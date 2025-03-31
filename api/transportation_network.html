@@ -6,8 +6,9 @@
 
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Overview: module code &#8212; city2graph 0.1.0 documentation</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Transportation Network &#8212; city2graph 0.1.0 documentation</title>
   
   
   
@@ -42,7 +43,7 @@
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/index';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/transportation_network';</script>
     <link rel="icon" href="../_static/city2graph_logo.png"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -145,7 +146,7 @@
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../api/index.html">
+  <a class="nav-link nav-internal" href="index.html">
     API Reference
   </a>
 </li>
@@ -216,6 +217,10 @@
   
 
   
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
 </div>
 
     </header>
@@ -259,7 +264,7 @@
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="../api/index.html">
+  <a class="nav-link nav-internal" href="index.html">
     API Reference
   </a>
 </li>
@@ -344,7 +349,7 @@
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Overview: module code</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Transportation Network</span></li>
   </ul>
 </nav>
 </div>
@@ -361,12 +366,54 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <h1>All modules for which code is available</h1>
-<ul><li><a href="city2graph/graph.html">city2graph.graph</a></li>
-<li><a href="city2graph/morphological_network.html">city2graph.morphological_network</a></li>
-<li><a href="city2graph/transportation_network.html">city2graph.transportation_network</a></li>
-<li><a href="city2graph/utils.html">city2graph.utils</a></li>
+  <section id="module-city2graph.transportation_network">
+<span id="transportation-network"></span><h1>Transportation Network<a class="headerlink" href="#module-city2graph.transportation_network" title="Link to this heading">#</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.transportation_network.load_gtfs">
+<span class="sig-prename descclassname"><span class="pre">city2graph.transportation_network.</span></span><span class="sig-name descname"><span class="pre">load_gtfs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gtfs_zip_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/transportation_network.html#load_gtfs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.transportation_network.load_gtfs" title="Link to this definition">#</a></dt>
+<dd><p>Complete workflow to process a GTFS zip file into DataFrames with geometry columns and summary statistics.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>gtfs_zip_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> or </em><em>Path</em>) – Path to the GTFS zip file</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dictionary with processed GTFS data including geometry objects</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.transportation_network.get_od_pairs">
+<span class="sig-prename descclassname"><span class="pre">city2graph.transportation_network.</span></span><span class="sig-name descname"><span class="pre">get_od_pairs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gtfs_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_date</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_date</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_geometry</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_generator</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/transportation_network.html#get_od_pairs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.transportation_network.get_od_pairs" title="Link to this definition">#</a></dt>
+<dd><p>Generate origin-destination pairs with timestamps from GTFS data.</p>
+<p>When as_generator is False this function returns a complete (Geo)DataFrame,
+and when True it returns a generator that yields chunks.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>gtfs_data</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>) – Dictionary with GTFS dataframes from load_gtfs.</p></li>
+<li><p><strong>start_date</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Start date in YYYYMMDD format; if None, defaults from calendar.</p></li>
+<li><p><strong>end_date</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – End date in YYYYMMDD format; if None, defaults from calendar.</p></li>
+<li><p><strong>include_geometry</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default True</em>) – Whether to include LineString geometries connecting the stops.</p></li>
+<li><p><strong>as_generator</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default False</em>) – If True, return a generator yielding GeoDataFrame chunks.</p></li>
+<li><p><strong>chunk_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default 10000</em>) – Number of rows per chunk when using the generator.</p></li>
 </ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>If as_generator is False, returns a complete GeoDataFrame (or DataFrame if include_geometry=False).
+If as_generator is True, returns a generator yielding (Geo)DataFrame chunks.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a> or <a class="reference external" href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v2.2.3)">pandas.DataFrame</a> or generator</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
 
                 </article>
               
@@ -383,6 +430,34 @@
             </div>
             
             
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.transportation_network.load_gtfs"><code class="docutils literal notranslate"><span class="pre">load_gtfs()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.transportation_network.get_od_pairs"><code class="docutils literal notranslate"><span class="pre">get_od_pairs()</span></code></a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/api/transportation_network.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
               
             
           </div>
