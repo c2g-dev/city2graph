@@ -1,0 +1,18 @@
+/* Custom CSS for city2graph documentation */
+
+/* Light/dark mode logo display */
+.only-light {
+    display: block;
+}
+
+.only-dark {
+    display: none;
+}
+
+html[data-theme="dark"] .only-light {
+    display: none;
+}
+
+html[data-theme="dark"] .only-dark {
+    display: block;
+}

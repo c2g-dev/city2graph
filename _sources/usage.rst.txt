@@ -1,0 +1,63 @@
+=====
+Usage
+=====
+
+city2graph provides tools for converting urban geometries into graph representations.
+
+Basic Usage
+----------
+
+Here's a basic example of converting GeoDataFrames to a graph:
+
+.. code-block:: python
+
+    import geopandas as gpd
+    from city2graph.graph import create_morphological_graph
+
+    # Load your data
+    buildings = gpd.read_file("buildings.geojson")
+    roads = gpd.read_file("roads.geojson")
+    
+    # Create a morphological graph
+    graph = create_morphological_graph(
+        private_gdf=buildings,
+        public_gdf=roads,
+        private_id_col="id",
+        public_id_col="id",
+        private_node_feature_cols=["area", "height"],
+        public_node_feature_cols=["length", "width"]
+    )
+
+Working with Urban Networks
+-------------------------
+
+For more detailed network analysis, you can use the morphological_network module:
+
+.. code-block:: python
+
+    from city2graph.morphological_network import (
+        create_private_to_private,
+        create_private_to_public,
+        create_public_to_public
+    )
+    
+    # Create connections between buildings
+    private_connections = create_private_to_private(
+        buildings,
+        private_id_col="id",
+        contiguity="queen"
+    )
+    
+    # Create connections between buildings and roads
+    private_public_connections = create_private_to_public(
+        buildings,
+        roads,
+        private_id_col="id",
+        public_id_col="id"
+    )
+    
+    # Create connections between roads
+    public_connections = create_public_to_public(
+        roads,
+        public_id_col="id"
+    )

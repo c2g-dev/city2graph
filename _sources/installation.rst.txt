@@ -1,0 +1,34 @@
+============
+Installation
+============
+
+You can install city2graph with conda using the provided environment files:
+
+.. code-block:: bash
+
+    # For development
+    conda env create -f environment.yml
+
+    # For documentation
+    conda env create -f docs_environment.yml
+    
+Or you can install the package directly from source:
+
+.. code-block:: bash
+
+    pip install -e .
+
+Requirements
+-----------
+
+city2graph requires the following packages:
+
+* shapely
+* geopandas
+* networkx
+* momepy
+* libpysal
+* torch
+* torch_geometric
+* numpy
+* pandas
