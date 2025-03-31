@@ -383,8 +383,120 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="utils">
-<h1>Utils<a class="headerlink" href="#utils" title="Link to this heading">#</a></h1>
+  <section id="module-city2graph.utils">
+<span id="utils"></span><h1>Utils<a class="headerlink" href="#module-city2graph.utils" title="Link to this heading">#</a></h1>
+<p>Geometry utilities for handling GeoDataFrames and spatial operations.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.utils.load_overture_data">
+<span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">load_overture_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">area</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">types</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_to_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#load_overture_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.load_overture_data" title="Link to this definition">#</a></dt>
+<dd><p>Load data from Overture Maps using the CLI tool and optionally save to GeoJSON files.
+Can accept either a bounding box or a Polygon as the area parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>area</strong> (<em>Union</em><em>[</em><em>List</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>]</em><em>, </em><em>Polygon</em><em>]</em>) – Either a bounding box as [min_lon, min_lat, max_lon, max_lat] in WGS84 coordinates
+or a Polygon in WGS84 coordinates (EPSG:4326). If provided in another CRS,
+it will be automatically transformed to WGS84.
+If a Polygon is provided, its bounding box will be used for the query and
+the results will be clipped to the Polygon boundaries.</p></li>
+<li><p><strong>types</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>]</em><em>, </em><em>default=None</em>) – Types of data to download. If None, downloads all available types.
+Must be valid Overture Maps data types: address, bathymetry, building,
+building_part, division, division_area, division_boundary, place, segment,
+connector, infrastructure, land, land_cover, land_use, water.</p></li>
+<li><p><strong>output_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default=&quot;.&quot;</em>) – Directory to save the GeoJSON files</p></li>
+<li><p><strong>prefix</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default=&quot;&quot;</em>) – Prefix to add to the output filenames</p></li>
+<li><p><strong>save_to_file</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=True</em>) – Whether to save the data to GeoJSON files</p></li>
+<li><p><strong>return_data</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=True</em>) – Whether to return the data as GeoDataFrames</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dictionary mapping types to GeoDataFrames if return_data is True,
+otherwise an empty dict</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dict[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)">str</a>, gpd.GeoDataFrame]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If any of the provided types are not valid Overture Maps data types</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The Overture Maps API requires coordinates in WGS84 (EPSG:4326) format.
+For more information, see https://docs.overturemaps.org/</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.utils.get_barrier_geometry">
+<span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">get_barrier_geometry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#get_barrier_geometry"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.get_barrier_geometry" title="Link to this definition">#</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoSeries.html#geopandas.GeoSeries" title="(in GeoPandas v1.0.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeoSeries</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>GeoDataFrame</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.utils.identify_connector_mask">
+<span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">identify_connector_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">connectors_info</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#identify_connector_mask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.identify_connector_mask" title="Link to this definition">#</a></dt>
+<dd><p>Parse connectors_info and return a connector mask list.
+Returns a list of floats starting with 0.0 and ending with 1.0.
+If connectors_info is empty or invalid, returns [0.0, 1.0].</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>connectors_info</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.utils.identify_barrier_mask">
+<span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">identify_barrier_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">level_rules</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#identify_barrier_mask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.identify_barrier_mask" title="Link to this definition">#</a></dt>
+<dd><p>Compute non-barrier intervals (barrier mask) from level_rules JSON.
+Only rules with “value” equal to 0 are considered as barriers.
+If any such rule has “between” equal to null, then the entire interval [0, 1]
+is treated as non-barrier.</p>
+<p>For example, if level_rules is:</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>level_rules</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>‘[{“value”: 0, “between”: [0.17760709099999999, 0.83631280600000002]},</dt><dd><p>{“value”: 0, “between”: [0.95722406000000004, 0.95967328100000004]}]’</p>
+</dd>
+</dl>
+<p>then the barrier intervals are [(0.17760709, 0.836312806), (0.95722406, 0.959673281)],
+and the returned non-barrier intervals will be:
+[[0.0, 0.17760709], [0.836312806, 0.95722406], [0.959673281, 1.0]].</p>
+<p>If any rule for which “value” equals 0 has “between” as null, then
+the function returns [[0.0, 1.0]].</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.utils.split_segments_by_connectors">
+<span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">split_segments_by_connectors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">segments_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connectors_gdf</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#split_segments_by_connectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.split_segments_by_connectors" title="Link to this definition">#</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeoDataFrame</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>segments_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>GeoDataFrame</em></a>)</p></li>
+<li><p><strong>connectors_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>GeoDataFrame</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
 
@@ -425,6 +537,22 @@
                 <dialog id="pst-secondary-sidebar-modal"></dialog>
                 <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.load_overture_data"><code class="docutils literal notranslate"><span class="pre">load_overture_data()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.get_barrier_geometry"><code class="docutils literal notranslate"><span class="pre">get_barrier_geometry()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.identify_connector_mask"><code class="docutils literal notranslate"><span class="pre">identify_connector_mask()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.identify_barrier_mask"><code class="docutils literal notranslate"><span class="pre">identify_barrier_mask()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.split_segments_by_connectors"><code class="docutils literal notranslate"><span class="pre">split_segments_by_connectors()</span></code></a></li>
+</ul>
+  </nav></div>
 
   <div class="sidebar-secondary-item">
   <div role="note" aria-label="source link">
@@ -469,7 +597,7 @@
         <div class="footer-item">
 
   <p class="sphinx-version">
-    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.1.3.
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
     <br/>
   </p>
 </div>
