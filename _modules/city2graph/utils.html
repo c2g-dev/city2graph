@@ -381,9 +381,17 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseGeometry</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.ops</span><span class="w"> </span><span class="kn">import</span> <span class="n">unary_union</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">momepy</span>
 
 <span class="c1"># Define the public API for this module</span>
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;load_overture_data&quot;</span><span class="p">,</span> <span class="s2">&quot;get_barrier_geometry&quot;</span><span class="p">,</span> <span class="s2">&quot;identify_connector_mask&quot;</span> <span class="p">,</span> <span class="s2">&quot;identify_barrier_mask&quot;</span><span class="p">,</span> <span class="s2">&quot;split_segments_by_connectors&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;load_overture_data&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;get_barrier_geometry&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;identify_connector_mask&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;identify_barrier_mask&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;split_segments_by_connectors&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;create_tessellation&quot;</span><span class="p">,</span>
+<span class="p">]</span>
 
 <span class="c1"># Valid Overture Maps data types</span>
 <span class="n">VALID_OVERTURE_TYPES</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
@@ -737,20 +745,24 @@
 <span class="sd">    Only rules with &quot;value&quot; equal to 0 are considered as barriers.</span>
 <span class="sd">    If any such rule has &quot;between&quot; equal to null, then the entire interval [0, 1]</span>
 <span class="sd">    is treated as non-barrier.</span>
-<span class="sd">    </span>
+
 <span class="sd">    For example, if level_rules is:</span>
-<span class="sd">    </span>
+
 <span class="sd">    &#39;[{&quot;value&quot;: 0, &quot;between&quot;: [0.17760709099999999, 0.83631280600000002]},</span>
 <span class="sd">      {&quot;value&quot;: 0, &quot;between&quot;: [0.95722406000000004, 0.95967328100000004]}]&#39;</span>
-<span class="sd">    </span>
+
 <span class="sd">    then the barrier intervals are [(0.17760709, 0.836312806), (0.95722406, 0.959673281)],</span>
 <span class="sd">    and the returned non-barrier intervals will be:</span>
 <span class="sd">    [[0.0, 0.17760709], [0.836312806, 0.95722406], [0.959673281, 1.0]].</span>
-<span class="sd">    </span>
+
 <span class="sd">    If any rule for which &quot;value&quot; equals 0 has &quot;between&quot; as null, then</span>
 <span class="sd">    the function returns [[0.0, 1.0]].</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">level_rules</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="n">level_rules</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="s2">&quot;null&quot;</span><span class="p">):</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">level_rules</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="n">level_rules</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;none&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;null&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
         <span class="k">return</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">rules</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">level_rules</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;&#39;&quot;</span><span class="p">,</span> <span class="s1">&#39;&quot;&#39;</span><span class="p">))</span>
@@ -808,10 +820,10 @@
 
     <span class="k">if</span> <span class="n">barrier_mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
-    
+
     <span class="k">if</span> <span class="n">barrier_mask</span> <span class="o">==</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]:</span>
         <span class="k">return</span> <span class="n">row</span><span class="o">.</span><span class="n">geometry</span>
-    
+
     <span class="k">try</span><span class="p">:</span>
         <span class="n">geom</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">geometry</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">MultiLineString</span><span class="p">):</span>
@@ -819,14 +831,23 @@
             <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">geom</span><span class="o">.</span><span class="n">geoms</span><span class="p">:</span>
                 <span class="n">clipped</span> <span class="o">=</span> <span class="n">_extract_barriers_from_mask</span><span class="p">(</span><span class="n">part</span><span class="p">,</span> <span class="n">barrier_mask</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">clipped</span><span class="p">:</span>
-                    <span class="n">parts</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">clipped</span><span class="o">.</span><span class="n">geoms</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">clipped</span><span class="p">,</span> <span class="n">MultiLineString</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="n">clipped</span><span class="p">])</span>
-            <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">parts</span> <span class="k">else</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">MultiLineString</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span>
+                    <span class="n">parts</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                        <span class="n">clipped</span><span class="o">.</span><span class="n">geoms</span>
+                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">clipped</span><span class="p">,</span> <span class="n">MultiLineString</span><span class="p">)</span>
+                        <span class="k">else</span> <span class="p">[</span><span class="n">clipped</span><span class="p">]</span>
+                    <span class="p">)</span>
+            <span class="k">return</span> <span class="p">(</span>
+                <span class="kc">None</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">parts</span>
+                <span class="k">else</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">MultiLineString</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span>
+            <span class="p">)</span>
 
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">_extract_barriers_from_mask</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">barrier_mask</span><span class="p">)</span>
-        
+
     <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
+
 
 <div class="viewcode-block" id="get_barrier_geometry">
 <a class="viewcode-back" href="../../api/utils.html#city2graph.utils.get_barrier_geometry">[docs]</a>
@@ -834,6 +855,7 @@
     <span class="c1"># Process each row of the GeoDataFrame</span>
     <span class="n">barrier_geoms</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_get_barrier_geometry</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">(</span><span class="n">barrier_geoms</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span></div>
+
 
 
 <div class="viewcode-block" id="identify_connector_mask">
@@ -880,12 +902,20 @@
         <span class="n">inter_start</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">interval</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">sub_start</span><span class="p">)</span>
         <span class="n">inter_end</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">interval</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">sub_end</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">inter_start</span> <span class="o">&lt;</span> <span class="n">inter_end</span><span class="p">:</span>
-            <span class="n">new_mask</span><span class="o">.</span><span class="n">append</span><span class="p">([(</span><span class="n">inter_start</span> <span class="o">-</span> <span class="n">sub_start</span><span class="p">)</span> <span class="o">/</span> <span class="n">seg_length</span><span class="p">,</span> <span class="p">(</span><span class="n">inter_end</span> <span class="o">-</span> <span class="n">sub_start</span><span class="p">)</span> <span class="o">/</span> <span class="n">seg_length</span><span class="p">])</span>
+            <span class="n">new_mask</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">[</span>
+                    <span class="p">(</span><span class="n">inter_start</span> <span class="o">-</span> <span class="n">sub_start</span><span class="p">)</span> <span class="o">/</span> <span class="n">seg_length</span><span class="p">,</span>
+                    <span class="p">(</span><span class="n">inter_end</span> <span class="o">-</span> <span class="n">sub_start</span><span class="p">)</span> <span class="o">/</span> <span class="n">seg_length</span><span class="p">,</span>
+                <span class="p">]</span>
+            <span class="p">)</span>
     <span class="k">return</span> <span class="n">new_mask</span>
+
 
 <div class="viewcode-block" id="split_segments_by_connectors">
 <a class="viewcode-back" href="../../api/utils.html#city2graph.utils.split_segments_by_connectors">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">split_segments_by_connectors</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">connectors_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">split_segments_by_connectors</span><span class="p">(</span>
+    <span class="n">segments_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">connectors_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
     <span class="n">new_rows</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
         <span class="n">geom</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">geometry</span>
@@ -913,7 +943,9 @@
                 <span class="n">new_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_row</span><span class="p">)</span>
                 <span class="k">continue</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to parse connectors for segment </span><span class="si">{</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;id&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">idx</span><span class="p">)</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Failed to parse connectors for segment </span><span class="si">{</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;id&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">idx</span><span class="p">)</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
             <span class="n">new_row</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
             <span class="n">new_row</span><span class="p">[</span><span class="s2">&quot;connector_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">connector_mask</span>
             <span class="n">new_row</span><span class="p">[</span><span class="s2">&quot;barrier_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">barrier_mask</span>
@@ -962,18 +994,22 @@
             <span class="n">new_row</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">original_id</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">counter</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="n">counter</span> <span class="o">+=</span> <span class="mi">1</span>
             <span class="n">new_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_row</span><span class="p">)</span>
-    
-    <span class="n">new_columns</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>  <span class="c1"># + [&quot;split_from&quot;, &quot;split_to&quot;, &quot;connector_mask&quot;, &quot;barrier_mask&quot;]</span>
+
+    <span class="n">new_columns</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">segments_gdf</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="p">)</span>  <span class="c1"># + [&quot;split_from&quot;, &quot;split_to&quot;, &quot;connector_mask&quot;, &quot;barrier_mask&quot;]</span>
     <span class="n">result_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">new_rows</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">new_columns</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">segments_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
-    
+
     <span class="c1"># Reset the index of the resulting GeoDataFrame</span>
     <span class="n">result_gdf</span> <span class="o">=</span> <span class="n">result_gdf</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    
+
     <span class="k">return</span> <span class="n">result_gdf</span></div>
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">get_walking_distance</span><span class="p">(</span><span class="n">point</span><span class="p">:</span> <span class="n">Point</span><span class="p">,</span> <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">street_network</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseGeometry</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_walking_distance</span><span class="p">(</span>
+    <span class="n">point</span><span class="p">:</span> <span class="n">Point</span><span class="p">,</span> <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">street_network</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseGeometry</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Compute an area reachable on foot from a point, based on topological distance of the street network.</span>
 
@@ -984,7 +1020,7 @@
 <span class="sd">    distance : float</span>
 <span class="sd">        The maximum travel distance along the street network.</span>
 <span class="sd">    street_network : nx.Graph</span>
-<span class="sd">        A networkx Graph where nodes have &#39;geometry&#39; (Point) and edges have &#39;geometry&#39; (LineString) </span>
+<span class="sd">        A networkx Graph where nodes have &#39;geometry&#39; (Point) and edges have &#39;geometry&#39; (LineString)</span>
 <span class="sd">        and a &#39;length&#39; attribute for distance.</span>
 
 <span class="sd">    Returns</span>
@@ -995,7 +1031,7 @@
     <span class="c1"># Find the nearest node in the street network</span>
     <span class="n">nearest_node</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span>
         <span class="n">street_network</span><span class="o">.</span><span class="n">nodes</span><span class="p">,</span>
-        <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">n</span><span class="p">:</span> <span class="n">point</span><span class="o">.</span><span class="n">distance</span><span class="p">(</span><span class="n">street_network</span><span class="o">.</span><span class="n">nodes</span><span class="p">[</span><span class="n">n</span><span class="p">][</span><span class="s2">&quot;geometry&quot;</span><span class="p">])</span>
+        <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">n</span><span class="p">:</span> <span class="n">point</span><span class="o">.</span><span class="n">distance</span><span class="p">(</span><span class="n">street_network</span><span class="o">.</span><span class="n">nodes</span><span class="p">[</span><span class="n">n</span><span class="p">][</span><span class="s2">&quot;geometry&quot;</span><span class="p">]),</span>
     <span class="p">)</span>
 
     <span class="c1"># Get all nodes within the given distance</span>
@@ -1014,6 +1050,99 @@
 
     <span class="c1"># Merge edges into a single geometry</span>
     <span class="k">return</span> <span class="n">unary_union</span><span class="p">(</span><span class="n">edge_geometries</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="create_tessellation">
+<a class="viewcode-back" href="../../api/utils.html#city2graph.utils.create_tessellation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_tessellation</span><span class="p">(</span>
+    <span class="n">geometry</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">],</span>
+    <span class="n">primary_barriers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">shrink</span><span class="p">:</span> <span class="nb">float</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span>
+    <span class="n">segment</span><span class="p">:</span> <span class="nb">float</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">n_jobs</span><span class="p">:</span> <span class="nb">int</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create tessellations from the given geometries.</span>
+<span class="sd">    If primary_barriers are provided, enclosed tessellations are created.</span>
+<span class="sd">    If not, morphological tessellations are created.</span>
+<span class="sd">    For more details, see momepy.enclosed_tessellation and momepy.morphological_tessellation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    geometry : Union[geopandas.GeoDataFrame, geopandas.GeoSeriesgeopandas       Input gegeopandastries to create a tessellation for. Should contain the geometries to tessellate.</span>
+<span class="sd">    primary_barriers : Optional[Union[gpd.GeoDataFrame, gpd.GeoSeries]], default=None</span>
+<span class="sd">        Optional GeoDataFrame or GeoSeries containing barriers to use for enclosed tessellation.</span>
+<span class="sd">        If provided, the function will create enclosed tessellation using these barriers.</span>
+<span class="sd">        If None, morphological tessellation will be created using the input geometries.</span>
+<span class="sd">    shrink : float, default=0.4</span>
+<span class="sd">        Distance for negative buffer of tessellations. By default, 0.4.</span>
+<span class="sd">        Used for both momepy.enclosed_tessellation and momepy.morphological_tessellation.</span>
+<span class="sd">    segment : float, default=0.5</span>
+<span class="sd">        Maximum distance between points for tessellations. By default, 0.5.</span>
+<span class="sd">        Used for both momepy.enclosed_tessellation and momepy.morphological_tessellation.</span>
+<span class="sd">    threshold : float, default=0.05</span>
+<span class="sd">        Minimum threshold for a building to be considered within an enclosure. By default, 0.05.</span>
+<span class="sd">        Used for both momepy.enclosed_tessellation.</span>
+<span class="sd">    n_jobs : int, default=-1</span>
+<span class="sd">        Number of parallel jobs to run. By default, -1 (use all available cores).</span>
+<span class="sd">        Used for both momepy.enclosed_tessellation.</span>
+<span class="sd">    **kwargs : Any</span>
+<span class="sd">        Additional keyword arguments to pass to momepy.enclosed_tessellation.</span>
+<span class="sd">        These can include parameters specific to the tessellation method used.</span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    geopandas.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing the tessellation polygons.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create tessellation using momepy based on whether primary_barriers are provided</span>
+    <span class="k">if</span> <span class="n">primary_barriers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Convert primary_barriers to GeoDataFrame if it&#39;s a GeoSeries</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">primary_barriers</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">):</span>
+            <span class="n">primary_barriers</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+                <span class="n">geometry</span><span class="o">=</span><span class="n">primary_barriers</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">primary_barriers</span><span class="o">.</span><span class="n">crs</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Ensure the barriers are in the same CRS as the input geometry</span>
+        <span class="k">if</span> <span class="n">geometry</span><span class="o">.</span><span class="n">crs</span> <span class="o">!=</span> <span class="n">primary_barriers</span><span class="o">.</span><span class="n">crs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;CRS mismatch: geometry and barriers must have the same CRS.&quot;</span>
+            <span class="p">)</span>
+        
+        <span class="c1"># Create enclosures for enclosed tessellation</span>
+        <span class="n">enclosures</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">enclosures</span><span class="p">(</span><span class="n">primary_barriers</span><span class="o">=</span><span class="n">primary_barriers</span><span class="p">,</span>
+                                       <span class="n">limit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                       <span class="n">additional_barriers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                       <span class="n">enclosure_id</span><span class="o">=</span><span class="s1">&#39;eID&#39;</span><span class="p">,</span>
+                                       <span class="n">clip</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        
+        <span class="n">tessellation</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">enclosed_tessellation</span><span class="p">(</span>
+            <span class="n">geometry</span><span class="o">=</span><span class="n">geometry</span><span class="p">,</span>
+            <span class="n">enclosures</span><span class="o">=</span><span class="n">enclosures</span><span class="p">,</span>
+            <span class="n">shrink</span><span class="o">=</span><span class="n">shrink</span><span class="p">,</span>
+            <span class="n">segment</span><span class="o">=</span><span class="n">segment</span><span class="p">,</span>
+            <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">,</span>
+            <span class="n">n_jobs</span><span class="o">=</span><span class="n">n_jobs</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Apply ID handling for enclosed tessellation</span>
+        <span class="n">tessellation</span><span class="p">[</span><span class="s2">&quot;tess_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">j</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tessellation</span><span class="p">[</span><span class="s2">&quot;enclosure_index&quot;</span><span class="p">],</span> <span class="n">tessellation</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="n">tessellation</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Create morphological tessellation</span>
+        <span class="n">tessellation</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">morphological_tessellation</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="n">geometry</span><span class="p">,</span>
+                                                         <span class="n">clip</span><span class="o">=</span><span class="s1">&#39;bounding_box&#39;</span><span class="p">,</span>
+                                                         <span class="n">shrink</span><span class="o">=</span><span class="n">shrink</span><span class="p">,</span>
+                                                         <span class="n">segment</span><span class="o">=</span><span class="n">segment</span><span class="p">)</span>
+        <span class="n">tessellation</span><span class="p">[</span><span class="s2">&quot;tess_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tessellation</span><span class="o">.</span><span class="n">index</span>
+
+    <span class="k">return</span> <span class="n">tessellation</span></div>
+
 </pre></div>
 
                 </article>

@@ -498,6 +498,41 @@ the function returns [[0.0, 1.0]].</p>
 </dl>
 </dd></dl>
 
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.utils.create_tessellation">
+<span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">create_tessellation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geometry</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">primary_barriers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shrink</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_jobs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#create_tessellation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.create_tessellation" title="Link to this definition">#</a></dt>
+<dd><p>Create tessellations from the given geometries.
+If primary_barriers are provided, enclosed tessellations are created.
+If not, morphological tessellations are created.
+For more details, see momepy.enclosed_tessellation and momepy.morphological_tessellation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>geometry</strong> (<em>Union</em><em>[</em><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a><em>, </em><em>geopandas.GeoSeriesgeopandas       Input gegeopandastries to create a tessellation for. Should contain the geometries to tessellate.</em>)</p></li>
+<li><p><strong>primary_barriers</strong> (<em>Optional</em><em>[</em><em>Union</em><em>[</em><em>gpd.GeoDataFrame</em><em>, </em><em>gpd.GeoSeries</em><em>]</em><em>]</em><em>, </em><em>default=None</em>) – Optional GeoDataFrame or GeoSeries containing barriers to use for enclosed tessellation.
+If provided, the function will create enclosed tessellation using these barriers.
+If None, morphological tessellation will be created using the input geometries.</p></li>
+<li><p><strong>shrink</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=0.4</em>) – Distance for negative buffer of tessellations. By default, 0.4.
+Used for both momepy.enclosed_tessellation and momepy.morphological_tessellation.</p></li>
+<li><p><strong>segment</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=0.5</em>) – Maximum distance between points for tessellations. By default, 0.5.
+Used for both momepy.enclosed_tessellation and momepy.morphological_tessellation.</p></li>
+<li><p><strong>threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=0.05</em>) – Minimum threshold for a building to be considered within an enclosure. By default, 0.05.
+Used for both momepy.enclosed_tessellation.</p></li>
+<li><p><strong>n_jobs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=-1</em>) – Number of parallel jobs to run. By default, -1 (use all available cores).
+Used for both momepy.enclosed_tessellation.</p></li>
+<li><p><strong>**kwargs</strong> (<em>Any</em>) – Additional keyword arguments to pass to momepy.enclosed_tessellation.
+These can include parameters specific to the tessellation method used.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>GeoDataFrame containing the tessellation polygons.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a></p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
 
@@ -552,6 +587,7 @@ the function returns [[0.0, 1.0]].</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.identify_connector_mask"><code class="docutils literal notranslate"><span class="pre">identify_connector_mask()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.identify_barrier_mask"><code class="docutils literal notranslate"><span class="pre">identify_barrier_mask()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.split_segments_by_connectors"><code class="docutils literal notranslate"><span class="pre">split_segments_by_connectors()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.create_tessellation"><code class="docutils literal notranslate"><span class="pre">create_tessellation()</span></code></a></li>
 </ul>
   </nav></div>
 
