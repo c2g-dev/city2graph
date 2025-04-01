@@ -388,33 +388,6 @@
 <span id="morphological-network"></span><h1>Morphological Network<a class="headerlink" href="#module-city2graph.morphological_network" title="Link to this heading">#</a></h1>
 <p>Network analysis functions for creating and manipulating network graphs.</p>
 <dl class="py function">
-<dt class="sig sig-object py" id="city2graph.morphological_network.extract_nearby_segments">
-<span class="sig-prename descclassname"><span class="pre">city2graph.morphological_network.</span></span><span class="sig-name descname"><span class="pre">extract_nearby_segments</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_point</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphological_network.html#extract_nearby_segments"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphological_network.extract_nearby_segments" title="Link to this definition">#</a></dt>
-<dd><p>Extracts a filtered segments GeoDataFrame containing only segments
-within a given shortest-path distance threshold from specified center point(s).</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – Input segments.</p></li>
-<li><p><strong>center_point</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoSeries.html#geopandas.GeoSeries" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoSeries</em></a><em> or </em><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – Center point(s) for distance calculation.
-Can be a single point or multiple points.</p></li>
-<li><p><strong>threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>) – Maximum shortest-path distance from any center node.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><dl class="simple">
-<dt>Filtered segments GeoDataFrame containing segments</dt><dd><p>within threshold distance of any center point.</p>
-</dd>
-</dl>
-</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="city2graph.morphological_network.convert_gdf_to_dual">
 <span class="sig-prename descclassname"><span class="pre">city2graph.morphological_network.</span></span><span class="sig-name descname"><span class="pre">convert_gdf_to_dual</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphological_network.html#convert_gdf_to_dual"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphological_network.convert_gdf_to_dual" title="Link to this definition">#</a></dt>
 <dd><p>Convert a GeoDataFrame to a NetworkX graph and then back to a GeoDataFrame.
@@ -475,7 +448,7 @@ If None, all polygons are treated as one group</p></li>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.morphological_network.create_private_to_public">
-<span class="sig-prename descclassname"><span class="pre">city2graph.morphological_network.</span></span><span class="sig-name descname"><span class="pre">create_private_to_public</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">private_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphological_network.html#create_private_to_public"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphological_network.create_private_to_public" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">city2graph.morphological_network.</span></span><span class="sig-name descname"><span class="pre">create_private_to_public</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">private_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphological_network.html#create_private_to_public"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphological_network.create_private_to_public" title="Link to this definition">#</a></dt>
 <dd><p>Creates connections between tessellation polygons (private space) and street segments (public space).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -520,6 +493,62 @@ If None, will use DataFrame index</p></li>
 <dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a></p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.morphological_network.create_morphological_network">
+<span class="sig-prename descclassname"><span class="pre">city2graph.morphological_network.</span></span><span class="sig-name descname"><span class="pre">create_morphological_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buildings_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segments_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_point</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'tess_id'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'id'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'barrier_geometry'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contiguity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'queen'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphological_network.html#create_morphological_network"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphological_network.create_morphological_network" title="Link to this definition">#</a></dt>
+<dd><p>Create a complete morphological network from buildings and road segments.</p>
+<p>This function performs a series of operations:
+1. Creates tessellations based on buildings and road barrier geometries
+2. Optionally filters the network by distance from a specified center point
+3. Identifies enclosed tessellations adjacent to the segments
+4. Creates three types of connections:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Private to private (between tessellation cells)</p></li>
+<li><p>Public to public (between road segments)</p></li>
+<li><p>Private to public (between tessellation cells and road segments)</p></li>
+</ul>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>buildings_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing building polygons</p></li>
+<li><p><strong>segments_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing road segments as LineStrings.
+Should include a ‘barrier_geometry’ column or the column specified in public_geom_col.</p></li>
+<li><p><strong>center_point</strong> (<em>Union</em><em>[</em><em>Point</em><em>, </em><em>gpd.GeoSeries</em><em>, </em><em>gpd.GeoDataFrame</em><em>]</em><em>, </em><em>optional</em>) – Optional center point for filtering the network by distance.
+If provided, only segments within the specified distance will be included.</p></li>
+<li><p><strong>distance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1000</em>) – Maximum network distance from center_point to include segments, if center_point is provided.
+If None, no distance filtering will be applied even if center_point is provided.</p></li>
+<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default='tess_id'</em>) – Column name that uniquely identifies each tessellation cell (private space).</p></li>
+<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default='id'</em>) – Column name that uniquely identifies each road segment (public space).</p></li>
+<li><p><strong>public_geom_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default='barrier_geometry'</em>) – Column name in segments_gdf containing the processed geometry to use.</p></li>
+<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1</em>) – Buffer tolerance for spatial joins and endpoint connections (in meters).</p></li>
+<li><p><strong>contiguity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default='queen'</em>) – Type of contiguity for private-to-private connections, either ‘queen’ or ‘rook’.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dictionary containing the following elements:
+- ‘tessellation’: GeoDataFrame of tessellation cells (private spaces)
+- ‘segments’: GeoDataFrame of road segments (public spaces)
+- ‘buildings’: GeoDataFrame of buildings
+- ‘private_to_private’: GeoDataFrame of connections between tessellation cells
+- ‘public_to_public’: GeoDataFrame of connections between road segments
+- ‘private_to_public’: GeoDataFrame of connections between tessellation cells and road segments</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a></p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>If center_point is not provided, all segments will be included.</p></li>
+<li><p>The barrier_geometry column should contain the processed geometries for road segments.
+If it doesn’t exist, the function will use the column specified in public_geom_col.</p></li>
+<li><p>The function requires the city2graph package and depends on create_tessellation, filter_network_by_distance,
+create_private_to_private, create_public_to_public, and create_private_to_public functions.</p></li>
+</ul>
 </dd></dl>
 
 </section>
@@ -571,11 +600,11 @@ If None, will use DataFrame index</p></li>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphological_network.extract_nearby_segments"><code class="docutils literal notranslate"><span class="pre">extract_nearby_segments()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphological_network.convert_gdf_to_dual"><code class="docutils literal notranslate"><span class="pre">convert_gdf_to_dual()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphological_network.create_private_to_private"><code class="docutils literal notranslate"><span class="pre">create_private_to_private()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphological_network.create_private_to_public"><code class="docutils literal notranslate"><span class="pre">create_private_to_public()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphological_network.create_public_to_public"><code class="docutils literal notranslate"><span class="pre">create_public_to_public()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphological_network.create_morphological_network"><code class="docutils literal notranslate"><span class="pre">create_morphological_network()</span></code></a></li>
 </ul>
   </nav></div>
 

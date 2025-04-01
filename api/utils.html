@@ -533,6 +533,33 @@ These can include parameters specific to the tessellation method used.</p></li>
 </dl>
 </dd></dl>
 
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.utils.filter_network_by_distance">
+<span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">filter_network_by_distance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">network</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_point</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distance</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_attr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'length'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#filter_network_by_distance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.filter_network_by_distance" title="Link to this definition">#</a></dt>
+<dd><p>Extracts a filtered network containing only elements
+within a given shortest-path distance from specified center point(s).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>network</strong> (<em>Union</em><em>[</em><em>gpd.GeoDataFrame</em><em>, </em><em>nx.Graph</em><em>]</em>) – Input network data as either a GeoDataFrame of edges or a NetworkX graph.</p></li>
+<li><p><strong>center_point</strong> (<em>Union</em><em>[</em><em>Point</em><em>, </em><em>gpd.GeoSeries</em><em>, </em><em>gpd.GeoDataFrame</em><em>]</em>) – Center point(s) for distance calculation.
+Can be a single Point, GeoSeries of points, or GeoDataFrame with point geometries.</p></li>
+<li><p><strong>distance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1000</em>) – Maximum shortest-path distance from any center node.</p></li>
+<li><p><strong>edge_attr</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default=&quot;length&quot;</em>) – Edge attribute to use as weight for distance calculation.</p></li>
+<li><p><strong>node_id_col</strong> (<em>Optional</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>, </em><em>default=None</em>) – Column name in nodes GeoDataFrame to use as node identifier.
+If None, will use auto-generated node IDs.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Filtered network containing only elements within distance of any center point.
+Returns the same type as the input (either GeoDataFrame or NetworkX graph).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Union[gpd.GeoDataFrame, nx.Graph]</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
 
@@ -588,6 +615,7 @@ These can include parameters specific to the tessellation method used.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.identify_barrier_mask"><code class="docutils literal notranslate"><span class="pre">identify_barrier_mask()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.split_segments_by_connectors"><code class="docutils literal notranslate"><span class="pre">split_segments_by_connectors()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.create_tessellation"><code class="docutils literal notranslate"><span class="pre">create_tessellation()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.filter_network_by_distance"><code class="docutils literal notranslate"><span class="pre">filter_network_by_distance()</span></code></a></li>
 </ul>
   </nav></div>
 

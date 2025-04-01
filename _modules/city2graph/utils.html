@@ -373,14 +373,12 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">subprocess</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">cast</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cast</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span><span class="p">,</span> <span class="n">MultiLineString</span><span class="p">,</span> <span class="n">Polygon</span><span class="p">,</span> <span class="n">Point</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseGeometry</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.ops</span><span class="w"> </span><span class="kn">import</span> <span class="n">unary_union</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">momepy</span>
 
 <span class="c1"># Define the public API for this module</span>
@@ -391,6 +389,7 @@
     <span class="s2">&quot;identify_barrier_mask&quot;</span><span class="p">,</span>
     <span class="s2">&quot;split_segments_by_connectors&quot;</span><span class="p">,</span>
     <span class="s2">&quot;create_tessellation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;filter_network_by_distance&quot;</span>
 <span class="p">]</span>
 
 <span class="c1"># Valid Overture Maps data types</span>
@@ -1006,52 +1005,6 @@
     <span class="k">return</span> <span class="n">result_gdf</span></div>
 
 
-
-<span class="k">def</span><span class="w"> </span><span class="nf">get_walking_distance</span><span class="p">(</span>
-    <span class="n">point</span><span class="p">:</span> <span class="n">Point</span><span class="p">,</span> <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">street_network</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseGeometry</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Compute an area reachable on foot from a point, based on topological distance of the street network.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    point : Point</span>
-<span class="sd">        The location from which to compute walking distance.</span>
-<span class="sd">    distance : float</span>
-<span class="sd">        The maximum travel distance along the street network.</span>
-<span class="sd">    street_network : nx.Graph</span>
-<span class="sd">        A networkx Graph where nodes have &#39;geometry&#39; (Point) and edges have &#39;geometry&#39; (LineString)</span>
-<span class="sd">        and a &#39;length&#39; attribute for distance.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    BaseGeometry</span>
-<span class="sd">        A unified geometry of all edges reachable within the specified distance.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># Find the nearest node in the street network</span>
-    <span class="n">nearest_node</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span>
-        <span class="n">street_network</span><span class="o">.</span><span class="n">nodes</span><span class="p">,</span>
-        <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">n</span><span class="p">:</span> <span class="n">point</span><span class="o">.</span><span class="n">distance</span><span class="p">(</span><span class="n">street_network</span><span class="o">.</span><span class="n">nodes</span><span class="p">[</span><span class="n">n</span><span class="p">][</span><span class="s2">&quot;geometry&quot;</span><span class="p">]),</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Get all nodes within the given distance</span>
-    <span class="n">lengths</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">single_source_dijkstra_path_length</span><span class="p">(</span>
-        <span class="n">street_network</span><span class="p">,</span> <span class="n">nearest_node</span><span class="p">,</span> <span class="n">cutoff</span><span class="o">=</span><span class="n">distance</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="s2">&quot;length&quot;</span>
-    <span class="p">)</span>
-    <span class="n">reachable_nodes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">lengths</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-
-    <span class="c1"># Collect edges between reachable nodes</span>
-    <span class="n">edge_geometries</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">u</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">street_network</span><span class="o">.</span><span class="n">edges</span><span class="p">():</span>
-        <span class="k">if</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">reachable_nodes</span> <span class="ow">and</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">reachable_nodes</span><span class="p">:</span>
-            <span class="n">edge_data</span> <span class="o">=</span> <span class="n">street_network</span><span class="p">[</span><span class="n">u</span><span class="p">][</span><span class="n">v</span><span class="p">]</span>
-            <span class="k">if</span> <span class="s2">&quot;geometry&quot;</span> <span class="ow">in</span> <span class="n">edge_data</span><span class="p">:</span>
-                <span class="n">edge_geometries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">edge_data</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">])</span>
-
-    <span class="c1"># Merge edges into a single geometry</span>
-    <span class="k">return</span> <span class="n">unary_union</span><span class="p">(</span><span class="n">edge_geometries</span><span class="p">)</span>
-
-
 <div class="viewcode-block" id="create_tessellation">
 <a class="viewcode-back" href="../../api/utils.html#city2graph.utils.create_tessellation">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">create_tessellation</span><span class="p">(</span>
@@ -1142,6 +1095,127 @@
         <span class="n">tessellation</span><span class="p">[</span><span class="s2">&quot;tess_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tessellation</span><span class="o">.</span><span class="n">index</span>
 
     <span class="k">return</span> <span class="n">tessellation</span></div>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_nearest_node</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">nodes_gdf</span><span class="p">,</span> <span class="n">node_id</span><span class="o">=</span><span class="s1">&#39;node_id&#39;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Helper function to find the nearest node in a GeoDataFrame.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">):</span>
+        <span class="n">point</span> <span class="o">=</span> <span class="n">point</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">nearest_idx</span> <span class="o">=</span> <span class="n">nodes_gdf</span><span class="o">.</span><span class="n">distance</span><span class="p">(</span><span class="n">point</span><span class="p">)</span><span class="o">.</span><span class="n">idxmin</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">nodes_gdf</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">nearest_idx</span><span class="p">,</span> <span class="n">node_id</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="filter_network_by_distance">
+<a class="viewcode-back" href="../../api/utils.html#city2graph.utils.filter_network_by_distance">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">filter_network_by_distance</span><span class="p">(</span>
+    <span class="n">network</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">],</span>
+    <span class="n">center_point</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
+    <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> 
+    <span class="n">edge_attr</span><span class="p">:</span> <span class="nb">str</span><span class="o">=</span><span class="s2">&quot;length&quot;</span><span class="p">,</span> 
+    <span class="n">node_id_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span><span class="o">=</span><span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extracts a filtered network containing only elements</span>
+<span class="sd">    within a given shortest-path distance from specified center point(s).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    network : Union[gpd.GeoDataFrame, nx.Graph]</span>
+<span class="sd">        Input network data as either a GeoDataFrame of edges or a NetworkX graph.</span>
+<span class="sd">    center_point : Union[Point, gpd.GeoSeries, gpd.GeoDataFrame]</span>
+<span class="sd">        Center point(s) for distance calculation.</span>
+<span class="sd">        Can be a single Point, GeoSeries of points, or GeoDataFrame with point geometries.</span>
+<span class="sd">    distance : float, default=1000</span>
+<span class="sd">        Maximum shortest-path distance from any center node.</span>
+<span class="sd">    edge_attr : str, default=&quot;length&quot;</span>
+<span class="sd">        Edge attribute to use as weight for distance calculation.</span>
+<span class="sd">    node_id_col : Optional[str], default=None</span>
+<span class="sd">        Column name in nodes GeoDataFrame to use as node identifier.</span>
+<span class="sd">        If None, will use auto-generated node IDs.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Union[gpd.GeoDataFrame, nx.Graph]</span>
+<span class="sd">        Filtered network containing only elements within distance of any center point.</span>
+<span class="sd">        Returns the same type as the input (either GeoDataFrame or NetworkX graph).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Determine input type</span>
+    <span class="n">is_graph_input</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">)</span>
+    
+    <span class="c1"># Convert to NetworkX graph if input is GeoDataFrame</span>
+    <span class="k">if</span> <span class="n">is_graph_input</span><span class="p">:</span>
+        <span class="n">G</span> <span class="o">=</span> <span class="n">network</span>
+        <span class="n">original_crs</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">G</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">gdf_to_nx</span><span class="p">(</span><span class="n">network</span><span class="p">)</span>
+        <span class="n">original_crs</span> <span class="o">=</span> <span class="n">network</span><span class="o">.</span><span class="n">crs</span>
+    
+    <span class="c1"># Build a GeoDataFrame for the nodes using their &#39;x&#39; and &#39;y&#39; attributes</span>
+    <span class="n">node_ids</span><span class="p">,</span> <span class="n">node_geometries</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="p">[</span>
+        <span class="p">(</span><span class="n">nid</span><span class="p">,</span> <span class="n">Point</span><span class="p">([</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">),</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;y&#39;</span><span class="p">)]))</span>
+        <span class="k">for</span> <span class="n">nid</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">G</span><span class="o">.</span><span class="n">nodes</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="p">])</span>
+    
+    <span class="c1"># Use provided node_id_col or default</span>
+    <span class="n">node_id_name</span> <span class="o">=</span> <span class="n">node_id_col</span> <span class="ow">or</span> <span class="s1">&#39;node_id&#39;</span>
+    
+    <span class="n">nodes_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+        <span class="p">{</span><span class="n">node_id_name</span><span class="p">:</span> <span class="n">node_ids</span><span class="p">,</span> <span class="s1">&#39;geometry&#39;</span><span class="p">:</span> <span class="n">node_geometries</span><span class="p">},</span>
+        <span class="n">crs</span><span class="o">=</span><span class="n">original_crs</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Initialize a set to collect nodes within distance from any center point</span>
+    <span class="n">nodes_within_distance</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    
+    <span class="c1"># Handle different types of center_point input</span>
+    <span class="n">center_points</span> <span class="o">=</span> <span class="n">center_point</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">):</span>
+        <span class="c1"># If it&#39;s a GeoDataFrame, convert to GeoSeries</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">):</span>
+            <span class="n">center_points</span> <span class="o">=</span> <span class="n">center_point</span><span class="o">.</span><span class="n">geometry</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Convert single point to a list</span>
+        <span class="n">center_points</span> <span class="o">=</span> <span class="p">[</span><span class="n">center_point</span><span class="p">]</span>
+    
+    <span class="c1"># Process each center point</span>
+    <span class="k">for</span> <span class="n">point</span> <span class="ow">in</span> <span class="n">center_points</span><span class="p">:</span>
+        <span class="c1"># Find the nearest node to this center</span>
+        <span class="n">nearest_node</span> <span class="o">=</span> <span class="n">_get_nearest_node</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">nodes_gdf</span><span class="p">,</span> <span class="n">node_id</span><span class="o">=</span><span class="n">node_id_name</span><span class="p">)</span>
+        
+        <span class="c1"># Compute shortest path lengths from this center</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">distance_dict</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">shortest_path_length</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">nearest_node</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="n">edge_attr</span><span class="p">)</span>
+            <span class="c1"># Add nodes within distance from this center</span>
+            <span class="n">nodes_within_distance</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">distance_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="o">&lt;</span> <span class="n">distance</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="n">nx</span><span class="o">.</span><span class="n">NetworkXNoPath</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">NodeNotFound</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not compute paths from a center point: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="ne">RuntimeWarning</span><span class="p">)</span>
+    
+    <span class="c1"># Extract subgraph for nodes within distance from any center</span>
+    <span class="k">if</span> <span class="n">nodes_within_distance</span><span class="p">:</span>
+        <span class="c1"># Create a subgraph from the original graph</span>
+        <span class="n">subgraph</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">subgraph</span><span class="p">(</span><span class="n">nodes_within_distance</span><span class="p">)</span>
+        
+        <span class="c1"># Return the result in the same format as the input</span>
+        <span class="k">if</span> <span class="n">is_graph_input</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">subgraph</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">filtered_gdf</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">subgraph</span><span class="p">,</span> <span class="n">points</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            
+            <span class="c1"># Ensure that the geometry column is properly set as GeoSeries</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">filtered_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">):</span>
+                <span class="n">filtered_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">filtered_gdf</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s1">&#39;geometry&#39;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">original_crs</span><span class="p">)</span>
+            
+            <span class="k">return</span> <span class="n">filtered_gdf</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Return empty result in the same format as the input</span>
+        <span class="k">if</span> <span class="n">is_graph_input</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="p">[],</span> <span class="n">crs</span><span class="o">=</span><span class="n">original_crs</span><span class="p">)</span></div>
 
 </pre></div>
 

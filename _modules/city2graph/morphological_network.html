@@ -377,100 +377,18 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">libpysal</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">momepy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Union</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">city2graph.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">filter_network_by_distance</span><span class="p">,</span> <span class="n">create_tessellation</span>
 
 <span class="c1"># Define the public API for this module</span>
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s1">&#39;extract_nearby_segments&#39;</span><span class="p">,</span>
     <span class="s1">&#39;convert_gdf_to_dual&#39;</span><span class="p">,</span>
     <span class="s1">&#39;create_private_to_private&#39;</span><span class="p">,</span>
     <span class="s1">&#39;create_private_to_public&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;create_public_to_public&#39;</span>
+    <span class="s1">&#39;create_public_to_public&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;create_morphological_network&#39;</span>
 <span class="p">]</span>
-
-<span class="c1"># Helper function to find the nearest node in a GeoDataFrame.</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">_get_nearest_node</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">nodes_gdf</span><span class="p">,</span> <span class="n">node_id</span><span class="o">=</span><span class="s1">&#39;node_id&#39;</span><span class="p">):</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">):</span>
-        <span class="n">point</span> <span class="o">=</span> <span class="n">point</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">nearest_idx</span> <span class="o">=</span> <span class="n">nodes_gdf</span><span class="o">.</span><span class="n">distance</span><span class="p">(</span><span class="n">point</span><span class="p">)</span><span class="o">.</span><span class="n">idxmin</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">nodes_gdf</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">nearest_idx</span><span class="p">,</span> <span class="n">node_id</span><span class="p">]</span>
-
-
-<div class="viewcode-block" id="extract_nearby_segments">
-<a class="viewcode-back" href="../../api/morphological_network.html#city2graph.morphological_network.extract_nearby_segments">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">extract_nearby_segments</span><span class="p">(</span><span class="n">gdf</span><span class="p">,</span> <span class="n">center_point</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mi">1000</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Extracts a filtered segments GeoDataFrame containing only segments</span>
-<span class="sd">    within a given shortest-path distance threshold from specified center point(s).</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        gdf (geopandas.GeoDataFrame): Input segments.</span>
-<span class="sd">        center_point (geopandas.GeoSeries or geopandas.GeoDataFrame): Center point(s) for distance calculation.</span>
-<span class="sd">                                                                      Can be a single point or multiple points.</span>
-<span class="sd">        threshold (float): Maximum shortest-path distance from any center node.</span>
-<span class="sd">    </span>
-<span class="sd">    Returns:</span>
-<span class="sd">        geopandas.GeoDataFrame: Filtered segments GeoDataFrame containing segments</span>
-<span class="sd">                               within threshold distance of any center point.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    
-    <span class="c1"># Convert segments GeoDataFrame to a NetworkX graph using momepy function.</span>
-    <span class="n">G</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">gdf_to_nx</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
-    
-    <span class="c1"># Build a GeoDataFrame for the nodes using their &#39;x&#39; and &#39;y&#39; attributes.</span>
-    <span class="n">node_ids</span><span class="p">,</span> <span class="n">node_geometries</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="p">[</span>
-        <span class="p">(</span><span class="n">nid</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">Point</span><span class="p">([</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">),</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;y&#39;</span><span class="p">)]))</span>
-        <span class="k">for</span> <span class="n">nid</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">G</span><span class="o">.</span><span class="n">nodes</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="p">])</span>
-    
-    <span class="n">nodes_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
-        <span class="p">{</span><span class="s1">&#39;node_id&#39;</span><span class="p">:</span> <span class="n">node_ids</span><span class="p">,</span> <span class="s1">&#39;geometry&#39;</span><span class="p">:</span> <span class="n">node_geometries</span><span class="p">},</span>
-        <span class="n">crs</span><span class="o">=</span><span class="n">gdf</span><span class="o">.</span><span class="n">crs</span>
-    <span class="p">)</span>
-    
-    <span class="c1"># Initialize a set to collect nodes within threshold from any center point</span>
-    <span class="n">nodes_within_threshold</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-    
-    <span class="c1"># Handle both single point and multiple points cases</span>
-    <span class="n">center_points</span> <span class="o">=</span> <span class="n">center_point</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">):</span>
-        <span class="c1"># If it&#39;s a GeoDataFrame, convert to GeoSeries</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">):</span>
-            <span class="n">center_points</span> <span class="o">=</span> <span class="n">center_point</span><span class="o">.</span><span class="n">geometry</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># Convert single point to a list</span>
-        <span class="n">center_points</span> <span class="o">=</span> <span class="p">[</span><span class="n">center_point</span><span class="p">]</span>
-    
-    <span class="c1"># Process each center point</span>
-    <span class="k">for</span> <span class="n">point</span> <span class="ow">in</span> <span class="n">center_points</span><span class="p">:</span>
-        <span class="c1"># Find the nearest node to this center</span>
-        <span class="n">nearest_node</span> <span class="o">=</span> <span class="n">_get_nearest_node</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">nodes_gdf</span><span class="p">)</span>
-        
-        <span class="c1"># Compute shortest path lengths from this center</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">distance_dict</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">shortest_path_length</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">nearest_node</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="s2">&quot;length&quot;</span><span class="p">)</span>
-            <span class="c1"># Add nodes within threshold from this center</span>
-            <span class="n">nodes_within_threshold</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
-                <span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">distance_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="o">&lt;</span> <span class="n">threshold</span>
-            <span class="p">)</span>
-        <span class="k">except</span> <span class="p">(</span><span class="n">nx</span><span class="o">.</span><span class="n">NetworkXNoPath</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">NodeNotFound</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not compute paths from a center point: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="ne">RuntimeWarning</span><span class="p">)</span>
-    
-    <span class="c1"># Extract subgraph for nodes within threshold from any center</span>
-    <span class="k">if</span> <span class="n">nodes_within_threshold</span><span class="p">:</span>
-        <span class="c1"># Create a subgraph from the original graph</span>
-        <span class="n">subgraph</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">subgraph</span><span class="p">(</span><span class="n">nodes_within_threshold</span><span class="p">)</span>
-        <span class="n">gdf_filtered</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">subgraph</span><span class="p">,</span> <span class="n">points</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-
-        <span class="c1"># Ensure that the geometry column is properly set as GeoSeries</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">gdf_filtered</span><span class="o">.</span><span class="n">geometry</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">):</span>
-            <span class="n">gdf_filtered</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">gdf_filtered</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s1">&#39;geometry&#39;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">gdf_filtered</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># Return empty GeoDataFrame with same structure if no nodes within threshold</span>
-        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="p">[],</span> <span class="n">crs</span><span class="o">=</span><span class="n">gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span></div>
-
-
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_adjacent_publics</span><span class="p">(</span>
     <span class="n">privates</span><span class="p">,</span>
@@ -564,8 +482,10 @@
     <span class="c1"># Determine the street geometry column and create buffered version</span>
     <span class="n">publics_copy</span> <span class="o">=</span> <span class="n">publics</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
     <span class="k">if</span> <span class="n">public_geom_col</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">publics_copy</span><span class="o">.</span><span class="n">geometry</span> <span class="o">=</span> <span class="n">publics_copy</span><span class="p">[</span><span class="n">public_geom_col</span><span class="p">]</span>
-    
+        <span class="n">publics_copy</span><span class="o">.</span><span class="n">geometry</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">(</span>
+            <span class="n">publics_copy</span><span class="p">[</span><span class="n">public_geom_col</span><span class="p">],</span> <span class="n">crs</span><span class="o">=</span><span class="n">publics_copy</span><span class="o">.</span><span class="n">crs</span>
+            <span class="p">)</span>
+
     <span class="c1"># Create buffered geometries for intersection test</span>
     <span class="n">publics_copy</span><span class="o">.</span><span class="n">geometry</span> <span class="o">=</span> <span class="n">publics_copy</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">buffer</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span>
 
@@ -1202,7 +1122,7 @@
     <span class="n">private_id_col</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">public_id_col</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="n">public_geom_col</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="n">tolerance</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Creates connections between tessellation polygons (private space) and street segments (public space).</span>
@@ -1258,7 +1178,9 @@
 
 <div class="viewcode-block" id="create_public_to_public">
 <a class="viewcode-back" href="../../api/morphological_network.html#city2graph.morphological_network.create_public_to_public">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">create_public_to_public</span><span class="p">(</span><span class="n">public_gdf</span><span class="p">,</span> <span class="n">public_id_col</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_public_to_public</span><span class="p">(</span><span class="n">public_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+                            <span class="n">public_id_col</span><span class="p">:</span><span class="nb">str</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                            <span class="n">tolerance</span><span class="p">:</span><span class="nb">float</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create connections between street segments (public-public connections).</span>
 <span class="sd">    </span>
@@ -1335,6 +1257,147 @@
             <span class="p">{</span><span class="s2">&quot;from_public_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;to_public_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="p">[]},</span>
             <span class="n">crs</span><span class="o">=</span><span class="n">public_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
         <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="create_morphological_network">
+<a class="viewcode-back" href="../../api/morphological_network.html#city2graph.morphological_network.create_morphological_network">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_morphological_network</span><span class="p">(</span>
+    <span class="n">buildings_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+    <span class="n">segments_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+    <span class="n">center_point</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">private_id_col</span><span class="o">=</span><span class="s1">&#39;tess_id&#39;</span><span class="p">,</span>
+    <span class="n">public_id_col</span><span class="o">=</span><span class="s1">&#39;id&#39;</span><span class="p">,</span>
+    <span class="n">public_geom_col</span><span class="o">=</span><span class="s1">&#39;barrier_geometry&#39;</span><span class="p">,</span>
+    <span class="n">tolerance</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">contiguity</span><span class="o">=</span><span class="s1">&#39;queen&#39;</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create a complete morphological network from buildings and road segments.</span>
+<span class="sd">    </span>
+<span class="sd">    This function performs a series of operations:</span>
+<span class="sd">    1. Creates tessellations based on buildings and road barrier geometries</span>
+<span class="sd">    2. Optionally filters the network by distance from a specified center point</span>
+<span class="sd">    3. Identifies enclosed tessellations adjacent to the segments</span>
+<span class="sd">    4. Creates three types of connections:</span>
+<span class="sd">       - Private to private (between tessellation cells)</span>
+<span class="sd">       - Public to public (between road segments)</span>
+<span class="sd">       - Private to public (between tessellation cells and road segments)</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    buildings_gdf : geopandas.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing building polygons</span>
+<span class="sd">    segments_gdf : geopandas.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing road segments as LineStrings.</span>
+<span class="sd">        Should include a &#39;barrier_geometry&#39; column or the column specified in public_geom_col.</span>
+<span class="sd">    center_point : Union[Point, gpd.GeoSeries, gpd.GeoDataFrame], optional</span>
+<span class="sd">        Optional center point for filtering the network by distance.</span>
+<span class="sd">        If provided, only segments within the specified distance will be included.</span>
+<span class="sd">    distance : float, default=1000</span>
+<span class="sd">        Maximum network distance from center_point to include segments, if center_point is provided.</span>
+<span class="sd">        If None, no distance filtering will be applied even if center_point is provided.</span>
+<span class="sd">    private_id_col : str, default=&#39;tess_id&#39;</span>
+<span class="sd">        Column name that uniquely identifies each tessellation cell (private space).</span>
+<span class="sd">    public_id_col : str, default=&#39;id&#39;</span>
+<span class="sd">        Column name that uniquely identifies each road segment (public space).</span>
+<span class="sd">    public_geom_col : str, default=&#39;barrier_geometry&#39;</span>
+<span class="sd">        Column name in segments_gdf containing the processed geometry to use.</span>
+<span class="sd">    tolerance : float, default=1</span>
+<span class="sd">        Buffer tolerance for spatial joins and endpoint connections (in meters).</span>
+<span class="sd">    contiguity : str, default=&#39;queen&#39;</span>
+<span class="sd">        Type of contiguity for private-to-private connections, either &#39;queen&#39; or &#39;rook&#39;.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Dictionary containing the following elements:</span>
+<span class="sd">        - &#39;tessellation&#39;: GeoDataFrame of tessellation cells (private spaces)</span>
+<span class="sd">        - &#39;segments&#39;: GeoDataFrame of road segments (public spaces)</span>
+<span class="sd">        - &#39;buildings&#39;: GeoDataFrame of buildings</span>
+<span class="sd">        - &#39;private_to_private&#39;: GeoDataFrame of connections between tessellation cells</span>
+<span class="sd">        - &#39;public_to_public&#39;: GeoDataFrame of connections between road segments</span>
+<span class="sd">        - &#39;private_to_public&#39;: GeoDataFrame of connections between tessellation cells and road segments</span>
+<span class="sd">        </span>
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    - If center_point is not provided, all segments will be included.</span>
+<span class="sd">    - The barrier_geometry column should contain the processed geometries for road segments.</span>
+<span class="sd">      If it doesn&#39;t exist, the function will use the column specified in public_geom_col.</span>
+<span class="sd">    - The function requires the city2graph package and depends on create_tessellation, filter_network_by_distance,</span>
+<span class="sd">      create_private_to_private, create_public_to_public, and create_private_to_public functions.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># Check if public_geom_col exists in segments_gdf</span>
+    <span class="k">if</span> <span class="n">public_geom_col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Column &#39;</span><span class="si">{</span><span class="n">public_geom_col</span><span class="si">}</span><span class="s2">&#39; not found in segments_gdf. Using &#39;geometry&#39; column instead.&quot;</span><span class="p">,</span> <span class="ne">RuntimeWarning</span><span class="p">)</span>
+        <span class="n">public_geom_col</span> <span class="o">=</span> <span class="s1">&#39;geometry&#39;</span>
+    
+    <span class="c1"># 1. Create tessellations based on buildings and road barrier geometries</span>
+    <span class="n">enclosed_tess</span> <span class="o">=</span> <span class="n">create_tessellation</span><span class="p">(</span>
+        <span class="n">buildings_gdf</span><span class="p">,</span> 
+        <span class="n">primary_barriers</span><span class="o">=</span><span class="n">segments_gdf</span><span class="p">[</span><span class="n">public_geom_col</span><span class="p">]</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># 2. Optionally filter the network by distance from a specified center point</span>
+    <span class="k">if</span> <span class="n">center_point</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">distance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">segments_subset</span> <span class="o">=</span> <span class="n">filter_network_by_distance</span><span class="p">(</span>
+            <span class="n">segments_gdf</span><span class="p">,</span>
+            <span class="n">center_point</span><span class="p">,</span>
+            <span class="n">distance</span><span class="o">=</span><span class="n">distance</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">segments_subset</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    
+    <span class="c1"># 3. Get the enclosure indices that are adjacent to the segments using a spatial join</span>
+    <span class="n">adjacent_enclosure_indices</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">sjoin</span><span class="p">(</span>
+        <span class="n">enclosed_tess</span><span class="p">,</span> 
+        <span class="n">segments_subset</span><span class="p">,</span> 
+        <span class="n">how</span><span class="o">=</span><span class="s1">&#39;inner&#39;</span><span class="p">,</span> 
+        <span class="n">predicate</span><span class="o">=</span><span class="s1">&#39;intersects&#39;</span>
+    <span class="p">)[</span><span class="s1">&#39;enclosure_index&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+    
+    <span class="c1"># Get enclosed tessellation for the adjacent enclosures</span>
+    <span class="n">tess_subset</span> <span class="o">=</span> <span class="n">enclosed_tess</span><span class="p">[</span><span class="n">enclosed_tess</span><span class="p">[</span><span class="s1">&#39;enclosure_index&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">adjacent_enclosure_indices</span><span class="p">)]</span>
+    
+    <span class="c1"># Filter buildings that intersect with the enclosed tessellation</span>
+    <span class="n">buildings_subset</span> <span class="o">=</span> <span class="n">buildings_gdf</span><span class="p">[</span><span class="n">buildings_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">intersects</span><span class="p">(</span><span class="n">tess_subset</span><span class="o">.</span><span class="n">unary_union</span><span class="p">)]</span>
+    
+    <span class="c1"># 4. Create connections between adjacent private spaces (tessellation cells)</span>
+    <span class="n">private_to_private</span> <span class="o">=</span> <span class="n">create_private_to_private</span><span class="p">(</span>
+        <span class="n">tess_subset</span><span class="p">,</span>
+        <span class="n">private_id_col</span><span class="o">=</span><span class="n">private_id_col</span><span class="p">,</span>
+        <span class="n">group_col</span><span class="o">=</span><span class="s2">&quot;enclosure_index&quot;</span><span class="p">,</span>
+        <span class="n">contiguity</span><span class="o">=</span><span class="n">contiguity</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Create connections between street segments</span>
+    <span class="n">public_to_public</span> <span class="o">=</span> <span class="n">create_public_to_public</span><span class="p">(</span>
+        <span class="n">segments_subset</span><span class="p">,</span>
+        <span class="n">public_id_col</span><span class="o">=</span><span class="n">public_id_col</span><span class="p">,</span>
+        <span class="n">tolerance</span><span class="o">=</span><span class="n">tolerance</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Create connections between private spaces and public spaces</span>
+    <span class="n">private_to_public</span> <span class="o">=</span> <span class="n">create_private_to_public</span><span class="p">(</span>
+        <span class="n">tess_subset</span><span class="p">,</span>
+        <span class="n">segments_subset</span><span class="p">,</span>
+        <span class="n">private_id_col</span><span class="o">=</span><span class="n">private_id_col</span><span class="p">,</span>
+        <span class="n">public_id_col</span><span class="o">=</span><span class="n">public_id_col</span><span class="p">,</span>
+        <span class="n">public_geom_col</span><span class="o">=</span><span class="n">public_geom_col</span><span class="p">,</span>
+        <span class="n">tolerance</span><span class="o">=</span><span class="n">tolerance</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Return all created elements</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;tessellations&#39;</span><span class="p">:</span> <span class="n">tess_subset</span><span class="p">,</span>
+        <span class="s1">&#39;segments&#39;</span><span class="p">:</span> <span class="n">segments_subset</span><span class="p">,</span>
+        <span class="s1">&#39;buildings&#39;</span><span class="p">:</span> <span class="n">buildings_subset</span><span class="p">,</span>
+        <span class="s1">&#39;private_to_private&#39;</span><span class="p">:</span> <span class="n">private_to_private</span><span class="p">,</span>
+        <span class="s1">&#39;public_to_public&#39;</span><span class="p">:</span> <span class="n">public_to_public</span><span class="p">,</span>
+        <span class="s1">&#39;private_to_public&#39;</span><span class="p">:</span> <span class="n">private_to_public</span>
+    <span class="p">}</span></div>
 
 </pre></div>
 
