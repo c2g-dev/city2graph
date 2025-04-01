@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>city2graph.morphological_network &#8212; city2graph 0.1.0 documentation</title>
+    <title>city2graph.morphology &#8212; city2graph 0.1.0 documentation</title>
   
   
   
@@ -42,7 +42,7 @@
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/city2graph/morphological_network';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/city2graph/morphology';</script>
     <link rel="icon" href="../../_static/city2graph_logo.png"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
@@ -347,7 +347,7 @@
     
     <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Module code</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">city2graph.morphological_network</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">city2graph.morphology</span></li>
   </ul>
 </nav>
 </div>
@@ -364,7 +364,7 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <h1>Source code for city2graph.morphological_network</h1><div class="highlight"><pre>
+  <h1>Source code for city2graph.morphology</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">Network analysis functions for creating and manipulating network graphs.</span>
 <span class="sd">&quot;&quot;&quot;</span>
@@ -693,7 +693,7 @@
 
 
 <div class="viewcode-block" id="convert_gdf_to_dual">
-<a class="viewcode-back" href="../../api/morphological_network.html#city2graph.morphological_network.convert_gdf_to_dual">[docs]</a>
+<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.convert_gdf_to_dual">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">convert_gdf_to_dual</span><span class="p">(</span><span class="n">gdf</span><span class="p">,</span> <span class="n">id_col</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Convert a GeoDataFrame to a NetworkX graph and then back to a GeoDataFrame.</span>
@@ -985,7 +985,7 @@
 
 
 <div class="viewcode-block" id="create_private_to_private">
-<a class="viewcode-back" href="../../api/morphological_network.html#city2graph.morphological_network.create_private_to_private">[docs]</a>
+<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.create_private_to_private">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">create_private_to_private</span><span class="p">(</span>
     <span class="n">private_gdf</span><span class="p">,</span> <span class="n">private_id_col</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">group_col</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">contiguity</span><span class="o">=</span><span class="s2">&quot;queen&quot;</span>
 <span class="p">):</span>
@@ -1115,7 +1115,7 @@
 
 
 <div class="viewcode-block" id="create_private_to_public">
-<a class="viewcode-back" href="../../api/morphological_network.html#city2graph.morphological_network.create_private_to_public">[docs]</a>
+<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.create_private_to_public">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">create_private_to_public</span><span class="p">(</span>
     <span class="n">private_gdf</span><span class="p">,</span>
     <span class="n">public_gdf</span><span class="p">,</span>
@@ -1177,7 +1177,7 @@
 
 
 <div class="viewcode-block" id="create_public_to_public">
-<a class="viewcode-back" href="../../api/morphological_network.html#city2graph.morphological_network.create_public_to_public">[docs]</a>
+<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.create_public_to_public">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">create_public_to_public</span><span class="p">(</span><span class="n">public_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
                             <span class="n">public_id_col</span><span class="p">:</span><span class="nb">str</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
                             <span class="n">tolerance</span><span class="p">:</span><span class="nb">float</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">):</span>
@@ -1261,7 +1261,7 @@
 
 
 <div class="viewcode-block" id="create_morphological_network">
-<a class="viewcode-back" href="../../api/morphological_network.html#city2graph.morphological_network.create_morphological_network">[docs]</a>
+<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.create_morphological_network">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">create_morphological_network</span><span class="p">(</span>
     <span class="n">buildings_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">segments_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>

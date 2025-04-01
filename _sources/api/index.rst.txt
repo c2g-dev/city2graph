@@ -8,6 +8,7 @@ This section provides detailed documentation for all modules and functions in th
    :maxdepth: 2
 
    graph
-   morphological_network
-   transportation_network
+   morphology
+   transportation
+   contiguity
    utils

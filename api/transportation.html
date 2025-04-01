@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Transportation Network &#8212; city2graph 0.1.0 documentation</title>
+    <title>Transportation &#8212; city2graph 0.1.0 documentation</title>
   
   
   
@@ -43,12 +43,12 @@
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/transportation_network';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/transportation';</script>
     <link rel="icon" href="../_static/city2graph_logo.png"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Utils" href="utils.html" />
-    <link rel="prev" title="Morphological Network" href="morphological_network.html" />
+    <link rel="prev" title="Morphology" href="morphology.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
@@ -321,8 +321,8 @@
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="graph.html">Graph</a></li>
-<li class="toctree-l1"><a class="reference internal" href="morphological_network.html">Morphological Network</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Transportation Network</a></li>
+<li class="toctree-l1"><a class="reference internal" href="morphology.html">Morphology</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Transportation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="utils.html">Utils</a></li>
 </ul>
 </div>
@@ -367,7 +367,7 @@
     
     <li class="breadcrumb-item"><a href="index.html" class="nav-link">API Reference</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Transportation Network</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Transportation</span></li>
   </ul>
 </nav>
 </div>
@@ -384,11 +384,11 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="module-city2graph.transportation_network">
-<span id="transportation-network"></span><h1>Transportation Network<a class="headerlink" href="#module-city2graph.transportation_network" title="Link to this heading">#</a></h1>
+  <section id="module-city2graph.transportation">
+<span id="transportation"></span><h1>Transportation<a class="headerlink" href="#module-city2graph.transportation" title="Link to this heading">#</a></h1>
 <dl class="py function">
-<dt class="sig sig-object py" id="city2graph.transportation_network.load_gtfs">
-<span class="sig-prename descclassname"><span class="pre">city2graph.transportation_network.</span></span><span class="sig-name descname"><span class="pre">load_gtfs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gtfs_zip_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/transportation_network.html#load_gtfs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.transportation_network.load_gtfs" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="city2graph.transportation.load_gtfs">
+<span class="sig-prename descclassname"><span class="pre">city2graph.transportation.</span></span><span class="sig-name descname"><span class="pre">load_gtfs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gtfs_zip_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/transportation.html#load_gtfs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.transportation.load_gtfs" title="Link to this definition">#</a></dt>
 <dd><p>Complete workflow to process a GTFS zip file into DataFrames with geometry columns and summary statistics.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -404,8 +404,8 @@
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="city2graph.transportation_network.get_od_pairs">
-<span class="sig-prename descclassname"><span class="pre">city2graph.transportation_network.</span></span><span class="sig-name descname"><span class="pre">get_od_pairs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gtfs_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_date</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_date</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_geometry</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_generator</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/transportation_network.html#get_od_pairs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.transportation_network.get_od_pairs" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="city2graph.transportation.get_od_pairs">
+<span class="sig-prename descclassname"><span class="pre">city2graph.transportation.</span></span><span class="sig-name descname"><span class="pre">get_od_pairs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gtfs_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_date</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_date</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_geometry</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_generator</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/transportation.html#get_od_pairs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.transportation.get_od_pairs" title="Link to this definition">#</a></dt>
 <dd><p>Generate origin-destination pairs with timestamps from GTFS data.</p>
 <p>When as_generator is False this function returns a complete (Geo)DataFrame,
 and when True it returns a generator that yields chunks.</p>
@@ -431,8 +431,8 @@ If as_generator is True, returns a generator yielding (Geo)DataFrame chunks.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="city2graph.transportation_network.create_travel_summary_network">
-<span class="sig-prename descclassname"><span class="pre">city2graph.transportation_network.</span></span><span class="sig-name descname"><span class="pre">create_travel_summary_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gtfs_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calendar_start</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calendar_end</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_gdf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/transportation_network.html#create_travel_summary_network"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.transportation_network.create_travel_summary_network" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="city2graph.transportation.create_travel_summary_network">
+<span class="sig-prename descclassname"><span class="pre">city2graph.transportation.</span></span><span class="sig-name descname"><span class="pre">create_travel_summary_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gtfs_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calendar_start</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calendar_end</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_gdf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/transportation.html#create_travel_summary_network"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.transportation.create_travel_summary_network" title="Link to this definition">#</a></dt>
 <dd><p>Create a network representing travel times and frequencies between stops.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -467,12 +467,12 @@ If as_generator is True, returns a generator yielding (Geo)DataFrame chunks.</p>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="morphological_network.html"
+       href="morphology.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Morphological Network</p>
+        <p class="prev-next-title">Morphology</p>
       </div>
     </a>
     <a class="right-next"
@@ -503,9 +503,9 @@ If as_generator is True, returns a generator yielding (Geo)DataFrame chunks.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.transportation_network.load_gtfs"><code class="docutils literal notranslate"><span class="pre">load_gtfs()</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.transportation_network.get_od_pairs"><code class="docutils literal notranslate"><span class="pre">get_od_pairs()</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.transportation_network.create_travel_summary_network"><code class="docutils literal notranslate"><span class="pre">create_travel_summary_network()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.transportation.load_gtfs"><code class="docutils literal notranslate"><span class="pre">load_gtfs()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.transportation.get_od_pairs"><code class="docutils literal notranslate"><span class="pre">get_od_pairs()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.transportation.create_travel_summary_network"><code class="docutils literal notranslate"><span class="pre">create_travel_summary_network()</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -513,7 +513,7 @@ If as_generator is True, returns a generator yielding (Geo)DataFrame chunks.</p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
-      <li><a href="../_sources/api/transportation_network.rst.txt"
+      <li><a href="../_sources/api/transportation.rst.txt"
             rel="nofollow">Show Source</a></li>
     </ul>
    </div></div>

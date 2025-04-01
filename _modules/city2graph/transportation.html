@@ -7,7 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>city2graph.transportation_network &#8212; city2graph 0.1.0 documentation</title>
+    <title>city2graph.transportation &#8212; city2graph 0.1.0 documentation</title>
   
   
   
@@ -42,7 +42,7 @@
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/city2graph/transportation_network';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/city2graph/transportation';</script>
     <link rel="icon" href="../../_static/city2graph_logo.png"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
@@ -347,7 +347,7 @@
     
     <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Module code</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">city2graph.transportation_network</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">city2graph.transportation</span></li>
   </ul>
 </nav>
 </div>
@@ -364,7 +364,7 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <h1>Source code for city2graph.transportation_network</h1><div class="highlight"><pre>
+  <h1>Source code for city2graph.transportation</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">zipfile</span>
@@ -555,7 +555,7 @@
 
 
 <div class="viewcode-block" id="load_gtfs">
-<a class="viewcode-back" href="../../api/transportation_network.html#city2graph.transportation_network.load_gtfs">[docs]</a>
+<a class="viewcode-back" href="../../api/transportation.html#city2graph.transportation.load_gtfs">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">load_gtfs</span><span class="p">(</span><span class="n">gtfs_zip_path</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Complete workflow to process a GTFS zip file into DataFrames with geometry columns and summary statistics.</span>
@@ -959,7 +959,7 @@
             <span class="k">yield</span> <span class="n">df_chunk</span>
 
 <div class="viewcode-block" id="get_od_pairs">
-<a class="viewcode-back" href="../../api/transportation_network.html#city2graph.transportation_network.get_od_pairs">[docs]</a>
+<a class="viewcode-back" href="../../api/transportation.html#city2graph.transportation.get_od_pairs">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">get_od_pairs</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">,</span> <span class="n">start_date</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">end_date</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">include_geometry</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                  <span class="n">as_generator</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="mi">10000</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -1091,7 +1091,7 @@
 
 
 <div class="viewcode-block" id="create_travel_summary_network">
-<a class="viewcode-back" href="../../api/transportation_network.html#city2graph.transportation_network.create_travel_summary_network">[docs]</a>
+<a class="viewcode-back" href="../../api/transportation.html#city2graph.transportation.create_travel_summary_network">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">create_travel_summary_network</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">,</span> <span class="n">start_time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">end_time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
                                   <span class="n">calendar_start</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">calendar_end</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">as_gdf</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>

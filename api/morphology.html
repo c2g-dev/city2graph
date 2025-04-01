@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Morphological Network &#8212; city2graph 0.1.0 documentation</title>
+    <title>Morphology &#8212; city2graph 0.1.0 documentation</title>
   
   
   
@@ -43,11 +43,11 @@
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/morphological_network';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/morphology';</script>
     <link rel="icon" href="../_static/city2graph_logo.png"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Transportation Network" href="transportation_network.html" />
+    <link rel="next" title="Transportation" href="transportation.html" />
     <link rel="prev" title="Graph" href="graph.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -321,8 +321,8 @@
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="graph.html">Graph</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">Morphological Network</a></li>
-<li class="toctree-l1"><a class="reference internal" href="transportation_network.html">Transportation Network</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Morphology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="transportation.html">Transportation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="utils.html">Utils</a></li>
 </ul>
 </div>
@@ -367,7 +367,7 @@
     
     <li class="breadcrumb-item"><a href="index.html" class="nav-link">API Reference</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Morphological Network</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Morphology</span></li>
   </ul>
 </nav>
 </div>
@@ -384,12 +384,12 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="module-city2graph.morphological_network">
-<span id="morphological-network"></span><h1>Morphological Network<a class="headerlink" href="#module-city2graph.morphological_network" title="Link to this heading">#</a></h1>
+  <section id="module-city2graph.morphology">
+<span id="morphology"></span><h1>Morphology<a class="headerlink" href="#module-city2graph.morphology" title="Link to this heading">#</a></h1>
 <p>Network analysis functions for creating and manipulating network graphs.</p>
 <dl class="py function">
-<dt class="sig sig-object py" id="city2graph.morphological_network.convert_gdf_to_dual">
-<span class="sig-prename descclassname"><span class="pre">city2graph.morphological_network.</span></span><span class="sig-name descname"><span class="pre">convert_gdf_to_dual</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphological_network.html#convert_gdf_to_dual"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphological_network.convert_gdf_to_dual" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="city2graph.morphology.convert_gdf_to_dual">
+<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">convert_gdf_to_dual</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#convert_gdf_to_dual"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.convert_gdf_to_dual" title="Link to this definition">#</a></dt>
 <dd><p>Convert a GeoDataFrame to a NetworkX graph and then back to a GeoDataFrame.
 Also detects connections where endpoints of one linestring are on another linestring.</p>
 <dl class="field-list simple">
@@ -417,8 +417,8 @@ If None, will use DataFrame index</p></li>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="city2graph.morphological_network.create_private_to_private">
-<span class="sig-prename descclassname"><span class="pre">city2graph.morphological_network.</span></span><span class="sig-name descname"><span class="pre">create_private_to_private</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">private_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contiguity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'queen'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphological_network.html#create_private_to_private"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphological_network.create_private_to_private" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="city2graph.morphology.create_private_to_private">
+<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">create_private_to_private</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">private_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contiguity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'queen'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#create_private_to_private"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.create_private_to_private" title="Link to this definition">#</a></dt>
 <dd><p>Create contiguity matrices for each group defined by group_col in the tessellation GeoDataFrame.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -447,8 +447,8 @@ If None, all polygons are treated as one group</p></li>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="city2graph.morphological_network.create_private_to_public">
-<span class="sig-prename descclassname"><span class="pre">city2graph.morphological_network.</span></span><span class="sig-name descname"><span class="pre">create_private_to_public</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">private_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphological_network.html#create_private_to_public"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphological_network.create_private_to_public" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="city2graph.morphology.create_private_to_public">
+<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">create_private_to_public</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">private_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#create_private_to_public"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.create_private_to_public" title="Link to this definition">#</a></dt>
 <dd><p>Creates connections between tessellation polygons (private space) and street segments (public space).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -474,8 +474,8 @@ If None, will use the geometry column</p></li>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="city2graph.morphological_network.create_public_to_public">
-<span class="sig-prename descclassname"><span class="pre">city2graph.morphological_network.</span></span><span class="sig-name descname"><span class="pre">create_public_to_public</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">public_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphological_network.html#create_public_to_public"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphological_network.create_public_to_public" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="city2graph.morphology.create_public_to_public">
+<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">create_public_to_public</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">public_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#create_public_to_public"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.create_public_to_public" title="Link to this definition">#</a></dt>
 <dd><p>Create connections between street segments (public-public connections).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -496,8 +496,8 @@ If None, will use DataFrame index</p></li>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="city2graph.morphological_network.create_morphological_network">
-<span class="sig-prename descclassname"><span class="pre">city2graph.morphological_network.</span></span><span class="sig-name descname"><span class="pre">create_morphological_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buildings_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segments_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_point</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'tess_id'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'id'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'barrier_geometry'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contiguity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'queen'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphological_network.html#create_morphological_network"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphological_network.create_morphological_network" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="city2graph.morphology.create_morphological_network">
+<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">create_morphological_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buildings_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segments_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_point</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'tess_id'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'id'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'barrier_geometry'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contiguity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'queen'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#create_morphological_network"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.create_morphological_network" title="Link to this definition">#</a></dt>
 <dd><p>Create a complete morphological network from buildings and road segments.</p>
 <p>This function performs a series of operations:
 1. Creates tessellations based on buildings and road barrier geometries
@@ -573,11 +573,11 @@ create_private_to_private, create_public_to_public, and create_private_to_public
       </div>
     </a>
     <a class="right-next"
-       href="transportation_network.html"
+       href="transportation.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Transportation Network</p>
+        <p class="prev-next-title">Transportation</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -600,11 +600,11 @@ create_private_to_private, create_public_to_public, and create_private_to_public
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphological_network.convert_gdf_to_dual"><code class="docutils literal notranslate"><span class="pre">convert_gdf_to_dual()</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphological_network.create_private_to_private"><code class="docutils literal notranslate"><span class="pre">create_private_to_private()</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphological_network.create_private_to_public"><code class="docutils literal notranslate"><span class="pre">create_private_to_public()</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphological_network.create_public_to_public"><code class="docutils literal notranslate"><span class="pre">create_public_to_public()</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphological_network.create_morphological_network"><code class="docutils literal notranslate"><span class="pre">create_morphological_network()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphology.convert_gdf_to_dual"><code class="docutils literal notranslate"><span class="pre">convert_gdf_to_dual()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphology.create_private_to_private"><code class="docutils literal notranslate"><span class="pre">create_private_to_private()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphology.create_private_to_public"><code class="docutils literal notranslate"><span class="pre">create_private_to_public()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphology.create_public_to_public"><code class="docutils literal notranslate"><span class="pre">create_public_to_public()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphology.create_morphological_network"><code class="docutils literal notranslate"><span class="pre">create_morphological_network()</span></code></a></li>
 </ul>
   </nav></div>
 
@@ -612,7 +612,7 @@ create_private_to_private, create_public_to_public, and create_private_to_public
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
-      <li><a href="../_sources/api/morphological_network.rst.txt"
+      <li><a href="../_sources/api/morphology.rst.txt"
             rel="nofollow">Show Source</a></li>
     </ul>
    </div></div>
