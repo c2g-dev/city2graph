@@ -723,7 +723,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_build_graph_data</span><span class="p">(</span>
     <span class="n">nodes</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
     <span class="n">edges</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
-    <span class="n">id_cols</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
+    <span class="n">node_id_cols</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
     <span class="n">node_feature_cols</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
     <span class="n">node_label_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]],</span>
     <span class="n">edge_source_cols</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">],</span>
@@ -740,7 +740,7 @@
 <span class="sd">        Dictionary of node GeoDataFrames keyed by node type.</span>
 <span class="sd">    edges : dict</span>
 <span class="sd">        Dictionary of edge GeoDataFrames keyed by (source_type, relation, target_type).</span>
-<span class="sd">    id_cols : dict</span>
+<span class="sd">    node_id_cols : dict</span>
 <span class="sd">        Dictionary mapping node types to the ID column name.</span>
 <span class="sd">    node_feature_cols : dict</span>
 <span class="sd">        Dictionary mapping node types to lists of feature column names.</span>
@@ -757,7 +757,7 @@
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    HeteroData</span>
+<span class="sd">    torch_geometric.data.HeteroData</span>
 <span class="sd">        A PyTorch Geometric HeteroData graph object.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">device</span> <span class="o">=</span> <span class="n">_get_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
@@ -767,7 +767,7 @@
     <span class="c1"># Process nodes across types</span>
     <span class="k">for</span> <span class="n">node_type</span><span class="p">,</span> <span class="n">node_gdf</span> <span class="ow">in</span> <span class="n">nodes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="c1"># ...existing node ID mapping and feature creation...</span>
-        <span class="n">id_col</span> <span class="o">=</span> <span class="n">id_cols</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">node_type</span><span class="p">)</span>
+        <span class="n">id_col</span> <span class="o">=</span> <span class="n">node_id_cols</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">node_type</span><span class="p">)</span>
         <span class="n">id_mapping</span><span class="p">,</span> <span class="n">actual_id_col</span> <span class="o">=</span> <span class="n">_extract_node_id_mapping</span><span class="p">(</span><span class="n">node_gdf</span><span class="p">,</span> <span class="n">id_col</span><span class="p">)</span>
         <span class="n">node_id_mappings</span><span class="p">[</span><span class="n">node_type</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;mapping&quot;</span><span class="p">:</span> <span class="n">id_mapping</span><span class="p">,</span> <span class="s2">&quot;id_col&quot;</span><span class="p">:</span> <span class="n">actual_id_col</span><span class="p">}</span>
         <span class="c1"># Update: use feature columns instead of attribute_cols</span>
@@ -878,7 +878,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">create_homogeneous_graph</span><span class="p">(</span>
     <span class="n">nodes_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">edges_gdf</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">id_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">node_id_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">node_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">node_label_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">edge_source_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -895,7 +895,7 @@
 <span class="sd">        GeoDataFrame containing node data.</span>
 <span class="sd">    edges_gdf : GeoDataFrame, optional</span>
 <span class="sd">        GeoDataFrame containing edge data.</span>
-<span class="sd">    id_col : str, optional</span>
+<span class="sd">    node_id_col : str, optional</span>
 <span class="sd">        Column name that uniquely identifies each node.</span>
 <span class="sd">    node_feature_cols : list of str, optional</span>
 <span class="sd">        List of columns to use as node features.</span>
@@ -912,7 +912,7 @@
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    Data</span>
+<span class="sd">    torch_geometric.data.Data</span>
 <span class="sd">        A PyTorch Geometric Data graph object.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># Preprocess homogeneous graph inputs into dictionaries.</span>
@@ -920,7 +920,7 @@
     <span class="n">edges_dict</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">if</span> <span class="n">edges_gdf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">edges_gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
         <span class="n">edges_dict</span><span class="p">[(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="n">edges_gdf</span>
-    <span class="n">id_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">id_col</span><span class="p">}</span> <span class="k">if</span> <span class="n">id_col</span> <span class="k">else</span> <span class="p">{}</span>
+    <span class="n">node_id_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">node_id_col</span><span class="p">}</span> <span class="k">if</span> <span class="n">node_id_col</span> <span class="k">else</span> <span class="p">{}</span>
     <span class="n">node_feature_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">node_feature_cols</span><span class="p">}</span> <span class="k">if</span> <span class="n">node_feature_cols</span> <span class="k">else</span> <span class="p">{}</span>
     <span class="n">node_label_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">node_label_cols</span><span class="p">}</span> <span class="k">if</span> <span class="n">node_label_cols</span> <span class="k">else</span> <span class="kc">None</span>
     <span class="n">edge_source_cols</span> <span class="o">=</span> <span class="p">(</span>
@@ -933,7 +933,7 @@
     <span class="n">hetero_data</span> <span class="o">=</span> <span class="n">_build_graph_data</span><span class="p">(</span>
         <span class="n">nodes</span><span class="o">=</span><span class="n">nodes_dict</span><span class="p">,</span>
         <span class="n">edges</span><span class="o">=</span><span class="n">edges_dict</span><span class="p">,</span>
-        <span class="n">id_cols</span><span class="o">=</span><span class="n">id_cols</span><span class="p">,</span>
+        <span class="n">id_cols</span><span class="o">=</span><span class="n">node_id_cols</span><span class="p">,</span>
         <span class="n">node_feature_cols</span><span class="o">=</span><span class="n">node_feature_cols</span><span class="p">,</span>
         <span class="n">node_label_cols</span><span class="o">=</span><span class="n">node_label_cols</span><span class="p">,</span>
         <span class="n">edge_source_cols</span><span class="o">=</span><span class="n">edge_source_cols</span><span class="p">,</span>
@@ -998,7 +998,7 @@
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    HeteroData</span>
+<span class="sd">    torch_geometric.data.HeteroData</span>
 <span class="sd">        A PyTorch Geometric HeteroData graph object.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">node_id_cols</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
