@@ -369,12 +369,12 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">zipfile</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
-
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Point</span><span class="p">,</span> <span class="n">LineString</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;load_gtfs&quot;</span><span class="p">,</span> <span class="s2">&quot;get_od_pairs&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;load_gtfs&quot;</span><span class="p">,</span> <span class="s2">&quot;get_od_pairs&quot;</span><span class="p">,</span> <span class="s2">&quot;create_travel_summary_network&quot;</span><span class="p">]</span>
 
 <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -713,13 +713,7 @@
         <span class="k">if</span> <span class="n">end_date</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;end_date&#39;</span> <span class="ow">in</span> <span class="n">calendar</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
             <span class="n">max_end_date</span> <span class="o">=</span> <span class="n">calendar</span><span class="p">[</span><span class="s1">&#39;end_date&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
             <span class="n">end_date</span> <span class="o">=</span> <span class="n">max_end_date</span> <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">notna</span><span class="p">(</span><span class="n">max_end_date</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
-        
-        <span class="c1"># Default dates if still None</span>
-        <span class="k">if</span> <span class="n">start_date</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">start_date</span> <span class="o">=</span> <span class="s1">&#39;20230101&#39;</span>  <span class="c1"># Default to Jan 1, 2023</span>
-        <span class="k">if</span> <span class="n">end_date</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">end_date</span> <span class="o">=</span> <span class="s1">&#39;20231231&#39;</span>  <span class="c1"># Default to Dec 31, 2023</span>
-            
+                    
         <span class="c1"># Convert dates to datetime objects</span>
         <span class="n">start_dt</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">start_date</span><span class="p">),</span> <span class="s1">&#39;%Y%m</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">)</span>
         <span class="n">end_dt</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">end_date</span><span class="p">),</span> <span class="s1">&#39;%Y%m</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">)</span>
@@ -1021,6 +1015,185 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Origin-destination pair generation complete&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">expanded_od</span></div>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_time_to_seconds</span><span class="p">(</span><span class="n">time_str</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">isna</span><span class="p">(</span><span class="n">time_str</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">time_str</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="n">time_str</span>
+    <span class="n">parts</span> <span class="o">=</span> <span class="n">time_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="n">h</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="n">parts</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">h</span><span class="p">)</span> <span class="o">*</span> <span class="mi">3600</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="o">*</span> <span class="mi">60</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_create_travel_summary_gdf</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">stops</span><span class="p">):</span>
+    <span class="c1"># Merge coordinates from origin stops</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+        <span class="n">stops</span><span class="p">[[</span><span class="s1">&#39;stop_lat&#39;</span><span class="p">,</span> <span class="s1">&#39;stop_lon&#39;</span><span class="p">]],</span>
+        <span class="n">left_on</span><span class="o">=</span><span class="s1">&#39;from_stop_id&#39;</span><span class="p">,</span>
+        <span class="n">right_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">suffixes</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="s1">&#39;_from&#39;</span><span class="p">)</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Merge coordinates from destination stops</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
+        <span class="n">stops</span><span class="p">[[</span><span class="s1">&#39;stop_lat&#39;</span><span class="p">,</span> <span class="s1">&#39;stop_lon&#39;</span><span class="p">]],</span>
+        <span class="n">left_on</span><span class="o">=</span><span class="s1">&#39;to_stop_id&#39;</span><span class="p">,</span>
+        <span class="n">right_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">suffixes</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;_from&#39;</span><span class="p">,</span> <span class="s1">&#39;_to&#39;</span><span class="p">)</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Create LineString geometries for each stop pair</span>
+    <span class="n">geometries</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">LineString</span><span class="p">([(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;stop_lon_from&#39;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;stop_lat_from&#39;</span><span class="p">]),</span>
+                    <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;stop_lon_to&#39;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;stop_lat_to&#39;</span><span class="p">])])</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">iterrows</span><span class="p">()</span>
+    <span class="p">]</span>
+    
+    <span class="n">gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+        <span class="n">result</span><span class="p">[[</span><span class="s1">&#39;from_stop_id&#39;</span><span class="p">,</span> <span class="s1">&#39;to_stop_id&#39;</span><span class="p">,</span> <span class="s1">&#39;travel_time&#39;</span><span class="p">,</span> <span class="s1">&#39;frequency&#39;</span><span class="p">]],</span>
+        <span class="n">geometry</span><span class="o">=</span><span class="n">geometries</span><span class="p">,</span>
+        <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">gdf</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_vectorized_time_to_seconds</span><span class="p">(</span><span class="n">time_series</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Efficiently convert a series of GTFS time strings to seconds.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    time_series : pandas.Series</span>
+<span class="sd">        Series containing time strings in HH:MM:SS format</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pandas.Series</span>
+<span class="sd">        Series containing time values converted to seconds</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">time_series</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="s1">&#39;object&#39;</span><span class="p">:</span>
+        <span class="c1"># Only process string values</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="o">~</span><span class="n">pd</span><span class="o">.</span><span class="n">isna</span><span class="p">(</span><span class="n">time_series</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">time_series</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="c1"># Process only non-NaN values</span>
+            <span class="n">time_parts</span> <span class="o">=</span> <span class="n">time_series</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="n">expand</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">result</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">time_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">3600</span> <span class="o">+</span> <span class="n">time_parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">60</span> <span class="o">+</span> <span class="n">time_parts</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+        
+        <span class="k">return</span> <span class="n">result</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># If already numeric, return as is</span>
+        <span class="k">return</span> <span class="n">time_series</span>
+
+
+<div class="viewcode-block" id="create_travel_summary_network">
+<a class="viewcode-back" href="../../api/transportation_network.html#city2graph.transportation_network.create_travel_summary_network">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_travel_summary_network</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">,</span> <span class="n">start_time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">end_time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
+                                  <span class="n">calendar_start</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">calendar_end</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">as_gdf</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create a network representing travel times and frequencies between stops.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    gtfs_data : dict</span>
+<span class="sd">        Dictionary with GTFS dataframes from load_gtfs</span>
+<span class="sd">    start_time : str, optional</span>
+<span class="sd">        Start time of day (HH:MM:SS) to filter trips</span>
+<span class="sd">    end_time : str, optional</span>
+<span class="sd">        End time of day (HH:MM:SS) to filter trips</span>
+<span class="sd">    calendar_start : str, optional</span>
+<span class="sd">        Start date in YYYYMMDD format to filter by service calendar</span>
+<span class="sd">    calendar_end : str, optional</span>
+<span class="sd">        End date in YYYYMMDD format to filter by service calendar</span>
+<span class="sd">    as_gdf : bool, default True</span>
+<span class="sd">        If True, return a GeoDataFrame; if False, return a dictionary</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    geopandas.GeoDataFrame or dict</span>
+<span class="sd">        Network of stop connections with travel times and frequencies</span>
+<span class="sd">    &quot;&quot;&quot;</span>    
+    <span class="c1"># Extract and preprocess the necessary dataframes</span>
+    <span class="n">stop_times</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;stop_times&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">trips</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;trips&quot;</span><span class="p">][[</span><span class="s1">&#39;trip_id&#39;</span><span class="p">,</span> <span class="s1">&#39;service_id&#39;</span><span class="p">]]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    
+    <span class="c1"># Convert time columns to seconds (vectorized for speed)</span>
+    <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;arrival_time_sec&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_vectorized_time_to_seconds</span><span class="p">(</span><span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;arrival_time&#39;</span><span class="p">])</span>
+    <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;departure_time_sec&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_vectorized_time_to_seconds</span><span class="p">(</span><span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;departure_time&#39;</span><span class="p">])</span>
+    
+    <span class="c1"># Apply time-of-day filters efficiently</span>
+    <span class="k">if</span> <span class="n">start_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">start_time_sec</span> <span class="o">=</span> <span class="n">_time_to_seconds</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">start_time</span><span class="p">))</span>
+        <span class="n">stop_times</span> <span class="o">=</span> <span class="n">stop_times</span><span class="p">[</span><span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;departure_time_sec&#39;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">start_time_sec</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">end_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">end_time_sec</span> <span class="o">=</span> <span class="n">_time_to_seconds</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">end_time</span><span class="p">))</span>
+        <span class="n">stop_times</span> <span class="o">=</span> <span class="n">stop_times</span><span class="p">[</span><span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;arrival_time_sec&#39;</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">end_time_sec</span><span class="p">]</span>
+    
+    <span class="c1"># Merge with trips to get service_id (using optimal merge strategy)</span>
+    <span class="n">stop_times</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">stop_times</span><span class="p">,</span> <span class="n">trips</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s1">&#39;trip_id&#39;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s1">&#39;inner&#39;</span><span class="p">)</span>
+    
+    <span class="c1"># Handle calendar filtering</span>
+    <span class="k">if</span> <span class="n">calendar_start</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">calendar_end</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Get valid service dates and calculate service frequency</span>
+        <span class="n">service_dates</span> <span class="o">=</span> <span class="n">_get_service_dates</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">,</span> <span class="n">calendar_start</span><span class="p">,</span> <span class="n">calendar_end</span><span class="p">)</span>
+        
+        <span class="c1"># Create a mapping from service_id to service count for efficient lookup</span>
+        <span class="n">service_counts</span> <span class="o">=</span> <span class="p">{</span><span class="n">s_id</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">dates</span><span class="p">)</span> <span class="k">for</span> <span class="n">s_id</span><span class="p">,</span> <span class="n">dates</span> <span class="ow">in</span> <span class="n">service_dates</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        
+        <span class="c1"># Add service counts using map (faster than apply)</span>
+        <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;service_count&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;service_id&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">service_counts</span><span class="p">)</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        
+        <span class="c1"># Filter out trips with no valid service dates</span>
+        <span class="n">stop_times</span> <span class="o">=</span> <span class="n">stop_times</span><span class="p">[</span><span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;service_count&#39;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Without calendar filtering, use uniform weight</span>
+        <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;service_count&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    
+    <span class="c1"># Create next stop info efficiently by sorting once then using shift</span>
+    <span class="n">stop_times</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">sort_values</span><span class="p">([</span><span class="s1">&#39;trip_id&#39;</span><span class="p">,</span> <span class="s1">&#39;stop_sequence&#39;</span><span class="p">])</span>
+    
+    <span class="c1"># Calculate next stop info within each trip</span>
+    <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;next_stop_id&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s1">&#39;trip_id&#39;</span><span class="p">)[</span><span class="s1">&#39;stop_id&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;next_arrival_time_sec&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s1">&#39;trip_id&#39;</span><span class="p">)[</span><span class="s1">&#39;arrival_time_sec&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    
+    <span class="c1"># Calculate travel times vectorized</span>
+    <span class="n">valid_pairs</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;next_stop_id&#39;</span><span class="p">,</span> <span class="s1">&#39;next_arrival_time_sec&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;travel_time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;next_arrival_time_sec&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;departure_time_sec&#39;</span><span class="p">]</span>
+    
+    <span class="c1"># Filter invalid pairs (all at once)</span>
+    <span class="n">valid_pairs</span> <span class="o">=</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;travel_time&#39;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
+    
+    <span class="c1"># Pre-calculate weights for aggregation</span>
+    <span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;weighted_time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;travel_time&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;service_count&#39;</span><span class="p">]</span>
+    
+    <span class="c1"># Efficient groupby aggregation with pre-calculated values</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">valid_pairs</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">&#39;stop_id&#39;</span><span class="p">,</span> <span class="s1">&#39;next_stop_id&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+        <span class="n">weighted_time</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;weighted_time&#39;</span><span class="p">,</span> <span class="s1">&#39;sum&#39;</span><span class="p">),</span>
+        <span class="n">total_service_count</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;service_count&#39;</span><span class="p">,</span> <span class="s1">&#39;sum&#39;</span><span class="p">)</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+    
+    <span class="c1"># Calculate weighted average travel time</span>
+    <span class="n">result</span><span class="p">[</span><span class="s1">&#39;travel_time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;weighted_time&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;total_service_count&#39;</span><span class="p">]</span>
+    <span class="n">result</span><span class="p">[</span><span class="s1">&#39;frequency&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;total_service_count&#39;</span><span class="p">]</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="s1">&#39;weighted_time&#39;</span><span class="p">,</span> <span class="s1">&#39;total_service_count&#39;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    
+    <span class="c1"># Return dictionary if requested</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">as_gdf</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;stop_id&#39;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;next_stop_id&#39;</span><span class="p">]):</span> <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;travel_time&#39;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;frequency&#39;</span><span class="p">])</span> 
+                <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">iterrows</span><span class="p">()}</span>
+    
+    <span class="c1"># Prepare for GeoDataFrame creation</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;stop_id&#39;</span><span class="p">:</span> <span class="s1">&#39;from_stop_id&#39;</span><span class="p">,</span> <span class="s1">&#39;next_stop_id&#39;</span><span class="p">:</span> <span class="s1">&#39;to_stop_id&#39;</span><span class="p">})</span>
+    <span class="n">stops</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s1">&#39;stops&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;stop_id&#39;</span><span class="p">)</span>
+    
+    <span class="c1"># Create GeoDataFrame</span>
+    <span class="n">gdf</span> <span class="o">=</span> <span class="n">_create_travel_summary_gdf</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">stops</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="n">gdf</span></div>
 
 </pre></div>
 
