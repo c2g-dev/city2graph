@@ -1,7 +1,7 @@
 .. city2graph documentation master file
 
 city2graph documentation
-==========
+========================
 
 .. figure:: _static/city2graph_logo_main.png
    :width: 400px
@@ -46,6 +46,19 @@ Examples
    :align: center
    
    A morphological network of 500-m walking distance in Liverpool
+
+
+Documentation
+------------
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
+
+   installation
+   examples
+   api
+   contributing
 
 
 Indices and tables
