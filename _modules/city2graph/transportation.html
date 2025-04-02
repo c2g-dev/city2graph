@@ -378,7 +378,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Point</span><span class="p">,</span> <span class="n">LineString</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;load_gtfs&quot;</span><span class="p">,</span> <span class="s2">&quot;get_od_pairs&quot;</span><span class="p">,</span> <span class="s2">&quot;create_travel_summary_network&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;load_gtfs&quot;</span><span class="p">,</span> <span class="s2">&quot;get_od_pairs&quot;</span><span class="p">,</span> <span class="s2">&quot;travel_summary_network&quot;</span><span class="p">]</span>
 
 <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -419,7 +419,9 @@
 
     <span class="c1"># Process stops.txt - convert latitude and longitude columns to numeric</span>
     <span class="n">stops_df</span> <span class="o">=</span> <span class="n">processed_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stops&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">stops_df</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="n">col</span> <span class="ow">in</span> <span class="n">stops_df</span><span class="o">.</span><span class="n">columns</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_lon&quot;</span><span class="p">]):</span>
+    <span class="k">if</span> <span class="n">stops_df</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span>
+        <span class="n">col</span> <span class="ow">in</span> <span class="n">stops_df</span><span class="o">.</span><span class="n">columns</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_lon&quot;</span><span class="p">]</span>
+    <span class="p">):</span>
         <span class="n">stops_df</span><span class="p">[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">stops_df</span><span class="p">[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span><span class="p">)</span>
         <span class="n">stops_df</span><span class="p">[</span><span class="s2">&quot;stop_lon&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">stops_df</span><span class="p">[</span><span class="s2">&quot;stop_lon&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span><span class="p">)</span>
         <span class="n">processed_data</span><span class="p">[</span><span class="s2">&quot;stops&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stops_df</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_lon&quot;</span><span class="p">])</span>
@@ -427,14 +429,26 @@
     <span class="c1"># Process routes.txt - convert route_type to numeric</span>
     <span class="n">routes_df</span> <span class="o">=</span> <span class="n">processed_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;routes&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">routes_df</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;route_type&quot;</span> <span class="ow">in</span> <span class="n">routes_df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
-        <span class="n">processed_data</span><span class="p">[</span><span class="s2">&quot;routes&quot;</span><span class="p">][</span><span class="s2">&quot;route_type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">routes_df</span><span class="p">[</span><span class="s2">&quot;route_type&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span><span class="p">)</span>
+        <span class="n">processed_data</span><span class="p">[</span><span class="s2">&quot;routes&quot;</span><span class="p">][</span><span class="s2">&quot;route_type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span>
+            <span class="n">routes_df</span><span class="p">[</span><span class="s2">&quot;route_type&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span>
+        <span class="p">)</span>
 
     <span class="c1"># Process calendar.txt - convert service day columns to boolean</span>
     <span class="n">calendar_df</span> <span class="o">=</span> <span class="n">processed_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;calendar&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">calendar_df</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">day</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;monday&quot;</span><span class="p">,</span> <span class="s2">&quot;tuesday&quot;</span><span class="p">,</span> <span class="s2">&quot;wednesday&quot;</span><span class="p">,</span> <span class="s2">&quot;thursday&quot;</span><span class="p">,</span> <span class="s2">&quot;friday&quot;</span><span class="p">,</span> <span class="s2">&quot;saturday&quot;</span><span class="p">,</span> <span class="s2">&quot;sunday&quot;</span><span class="p">]:</span>
+        <span class="k">for</span> <span class="n">day</span> <span class="ow">in</span> <span class="p">[</span>
+            <span class="s2">&quot;monday&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;tuesday&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;wednesday&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;thursday&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;friday&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;saturday&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;sunday&quot;</span><span class="p">,</span>
+        <span class="p">]:</span>
             <span class="k">if</span> <span class="n">day</span> <span class="ow">in</span> <span class="n">calendar_df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
-                <span class="n">processed_data</span><span class="p">[</span><span class="s2">&quot;calendar&quot;</span><span class="p">][</span><span class="n">day</span><span class="p">]</span> <span class="o">=</span> <span class="n">calendar_df</span><span class="p">[</span><span class="n">day</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">bool</span><span class="p">)</span>
+                <span class="n">processed_data</span><span class="p">[</span><span class="s2">&quot;calendar&quot;</span><span class="p">][</span><span class="n">day</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">calendar_df</span><span class="p">[</span><span class="n">day</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">bool</span><span class="p">)</span>
+                <span class="p">)</span>
 
     <span class="c1"># Process stop_times.txt - no changes needed since time processing can be complex</span>
     <span class="k">if</span> <span class="n">processed_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stop_times&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -446,30 +460,34 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_stops_geometry</span><span class="p">(</span><span class="n">stops_df</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create a GeoSeries of Points for stops based on latitude and longitude.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    stops_df : pandas.DataFrame</span>
 <span class="sd">        DataFrame containing stop information with stop_lat and stop_lon columns</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    geopandas.GeoSeries</span>
 <span class="sd">        GeoSeries containing Point geometries indexed by stop_id</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">stops_df</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">col</span> <span class="ow">in</span> <span class="n">stops_df</span><span class="o">.</span><span class="n">columns</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;stop_lon&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_lat&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_id&quot;</span><span class="p">]):</span>
+    <span class="k">if</span> <span class="n">stops_df</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span>
+        <span class="n">col</span> <span class="ow">in</span> <span class="n">stops_df</span><span class="o">.</span><span class="n">columns</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;stop_lon&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_lat&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_id&quot;</span><span class="p">]</span>
+    <span class="p">):</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Missing required columns in stops DataFrame&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">None</span>
-    
+
     <span class="c1"># Convert lat/lon to numeric if not already</span>
     <span class="n">stops_df</span> <span class="o">=</span> <span class="n">stops_df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
     <span class="n">stops_df</span><span class="p">[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">stops_df</span><span class="p">[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span><span class="p">)</span>
     <span class="n">stops_df</span><span class="p">[</span><span class="s2">&quot;stop_lon&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">stops_df</span><span class="p">[</span><span class="s2">&quot;stop_lon&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span><span class="p">)</span>
     <span class="n">stops_df</span> <span class="o">=</span> <span class="n">stops_df</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_lon&quot;</span><span class="p">])</span>
-    
+
     <span class="c1"># Create Point geometries</span>
-    <span class="n">geometries</span> <span class="o">=</span> <span class="p">[</span><span class="n">Point</span><span class="p">(</span><span class="n">lon</span><span class="p">,</span> <span class="n">lat</span><span class="p">)</span> <span class="k">for</span> <span class="n">lon</span><span class="p">,</span> <span class="n">lat</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">stops_df</span><span class="p">[</span><span class="s2">&quot;stop_lon&quot;</span><span class="p">],</span> <span class="n">stops_df</span><span class="p">[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">])]</span>
-    
+    <span class="n">geometries</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">Point</span><span class="p">(</span><span class="n">lon</span><span class="p">,</span> <span class="n">lat</span><span class="p">)</span> <span class="k">for</span> <span class="n">lon</span><span class="p">,</span> <span class="n">lat</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">stops_df</span><span class="p">[</span><span class="s2">&quot;stop_lon&quot;</span><span class="p">],</span> <span class="n">stops_df</span><span class="p">[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">])</span>
+    <span class="p">]</span>
+
     <span class="c1"># Create and return a GeoSeries indexed by stop_id</span>
     <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">(</span><span class="n">geometries</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span><span class="p">)</span>
 
@@ -477,37 +495,51 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_shapes_geometry</span><span class="p">(</span><span class="n">shapes_df</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create a GeoSeries of LineStrings for shapes by aggregating points in sequence.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    shapes_df : pandas.DataFrame</span>
-<span class="sd">        DataFrame containing shape information with shape_id, shape_pt_lat, </span>
+<span class="sd">        DataFrame containing shape information with shape_id, shape_pt_lat,</span>
 <span class="sd">        shape_pt_lon, and shape_pt_sequence columns</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    geopandas.GeoSeries</span>
 <span class="sd">        GeoSeries containing LineString geometries indexed by shape_id</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">shapes_df</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">col</span> <span class="ow">in</span> <span class="n">shapes_df</span><span class="o">.</span><span class="n">columns</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;shape_id&quot;</span><span class="p">,</span> <span class="s2">&quot;shape_pt_lat&quot;</span><span class="p">,</span> <span class="s2">&quot;shape_pt_lon&quot;</span><span class="p">,</span> <span class="s2">&quot;shape_pt_sequence&quot;</span><span class="p">]):</span>
+    <span class="k">if</span> <span class="n">shapes_df</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span>
+        <span class="n">col</span> <span class="ow">in</span> <span class="n">shapes_df</span><span class="o">.</span><span class="n">columns</span>
+        <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;shape_id&quot;</span><span class="p">,</span> <span class="s2">&quot;shape_pt_lat&quot;</span><span class="p">,</span> <span class="s2">&quot;shape_pt_lon&quot;</span><span class="p">,</span> <span class="s2">&quot;shape_pt_sequence&quot;</span><span class="p">]</span>
+    <span class="p">):</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Missing required columns in shapes DataFrame&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">None</span>
 
     <span class="c1"># Convert columns to numeric</span>
     <span class="n">shapes_df</span> <span class="o">=</span> <span class="n">shapes_df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-    <span class="n">shapes_df</span><span class="p">[</span><span class="s2">&quot;shape_pt_lat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">shapes_df</span><span class="p">[</span><span class="s2">&quot;shape_pt_lat&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span><span class="p">)</span>
-    <span class="n">shapes_df</span><span class="p">[</span><span class="s2">&quot;shape_pt_lon&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">shapes_df</span><span class="p">[</span><span class="s2">&quot;shape_pt_lon&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span><span class="p">)</span>
-    <span class="n">shapes_df</span><span class="p">[</span><span class="s2">&quot;shape_pt_sequence&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">shapes_df</span><span class="p">[</span><span class="s2">&quot;shape_pt_sequence&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span><span class="p">)</span>
-    <span class="n">shapes_df</span> <span class="o">=</span> <span class="n">shapes_df</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;shape_pt_lat&quot;</span><span class="p">,</span> <span class="s2">&quot;shape_pt_lon&quot;</span><span class="p">,</span> <span class="s2">&quot;shape_pt_sequence&quot;</span><span class="p">])</span>
+    <span class="n">shapes_df</span><span class="p">[</span><span class="s2">&quot;shape_pt_lat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span>
+        <span class="n">shapes_df</span><span class="p">[</span><span class="s2">&quot;shape_pt_lat&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span>
+    <span class="p">)</span>
+    <span class="n">shapes_df</span><span class="p">[</span><span class="s2">&quot;shape_pt_lon&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span>
+        <span class="n">shapes_df</span><span class="p">[</span><span class="s2">&quot;shape_pt_lon&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span>
+    <span class="p">)</span>
+    <span class="n">shapes_df</span><span class="p">[</span><span class="s2">&quot;shape_pt_sequence&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span>
+        <span class="n">shapes_df</span><span class="p">[</span><span class="s2">&quot;shape_pt_sequence&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span>
+    <span class="p">)</span>
+    <span class="n">shapes_df</span> <span class="o">=</span> <span class="n">shapes_df</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span>
+        <span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;shape_pt_lat&quot;</span><span class="p">,</span> <span class="s2">&quot;shape_pt_lon&quot;</span><span class="p">,</span> <span class="s2">&quot;shape_pt_sequence&quot;</span><span class="p">]</span>
+    <span class="p">)</span>
     <span class="n">shapes_df</span> <span class="o">=</span> <span class="n">shapes_df</span><span class="o">.</span><span class="n">sort_values</span><span class="p">([</span><span class="s2">&quot;shape_id&quot;</span><span class="p">,</span> <span class="s2">&quot;shape_pt_sequence&quot;</span><span class="p">])</span>
 
     <span class="c1"># Create LineStrings for each shape_id</span>
     <span class="n">linestrings</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">for</span> <span class="n">shape_id</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">shapes_df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;shape_id&quot;</span><span class="p">):</span>
-        <span class="n">points</span> <span class="o">=</span> <span class="p">[</span><span class="n">Point</span><span class="p">(</span><span class="n">lon</span><span class="p">,</span> <span class="n">lat</span><span class="p">)</span> <span class="k">for</span> <span class="n">lon</span><span class="p">,</span> <span class="n">lat</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">group</span><span class="p">[</span><span class="s2">&quot;shape_pt_lon&quot;</span><span class="p">],</span> <span class="n">group</span><span class="p">[</span><span class="s2">&quot;shape_pt_lat&quot;</span><span class="p">])]</span>
+        <span class="n">points</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">Point</span><span class="p">(</span><span class="n">lon</span><span class="p">,</span> <span class="n">lat</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">lon</span><span class="p">,</span> <span class="n">lat</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">group</span><span class="p">[</span><span class="s2">&quot;shape_pt_lon&quot;</span><span class="p">],</span> <span class="n">group</span><span class="p">[</span><span class="s2">&quot;shape_pt_lat&quot;</span><span class="p">])</span>
+        <span class="p">]</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
             <span class="n">linestrings</span><span class="p">[</span><span class="n">shape_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">LineString</span><span class="p">(</span><span class="n">points</span><span class="p">)</span>
-    
+
     <span class="c1"># Return a GeoSeries if we have any valid shapes</span>
     <span class="k">if</span> <span class="n">linestrings</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">(</span><span class="n">linestrings</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span><span class="p">)</span>
@@ -517,20 +549,23 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_create_route_trips_df</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">,</span> <span class="n">shapes_geometry</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create a GeoDataFrame linking routes and trips with shape geometries.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    gtfs_data : dict</span>
 <span class="sd">        Dictionary with GTFS file names as keys and pandas DataFrames as values</span>
 <span class="sd">    shapes_geometry : geopandas.GeoSeries</span>
 <span class="sd">        GeoSeries containing LineString geometries indexed by shape_id</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    geopandas.GeoDataFrame</span>
 <span class="sd">        GeoDataFrame with route and trip information and LineString geometries</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">key</span> <span class="ow">in</span> <span class="n">gtfs_data</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;routes&quot;</span><span class="p">,</span> <span class="s2">&quot;trips&quot;</span><span class="p">])</span> <span class="ow">or</span> <span class="n">shapes_geometry</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">key</span> <span class="ow">in</span> <span class="n">gtfs_data</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;routes&quot;</span><span class="p">,</span> <span class="s2">&quot;trips&quot;</span><span class="p">])</span>
+        <span class="ow">or</span> <span class="n">shapes_geometry</span> <span class="ow">is</span> <span class="kc">None</span>
+    <span class="p">):</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Missing required data to create route trips GeoDataFrame&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">None</span>
 
@@ -539,20 +574,20 @@
         <span class="n">routes_df</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;routes&quot;</span><span class="p">]</span>
 
         <span class="c1"># Create a DataFrame from the shapes GeoSeries</span>
-        <span class="n">shapes_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;shape_id&quot;</span><span class="p">:</span> <span class="n">shapes_geometry</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="n">shapes_geometry</span><span class="o">.</span><span class="n">values</span><span class="p">})</span>
-        
+        <span class="n">shapes_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+            <span class="p">{</span><span class="s2">&quot;shape_id&quot;</span><span class="p">:</span> <span class="n">shapes_geometry</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="n">shapes_geometry</span><span class="o">.</span><span class="n">values</span><span class="p">}</span>
+        <span class="p">)</span>
+
         <span class="c1"># Merge trips with shapes geometry</span>
-        <span class="n">trips_with_shapes</span> <span class="o">=</span> <span class="n">trips_df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
-            <span class="n">shapes_df</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s2">&quot;shape_id&quot;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span>
-        <span class="p">)</span>
-        
+        <span class="n">trips_with_shapes</span> <span class="o">=</span> <span class="n">trips_df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">shapes_df</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s2">&quot;shape_id&quot;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span><span class="p">)</span>
+
         <span class="c1"># Merge with routes</span>
-        <span class="n">route_trips</span> <span class="o">=</span> <span class="n">trips_with_shapes</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
-            <span class="n">routes_df</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s2">&quot;route_id&quot;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span>
-        <span class="p">)</span>
-        
+        <span class="n">route_trips</span> <span class="o">=</span> <span class="n">trips_with_shapes</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">routes_df</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s2">&quot;route_id&quot;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span><span class="p">)</span>
+
         <span class="c1"># Convert to GeoDataFrame</span>
-        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">route_trips</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">shapes_geometry</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+            <span class="n">route_trips</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">shapes_geometry</span><span class="o">.</span><span class="n">crs</span>
+        <span class="p">)</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error creating route trips GeoDataFrame: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="kc">None</span>
@@ -563,12 +598,12 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">load_gtfs</span><span class="p">(</span><span class="n">gtfs_zip_path</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Complete workflow to process a GTFS zip file into DataFrames with geometry columns and summary statistics.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    gtfs_zip_path : str or Path</span>
 <span class="sd">        Path to the GTFS zip file</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    dict</span>
@@ -588,8 +623,9 @@
         <span class="k">if</span> <span class="n">stops_geometry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Add the stops GeoSeries to the dictionary</span>
             <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;stops&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
-                <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;stops&quot;</span><span class="p">],</span> <span class="n">geometry</span><span class="o">=</span><span class="n">stops_geometry</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span><span class="p">)</span>
-            
+                <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;stops&quot;</span><span class="p">],</span> <span class="n">geometry</span><span class="o">=</span><span class="n">stops_geometry</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span>
+            <span class="p">)</span>
+
     <span class="k">if</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;shapes&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Creating shapes geometry...&quot;</span><span class="p">)</span>
         <span class="n">shapes_geometry</span> <span class="o">=</span> <span class="n">_get_shapes_geometry</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;shapes&quot;</span><span class="p">])</span>
@@ -597,7 +633,8 @@
         <span class="k">if</span> <span class="n">shapes_geometry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Add the shapes GeoSeries to the dictionary</span>
             <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;shapes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
-                <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;shapes&quot;</span><span class="p">],</span> <span class="n">geometry</span><span class="o">=</span><span class="n">shapes_geometry</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span><span class="p">)</span>
+                <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;shapes&quot;</span><span class="p">],</span> <span class="n">geometry</span><span class="o">=</span><span class="n">shapes_geometry</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span>
+            <span class="p">)</span>
 
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;GTFS data processing complete&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">gtfs_data</span></div>
@@ -608,83 +645,87 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_create_od_pairs</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create origin-destination pairs with timestamps from GTFS data.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    gtfs_data : dict</span>
 <span class="sd">        Dictionary with GTFS dataframes</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    pandas.DataFrame</span>
 <span class="sd">        DataFrame with trip_id, orig_stop_id, dest_stop_id, and timestamp columns</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">stop_times</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;stop_times&#39;</span><span class="p">)</span>
-    <span class="n">trips</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;trips&#39;</span><span class="p">)</span>
-    <span class="n">calendar</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;calendar&#39;</span><span class="p">)</span>
-    <span class="n">calendar_dates</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;calendar_dates&#39;</span><span class="p">)</span>
-    
+    <span class="n">stop_times</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stop_times&quot;</span><span class="p">)</span>
+    <span class="n">trips</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;trips&quot;</span><span class="p">)</span>
+    <span class="n">calendar</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;calendar&quot;</span><span class="p">)</span>
+    <span class="n">calendar_dates</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;calendar_dates&quot;</span><span class="p">)</span>
+
     <span class="k">if</span> <span class="n">stop_times</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">trips</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Missing required GTFS data tables.&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">None</span>
-    
+
     <span class="c1"># Process stop_times to convert arrival_time and departure_time to datetime</span>
     <span class="n">stop_times_copy</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-    
+
     <span class="c1"># Ensure stop_sequence is numeric</span>
-    <span class="n">stop_times_copy</span><span class="p">[</span><span class="s1">&#39;stop_sequence&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">stop_times_copy</span><span class="p">[</span><span class="s1">&#39;stop_sequence&#39;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s1">&#39;coerce&#39;</span><span class="p">)</span>
-    
+    <span class="n">stop_times_copy</span><span class="p">[</span><span class="s2">&quot;stop_sequence&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span>
+        <span class="n">stop_times_copy</span><span class="p">[</span><span class="s2">&quot;stop_sequence&quot;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span>
+    <span class="p">)</span>
+
     <span class="c1"># Sort by trip_id and stop_sequence to ensure correct order</span>
-    <span class="n">stop_times_copy</span> <span class="o">=</span> <span class="n">stop_times_copy</span><span class="o">.</span><span class="n">sort_values</span><span class="p">([</span><span class="s1">&#39;trip_id&#39;</span><span class="p">,</span> <span class="s1">&#39;stop_sequence&#39;</span><span class="p">])</span>
-    
+    <span class="n">stop_times_copy</span> <span class="o">=</span> <span class="n">stop_times_copy</span><span class="o">.</span><span class="n">sort_values</span><span class="p">([</span><span class="s2">&quot;trip_id&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_sequence&quot;</span><span class="p">])</span>
+
     <span class="c1"># Create a shifted dataframe to get the next stop in the sequence</span>
     <span class="n">next_stops</span> <span class="o">=</span> <span class="n">stop_times_copy</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-    <span class="n">next_stops</span> <span class="o">=</span> <span class="n">next_stops</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span>
-        <span class="s1">&#39;stop_id&#39;</span><span class="p">:</span> <span class="s1">&#39;dest_stop_id&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;arrival_time&#39;</span><span class="p">:</span> <span class="s1">&#39;dest_arrival_time&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;departure_time&#39;</span><span class="p">:</span> <span class="s1">&#39;dest_departure_time&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;stop_sequence&#39;</span><span class="p">:</span> <span class="s1">&#39;dest_stop_sequence&#39;</span>
-    <span class="p">})</span>
-    
+    <span class="n">next_stops</span> <span class="o">=</span> <span class="n">next_stops</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span>
+        <span class="n">columns</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">&quot;stop_id&quot;</span><span class="p">:</span> <span class="s2">&quot;dest_stop_id&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;arrival_time&quot;</span><span class="p">:</span> <span class="s2">&quot;dest_arrival_time&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;departure_time&quot;</span><span class="p">:</span> <span class="s2">&quot;dest_departure_time&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;stop_sequence&quot;</span><span class="p">:</span> <span class="s2">&quot;dest_stop_sequence&quot;</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+
     <span class="c1"># Create origin-destination pairs within the same trip</span>
     <span class="n">od_pairs</span> <span class="o">=</span> <span class="p">[]</span>
-    
-    <span class="k">for</span> <span class="n">trip_id</span><span class="p">,</span> <span class="n">trip_stops</span> <span class="ow">in</span> <span class="n">stop_times_copy</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s1">&#39;trip_id&#39;</span><span class="p">):</span>
-        <span class="n">trip_stops</span> <span class="o">=</span> <span class="n">trip_stops</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s1">&#39;stop_sequence&#39;</span><span class="p">)</span>
-        
+
+    <span class="k">for</span> <span class="n">trip_id</span><span class="p">,</span> <span class="n">trip_stops</span> <span class="ow">in</span> <span class="n">stop_times_copy</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;trip_id&quot;</span><span class="p">):</span>
+        <span class="n">trip_stops</span> <span class="o">=</span> <span class="n">trip_stops</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s2">&quot;stop_sequence&quot;</span><span class="p">)</span>
+
         <span class="c1"># Skip trips with only one stop</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">trip_stops</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">continue</span>
-            
+
         <span class="c1"># Iterate through consecutive stops</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">trip_stops</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
             <span class="n">orig_stop</span> <span class="o">=</span> <span class="n">trip_stops</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
             <span class="n">dest_stop</span> <span class="o">=</span> <span class="n">trip_stops</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
-            
+
             <span class="n">od_pair</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="s1">&#39;trip_id&#39;</span><span class="p">:</span> <span class="n">trip_id</span><span class="p">,</span>
-                <span class="s1">&#39;orig_stop_id&#39;</span><span class="p">:</span> <span class="n">orig_stop</span><span class="p">[</span><span class="s1">&#39;stop_id&#39;</span><span class="p">],</span>
-                <span class="s1">&#39;dest_stop_id&#39;</span><span class="p">:</span> <span class="n">dest_stop</span><span class="p">[</span><span class="s1">&#39;stop_id&#39;</span><span class="p">],</span>
-                <span class="s1">&#39;departure_time&#39;</span><span class="p">:</span> <span class="n">orig_stop</span><span class="p">[</span><span class="s1">&#39;departure_time&#39;</span><span class="p">],</span>
-                <span class="s1">&#39;arrival_time&#39;</span><span class="p">:</span> <span class="n">dest_stop</span><span class="p">[</span><span class="s1">&#39;arrival_time&#39;</span><span class="p">],</span>
-                <span class="s1">&#39;orig_stop_sequence&#39;</span><span class="p">:</span> <span class="n">orig_stop</span><span class="p">[</span><span class="s1">&#39;stop_sequence&#39;</span><span class="p">],</span>
-                <span class="s1">&#39;dest_stop_sequence&#39;</span><span class="p">:</span> <span class="n">dest_stop</span><span class="p">[</span><span class="s1">&#39;stop_sequence&#39;</span><span class="p">]</span>
+                <span class="s2">&quot;trip_id&quot;</span><span class="p">:</span> <span class="n">trip_id</span><span class="p">,</span>
+                <span class="s2">&quot;orig_stop_id&quot;</span><span class="p">:</span> <span class="n">orig_stop</span><span class="p">[</span><span class="s2">&quot;stop_id&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;dest_stop_id&quot;</span><span class="p">:</span> <span class="n">dest_stop</span><span class="p">[</span><span class="s2">&quot;stop_id&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;departure_time&quot;</span><span class="p">:</span> <span class="n">orig_stop</span><span class="p">[</span><span class="s2">&quot;departure_time&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;arrival_time&quot;</span><span class="p">:</span> <span class="n">dest_stop</span><span class="p">[</span><span class="s2">&quot;arrival_time&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;orig_stop_sequence&quot;</span><span class="p">:</span> <span class="n">orig_stop</span><span class="p">[</span><span class="s2">&quot;stop_sequence&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;dest_stop_sequence&quot;</span><span class="p">:</span> <span class="n">dest_stop</span><span class="p">[</span><span class="s2">&quot;stop_sequence&quot;</span><span class="p">],</span>
             <span class="p">}</span>
             <span class="n">od_pairs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">od_pair</span><span class="p">)</span>
-    
+
     <span class="c1"># Create DataFrame from the list of OD pairs</span>
     <span class="n">od_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">od_pairs</span><span class="p">)</span>
-    
+
     <span class="c1"># Merge with trips to get service_id</span>
-    <span class="n">od_df</span> <span class="o">=</span> <span class="n">od_df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">trips</span><span class="p">[[</span><span class="s1">&#39;trip_id&#39;</span><span class="p">,</span> <span class="s1">&#39;service_id&#39;</span><span class="p">]],</span> <span class="n">on</span><span class="o">=</span><span class="s1">&#39;trip_id&#39;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s1">&#39;left&#39;</span><span class="p">)</span>
-    
+    <span class="n">od_df</span> <span class="o">=</span> <span class="n">od_df</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">trips</span><span class="p">[[</span><span class="s2">&quot;trip_id&quot;</span><span class="p">,</span> <span class="s2">&quot;service_id&quot;</span><span class="p">]],</span> <span class="n">on</span><span class="o">=</span><span class="s2">&quot;trip_id&quot;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">)</span>
+
     <span class="k">return</span> <span class="n">od_df</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_service_dates</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">,</span> <span class="n">start_date</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">end_date</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Get the dates when each service_id is active based on calendar and calendar_dates.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    gtfs_data : dict</span>
@@ -693,7 +734,7 @@
 <span class="sd">        Start date in YYYYMMDD format, defaults to calendar&#39;s start_date if None</span>
 <span class="sd">    end_date : str, optional</span>
 <span class="sd">        End date in YYYYMMDD format, defaults to calendar&#39;s end_date if None</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    dict</span>
@@ -701,109 +742,118 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timedelta</span>
-    
-    <span class="n">calendar</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;calendar&#39;</span><span class="p">)</span>
-    <span class="n">calendar_dates</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;calendar_dates&#39;</span><span class="p">)</span>
-    
+
+    <span class="n">calendar</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;calendar&quot;</span><span class="p">)</span>
+    <span class="n">calendar_dates</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;calendar_dates&quot;</span><span class="p">)</span>
+
     <span class="n">service_dates</span> <span class="o">=</span> <span class="p">{}</span>
-    
+
     <span class="c1"># Process regular service from calendar.txt</span>
     <span class="k">if</span> <span class="n">calendar</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># If start_date and end_date are not provided, use min and max from calendar</span>
-        <span class="k">if</span> <span class="n">start_date</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;start_date&#39;</span> <span class="ow">in</span> <span class="n">calendar</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
-            <span class="n">min_start_date</span> <span class="o">=</span> <span class="n">calendar</span><span class="p">[</span><span class="s1">&#39;start_date&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">start_date</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;start_date&quot;</span> <span class="ow">in</span> <span class="n">calendar</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">min_start_date</span> <span class="o">=</span> <span class="n">calendar</span><span class="p">[</span><span class="s2">&quot;start_date&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
             <span class="n">start_date</span> <span class="o">=</span> <span class="n">min_start_date</span> <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">notna</span><span class="p">(</span><span class="n">min_start_date</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
-        
-        <span class="k">if</span> <span class="n">end_date</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s1">&#39;end_date&#39;</span> <span class="ow">in</span> <span class="n">calendar</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
-            <span class="n">max_end_date</span> <span class="o">=</span> <span class="n">calendar</span><span class="p">[</span><span class="s1">&#39;end_date&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">end_date</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;end_date&quot;</span> <span class="ow">in</span> <span class="n">calendar</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">max_end_date</span> <span class="o">=</span> <span class="n">calendar</span><span class="p">[</span><span class="s2">&quot;end_date&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
             <span class="n">end_date</span> <span class="o">=</span> <span class="n">max_end_date</span> <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">notna</span><span class="p">(</span><span class="n">max_end_date</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
-                    
+
         <span class="c1"># Convert dates to datetime objects</span>
-        <span class="n">start_dt</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">start_date</span><span class="p">),</span> <span class="s1">&#39;%Y%m</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">)</span>
-        <span class="n">end_dt</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">end_date</span><span class="p">),</span> <span class="s1">&#39;%Y%m</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">)</span>
-        
+        <span class="n">start_dt</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">start_date</span><span class="p">),</span> <span class="s2">&quot;%Y%m</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">end_dt</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">end_date</span><span class="p">),</span> <span class="s2">&quot;%Y%m</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">)</span>
+
         <span class="c1"># Map days of week to calendar columns</span>
         <span class="n">day_mapping</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="mi">0</span><span class="p">:</span> <span class="s1">&#39;monday&#39;</span><span class="p">,</span>
-            <span class="mi">1</span><span class="p">:</span> <span class="s1">&#39;tuesday&#39;</span><span class="p">,</span>
-            <span class="mi">2</span><span class="p">:</span> <span class="s1">&#39;wednesday&#39;</span><span class="p">,</span>
-            <span class="mi">3</span><span class="p">:</span> <span class="s1">&#39;thursday&#39;</span><span class="p">,</span>
-            <span class="mi">4</span><span class="p">:</span> <span class="s1">&#39;friday&#39;</span><span class="p">,</span>
-            <span class="mi">5</span><span class="p">:</span> <span class="s1">&#39;saturday&#39;</span><span class="p">,</span>
-            <span class="mi">6</span><span class="p">:</span> <span class="s1">&#39;sunday&#39;</span>
+            <span class="mi">0</span><span class="p">:</span> <span class="s2">&quot;monday&quot;</span><span class="p">,</span>
+            <span class="mi">1</span><span class="p">:</span> <span class="s2">&quot;tuesday&quot;</span><span class="p">,</span>
+            <span class="mi">2</span><span class="p">:</span> <span class="s2">&quot;wednesday&quot;</span><span class="p">,</span>
+            <span class="mi">3</span><span class="p">:</span> <span class="s2">&quot;thursday&quot;</span><span class="p">,</span>
+            <span class="mi">4</span><span class="p">:</span> <span class="s2">&quot;friday&quot;</span><span class="p">,</span>
+            <span class="mi">5</span><span class="p">:</span> <span class="s2">&quot;saturday&quot;</span><span class="p">,</span>
+            <span class="mi">6</span><span class="p">:</span> <span class="s2">&quot;sunday&quot;</span><span class="p">,</span>
         <span class="p">}</span>
-        
+
         <span class="c1"># Create a set of dates for each service_id</span>
         <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">calendar</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
-            <span class="n">service_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;service_id&#39;</span><span class="p">]</span>
-            <span class="n">service_start</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;start_date&#39;</span><span class="p">]),</span> <span class="s1">&#39;%Y%m</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">)</span>
-            <span class="n">service_end</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;end_date&#39;</span><span class="p">]),</span> <span class="s1">&#39;%Y%m</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">)</span>
-            
+            <span class="n">service_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;service_id&quot;</span><span class="p">]</span>
+            <span class="n">service_start</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;start_date&quot;</span><span class="p">]),</span> <span class="s2">&quot;%Y%m</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">service_end</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;end_date&quot;</span><span class="p">]),</span> <span class="s2">&quot;%Y%m</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">)</span>
+
             <span class="c1"># Use the intersection of our date range and the service date range</span>
             <span class="n">date_range_start</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">start_dt</span><span class="p">,</span> <span class="n">service_start</span><span class="p">)</span>
             <span class="n">date_range_end</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">end_dt</span><span class="p">,</span> <span class="n">service_end</span><span class="p">)</span>
-            
+
             <span class="c1"># Initialize empty list for this service_id</span>
             <span class="k">if</span> <span class="n">service_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">service_dates</span><span class="p">:</span>
                 <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-            
+
             <span class="c1"># Add each applicable date</span>
             <span class="n">current_date</span> <span class="o">=</span> <span class="n">date_range_start</span>
             <span class="k">while</span> <span class="n">current_date</span> <span class="o">&lt;=</span> <span class="n">date_range_end</span><span class="p">:</span>
                 <span class="n">day_of_week</span> <span class="o">=</span> <span class="n">current_date</span><span class="o">.</span><span class="n">weekday</span><span class="p">()</span>  <span class="c1"># 0 = Monday, 6 = Sunday</span>
                 <span class="n">day_column</span> <span class="o">=</span> <span class="n">day_mapping</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">day_of_week</span><span class="p">)</span>
-                
+
                 <span class="c1"># If this service runs on this day of the week</span>
                 <span class="k">if</span> <span class="n">day_column</span> <span class="ow">in</span> <span class="n">row</span> <span class="ow">and</span> <span class="n">row</span><span class="p">[</span><span class="n">day_column</span><span class="p">]:</span>
                     <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current_date</span><span class="p">)</span>
-                
+
                 <span class="n">current_date</span> <span class="o">+=</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-    
+
     <span class="c1"># Process exceptions from calendar_dates.txt</span>
     <span class="k">if</span> <span class="n">calendar_dates</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">calendar_dates</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
-            <span class="n">service_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;service_id&#39;</span><span class="p">]</span>
-            <span class="n">date_str</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;date&#39;</span><span class="p">]</span>
-            <span class="n">exception_type</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;exception_type&#39;</span><span class="p">])</span> <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">notna</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;exception_type&#39;</span><span class="p">])</span> <span class="k">else</span> <span class="mi">0</span>
-            
+            <span class="n">service_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;service_id&quot;</span><span class="p">]</span>
+            <span class="n">date_str</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;date&quot;</span><span class="p">]</span>
+            <span class="n">exception_type</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;exception_type&quot;</span><span class="p">])</span> <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">notna</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;exception_type&quot;</span><span class="p">])</span> <span class="k">else</span> <span class="mi">0</span>
+            <span class="p">)</span>
+
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">exception_date</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">date_str</span><span class="p">),</span> <span class="s1">&#39;%Y%m</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">)</span>
-                
+                <span class="n">exception_date</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">date_str</span><span class="p">),</span> <span class="s2">&quot;%Y%m</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">)</span>
+
                 <span class="c1"># Initialize if this service_id isn&#39;t in the dict yet</span>
                 <span class="k">if</span> <span class="n">service_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">service_dates</span><span class="p">:</span>
                     <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-                
+
                 <span class="c1"># 1 = service added, 2 = service removed</span>
-                <span class="k">if</span> <span class="n">exception_type</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">exception_date</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]:</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="n">exception_type</span> <span class="o">==</span> <span class="mi">1</span>
+                    <span class="ow">and</span> <span class="n">exception_date</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]</span>
+                <span class="p">):</span>
                     <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">exception_date</span><span class="p">)</span>
-                <span class="k">elif</span> <span class="n">exception_type</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">exception_date</span> <span class="ow">in</span> <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]:</span>
+                <span class="k">elif</span> <span class="p">(</span>
+                    <span class="n">exception_type</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">exception_date</span> <span class="ow">in</span> <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]</span>
+                <span class="p">):</span>
                     <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">exception_date</span><span class="p">)</span>
             <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
                 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not parse date </span><span class="si">{</span><span class="n">date_str</span><span class="si">}</span><span class="s2"> for service_id </span><span class="si">{</span><span class="n">service_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    
+
     <span class="k">return</span> <span class="n">service_dates</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_create_timestamp</span><span class="p">(</span><span class="n">time_str</span><span class="p">,</span> <span class="n">date_obj</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert GTFS time string and date to a timestamp&quot;&quot;&quot;</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timedelta</span>
-    
+
     <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">isna</span><span class="p">(</span><span class="n">time_str</span><span class="p">):</span>
         <span class="k">return</span> <span class="kc">None</span>
-        
+
     <span class="c1"># GTFS times can be &gt;24 hours, so we need to handle that</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">hours</span><span class="p">,</span> <span class="n">minutes</span><span class="p">,</span> <span class="n">seconds</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">time_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">))</span>
+        <span class="n">hours</span><span class="p">,</span> <span class="n">minutes</span><span class="p">,</span> <span class="n">seconds</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">time_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">))</span>
         <span class="n">days_offset</span> <span class="o">=</span> <span class="n">hours</span> <span class="o">//</span> <span class="mi">24</span>
         <span class="n">hours</span> <span class="o">=</span> <span class="n">hours</span> <span class="o">%</span> <span class="mi">24</span>
-        
+
         <span class="c1"># Create the timestamp</span>
-        <span class="n">timestamp</span> <span class="o">=</span> <span class="n">datetime</span><span class="p">(</span><span class="n">date_obj</span><span class="o">.</span><span class="n">year</span><span class="p">,</span> <span class="n">date_obj</span><span class="o">.</span><span class="n">month</span><span class="p">,</span> <span class="n">date_obj</span><span class="o">.</span><span class="n">day</span><span class="p">,</span> <span class="n">hours</span><span class="p">,</span> <span class="n">minutes</span><span class="p">,</span> <span class="n">seconds</span><span class="p">)</span>
-        
+        <span class="n">timestamp</span> <span class="o">=</span> <span class="n">datetime</span><span class="p">(</span>
+            <span class="n">date_obj</span><span class="o">.</span><span class="n">year</span><span class="p">,</span> <span class="n">date_obj</span><span class="o">.</span><span class="n">month</span><span class="p">,</span> <span class="n">date_obj</span><span class="o">.</span><span class="n">day</span><span class="p">,</span> <span class="n">hours</span><span class="p">,</span> <span class="n">minutes</span><span class="p">,</span> <span class="n">seconds</span>
+        <span class="p">)</span>
+
         <span class="c1"># Add any days offset for times &gt;24 hours</span>
         <span class="k">if</span> <span class="n">days_offset</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">timestamp</span> <span class="o">+=</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="n">days_offset</span><span class="p">)</span>
-            
+
         <span class="k">return</span> <span class="n">timestamp</span>
     <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">):</span>
         <span class="k">return</span> <span class="kc">None</span>
@@ -812,48 +862,50 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_expand_od_pairs_with_dates</span><span class="p">(</span><span class="n">od_pairs</span><span class="p">,</span> <span class="n">service_dates</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Expand origin-destination pairs by combining with service dates.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    od_pairs : pandas.DataFrame</span>
 <span class="sd">        DataFrame with trip_id, orig_stop_id, dest_stop_id, etc.</span>
 <span class="sd">    service_dates : dict</span>
 <span class="sd">        Dictionary mapping service_id to list of dates</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    pandas.DataFrame</span>
 <span class="sd">        Expanded DataFrame with complete timestamps</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">expanded_rows</span> <span class="o">=</span> <span class="p">[]</span>
-    
+
     <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">od_pairs</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
-        <span class="n">service_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;service_id&#39;</span><span class="p">]</span>
-        
+        <span class="n">service_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;service_id&quot;</span><span class="p">]</span>
+
         <span class="c1"># Skip if no dates for this service_id</span>
         <span class="k">if</span> <span class="n">service_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">service_dates</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]:</span>
             <span class="k">continue</span>
-        
+
         <span class="k">for</span> <span class="n">date</span> <span class="ow">in</span> <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]:</span>
             <span class="c1"># Create departure and arrival timestamps</span>
-            <span class="n">departure_timestamp</span> <span class="o">=</span> <span class="n">_create_timestamp</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;departure_time&#39;</span><span class="p">],</span> <span class="n">date</span><span class="p">)</span>
-            <span class="n">arrival_timestamp</span> <span class="o">=</span> <span class="n">_create_timestamp</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;arrival_time&#39;</span><span class="p">],</span> <span class="n">date</span><span class="p">)</span>
-            
+            <span class="n">departure_timestamp</span> <span class="o">=</span> <span class="n">_create_timestamp</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;departure_time&quot;</span><span class="p">],</span> <span class="n">date</span><span class="p">)</span>
+            <span class="n">arrival_timestamp</span> <span class="o">=</span> <span class="n">_create_timestamp</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;arrival_time&quot;</span><span class="p">],</span> <span class="n">date</span><span class="p">)</span>
+
             <span class="k">if</span> <span class="n">departure_timestamp</span> <span class="ow">and</span> <span class="n">arrival_timestamp</span><span class="p">:</span>
                 <span class="n">expanded_row</span> <span class="o">=</span> <span class="p">{</span>
-                    <span class="s1">&#39;trip_id&#39;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;trip_id&#39;</span><span class="p">],</span>
-                    <span class="s1">&#39;service_id&#39;</span><span class="p">:</span> <span class="n">service_id</span><span class="p">,</span>
-                    <span class="s1">&#39;orig_stop_id&#39;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;orig_stop_id&#39;</span><span class="p">],</span>
-                    <span class="s1">&#39;dest_stop_id&#39;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;dest_stop_id&#39;</span><span class="p">],</span>
-                    <span class="s1">&#39;departure_timestamp&#39;</span><span class="p">:</span> <span class="n">departure_timestamp</span><span class="p">,</span>
-                    <span class="s1">&#39;arrival_timestamp&#39;</span><span class="p">:</span> <span class="n">arrival_timestamp</span><span class="p">,</span>
-                    <span class="s1">&#39;travel_time_seconds&#39;</span><span class="p">:</span> <span class="p">(</span><span class="n">arrival_timestamp</span> <span class="o">-</span> <span class="n">departure_timestamp</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">(),</span>
-                    <span class="s1">&#39;date&#39;</span><span class="p">:</span> <span class="n">date</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s1">&#39;%Y-%m-</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">),</span>
-                    <span class="s1">&#39;orig_stop_sequence&#39;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;orig_stop_sequence&#39;</span><span class="p">],</span>
-                    <span class="s1">&#39;dest_stop_sequence&#39;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;dest_stop_sequence&#39;</span><span class="p">]</span>
+                    <span class="s2">&quot;trip_id&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;trip_id&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;service_id&quot;</span><span class="p">:</span> <span class="n">service_id</span><span class="p">,</span>
+                    <span class="s2">&quot;orig_stop_id&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;orig_stop_id&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;dest_stop_id&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;dest_stop_id&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;departure_timestamp&quot;</span><span class="p">:</span> <span class="n">departure_timestamp</span><span class="p">,</span>
+                    <span class="s2">&quot;arrival_timestamp&quot;</span><span class="p">:</span> <span class="n">arrival_timestamp</span><span class="p">,</span>
+                    <span class="s2">&quot;travel_time_seconds&quot;</span><span class="p">:</span> <span class="p">(</span>
+                        <span class="n">arrival_timestamp</span> <span class="o">-</span> <span class="n">departure_timestamp</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">(),</span>
+                    <span class="s2">&quot;date&quot;</span><span class="p">:</span> <span class="n">date</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%Y-%m-</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">),</span>
+                    <span class="s2">&quot;orig_stop_sequence&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;orig_stop_sequence&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;dest_stop_sequence&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;dest_stop_sequence&quot;</span><span class="p">],</span>
                 <span class="p">}</span>
                 <span class="n">expanded_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">expanded_row</span><span class="p">)</span>
-    
+
     <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">expanded_rows</span><span class="p">)</span>
 
 
@@ -861,14 +913,14 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_create_od_gdf</span><span class="p">(</span><span class="n">expanded_od_pairs</span><span class="p">,</span> <span class="n">gtfs_data</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create a GeoDataFrame with LineString geometries for origin-destination pairs.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    expanded_od_pairs : pandas.DataFrame</span>
 <span class="sd">        DataFrame with origin-destination pair information</span>
 <span class="sd">    gtfs_data : dict</span>
 <span class="sd">        Dictionary with GTFS dataframes</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    geopandas.GeoDataFrame</span>
@@ -876,40 +928,36 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span><span class="p">,</span> <span class="n">Point</span>
-    
+
     <span class="c1"># Get stops dataframe with geometry</span>
-    <span class="n">stops</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;stops&#39;</span><span class="p">)</span>
-    
+    <span class="n">stops</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stops&quot;</span><span class="p">)</span>
+
     <span class="k">if</span> <span class="n">stops</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">expanded_od_pairs</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">expanded_od_pairs</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Missing required data to create GeoDataFrame&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">None</span>
-        
+
     <span class="c1"># Create a dictionary mapping stop_id to Point geometry</span>
     <span class="n">stop_geometries</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">stop</span> <span class="ow">in</span> <span class="n">stops</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
-        <span class="k">if</span> <span class="s1">&#39;geometry&#39;</span> <span class="ow">in</span> <span class="n">stop</span><span class="p">:</span>
-            <span class="n">stop_geometries</span><span class="p">[</span><span class="n">stop</span><span class="p">[</span><span class="s1">&#39;stop_id&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">stop</span><span class="p">[</span><span class="s1">&#39;geometry&#39;</span><span class="p">]</span>
-        <span class="k">elif</span> <span class="nb">all</span><span class="p">(</span><span class="n">col</span> <span class="ow">in</span> <span class="n">stop</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;stop_lon&#39;</span><span class="p">,</span> <span class="s1">&#39;stop_lat&#39;</span><span class="p">]):</span>
-            <span class="n">stop_geometries</span><span class="p">[</span><span class="n">stop</span><span class="p">[</span><span class="s1">&#39;stop_id&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Point</span><span class="p">(</span><span class="n">stop</span><span class="p">[</span><span class="s1">&#39;stop_lon&#39;</span><span class="p">],</span> <span class="n">stop</span><span class="p">[</span><span class="s1">&#39;stop_lat&#39;</span><span class="p">])</span>
-    
+        <span class="k">if</span> <span class="s2">&quot;geometry&quot;</span> <span class="ow">in</span> <span class="n">stop</span><span class="p">:</span>
+            <span class="n">stop_geometries</span><span class="p">[</span><span class="n">stop</span><span class="p">[</span><span class="s2">&quot;stop_id&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">stop</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">all</span><span class="p">(</span><span class="n">col</span> <span class="ow">in</span> <span class="n">stop</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;stop_lon&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_lat&quot;</span><span class="p">]):</span>
+            <span class="n">stop_geometries</span><span class="p">[</span><span class="n">stop</span><span class="p">[</span><span class="s2">&quot;stop_id&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Point</span><span class="p">(</span><span class="n">stop</span><span class="p">[</span><span class="s2">&quot;stop_lon&quot;</span><span class="p">],</span> <span class="n">stop</span><span class="p">[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">])</span>
+
     <span class="c1"># Create LineString geometries for each OD pair</span>
     <span class="n">geometries</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">expanded_od_pairs</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
-        <span class="n">orig_geom</span> <span class="o">=</span> <span class="n">stop_geometries</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;orig_stop_id&#39;</span><span class="p">])</span>
-        <span class="n">dest_geom</span> <span class="o">=</span> <span class="n">stop_geometries</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;dest_stop_id&#39;</span><span class="p">])</span>
-        
+        <span class="n">orig_geom</span> <span class="o">=</span> <span class="n">stop_geometries</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;orig_stop_id&quot;</span><span class="p">])</span>
+        <span class="n">dest_geom</span> <span class="o">=</span> <span class="n">stop_geometries</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;dest_stop_id&quot;</span><span class="p">])</span>
+
         <span class="k">if</span> <span class="n">orig_geom</span> <span class="ow">and</span> <span class="n">dest_geom</span><span class="p">:</span>
             <span class="n">geometries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">LineString</span><span class="p">([</span><span class="n">orig_geom</span><span class="p">,</span> <span class="n">dest_geom</span><span class="p">]))</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">geometries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-    
+
     <span class="c1"># Create GeoDataFrame</span>
-    <span class="n">gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
-        <span class="n">expanded_od_pairs</span><span class="p">,</span>
-        <span class="n">geometry</span><span class="o">=</span><span class="n">geometries</span><span class="p">,</span>
-        <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span>
-    <span class="p">)</span>
-    
+    <span class="n">gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">expanded_od_pairs</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="n">geometries</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span><span class="p">)</span>
+
     <span class="k">return</span> <span class="n">gdf</span>
 
 
@@ -919,28 +967,32 @@
 <span class="sd">    Yields one expanded row (as a dict) at a time.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">od_pairs</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
-        <span class="n">service_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;service_id&#39;</span><span class="p">]</span>
+        <span class="n">service_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;service_id&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">service_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">service_dates</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]:</span>
             <span class="k">continue</span>
         <span class="k">for</span> <span class="n">date</span> <span class="ow">in</span> <span class="n">service_dates</span><span class="p">[</span><span class="n">service_id</span><span class="p">]:</span>
-            <span class="n">departure_timestamp</span> <span class="o">=</span> <span class="n">_create_timestamp</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;departure_time&#39;</span><span class="p">],</span> <span class="n">date</span><span class="p">)</span>
-            <span class="n">arrival_timestamp</span> <span class="o">=</span> <span class="n">_create_timestamp</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;arrival_time&#39;</span><span class="p">],</span> <span class="n">date</span><span class="p">)</span>
+            <span class="n">departure_timestamp</span> <span class="o">=</span> <span class="n">_create_timestamp</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;departure_time&quot;</span><span class="p">],</span> <span class="n">date</span><span class="p">)</span>
+            <span class="n">arrival_timestamp</span> <span class="o">=</span> <span class="n">_create_timestamp</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;arrival_time&quot;</span><span class="p">],</span> <span class="n">date</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">departure_timestamp</span> <span class="ow">and</span> <span class="n">arrival_timestamp</span><span class="p">:</span>
                 <span class="k">yield</span> <span class="p">{</span>
-                    <span class="s1">&#39;trip_id&#39;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;trip_id&#39;</span><span class="p">],</span>
-                    <span class="s1">&#39;service_id&#39;</span><span class="p">:</span> <span class="n">service_id</span><span class="p">,</span>
-                    <span class="s1">&#39;orig_stop_id&#39;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;orig_stop_id&#39;</span><span class="p">],</span>
-                    <span class="s1">&#39;dest_stop_id&#39;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;dest_stop_id&#39;</span><span class="p">],</span>
-                    <span class="s1">&#39;departure_timestamp&#39;</span><span class="p">:</span> <span class="n">departure_timestamp</span><span class="p">,</span>
-                    <span class="s1">&#39;arrival_timestamp&#39;</span><span class="p">:</span> <span class="n">arrival_timestamp</span><span class="p">,</span>
-                    <span class="s1">&#39;travel_time_seconds&#39;</span><span class="p">:</span> <span class="p">(</span><span class="n">arrival_timestamp</span> <span class="o">-</span> <span class="n">departure_timestamp</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">(),</span>
-                    <span class="s1">&#39;date&#39;</span><span class="p">:</span> <span class="n">date</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s1">&#39;%Y-%m-</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">),</span>
-                    <span class="s1">&#39;orig_stop_sequence&#39;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;orig_stop_sequence&#39;</span><span class="p">],</span>
-                    <span class="s1">&#39;dest_stop_sequence&#39;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;dest_stop_sequence&#39;</span><span class="p">]</span>
+                    <span class="s2">&quot;trip_id&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;trip_id&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;service_id&quot;</span><span class="p">:</span> <span class="n">service_id</span><span class="p">,</span>
+                    <span class="s2">&quot;orig_stop_id&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;orig_stop_id&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;dest_stop_id&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;dest_stop_id&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;departure_timestamp&quot;</span><span class="p">:</span> <span class="n">departure_timestamp</span><span class="p">,</span>
+                    <span class="s2">&quot;arrival_timestamp&quot;</span><span class="p">:</span> <span class="n">arrival_timestamp</span><span class="p">,</span>
+                    <span class="s2">&quot;travel_time_seconds&quot;</span><span class="p">:</span> <span class="p">(</span>
+                        <span class="n">arrival_timestamp</span> <span class="o">-</span> <span class="n">departure_timestamp</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">(),</span>
+                    <span class="s2">&quot;date&quot;</span><span class="p">:</span> <span class="n">date</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%Y-%m-</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">),</span>
+                    <span class="s2">&quot;orig_stop_sequence&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;orig_stop_sequence&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;dest_stop_sequence&quot;</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;dest_stop_sequence&quot;</span><span class="p">],</span>
                 <span class="p">}</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_get_od_pairs_generator</span><span class="p">(</span><span class="n">od_pairs</span><span class="p">,</span> <span class="n">service_dates</span><span class="p">,</span> <span class="n">gtfs_data</span><span class="p">,</span> <span class="n">include_geometry</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_od_pairs_generator</span><span class="p">(</span>
+    <span class="n">od_pairs</span><span class="p">,</span> <span class="n">service_dates</span><span class="p">,</span> <span class="n">gtfs_data</span><span class="p">,</span> <span class="n">include_geometry</span><span class="p">,</span> <span class="n">chunk_size</span>
+<span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generator helper that yields chunks (as (Geo)DataFrames).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -962,16 +1014,23 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">yield</span> <span class="n">df_chunk</span>
 
+
 <div class="viewcode-block" id="get_od_pairs">
 <a class="viewcode-back" href="../../api/transportation.html#city2graph.transportation.get_od_pairs">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">get_od_pairs</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">,</span> <span class="n">start_date</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">end_date</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">include_geometry</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                 <span class="n">as_generator</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="mi">10000</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_od_pairs</span><span class="p">(</span>
+    <span class="n">gtfs_data</span><span class="p">,</span>
+    <span class="n">start_date</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">end_date</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">include_geometry</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">as_generator</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
+<span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate origin-destination pairs with timestamps from GTFS data.</span>
-<span class="sd">    </span>
+
 <span class="sd">    When as_generator is False this function returns a complete (Geo)DataFrame,</span>
 <span class="sd">    and when True it returns a generator that yields chunks.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    gtfs_data : dict</span>
@@ -986,7 +1045,7 @@
 <span class="sd">        If True, return a generator yielding GeoDataFrame chunks.</span>
 <span class="sd">    chunk_size : int, default 10000</span>
 <span class="sd">        Number of rows per chunk when using the generator.</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    geopandas.GeoDataFrame or pandas.DataFrame or generator</span>
@@ -994,21 +1053,23 @@
 <span class="sd">        If as_generator is True, returns a generator yielding (Geo)DataFrame chunks.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Creating origin-destination pairs from GTFS data...&quot;</span><span class="p">)</span>
-    
+
     <span class="c1"># 1. Create basic OD pairs</span>
     <span class="n">od_pairs</span> <span class="o">=</span> <span class="n">_create_od_pairs</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">od_pairs</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">od_pairs</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Failed to create origin-destination pairs&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">None</span>
-    
+
     <span class="c1"># 2. Get service dates</span>
     <span class="n">service_dates</span> <span class="o">=</span> <span class="n">_get_service_dates</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">,</span> <span class="n">start_date</span><span class="p">,</span> <span class="n">end_date</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">service_dates</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;No service dates found in calendar data&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">od_pairs</span>  <span class="c1"># fallback: basic OD pairs</span>
-    
+
     <span class="k">if</span> <span class="n">as_generator</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">_get_od_pairs_generator</span><span class="p">(</span><span class="n">od_pairs</span><span class="p">,</span> <span class="n">service_dates</span><span class="p">,</span> <span class="n">gtfs_data</span><span class="p">,</span> <span class="n">include_geometry</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_get_od_pairs_generator</span><span class="p">(</span>
+            <span class="n">od_pairs</span><span class="p">,</span> <span class="n">service_dates</span><span class="p">,</span> <span class="n">gtfs_data</span><span class="p">,</span> <span class="n">include_geometry</span><span class="p">,</span> <span class="n">chunk_size</span>
+        <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="c1"># Fully materialize the expansion</span>
         <span class="n">expanded_od</span> <span class="o">=</span> <span class="n">_expand_od_pairs_with_dates</span><span class="p">(</span><span class="n">od_pairs</span><span class="p">,</span> <span class="n">service_dates</span><span class="p">)</span>
@@ -1021,45 +1082,51 @@
             <span class="k">return</span> <span class="n">expanded_od</span></div>
 
 
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_time_to_seconds</span><span class="p">(</span><span class="n">time_str</span><span class="p">):</span>
     <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">isna</span><span class="p">(</span><span class="n">time_str</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">time_str</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
         <span class="k">return</span> <span class="n">time_str</span>
-    <span class="n">parts</span> <span class="o">=</span> <span class="n">time_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)</span>
+    <span class="n">parts</span> <span class="o">=</span> <span class="n">time_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
         <span class="n">h</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="n">parts</span>
         <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">h</span><span class="p">)</span> <span class="o">*</span> <span class="mi">3600</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="o">*</span> <span class="mi">60</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
 
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_create_travel_summary_gdf</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">stops</span><span class="p">):</span>
     <span class="c1"># Merge coordinates from origin stops</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
-        <span class="n">stops</span><span class="p">[[</span><span class="s1">&#39;stop_lat&#39;</span><span class="p">,</span> <span class="s1">&#39;stop_lon&#39;</span><span class="p">]],</span>
-        <span class="n">left_on</span><span class="o">=</span><span class="s1">&#39;from_stop_id&#39;</span><span class="p">,</span>
+        <span class="n">stops</span><span class="p">[[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_lon&quot;</span><span class="p">]],</span>
+        <span class="n">left_on</span><span class="o">=</span><span class="s2">&quot;from_stop_id&quot;</span><span class="p">,</span>
         <span class="n">right_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">suffixes</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="s1">&#39;_from&#39;</span><span class="p">)</span>
+        <span class="n">suffixes</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;_from&quot;</span><span class="p">),</span>
     <span class="p">)</span>
-    
+
     <span class="c1"># Merge coordinates from destination stops</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span>
-        <span class="n">stops</span><span class="p">[[</span><span class="s1">&#39;stop_lat&#39;</span><span class="p">,</span> <span class="s1">&#39;stop_lon&#39;</span><span class="p">]],</span>
-        <span class="n">left_on</span><span class="o">=</span><span class="s1">&#39;to_stop_id&#39;</span><span class="p">,</span>
+        <span class="n">stops</span><span class="p">[[</span><span class="s2">&quot;stop_lat&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_lon&quot;</span><span class="p">]],</span>
+        <span class="n">left_on</span><span class="o">=</span><span class="s2">&quot;to_stop_id&quot;</span><span class="p">,</span>
         <span class="n">right_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">suffixes</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;_from&#39;</span><span class="p">,</span> <span class="s1">&#39;_to&#39;</span><span class="p">)</span>
+        <span class="n">suffixes</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;_from&quot;</span><span class="p">,</span> <span class="s2">&quot;_to&quot;</span><span class="p">),</span>
     <span class="p">)</span>
-    
+
     <span class="c1"># Create LineString geometries for each stop pair</span>
     <span class="n">geometries</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">LineString</span><span class="p">([(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;stop_lon_from&#39;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;stop_lat_from&#39;</span><span class="p">]),</span>
-                    <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;stop_lon_to&#39;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;stop_lat_to&#39;</span><span class="p">])])</span>
+        <span class="n">LineString</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;stop_lon_from&quot;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;stop_lat_from&quot;</span><span class="p">]),</span>
+                <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;stop_lon_to&quot;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;stop_lat_to&quot;</span><span class="p">]),</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
         <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">iterrows</span><span class="p">()</span>
     <span class="p">]</span>
-    
+
     <span class="n">gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
-        <span class="n">result</span><span class="p">[[</span><span class="s1">&#39;from_stop_id&#39;</span><span class="p">,</span> <span class="s1">&#39;to_stop_id&#39;</span><span class="p">,</span> <span class="s1">&#39;travel_time&#39;</span><span class="p">,</span> <span class="s1">&#39;frequency&#39;</span><span class="p">]],</span>
+        <span class="n">result</span><span class="p">[[</span><span class="s2">&quot;from_stop_id&quot;</span><span class="p">,</span> <span class="s2">&quot;to_stop_id&quot;</span><span class="p">,</span> <span class="s2">&quot;travel_time&quot;</span><span class="p">,</span> <span class="s2">&quot;frequency&quot;</span><span class="p">]],</span>
         <span class="n">geometry</span><span class="o">=</span><span class="n">geometries</span><span class="p">,</span>
-        <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span>
+        <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">gdf</span>
 
@@ -1067,40 +1134,46 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_vectorized_time_to_seconds</span><span class="p">(</span><span class="n">time_series</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Efficiently convert a series of GTFS time strings to seconds.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    time_series : pandas.Series</span>
 <span class="sd">        Series containing time strings in HH:MM:SS format</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    pandas.Series</span>
 <span class="sd">        Series containing time values converted to seconds</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">time_series</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="s1">&#39;object&#39;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">time_series</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="s2">&quot;object&quot;</span><span class="p">:</span>
         <span class="c1"># Only process string values</span>
         <span class="n">mask</span> <span class="o">=</span> <span class="o">~</span><span class="n">pd</span><span class="o">.</span><span class="n">isna</span><span class="p">(</span><span class="n">time_series</span><span class="p">)</span>
         <span class="n">result</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">time_series</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
-        
+
         <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
             <span class="c1"># Process only non-NaN values</span>
-            <span class="n">time_parts</span> <span class="o">=</span> <span class="n">time_series</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="n">expand</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">time_parts</span> <span class="o">=</span> <span class="n">time_series</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">,</span> <span class="n">expand</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
             <span class="n">result</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">time_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">3600</span> <span class="o">+</span> <span class="n">time_parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">60</span> <span class="o">+</span> <span class="n">time_parts</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
-        
+
         <span class="k">return</span> <span class="n">result</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="c1"># If already numeric, return as is</span>
         <span class="k">return</span> <span class="n">time_series</span>
 
 
-<div class="viewcode-block" id="create_travel_summary_network">
-<a class="viewcode-back" href="../../api/transportation.html#city2graph.transportation.create_travel_summary_network">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">create_travel_summary_network</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">,</span> <span class="n">start_time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">end_time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
-                                  <span class="n">calendar_start</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">calendar_end</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">as_gdf</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<div class="viewcode-block" id="travel_summary_network">
+<a class="viewcode-back" href="../../api/transportation.html#city2graph.transportation.travel_summary_network">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">travel_summary_network</span><span class="p">(</span>
+    <span class="n">gtfs_data</span><span class="p">,</span>
+    <span class="n">start_time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">end_time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">calendar_start</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">calendar_end</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">as_gdf</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create a network representing travel times and frequencies between stops.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    gtfs_data : dict</span>
@@ -1115,88 +1188,113 @@
 <span class="sd">        End date in YYYYMMDD format to filter by service calendar</span>
 <span class="sd">    as_gdf : bool, default True</span>
 <span class="sd">        If True, return a GeoDataFrame; if False, return a dictionary</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    geopandas.GeoDataFrame or dict</span>
 <span class="sd">        Network of stop connections with travel times and frequencies</span>
-<span class="sd">    &quot;&quot;&quot;</span>    
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># Extract and preprocess the necessary dataframes</span>
     <span class="n">stop_times</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;stop_times&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-    <span class="n">trips</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;trips&quot;</span><span class="p">][[</span><span class="s1">&#39;trip_id&#39;</span><span class="p">,</span> <span class="s1">&#39;service_id&#39;</span><span class="p">]]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-    
+    <span class="n">trips</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;trips&quot;</span><span class="p">][[</span><span class="s2">&quot;trip_id&quot;</span><span class="p">,</span> <span class="s2">&quot;service_id&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
     <span class="c1"># Convert time columns to seconds (vectorized for speed)</span>
-    <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;arrival_time_sec&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_vectorized_time_to_seconds</span><span class="p">(</span><span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;arrival_time&#39;</span><span class="p">])</span>
-    <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;departure_time_sec&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_vectorized_time_to_seconds</span><span class="p">(</span><span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;departure_time&#39;</span><span class="p">])</span>
-    
+    <span class="n">stop_times</span><span class="p">[</span><span class="s2">&quot;arrival_time_sec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_vectorized_time_to_seconds</span><span class="p">(</span>
+        <span class="n">stop_times</span><span class="p">[</span><span class="s2">&quot;arrival_time&quot;</span><span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">stop_times</span><span class="p">[</span><span class="s2">&quot;departure_time_sec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_vectorized_time_to_seconds</span><span class="p">(</span>
+        <span class="n">stop_times</span><span class="p">[</span><span class="s2">&quot;departure_time&quot;</span><span class="p">]</span>
+    <span class="p">)</span>
+
     <span class="c1"># Apply time-of-day filters efficiently</span>
     <span class="k">if</span> <span class="n">start_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">start_time_sec</span> <span class="o">=</span> <span class="n">_time_to_seconds</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">start_time</span><span class="p">))</span>
-        <span class="n">stop_times</span> <span class="o">=</span> <span class="n">stop_times</span><span class="p">[</span><span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;departure_time_sec&#39;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">start_time_sec</span><span class="p">]</span>
+        <span class="n">stop_times</span> <span class="o">=</span> <span class="n">stop_times</span><span class="p">[</span><span class="n">stop_times</span><span class="p">[</span><span class="s2">&quot;departure_time_sec&quot;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">start_time_sec</span><span class="p">]</span>
     <span class="k">if</span> <span class="n">end_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">end_time_sec</span> <span class="o">=</span> <span class="n">_time_to_seconds</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">end_time</span><span class="p">))</span>
-        <span class="n">stop_times</span> <span class="o">=</span> <span class="n">stop_times</span><span class="p">[</span><span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;arrival_time_sec&#39;</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">end_time_sec</span><span class="p">]</span>
-    
+        <span class="n">stop_times</span> <span class="o">=</span> <span class="n">stop_times</span><span class="p">[</span><span class="n">stop_times</span><span class="p">[</span><span class="s2">&quot;arrival_time_sec&quot;</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">end_time_sec</span><span class="p">]</span>
+
     <span class="c1"># Merge with trips to get service_id (using optimal merge strategy)</span>
-    <span class="n">stop_times</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">stop_times</span><span class="p">,</span> <span class="n">trips</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s1">&#39;trip_id&#39;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s1">&#39;inner&#39;</span><span class="p">)</span>
-    
+    <span class="n">stop_times</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">stop_times</span><span class="p">,</span> <span class="n">trips</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s2">&quot;trip_id&quot;</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span><span class="p">)</span>
+
     <span class="c1"># Handle calendar filtering</span>
     <span class="k">if</span> <span class="n">calendar_start</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">calendar_end</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># Get valid service dates and calculate service frequency</span>
         <span class="n">service_dates</span> <span class="o">=</span> <span class="n">_get_service_dates</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">,</span> <span class="n">calendar_start</span><span class="p">,</span> <span class="n">calendar_end</span><span class="p">)</span>
-        
+
         <span class="c1"># Create a mapping from service_id to service count for efficient lookup</span>
         <span class="n">service_counts</span> <span class="o">=</span> <span class="p">{</span><span class="n">s_id</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">dates</span><span class="p">)</span> <span class="k">for</span> <span class="n">s_id</span><span class="p">,</span> <span class="n">dates</span> <span class="ow">in</span> <span class="n">service_dates</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-        
+
         <span class="c1"># Add service counts using map (faster than apply)</span>
-        <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;service_count&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;service_id&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">service_counts</span><span class="p">)</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-        
+        <span class="n">stop_times</span><span class="p">[</span><span class="s2">&quot;service_count&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">stop_times</span><span class="p">[</span><span class="s2">&quot;service_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">service_counts</span><span class="p">)</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="p">)</span>
+
         <span class="c1"># Filter out trips with no valid service dates</span>
-        <span class="n">stop_times</span> <span class="o">=</span> <span class="n">stop_times</span><span class="p">[</span><span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;service_count&#39;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="n">stop_times</span> <span class="o">=</span> <span class="n">stop_times</span><span class="p">[</span><span class="n">stop_times</span><span class="p">[</span><span class="s2">&quot;service_count&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="c1"># Without calendar filtering, use uniform weight</span>
-        <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;service_count&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
-    
+        <span class="n">stop_times</span><span class="p">[</span><span class="s2">&quot;service_count&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+
     <span class="c1"># Create next stop info efficiently by sorting once then using shift</span>
-    <span class="n">stop_times</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">sort_values</span><span class="p">([</span><span class="s1">&#39;trip_id&#39;</span><span class="p">,</span> <span class="s1">&#39;stop_sequence&#39;</span><span class="p">])</span>
-    
+    <span class="n">stop_times</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">sort_values</span><span class="p">([</span><span class="s2">&quot;trip_id&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_sequence&quot;</span><span class="p">])</span>
+
     <span class="c1"># Calculate next stop info within each trip</span>
-    <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;next_stop_id&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s1">&#39;trip_id&#39;</span><span class="p">)[</span><span class="s1">&#39;stop_id&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">stop_times</span><span class="p">[</span><span class="s1">&#39;next_arrival_time_sec&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s1">&#39;trip_id&#39;</span><span class="p">)[</span><span class="s1">&#39;arrival_time_sec&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-    
+    <span class="n">stop_times</span><span class="p">[</span><span class="s2">&quot;next_stop_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;trip_id&quot;</span><span class="p">)[</span><span class="s2">&quot;stop_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">stop_times</span><span class="p">[</span><span class="s2">&quot;next_arrival_time_sec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;trip_id&quot;</span><span class="p">)[</span>
+        <span class="s2">&quot;arrival_time_sec&quot;</span>
+    <span class="p">]</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
     <span class="c1"># Calculate travel times vectorized</span>
-    <span class="n">valid_pairs</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;next_stop_id&#39;</span><span class="p">,</span> <span class="s1">&#39;next_arrival_time_sec&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-    <span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;travel_time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;next_arrival_time_sec&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;departure_time_sec&#39;</span><span class="p">]</span>
-    
+    <span class="n">valid_pairs</span> <span class="o">=</span> <span class="n">stop_times</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span>
+        <span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;next_stop_id&quot;</span><span class="p">,</span> <span class="s2">&quot;next_arrival_time_sec&quot;</span><span class="p">]</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">valid_pairs</span><span class="p">[</span><span class="s2">&quot;travel_time&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">valid_pairs</span><span class="p">[</span><span class="s2">&quot;next_arrival_time_sec&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="s2">&quot;departure_time_sec&quot;</span><span class="p">]</span>
+    <span class="p">)</span>
+
     <span class="c1"># Filter invalid pairs (all at once)</span>
-    <span class="n">valid_pairs</span> <span class="o">=</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;travel_time&#39;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
-    
+    <span class="n">valid_pairs</span> <span class="o">=</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="n">valid_pairs</span><span class="p">[</span><span class="s2">&quot;travel_time&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
+
     <span class="c1"># Pre-calculate weights for aggregation</span>
-    <span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;weighted_time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;travel_time&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="s1">&#39;service_count&#39;</span><span class="p">]</span>
-    
+    <span class="n">valid_pairs</span><span class="p">[</span><span class="s2">&quot;weighted_time&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">valid_pairs</span><span class="p">[</span><span class="s2">&quot;travel_time&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">valid_pairs</span><span class="p">[</span><span class="s2">&quot;service_count&quot;</span><span class="p">]</span>
+    <span class="p">)</span>
+
     <span class="c1"># Efficient groupby aggregation with pre-calculated values</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">valid_pairs</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">&#39;stop_id&#39;</span><span class="p">,</span> <span class="s1">&#39;next_stop_id&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span>
-        <span class="n">weighted_time</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;weighted_time&#39;</span><span class="p">,</span> <span class="s1">&#39;sum&#39;</span><span class="p">),</span>
-        <span class="n">total_service_count</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;service_count&#39;</span><span class="p">,</span> <span class="s1">&#39;sum&#39;</span><span class="p">)</span>
-    <span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
-    
+    <span class="n">result</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">valid_pairs</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s2">&quot;stop_id&quot;</span><span class="p">,</span> <span class="s2">&quot;next_stop_id&quot;</span><span class="p">])</span>
+        <span class="o">.</span><span class="n">agg</span><span class="p">(</span>
+            <span class="n">weighted_time</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;weighted_time&quot;</span><span class="p">,</span> <span class="s2">&quot;sum&quot;</span><span class="p">),</span>
+            <span class="n">total_service_count</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;service_count&quot;</span><span class="p">,</span> <span class="s2">&quot;sum&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+    <span class="p">)</span>
+
     <span class="c1"># Calculate weighted average travel time</span>
-    <span class="n">result</span><span class="p">[</span><span class="s1">&#39;travel_time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;weighted_time&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;total_service_count&#39;</span><span class="p">]</span>
-    <span class="n">result</span><span class="p">[</span><span class="s1">&#39;frequency&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s1">&#39;total_service_count&#39;</span><span class="p">]</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="s1">&#39;weighted_time&#39;</span><span class="p">,</span> <span class="s1">&#39;total_service_count&#39;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-    
+    <span class="n">result</span><span class="p">[</span><span class="s2">&quot;travel_time&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;weighted_time&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;total_service_count&quot;</span><span class="p">]</span>
+    <span class="n">result</span><span class="p">[</span><span class="s2">&quot;frequency&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;total_service_count&quot;</span><span class="p">]</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="s2">&quot;weighted_time&quot;</span><span class="p">,</span> <span class="s2">&quot;total_service_count&quot;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
     <span class="c1"># Return dictionary if requested</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">as_gdf</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">{(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;stop_id&#39;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;next_stop_id&#39;</span><span class="p">]):</span> <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s1">&#39;travel_time&#39;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s1">&#39;frequency&#39;</span><span class="p">])</span> 
-                <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">iterrows</span><span class="p">()}</span>
-    
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;stop_id&quot;</span><span class="p">],</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;next_stop_id&quot;</span><span class="p">]):</span> <span class="p">(</span>
+                <span class="n">row</span><span class="p">[</span><span class="s2">&quot;travel_time&quot;</span><span class="p">],</span>
+                <span class="n">row</span><span class="p">[</span><span class="s2">&quot;frequency&quot;</span><span class="p">],</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">iterrows</span><span class="p">()</span>
+        <span class="p">}</span>
+
     <span class="c1"># Prepare for GeoDataFrame creation</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;stop_id&#39;</span><span class="p">:</span> <span class="s1">&#39;from_stop_id&#39;</span><span class="p">,</span> <span class="s1">&#39;next_stop_id&#39;</span><span class="p">:</span> <span class="s1">&#39;to_stop_id&#39;</span><span class="p">})</span>
-    <span class="n">stops</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s1">&#39;stops&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;stop_id&#39;</span><span class="p">)</span>
-    
+    <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span>
+        <span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;stop_id&quot;</span><span class="p">:</span> <span class="s2">&quot;from_stop_id&quot;</span><span class="p">,</span> <span class="s2">&quot;next_stop_id&quot;</span><span class="p">:</span> <span class="s2">&quot;to_stop_id&quot;</span><span class="p">}</span>
+    <span class="p">)</span>
+    <span class="n">stops</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;stops&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">&quot;stop_id&quot;</span><span class="p">)</span>
+
     <span class="c1"># Create GeoDataFrame</span>
     <span class="n">gdf</span> <span class="o">=</span> <span class="n">_create_travel_summary_gdf</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">stops</span><span class="p">)</span>
-    
+
     <span class="k">return</span> <span class="n">gdf</span></div>
 
 </pre></div>

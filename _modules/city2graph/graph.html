@@ -382,8 +382,8 @@
 
 <span class="c1"># Define the public API for this module</span>
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s2">&quot;create_homogeneous_graph&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;create_heterogeneous_graph&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;homogeneous_graph&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;heterogeneous_graph&quot;</span><span class="p">,</span>
     <span class="s2">&quot;from_morphological_network&quot;</span><span class="p">,</span>
     <span class="s2">&quot;to_networkx&quot;</span><span class="p">,</span>
 <span class="p">]</span>
@@ -869,13 +869,9 @@
     <span class="k">return</span> <span class="n">data</span>
 
 
-<span class="c1"># Refactored create_homogeneous_graph: Preprocess the input GeoDataFrames into dictionary form,</span>
-<span class="c1"># call _build_graph_data, then convert the resulting HeteroData into a standard Data object.</span>
-<span class="c1"># Updated create_homogeneous_graph with a y_attribute_cols parameter</span>
-<span class="c1"># Modified create_homogeneous_graph: update parameter names and usage</span>
-<div class="viewcode-block" id="create_homogeneous_graph">
-<a class="viewcode-back" href="../../api/graph.html#city2graph.graph.create_homogeneous_graph">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">create_homogeneous_graph</span><span class="p">(</span>
+<div class="viewcode-block" id="homogeneous_graph">
+<a class="viewcode-back" href="../../api/graph.html#city2graph.graph.homogeneous_graph">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">homogeneous_graph</span><span class="p">(</span>
     <span class="n">nodes_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">edges_gdf</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">node_id_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -956,12 +952,9 @@
 
 
 
-<span class="c1"># Refactored create_heterogeneous_graph using _build_graph_data</span>
-<span class="c1"># Updated create_heterogeneous_graph to accept node_y_attribute_cols parameter</span>
-<span class="c1"># Modified create_heterogeneous_graph: update parameter names and usage</span>
-<div class="viewcode-block" id="create_heterogeneous_graph">
-<a class="viewcode-back" href="../../api/graph.html#city2graph.graph.create_heterogeneous_graph">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">create_heterogeneous_graph</span><span class="p">(</span>
+<div class="viewcode-block" id="heterogeneous_graph">
+<a class="viewcode-back" href="../../api/graph.html#city2graph.graph.heterogeneous_graph">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">heterogeneous_graph</span><span class="p">(</span>
     <span class="n">nodes_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
     <span class="n">edges_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
     <span class="n">node_id_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1132,7 +1125,7 @@
         <span class="p">}</span>
 
         <span class="c1"># Create the heterogeneous graph</span>
-        <span class="k">return</span> <span class="n">create_heterogeneous_graph</span><span class="p">(</span>
+        <span class="k">return</span> <span class="n">heterogeneous_graph</span><span class="p">(</span>
             <span class="n">nodes_dict</span><span class="o">=</span><span class="n">nodes_dict</span><span class="p">,</span>
             <span class="n">edges_dict</span><span class="o">=</span><span class="n">edges_dict</span><span class="p">,</span>
             <span class="n">node_id_cols</span><span class="o">=</span><span class="n">node_id_cols</span><span class="p">,</span>
@@ -1146,7 +1139,7 @@
 
     <span class="c1"># Case 2: We only have private nodes - create homogeneous graph</span>
     <span class="k">elif</span> <span class="n">has_private</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">create_homogeneous_graph</span><span class="p">(</span>
+        <span class="k">return</span> <span class="n">homogeneous_graph</span><span class="p">(</span>
             <span class="n">nodes_gdf</span><span class="o">=</span><span class="n">private_gdf</span><span class="p">,</span>
             <span class="n">edges_gdf</span><span class="o">=</span><span class="n">private_to_private_gdf</span><span class="p">,</span>
             <span class="n">node_id_col</span><span class="o">=</span><span class="n">private_id_col</span><span class="p">,</span>
@@ -1160,7 +1153,7 @@
 
     <span class="c1"># Case 3: We only have public nodes - create homogeneous graph</span>
     <span class="k">elif</span> <span class="n">has_public</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">create_homogeneous_graph</span><span class="p">(</span>
+        <span class="k">return</span> <span class="n">homogeneous_graph</span><span class="p">(</span>
             <span class="n">nodes_gdf</span><span class="o">=</span><span class="n">public_gdf</span><span class="p">,</span>
             <span class="n">edges_gdf</span><span class="o">=</span><span class="n">public_to_public_gdf</span><span class="p">,</span>
             <span class="n">node_id_col</span><span class="o">=</span><span class="n">public_id_col</span><span class="p">,</span>
