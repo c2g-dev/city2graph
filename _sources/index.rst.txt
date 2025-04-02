@@ -57,7 +57,7 @@ Documentation
 
    installation
    examples
-   api
+   api/index
    contributing
 
 
