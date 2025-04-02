@@ -1270,7 +1270,6 @@
     <span class="n">private_id_col</span><span class="o">=</span><span class="s1">&#39;tess_id&#39;</span><span class="p">,</span>
     <span class="n">public_id_col</span><span class="o">=</span><span class="s1">&#39;id&#39;</span><span class="p">,</span>
     <span class="n">public_geom_col</span><span class="o">=</span><span class="s1">&#39;barrier_geometry&#39;</span><span class="p">,</span>
-    <span class="n">tolerance</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
     <span class="n">contiguity</span><span class="o">=</span><span class="s1">&#39;queen&#39;</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -1334,13 +1333,13 @@
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Column &#39;</span><span class="si">{</span><span class="n">public_geom_col</span><span class="si">}</span><span class="s2">&#39; not found in segments_gdf. Using &#39;geometry&#39; column instead.&quot;</span><span class="p">,</span> <span class="ne">RuntimeWarning</span><span class="p">)</span>
         <span class="n">public_geom_col</span> <span class="o">=</span> <span class="s1">&#39;geometry&#39;</span>
     
-    <span class="c1"># 1. Create tessellations based on buildings and road barrier geometries</span>
+    <span class="c1"># Create tessellations based on buildings and road barrier geometries</span>
     <span class="n">enclosed_tess</span> <span class="o">=</span> <span class="n">create_tessellation</span><span class="p">(</span>
         <span class="n">buildings_gdf</span><span class="p">,</span> 
         <span class="n">primary_barriers</span><span class="o">=</span><span class="n">segments_gdf</span><span class="p">[</span><span class="n">public_geom_col</span><span class="p">]</span>
     <span class="p">)</span>
     
-    <span class="c1"># 2. Optionally filter the network by distance from a specified center point</span>
+    <span class="c1"># Optionally filter the network by distance from a specified center point</span>
     <span class="k">if</span> <span class="n">center_point</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">distance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">segments_subset</span> <span class="o">=</span> <span class="n">filter_network_by_distance</span><span class="p">(</span>
             <span class="n">segments_gdf</span><span class="p">,</span>
@@ -1350,7 +1349,7 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="n">segments_subset</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
     
-    <span class="c1"># 3. Get the enclosure indices that are adjacent to the segments using a spatial join</span>
+    <span class="c1"># Get the enclosure indices that are adjacent to the segments using a spatial join</span>
     <span class="n">adjacent_enclosure_indices</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">sjoin</span><span class="p">(</span>
         <span class="n">enclosed_tess</span><span class="p">,</span> 
         <span class="n">segments_subset</span><span class="p">,</span> 
@@ -1364,7 +1363,7 @@
     <span class="c1"># Filter buildings that intersect with the enclosed tessellation</span>
     <span class="n">buildings_subset</span> <span class="o">=</span> <span class="n">buildings_gdf</span><span class="p">[</span><span class="n">buildings_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">intersects</span><span class="p">(</span><span class="n">tess_subset</span><span class="o">.</span><span class="n">unary_union</span><span class="p">)]</span>
     
-    <span class="c1"># 4. Create connections between adjacent private spaces (tessellation cells)</span>
+    <span class="c1"># Create connections between adjacent private spaces (tessellation cells)</span>
     <span class="n">private_to_private</span> <span class="o">=</span> <span class="n">create_private_to_private</span><span class="p">(</span>
         <span class="n">tess_subset</span><span class="p">,</span>
         <span class="n">private_id_col</span><span class="o">=</span><span class="n">private_id_col</span><span class="p">,</span>
@@ -1376,7 +1375,6 @@
     <span class="n">public_to_public</span> <span class="o">=</span> <span class="n">create_public_to_public</span><span class="p">(</span>
         <span class="n">segments_subset</span><span class="p">,</span>
         <span class="n">public_id_col</span><span class="o">=</span><span class="n">public_id_col</span><span class="p">,</span>
-        <span class="n">tolerance</span><span class="o">=</span><span class="n">tolerance</span>
     <span class="p">)</span>
     
     <span class="c1"># Create connections between private spaces and public spaces</span>
@@ -1386,7 +1384,6 @@
         <span class="n">private_id_col</span><span class="o">=</span><span class="n">private_id_col</span><span class="p">,</span>
         <span class="n">public_id_col</span><span class="o">=</span><span class="n">public_id_col</span><span class="p">,</span>
         <span class="n">public_geom_col</span><span class="o">=</span><span class="n">public_geom_col</span><span class="p">,</span>
-        <span class="n">tolerance</span><span class="o">=</span><span class="n">tolerance</span>
     <span class="p">)</span>
     
     <span class="c1"># Return all created elements</span>

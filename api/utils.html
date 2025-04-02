@@ -386,7 +386,7 @@
                   
   <section id="module-city2graph.utils">
 <span id="utils"></span><h1>Utils<a class="headerlink" href="#module-city2graph.utils" title="Link to this heading">#</a></h1>
-<p>Geometry utilities for handling GeoDataFrames and spatial operations.</p>
+<p>Module for utilities that handle GeoDataFrames and spatial operations.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.utils.load_overture_data">
 <span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">load_overture_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">area</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">types</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_to_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#load_overture_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.load_overture_data" title="Link to this definition">#</a></dt>
@@ -485,17 +485,54 @@ the function returns [[0.0, 1.0]].</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.utils.split_segments_by_connectors">
 <span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">split_segments_by_connectors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">segments_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connectors_gdf</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#split_segments_by_connectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.split_segments_by_connectors" title="Link to this definition">#</a></dt>
-<dd><dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeoDataFrame</span></code></a></span></p>
-</dd>
-<dt class="field-even">Parameters<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><strong>segments_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>GeoDataFrame</em></a>)</p></li>
-<li><p><strong>connectors_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>GeoDataFrame</em></a>)</p></li>
+<dd><p>Split segments at connector points and update barrier masks accordingly.
+Optimized for performance with batch processing.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>segments_gdf</strong> (<em>gpd.GeoDataFrame</em>) – GeoDataFrame containing segments to be split</p></li>
+<li><p><strong>connectors_gdf</strong> (<em>gpd.GeoDataFrame</em>) – GeoDataFrame containing connector points</p></li>
 </ul>
 </dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>New GeoDataFrame with split segments</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>gpd.GeoDataFrame</p>
+</dd>
 </dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.utils.adjust_segment_connectors">
+<span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">adjust_segment_connectors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">segments_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#adjust_segment_connectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.adjust_segment_connectors" title="Link to this definition">#</a></dt>
+<dd><p>Adjust segment connector endpoints by clustering endpoints within a threshold distance.</p>
+<p>This function identifies endpoints that are within a threshold distance of each other
+and replaces them with their cluster’s centroid, creating more precise connections
+between LineString segments.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>segments_gdf</strong> (<em>gpd.GeoDataFrame</em>) – GeoDataFrame containing segment geometries (LineStrings)</p></li>
+<li><p><strong>threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>) – Distance threshold for clustering endpoints. Endpoints whose coordinates
+quantize to the same bin (based on this threshold) will be merged.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>GeoDataFrame with adjusted LineString geometries where endpoints
+that were within the threshold have been merged to a common point</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>gpd.GeoDataFrame</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The function works by:
+1. Extracting start and end points from all LineStrings
+2. Quantizing coordinates to bins based on the threshold
+3. Computing the centroid for each bin
+4. Rebuilding LineStrings with the new endpoint coordinates</p>
+<p>Only LineString geometries are processed; other geometry types are left unchanged.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -614,6 +651,7 @@ Returns the same type as the input (either GeoDataFrame or NetworkX graph).</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.identify_connector_mask"><code class="docutils literal notranslate"><span class="pre">identify_connector_mask()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.identify_barrier_mask"><code class="docutils literal notranslate"><span class="pre">identify_barrier_mask()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.split_segments_by_connectors"><code class="docutils literal notranslate"><span class="pre">split_segments_by_connectors()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.adjust_segment_connectors"><code class="docutils literal notranslate"><span class="pre">adjust_segment_connectors()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.create_tessellation"><code class="docutils literal notranslate"><span class="pre">create_tessellation()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.filter_network_by_distance"><code class="docutils literal notranslate"><span class="pre">filter_network_by_distance()</span></code></a></li>
 </ul>
