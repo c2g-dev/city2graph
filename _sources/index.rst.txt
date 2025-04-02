@@ -17,7 +17,7 @@ city2graph documentation
 
 **city2graph** is a Python library for converting datasets of geospatial relations into graphs.
 It is designed to facilitate the graph data analytics in particular for urban studies and spatial analysis.
-It supports `Pytorch Geometric <https://pytorch-geometric.readthedocs.io/en/latest/>` to enable graph representation learning, such as Graph Neural Networks (GNNs).
+It supports `Pytorch Geometric <https://pytorch-geometric.readthedocs.io/en/latest/>`_ to enable graph representation learning, such as Graph Neural Networks (GNNs).
 
 Features
 --------
@@ -43,6 +43,7 @@ Examples
 --------
 
 .. code-block:: python
+
    morphological_network = city2graph.morphological_network(
       buildings_gdf,
       segments_gdf,
@@ -51,7 +52,7 @@ Examples
     )
 
 .. figure:: _static/morphological_network.png
-   :width: 600px
+   :width: 1000px
    :alt: A morphological network in Liverpool
    :align: center
    

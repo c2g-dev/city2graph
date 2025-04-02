@@ -313,7 +313,7 @@
 </figure>
 <p><strong>city2graph</strong> is a Python library for converting datasets of geospatial relations into graphs.
 It is designed to facilitate the graph data analytics in particular for urban studies and spatial analysis.
-It supports <cite>Pytorch Geometric &lt;https://pytorch-geometric.readthedocs.io/en/latest/&gt;</cite> to enable graph representation learning, such as Graph Neural Networks (GNNs).</p>
+It supports <a class="reference external" href="https://pytorch-geometric.readthedocs.io/en/latest/">Pytorch Geometric</a> to enable graph representation learning, such as Graph Neural Networks (GNNs).</p>
 <section id="features">
 <h2>Features<a class="headerlink" href="#features" title="Link to this heading">#</a></h2>
 <ul class="simple">
@@ -338,8 +338,16 @@ It supports <cite>Pytorch Geometric &lt;https://pytorch-geometric.readthedocs.io
 </section>
 <section id="examples">
 <h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">morphological_network</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">morphological_network</span><span class="p">(</span>
+   <span class="n">buildings_gdf</span><span class="p">,</span>
+   <span class="n">segments_gdf</span><span class="p">,</span>
+   <span class="n">center_point</span><span class="p">,</span>
+   <span class="n">distance</span><span class="o">=</span><span class="mi">500</span>
+ <span class="p">)</span>
+</pre></div>
+</div>
 <figure class="align-center" id="id1">
-<a class="reference internal image-reference" href="_images/morphological_network.png"><img alt="A morphological network in Liverpool" src="_images/morphological_network.png" style="width: 600px;" />
+<a class="reference internal image-reference" href="_images/morphological_network.png"><img alt="A morphological network in Liverpool" src="_images/morphological_network.png" style="width: 1000px;" />
 </a>
 <figcaption>
 <p><span class="caption-text">A morphological network of 500-m walking distance in Liverpool</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
