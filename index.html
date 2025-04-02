@@ -138,27 +138,6 @@
   </a>
 </li>
 
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="examples.html">
-    Examples
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="api/index.html">
-    API Reference
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="contributing.html">
-    Contributing
-  </a>
-</li>
-
   </ul>
 </nav></div>
       
@@ -256,27 +235,6 @@
   </a>
 </li>
 
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="examples.html">
-    Examples
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="api/index.html">
-    API Reference
-  </a>
-</li>
-
-
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="contributing.html">
-    Contributing
-  </a>
-</li>
-
   </ul>
 </nav></div>
           
@@ -353,44 +311,40 @@
 <a class="only-dark reference internal image-reference" href="_images/city2graph_logo_main_dark.png"><img alt="city2graph logo" class="only-dark" src="_images/city2graph_logo_main_dark.png" style="width: 400px;" />
 </a>
 </figure>
-<p><strong>city2graph</strong> is a Python library for converting urban geometry into graph representations,
-enabling advanced analysis of urban environments.</p>
+<p><strong>city2graph</strong> is a Python library for converting datasets of geospatial relations into graphs.
+It is designed to facilitate the graph data analytics in particular for urban studies and spatial analysis.
+It supports <cite>Pytorch Geometric &lt;https://pytorch-geometric.readthedocs.io/en/latest/&gt;</cite> to enable graph representation learning, such as Graph Neural Networks (GNNs).</p>
 <section id="features">
 <h2>Features<a class="headerlink" href="#features" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p>Convert city geometry to mathematical graphs</p></li>
-<li><p>Analyze urban networks and connectivity</p></li>
-<li><p>Support for various urban data formats</p></li>
-<li><p>Visualization tools for urban graphs</p></li>
+<li><p>Construct graphs from morphological datasets (e.g. buildings, streets, and land use)</p></li>
+<li><p>Construct graphs from transportation datasets (e.g. public transport of buses, trams, and trains)</p></li>
+<li><p>Construct graphs from contiguity datasets (e.g. land use, land cover, and administrative boundaries)</p></li>
+<li><p>Construct graphs from mobility datasets (e.g. bike-sharing, migration, and pedestrian flows)</p></li>
+<li><p>Convert geospatial data into pytorch tensors for graph representation learning, such as Graph Neural Networks (GNNs)</p></li>
 </ul>
 </section>
 <section id="documentation">
 <h2>Documentation<a class="headerlink" href="#documentation" title="Link to this heading">#</a></h2>
 <div class="toctree-wrapper compound">
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="installation.html#requirements">Requirements</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api/index.html">API Reference</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="api/graph.html">Graph</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/morphology.html">Morphology</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/transportation.html">Transportation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/utils.html">Utils</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="contributing.html#setting-up-development-environment">Setting Up Development Environment</a></li>
-<li class="toctree-l2"><a class="reference internal" href="contributing.html#making-changes">Making Changes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="contributing.html#code-style">Code Style</a></li>
-<li class="toctree-l2"><a class="reference internal" href="contributing.html#documentation">Documentation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="contributing.html#pull-requests">Pull Requests</a></li>
-<li class="toctree-l2"><a class="reference internal" href="contributing.html#building-documentation">Building Documentation</a></li>
-</ul>
-</li>
 </ul>
 </div>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h2>
+<figure class="align-center" id="id1">
+<a class="reference internal image-reference" href="_images/morphological_network.png"><img alt="A morphological network in Liverpool" src="_images/morphological_network.png" style="width: 600px;" />
+</a>
+<figcaption>
+<p><span class="caption-text">A morphological network of 500-m walking distance in Liverpool</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
 </section>
 <section id="indices-and-tables">
 <h2>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Link to this heading">#</a></h2>
@@ -442,6 +396,7 @@ enabling advanced analysis of urban environments.</p>
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#features">Features</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#documentation">Documentation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#examples">Examples</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#indices-and-tables">Indices and tables</a></li>
 </ul>
   </nav></div>
