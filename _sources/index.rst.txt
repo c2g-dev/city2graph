@@ -28,17 +28,6 @@ Features
 - Construct graphs from mobility datasets (e.g. bike-sharing, migration, and pedestrian flows)
 - Convert geospatial data into pytorch tensors for graph representation learning, such as Graph Neural Networks (GNNs)
 
-Documentation
-------------
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
-   installation
-   usage
-   api
-
 Examples
 --------
 
