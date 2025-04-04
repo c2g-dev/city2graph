@@ -45,8 +45,7 @@ Examples
    :alt: A morphological network in Liverpool
    :align: center
    
-   A morphological network of 500-m walking distance in Liverpool
-
+   A morphological network of 500m walking distance in Liverpool
 
 Documentation
 ------------
@@ -56,7 +55,7 @@ Documentation
    :caption: Contents:
 
    installation
-   examples
+   examples/index
    api/index
    contributing
 
