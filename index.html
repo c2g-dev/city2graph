@@ -383,6 +383,14 @@ It supports <a class="reference external" href="https://pytorch-geometric.readth
 <p><span class="caption-text">A morphological network of 500m walking distance in Liverpool</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">sample_gtfs_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;./itm_london_gtfs.zip&quot;</span><span class="p">)</span>
+<span class="n">gtfs_data</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">load_gtfs</span><span class="p">(</span><span class="n">sample_gtfs_path</span><span class="p">)</span>
+
+<span class="n">travel_summary_gdf</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">travel_summary_network</span><span class="p">(</span>
+   <span class="n">gtfs_data</span><span class="p">,</span> <span class="n">calendar_start</span><span class="o">=</span><span class="s2">&quot;20250401&quot;</span><span class="p">,</span> <span class="n">calendar_end</span><span class="o">=</span><span class="s2">&quot;20250401&quot;</span><span class="p">,</span> <span class="n">as_gdf</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">27700</span><span class="p">)</span>
+</pre></div>
+</div>
 <figure class="align-center" id="id2">
 <a class="reference internal image-reference" href="_images/trav_sum_network_overview.png"><img alt="A bus transportation network in London" src="_images/trav_sum_network_overview.png" style="width: 1000px;" />
 </a>
