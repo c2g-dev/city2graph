@@ -47,6 +47,8 @@ Examples
    
    A morphological network of 500m walking distance in Liverpool
 
+>> For details, see :doc:`examples/morphological_networks_from_overturemaps`
+
 .. code-block:: python
 
    sample_gtfs_path = Path("./itm_london_gtfs.zip")
@@ -62,6 +64,8 @@ Examples
    :align: center
 
    A bus transportation network between stops in London
+
+>> For details, see :doc:`examples/gtfs`
 
 Documentation
 ------------
