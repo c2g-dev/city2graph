@@ -47,6 +47,13 @@ Examples
    
    A morphological network of 500m walking distance in Liverpool
 
+.. figure:: _static/trav_sum_network_overview.png
+   :width: 1000px
+   :alt: A bus transportation network in London
+   :align: center
+
+   A bus transportation network between stops in London
+
 Documentation
 ------------
 

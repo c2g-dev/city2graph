@@ -1,0 +1,1572 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>1. Set up environment &#8212; city2graph 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ababc33f" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/gtfs';</script>
+    <link rel="icon" href="../_static/city2graph_logo.png"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="API Reference" href="../api/index.html" />
+    <link rel="prev" title="Constructing Morphological Networks from Overture Maps" href="morphological_networks_from_overturemaps.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/city2graph_logo_wide.png" class="logo__image only-light" alt="city2graph 0.1.0 documentation - Home"/>
+    <img src="../_static/city2graph_logo_wide_dark.png" class="logo__image only-dark pst-js-only" alt="city2graph 0.1.0 documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+    Examples
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributing.html">
+    Contributing
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/yu-ta-sato/city2graph" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+    Examples
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributing.html">
+    Contributing
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/yu-ta-sato/city2graph" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="morphological_networks_from_overturemaps.html">Constructing Morphological Networks from Overture Maps</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">1. Set up environment</a></li>
+
+
+
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Examples</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">1. Set up environment</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="1.-Set-up-environment">
+<h1>1. Set up environment<a class="headerlink" href="#1.-Set-up-environment" title="Link to this heading">#</a></h1>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import os
+from pathlib import Path
+
+from shapely import LineString
+import pandas as pd
+import geopandas as gpd
+
+import contextily as ctx
+import folium
+
+import matplotlib.pyplot as plt
+import city2graph
+
+# Configure matplotlib for better visualizations
+plt.rcParams[&#39;figure.figsize&#39;] = (12, 10)
+plt.rcParams[&#39;figure.dpi&#39;] = 100
+plt.style.use(&#39;ggplot&#39;)
+</pre></div>
+</div>
+</div>
+</section>
+<section id="2.-Load-GTFS-Data">
+<h1>2. Load GTFS Data<a class="headerlink" href="#2.-Load-GTFS-Data" title="Link to this heading">#</a></h1>
+<p>The General Transit Feed Specification (GTFS) is a standard format for public transportation schedules and associated geographic information. In this example, we employ a GTFS of London from <a class="reference external" href="https://tfl.gov.uk/info-for/open-data-users/our-open-data">Transport for London</a>. For more information about the data structure, please refer to <a class="reference external" href="https://gtfs.org/documentation/overview/">the official documentation of GTFS</a>.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sample_gtfs_path = Path(&quot;./itm_london_gtfs.zip&quot;)
+gtfs_data = city2graph.load_gtfs(sample_gtfs_path)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+INFO:city2graph.transportation:Loading GTFS data from itm_london_gtfs.zip...
+INFO:city2graph.transportation:Loaded 10 GTFS files
+INFO:city2graph.transportation:Processing GTFS DataFrames...
+INFO:city2graph.transportation:Creating stops geometry...
+INFO:city2graph.transportation:Creating shapes geometry...
+INFO:city2graph.transportation:GTFS data processing complete
+</pre></div></div>
+</div>
+<p>GTFS contains the necessary information for the schedule of public transportation, such as the calendar, trip, route, and stop times. <code class="docutils literal notranslate"><span class="pre">load_gtfs</span></code> provides a dictionary of such tabular data in <code class="docutils literal notranslate"><span class="pre">pd.DataFrame</span></code> or <code class="docutils literal notranslate"><span class="pre">gpd.GeoDataFrame</span></code> with coordinates.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data.keys()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;feed_info&#39;, &#39;frequencies&#39;, &#39;routes&#39;, &#39;shapes&#39;, &#39;stop_times&#39;, &#39;stops&#39;, &#39;trips&#39;])
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;agency&#39;].head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>agency_id</th>
+      <th>agency_name</th>
+      <th>agency_url</th>
+      <th>agency_timezone</th>
+      <th>agency_lang</th>
+      <th>agency_phone</th>
+      <th>agency_noc</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>OP5051</td>
+      <td>FlixBus</td>
+      <td>https://www.traveline.info</td>
+      <td>Europe/London</td>
+      <td>EN</td>
+      <td>NaN</td>
+      <td>FLIX</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>OP564</td>
+      <td>Megabus</td>
+      <td>https://www.traveline.info</td>
+      <td>Europe/London</td>
+      <td>EN</td>
+      <td>NaN</td>
+      <td>MEGA</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>OP28</td>
+      <td>New Bharat Coaches (Southall, London)</td>
+      <td>https://www.traveline.info</td>
+      <td>Europe/London</td>
+      <td>EN</td>
+      <td>NaN</td>
+      <td>BHAT</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>OP545</td>
+      <td>Scottish Citylink</td>
+      <td>https://www.traveline.info</td>
+      <td>Europe/London</td>
+      <td>EN</td>
+      <td>NaN</td>
+      <td>SCLK</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>OP13994</td>
+      <td>Barnett's Tiger Line</td>
+      <td>https://www.traveline.info</td>
+      <td>Europe/London</td>
+      <td>EN</td>
+      <td>NaN</td>
+      <td>BARC</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;calendar&#39;].head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>service_id</th>
+      <th>monday</th>
+      <th>tuesday</th>
+      <th>wednesday</th>
+      <th>thursday</th>
+      <th>friday</th>
+      <th>saturday</th>
+      <th>sunday</th>
+      <th>start_date</th>
+      <th>end_date</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>45</td>
+      <td>False</td>
+      <td>False</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+      <td>False</td>
+      <td>False</td>
+      <td>20250417</td>
+      <td>20250923</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>104</td>
+      <td>False</td>
+      <td>False</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+      <td>False</td>
+      <td>False</td>
+      <td>20250324</td>
+      <td>20250611</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>42</td>
+      <td>False</td>
+      <td>False</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+      <td>False</td>
+      <td>False</td>
+      <td>20250417</td>
+      <td>20250923</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>94</td>
+      <td>False</td>
+      <td>False</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+      <td>False</td>
+      <td>False</td>
+      <td>20250417</td>
+      <td>20250605</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>105</td>
+      <td>False</td>
+      <td>False</td>
+      <td>False</td>
+      <td>True</td>
+      <td>False</td>
+      <td>False</td>
+      <td>False</td>
+      <td>20250324</td>
+      <td>20250611</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;calendar_dates&#39;].head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>service_id</th>
+      <th>date</th>
+      <th>exception_type</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1000</td>
+      <td>20250418</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>1000</td>
+      <td>20250421</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>1000</td>
+      <td>20250505</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>1000</td>
+      <td>20250526</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>1000</td>
+      <td>20250825</td>
+      <td>2</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;routes&#39;].head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>route_id</th>
+      <th>agency_id</th>
+      <th>route_short_name</th>
+      <th>route_long_name</th>
+      <th>route_type</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>103800</td>
+      <td>OP5051</td>
+      <td>940</td>
+      <td>NaN</td>
+      <td>200</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>112106</td>
+      <td>OP5051</td>
+      <td>XN10</td>
+      <td>NaN</td>
+      <td>200</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>114878</td>
+      <td>OP5051</td>
+      <td>002</td>
+      <td>NaN</td>
+      <td>200</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>113261</td>
+      <td>OP5051</td>
+      <td>N49</td>
+      <td>NaN</td>
+      <td>200</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>113262</td>
+      <td>OP5051</td>
+      <td>049</td>
+      <td>NaN</td>
+      <td>200</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;stops&#39;].head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>stop_id</th>
+      <th>stop_code</th>
+      <th>stop_name</th>
+      <th>stop_lat</th>
+      <th>stop_lon</th>
+      <th>wheelchair_boarding</th>
+      <th>location_type</th>
+      <th>parent_station</th>
+      <th>platform_code</th>
+      <th>geometry</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>01000053216</td>
+      <td>bstgjpt</td>
+      <td>Bus Station (Bay 8)</td>
+      <td>51.459064</td>
+      <td>-2.592986</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>POINT (-2.59299 51.45906)</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>0170SGP90689</td>
+      <td>sglawta</td>
+      <td>Coldharbour Lane</td>
+      <td>51.503525</td>
+      <td>-2.544981</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>POINT (-2.54498 51.50352)</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>0180BAA01319</td>
+      <td>bthmtwj</td>
+      <td>Bus Station (Bay 1)</td>
+      <td>51.377853</td>
+      <td>-2.359460</td>
+      <td>0</td>
+      <td>0</td>
+      <td>018G0001</td>
+      <td>1</td>
+      <td>POINT (-2.35946 51.37785)</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>019000017</td>
+      <td>wsmpadp</td>
+      <td>Terminus B</td>
+      <td>51.361954</td>
+      <td>-2.909259</td>
+      <td>0</td>
+      <td>0</td>
+      <td>019G0001</td>
+      <td>NaN</td>
+      <td>POINT (-2.90926 51.36195)</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>0190NSC30144</td>
+      <td>wsmajaj</td>
+      <td>Alexandra Parade (Stop CC)</td>
+      <td>51.347240</td>
+      <td>-2.975564</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>POINT (-2.97556 51.34724)</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;stop_times&#39;].head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>trip_id</th>
+      <th>arrival_time</th>
+      <th>departure_time</th>
+      <th>stop_id</th>
+      <th>stop_sequence</th>
+      <th>stop_headsign</th>
+      <th>pickup_type</th>
+      <th>drop_off_type</th>
+      <th>shape_dist_traveled</th>
+      <th>timepoint</th>
+      <th>stop_direction_name</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>VJ499f13f50ffa86ecba4c582cde0e97cf30b99b62</td>
+      <td>10:20:00</td>
+      <td>10:20:00</td>
+      <td>5810WDB48070</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>1</td>
+      <td>NaN</td>
+      <td>1</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>VJ499f13f50ffa86ecba4c582cde0e97cf30b99b62</td>
+      <td>10:30:00</td>
+      <td>10:30:00</td>
+      <td>5820AWC50344</td>
+      <td>1</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>VJ499f13f50ffa86ecba4c582cde0e97cf30b99b62</td>
+      <td>10:45:00</td>
+      <td>10:50:00</td>
+      <td>5820AWK65490</td>
+      <td>2</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>VJ499f13f50ffa86ecba4c582cde0e97cf30b99b62</td>
+      <td>11:10:00</td>
+      <td>11:10:00</td>
+      <td>5510AWA13122</td>
+      <td>3</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>NaN</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>VJ499f13f50ffa86ecba4c582cde0e97cf30b99b62</td>
+      <td>11:40:00</td>
+      <td>11:45:00</td>
+      <td>5710WDB48422</td>
+      <td>4</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>NaN</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;trips&#39;].head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>route_id</th>
+      <th>service_id</th>
+      <th>trip_id</th>
+      <th>trip_headsign</th>
+      <th>direction_id</th>
+      <th>block_id</th>
+      <th>shape_id</th>
+      <th>wheelchair_accessible</th>
+      <th>trip_direction_name</th>
+      <th>vehicle_journey_code</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>103800</td>
+      <td>0</td>
+      <td>VJ499f13f50ffa86ecba4c582cde0e97cf30b99b62</td>
+      <td>Gatwick Airport</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>J1004,J1035,J1066,J942,J973</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>103800</td>
+      <td>1</td>
+      <td>VJc91f5543557f21e942eb8b7e29c6c198d067f0f3</td>
+      <td>Gatwick Airport</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>J2094,J2110,J2126,J2142,J2158,J2174</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>103800</td>
+      <td>1</td>
+      <td>VJc30f50c89b5fdce773c0ac97c2f282b2cb960ecf</td>
+      <td>Gatwick Airport</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>J2361,J2376,J2391,J2406,J2421,J2435</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>103800</td>
+      <td>1</td>
+      <td>VJ1f75c251e5ce08ef0e53ff5112966b4c26c083e4</td>
+      <td>Gatwick Airport</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>J2940,J2947,J2954,J2961,J2968,J2975</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>103800</td>
+      <td>1</td>
+      <td>VJ157e085e99c6b4a7732a952da3bdadf4ac679087</td>
+      <td>Gatwick Airport</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>0</td>
+      <td>NaN</td>
+      <td>J3160,J3165,J3170,J3175,J3180,J3185</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Convert stops dataframe to GeoDataFrame with EPSG:4326 (WGS84) coordinates
+stops_gdf = gpd.GeoDataFrame(
+    gtfs_data[&#39;stops&#39;],
+    geometry=gpd.points_from_xy(gtfs_data[&#39;stops&#39;][&#39;stop_lon&#39;], gtfs_data[&#39;stops&#39;][&#39;stop_lat&#39;]),
+    crs=&quot;EPSG:4326&quot;
+)
+
+# Reproject to British National Grid (EPSG:27700)
+stops_gdf_27700 = stops_gdf.to_crs(epsg=27700)
+
+# Create the plot in British National Grid
+fig, ax = plt.subplots(figsize=(12, 10))
+stops_gdf_27700.plot(ax=ax, alpha=0.5, c=&#39;blue&#39;, markersize=5)  # Reduced marker size
+
+# Add a basemap appropriate for the British National Grid
+ctx.add_basemap(ax, crs=stops_gdf_27700.crs.to_string(), source=ctx.providers.CartoDB.Positron)
+
+# Remove title and labels from coordinate axis
+ax.set_xticklabels([])
+ax.set_yticklabels([])
+ax.set_xticks([])
+ax.set_yticks([])
+
+# Improve the aspect ratio for geographic data
+ax.set_aspect(&#39;equal&#39;)
+
+plt.tight_layout()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/examples_gtfs_13_0.png" src="../_images/examples_gtfs_13_0.png" />
+</div>
+</div>
+</section>
+<section id="3.-Process-GTFS-data-to-summarise-the-trips">
+<h1>3. Process GTFS data to summarise the trips<a class="headerlink" href="#3.-Process-GTFS-data-to-summarise-the-trips" title="Link to this heading">#</a></h1>
+<p>After loading the GTFS, <code class="docutils literal notranslate"><span class="pre">travel_summary_network</span></code> can summarise the trips between stops. The output contains the origin and destination of stops, with average travel times in seconds and frequency in the specified time intervals.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>travel_summary_gdf = city2graph.travel_summary_network(
+    gtfs_data, calendar_start=&quot;20250401&quot;, calendar_end=&quot;20250401&quot;, as_gdf=True
+).to_crs(epsg=27700)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[45]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>travel_summary_gdf.head()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[45]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>from_stop_id</th>
+      <th>to_stop_id</th>
+      <th>travel_time</th>
+      <th>frequency</th>
+      <th>geometry</th>
+      <th>travel_time_quantiles</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>01000053216</td>
+      <td>0170SGP90689</td>
+      <td>750.0</td>
+      <td>6</td>
+      <td>LINESTRING (358898.043 173510.112, 362270.027 ...</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>01000053216</td>
+      <td>360000174</td>
+      <td>3600.0</td>
+      <td>1</td>
+      <td>LINESTRING (358898.043 173510.112, 325333.037 ...</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>01000053216</td>
+      <td>490007703M</td>
+      <td>8800.0</td>
+      <td>3</td>
+      <td>LINESTRING (358898.043 173510.112, 523267.997 ...</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>01000053216</td>
+      <td>490008016CS</td>
+      <td>7260.0</td>
+      <td>10</td>
+      <td>LINESTRING (358898.043 173510.112, 507541.013 ...</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>01000053216</td>
+      <td>5310AWB30328</td>
+      <td>2875.0</td>
+      <td>12</td>
+      <td>LINESTRING (358898.043 173510.112, 330886.046 ...</td>
+      <td>3</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[73]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from shapely.geometry import box
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+import geopandas as gpd
+import contextily as ctx
+
+# Define the bounding box for Greater London
+london_bbox = (-0.489, 51.28, 0.236, 51.686)
+
+# Create a box (polygon) from the bounding box
+bbox = box(*london_bbox)
+
+# Create a GeoDataFrame from the box and project to British National Grid (EPSG:27700)
+bbox_gdf = gpd.GeoDataFrame({&quot;geometry&quot;: [bbox]}, crs=&quot;EPSG:4326&quot;).to_crs(epsg=27700)
+
+# Perform the spatial join (filtering travel times under 300 seconds)
+travel_summary_gdf_cropped = gpd.sjoin(
+    travel_summary_gdf[travel_summary_gdf[&quot;travel_time&quot;] &lt; 300],
+    bbox_gdf,
+    how=&quot;inner&quot;,
+    predicate=&quot;within&quot;
+)
+
+# Create a visually appealing color map
+cmap = plt.cm.viridis
+
+# Create a larger figure and axis for visualization
+fig, ax = plt.subplots(figsize=(15, 12))
+
+# Plot the data with styling based on travel_time and frequency.
+# The auto-generated legend for travel time is set to &#39;lower right&#39;
+travel_summary_gdf_cropped.plot(
+    column=&quot;travel_time&quot;,
+    cmap=cmap,
+    scheme=&quot;quantiles&quot;,
+    k=5,
+    linewidth=travel_summary_gdf_cropped[&#39;frequency&#39;] / 500,  # Scale line width by frequency
+    alpha=0.7,
+    ax=ax,
+    legend=True,
+    legend_kwds={&#39;title&#39;: &#39;Travel Time (seconds)&#39;, &#39;loc&#39;: &#39;lower right&#39;}
+)
+
+# Capture the auto-generated travel time legend
+travel_time_legend = ax.get_legend()
+
+# Reposition the travel time legend to the lower-right corner with explicit bbox coordinates.
+# Its lower-right corner is anchored at (1, 0)
+travel_time_legend.set_bbox_to_anchor((1, 0))
+travel_time_legend.set_loc(&#39;lower right&#39;)
+
+# Create custom legend handles for frequency values
+freq_values = [500, 1000, 1500]
+freq_legend_elements = []
+for freq in freq_values:
+    freq_legend_elements.append(
+        mlines.Line2D([0], [0],
+                      color=&#39;black&#39;,
+                      linewidth=freq/500,
+                      label=f&#39;{freq} trips/day&#39;)
+    )
+
+# Add the frequency legend to the plot
+freq_legend = ax.legend(
+    handles=freq_legend_elements,
+    title=&quot;Frequency (trips/day)&quot;,
+    loc=&quot;lower right&quot;,
+    bbox_to_anchor=(1, 0.12),
+    frameon=True,
+    framealpha=0.8
+)
+
+# Add the travel time legend back so that both legends are visible.
+ax.add_artist(travel_time_legend)
+
+# Add a basemap appropriate for the British National Grid.
+ctx.add_basemap(
+    ax,
+    crs=travel_summary_gdf_cropped.crs.to_string(),
+    source=ctx.providers.CartoDB.Positron,
+    alpha=0.5
+)
+
+# Remove axis labels and ticks for a cleaner look.
+ax.set_xticklabels([])
+ax.set_yticklabels([])
+ax.set_xticks([])
+ax.set_yticks([])
+
+# Add a border around the plot.
+for spine in ax.spines.values():
+    spine.set_visible(True)
+    spine.set_linewidth(1)
+    spine.set_color(&#39;#333333&#39;)
+
+# Ensure the aspect ratio is equal (important for geographic data).
+ax.set_aspect(&quot;equal&quot;)
+
+plt.tight_layout()
+plt.show()
+<br/></pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/examples_gtfs_18_0.png" src="../_images/examples_gtfs_18_0.png" />
+</div>
+</div>
+</section>
+<section id="4.-Create-row-OD-matrix-from-GTFS-(experimental)">
+<h1>4. Create row OD matrix from GTFS (experimental)<a class="headerlink" href="#4.-Create-row-OD-matrix-from-GTFS-(experimental)" title="Link to this heading">#</a></h1>
+<p>You can create row OD matrix from GTFS data by <code class="docutils literal notranslate"><span class="pre">get_od_pairs</span></code>. However, the data amount will be explosive if the original GTFS covers broadly in terms of space and time.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>od_gdf = city2graph.get_od_pairs(gtfs_data, start_date=&quot;20250401&quot;, end_date=&quot;20250401&quot;, include_geometry=True, as_generator=False)
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># To iterate over chunks and process/write them immediately
+for od_chunk in city2graph.get_od_pairs(gtfs_data, as_generator=True, chunk_size=5000):
+    # Process or write the chunk to disk
+    print(od_chunk.shape)
+    # Optionally, write to a file in append mode:
+    od_chunk.to_csv(&#39;gtfs_od_pairs_chunk.csv&#39;, mode=&#39;a&#39;, header=not os.path.exists(&#39;gtfs_od_pairs_chunk.csv&#39;), index=False)
+</pre></div>
+</div>
+</div>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="morphological_networks_from_overturemaps.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Constructing Morphological Networks from Overture Maps</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../api/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">API Reference</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">1. Set up environment</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#2.-Load-GTFS-Data">2. Load GTFS Data</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#3.-Process-GTFS-data-to-summarise-the-trips">3. Process GTFS data to summarise the trips</a></li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#4.-Create-row-OD-matrix-from-GTFS-(experimental)">4. Create row OD matrix from GTFS (experimental)</a></li>
+</ul>
+
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/examples/gtfs.ipynb.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, city2graph developers.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>
