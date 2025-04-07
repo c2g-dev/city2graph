@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>1. Set up environment &#8212; city2graph 0.1.0 documentation</title>
+    <title>Processing GTFS to Obtain Flows of Public Transportation &#8212; city2graph 0.1.0 documentation</title>
   
   
   
@@ -322,10 +322,7 @@
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="morphological_networks_from_overturemaps.html">Constructing Morphological Networks from Overture Maps</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">1. Set up environment</a></li>
-
-
-
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Processing GTFS to Obtain Flows of Public Transportation</a></li>
 </ul>
 </div>
 </nav></div>
@@ -369,7 +366,7 @@
     
     <li class="breadcrumb-item"><a href="index.html" class="nav-link">Examples</a></li>
     
-    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">1. Set up environment</span></li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Processing GTFS to Obtain Flows of Public Transportation</span></li>
   </ul>
 </nav>
 </div>
@@ -386,10 +383,13 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="1.-Set-up-environment">
-<h1>1. Set up environment<a class="headerlink" href="#1.-Set-up-environment" title="Link to this heading">#</a></h1>
+  <section id="Processing-GTFS-to-Obtain-Flows-of-Public-Transportation">
+<h1>Processing GTFS to Obtain Flows of Public Transportation<a class="headerlink" href="#Processing-GTFS-to-Obtain-Flows-of-Public-Transportation" title="Link to this heading">#</a></h1>
+<p>This notebook demonstrates how to process General Transit Feed Specification (GTFS) data to analyze and visualize public transportation flows. We will load GTFS data, summarise trips, and create origin-destination matrices to understand travel patterns.</p>
+<section id="1.-Set-up-environment">
+<h2>1. Set up environment<a class="headerlink" href="#1.-Set-up-environment" title="Link to this heading">#</a></h2>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import os
@@ -414,10 +414,10 @@ plt.style.use(&#39;ggplot&#39;)
 </div>
 </section>
 <section id="2.-Load-GTFS-Data">
-<h1>2. Load GTFS Data<a class="headerlink" href="#2.-Load-GTFS-Data" title="Link to this heading">#</a></h1>
+<h2>2. Load GTFS Data<a class="headerlink" href="#2.-Load-GTFS-Data" title="Link to this heading">#</a></h2>
 <p>The General Transit Feed Specification (GTFS) is a standard format for public transportation schedules and associated geographic information. In this example, we employ a GTFS of London from <a class="reference external" href="https://tfl.gov.uk/info-for/open-data-users/our-open-data">Transport for London</a>. For more information about the data structure, please refer to <a class="reference external" href="https://gtfs.org/documentation/overview/">the official documentation of GTFS</a>.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sample_gtfs_path = Path(&quot;./itm_london_gtfs.zip&quot;)
@@ -440,7 +440,7 @@ INFO:city2graph.transportation:GTFS data processing complete
 </div>
 <p>GTFS contains the necessary information for the schedule of public transportation, such as the calendar, trip, route, and stop times. <code class="docutils literal notranslate"><span class="pre">load_gtfs</span></code> provides a dictionary of such tabular data in <code class="docutils literal notranslate"><span class="pre">pd.DataFrame</span></code> or <code class="docutils literal notranslate"><span class="pre">gpd.GeoDataFrame</span></code> with coordinates.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data.keys()
@@ -448,7 +448,7 @@ INFO:city2graph.transportation:GTFS data processing complete
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
 <div class="output_area docutils container">
@@ -457,7 +457,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;agency&#39;].head()
@@ -465,7 +465,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -552,7 +552,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;calendar&#39;].head()
@@ -560,7 +560,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -665,7 +665,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;calendar_dates&#39;].head()
@@ -673,7 +673,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -736,7 +736,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;routes&#39;].head()
@@ -744,7 +744,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -819,7 +819,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;stops&#39;].head()
@@ -827,7 +827,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -932,7 +932,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;stop_times&#39;].head()
@@ -940,7 +940,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -1051,7 +1051,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;trips&#39;].head()
@@ -1059,7 +1059,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -1164,7 +1164,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 </div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Convert stops dataframe to GeoDataFrame with EPSG:4326 (WGS84) coordinates
@@ -1201,15 +1201,15 @@ plt.tight_layout()
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/examples_gtfs_13_0.png" src="../_images/examples_gtfs_13_0.png" />
+<img alt="../_images/examples_gtfs_14_0.png" src="../_images/examples_gtfs_14_0.png" />
 </div>
 </div>
 </section>
 <section id="3.-Process-GTFS-data-to-summarise-the-trips">
-<h1>3. Process GTFS data to summarise the trips<a class="headerlink" href="#3.-Process-GTFS-data-to-summarise-the-trips" title="Link to this heading">#</a></h1>
+<h2>3. Process GTFS data to summarise the trips<a class="headerlink" href="#3.-Process-GTFS-data-to-summarise-the-trips" title="Link to this heading">#</a></h2>
 <p>After loading the GTFS, <code class="docutils literal notranslate"><span class="pre">travel_summary_network</span></code> can summarise the trips between stops. The output contains the origin and destination of stops, with average travel times in seconds and frequency in the specified time intervals.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>travel_summary_gdf = city2graph.travel_summary_network(
@@ -1219,7 +1219,7 @@ plt.tight_layout()
 </div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[45]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>travel_summary_gdf.head()
@@ -1227,7 +1227,7 @@ plt.tight_layout()
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[45]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -1254,7 +1254,6 @@ plt.tight_layout()
       <th>travel_time</th>
       <th>frequency</th>
       <th>geometry</th>
-      <th>travel_time_quantiles</th>
     </tr>
   </thead>
   <tbody>
@@ -1265,7 +1264,6 @@ plt.tight_layout()
       <td>750.0</td>
       <td>6</td>
       <td>LINESTRING (358898.043 173510.112, 362270.027 ...</td>
-      <td>3</td>
     </tr>
     <tr>
       <th>1</th>
@@ -1274,7 +1272,6 @@ plt.tight_layout()
       <td>3600.0</td>
       <td>1</td>
       <td>LINESTRING (358898.043 173510.112, 325333.037 ...</td>
-      <td>3</td>
     </tr>
     <tr>
       <th>2</th>
@@ -1283,7 +1280,6 @@ plt.tight_layout()
       <td>8800.0</td>
       <td>3</td>
       <td>LINESTRING (358898.043 173510.112, 523267.997 ...</td>
-      <td>3</td>
     </tr>
     <tr>
       <th>3</th>
@@ -1292,7 +1288,6 @@ plt.tight_layout()
       <td>7260.0</td>
       <td>10</td>
       <td>LINESTRING (358898.043 173510.112, 507541.013 ...</td>
-      <td>3</td>
     </tr>
     <tr>
       <th>4</th>
@@ -1301,14 +1296,13 @@ plt.tight_layout()
       <td>2875.0</td>
       <td>12</td>
       <td>LINESTRING (358898.043 173510.112, 330886.046 ...</td>
-      <td>3</td>
     </tr>
   </tbody>
 </table>
 </div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[73]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from shapely.geometry import box
@@ -1409,6 +1403,9 @@ for spine in ax.spines.values():
 # Ensure the aspect ratio is equal (important for geographic data).
 ax.set_aspect(&quot;equal&quot;)
 
+# Add title and remove axes
+ax.set_axis_off()
+
 plt.tight_layout()
 plt.show()
 <br/></pre></div>
@@ -1418,12 +1415,12 @@ plt.show()
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/examples_gtfs_18_0.png" src="../_images/examples_gtfs_18_0.png" />
+<img alt="../_images/examples_gtfs_19_0.png" src="../_images/examples_gtfs_19_0.png" />
 </div>
 </div>
 </section>
 <section id="4.-Create-row-OD-matrix-from-GTFS-(experimental)">
-<h1>4. Create row OD matrix from GTFS (experimental)<a class="headerlink" href="#4.-Create-row-OD-matrix-from-GTFS-(experimental)" title="Link to this heading">#</a></h1>
+<h2>4. Create row OD matrix from GTFS (experimental)<a class="headerlink" href="#4.-Create-row-OD-matrix-from-GTFS-(experimental)" title="Link to this heading">#</a></h2>
 <p>You can create row OD matrix from GTFS data by <code class="docutils literal notranslate"><span class="pre">get_od_pairs</span></code>. However, the data amount will be explosive if the original GTFS covers broadly in terms of space and time.</p>
 <div class="nbinput nblast docutils container">
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
@@ -1446,6 +1443,7 @@ for od_chunk in city2graph.get_od_pairs(gtfs_data, as_generator=True, chunk_size
 </pre></div>
 </div>
 </div>
+</section>
 </section>
 
 
@@ -1495,12 +1493,11 @@ for od_chunk in city2graph.get_od_pairs(gtfs_data, as_generator=True, chunk_size
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">1. Set up environment</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#2.-Load-GTFS-Data">2. Load GTFS Data</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#3.-Process-GTFS-data-to-summarise-the-trips">3. Process GTFS data to summarise the trips</a></li>
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#4.-Create-row-OD-matrix-from-GTFS-(experimental)">4. Create row OD matrix from GTFS (experimental)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#1.-Set-up-environment">1. Set up environment</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#2.-Load-GTFS-Data">2. Load GTFS Data</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#3.-Process-GTFS-data-to-summarise-the-trips">3. Process GTFS data to summarise the trips</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#4.-Create-row-OD-matrix-from-GTFS-(experimental)">4. Create row OD matrix from GTFS (experimental)</a></li>
 </ul>
-
   </nav></div>
 
   <div class="sidebar-secondary-item">
