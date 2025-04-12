@@ -1,0 +1,2110 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Constructing Morphological Networks from Overture Maps &#8212; city2graph 0.1.0 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=ababc33f" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'examples/map_attributes_on_network';</script>
+    <link rel="icon" href="../_static/city2graph_logo.png"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/city2graph_logo_wide.png" class="logo__image only-light" alt="city2graph 0.1.0 documentation - Home"/>
+    <img src="../_static/city2graph_logo_wide_dark.png" class="logo__image only-dark pst-js-only" alt="city2graph 0.1.0 documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="index.html">
+    Examples
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributing.html">
+    Contributing
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/yu-ta-sato/city2graph" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="index.html">
+    Examples
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../api/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../contributing.html">
+    Contributing
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/yu-ta-sato/city2graph" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Constructing Morphological Networks from Overture Maps</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="Constructing-Morphological-Networks-from-Overture-Maps">
+<h1>Constructing Morphological Networks from Overture Maps<a class="headerlink" href="#Constructing-Morphological-Networks-from-Overture-Maps" title="Link to this heading">#</a></h1>
+<p>In this notebook, we’ll walk through the following workflow:</p>
+<ol class="arabic simple">
+<li><p><strong>Data Preparation</strong>: Loading and processing street segments and building data from Overture Maps</p></li>
+<li><p><strong>Space Division</strong>: Creating morphological tessellations to represent private spaces</p></li>
+<li><p><strong>Network Creation</strong>: Generating different types of morphological networks:</p>
+<ul class="simple">
+<li><p>Private-to-private connections (between adjacent private spaces)</p></li>
+<li><p>Public-to-public connections (between street segments)</p></li>
+<li><p>Private-to-public connections (between private spaces and streets)</p></li>
+</ul>
+</li>
+<li><p><strong>Graph Conversion</strong>: Converting spatial networks to graph representations using PyTorch Geometric</p></li>
+<li><p><strong>Visualization</strong>: Exploring different ways to visualize the morphological networks</p></li>
+</ol>
+<p>These graph representations enable various analyses of urban form, including connectivity studies, accessibility measures, and graph-based machine learning for urban analytics.</p>
+<section id="1.-Setup-and-Environment">
+<h2>1. Setup and Environment<a class="headerlink" href="#1.-Setup-and-Environment" title="Link to this heading">#</a></h2>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import numpy as np
+from shapely import Point
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import contextily as cx
+import city2graph
+import folium
+
+# Configure matplotlib for better visualizations
+plt.rcParams[&#39;figure.figsize&#39;] = (12, 10)
+plt.rcParams[&#39;figure.dpi&#39;] = 100
+plt.style.use(&#39;ggplot&#39;)
+</pre></div>
+</div>
+</div>
+</section>
+<section id="2.-Data-Loading-and-Preparation">
+<h2>2. Data Loading and Preparation<a class="headerlink" href="#2.-Data-Loading-and-Preparation" title="Link to this heading">#</a></h2>
+<p>We’ll work with data from Liverpool, UK, including building footprints and road network segments. These data are stored as GeoJSON files. <code class="docutils literal notranslate"><span class="pre">area</span></code> accepts either bbox or Polygon in WGS84.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>bbox = [-3.090173,53.355487,-2.917138,53.465587] # Liverpool city centre
+city2graph.load_overture_data(area=bbox,
+                              types=[&quot;segment&quot;, &quot;building&quot;, &quot;connector&quot;],
+                              output_dir=&quot;.&quot;,
+                              prefix=&quot;liverpool_&quot;,
+                              save_to_file=True,
+                              return_data=False)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+{}
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Load GeoJSON files
+buildings_gdf = gpd.read_file(&quot;liverpool_building.geojson&quot;)
+segments_gdf = gpd.read_file(&quot;liverpool_segment.geojson&quot;)
+connectors_gdf = gpd.read_file(&quot;liverpool_connector.geojson&quot;)
+
+# Convert to British National Grid (EPSG:27700)
+buildings_gdf = buildings_gdf.to_crs(epsg=27700)
+segments_gdf = segments_gdf.to_crs(epsg=27700)
+connectors_gdf = connectors_gdf.to_crs(epsg=27700)
+
+print(f&quot;Loaded {len(buildings_gdf)} buildings, {len(segments_gdf)} segments, and {len(connectors_gdf)} connectors&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Loaded 132972 buildings, 37474 segments, and 47367 connectors
+</pre></div></div>
+</div>
+</section>
+<section id="3.-Street-Network-Processing">
+<h2>3. Street Network Processing<a class="headerlink" href="#3.-Street-Network-Processing" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">city2graph</span></code> offers functions that can process and clean up the original segments from Overture Maps. Eventually, <code class="docutils literal notranslate"><span class="pre">barrier_geometry</span></code> stores the ones not considered as tunnels and/or bridges.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Filter road segments and process them to handle tunnels
+segments_gdf = segments_gdf[segments_gdf[&quot;subtype&quot;] == &quot;road&quot;].copy()
+
+# Identify tunnels and set their geometry to None
+segments_gdf[&quot;barrier_mask&quot;] = segments_gdf[&quot;level_rules&quot;].apply(city2graph.identify_barrier_mask)
+
+# Split segments by connectors
+segments_gdf = city2graph.split_segments_by_connectors(segments_gdf, connectors_gdf)
+
+# Filter road segments and process them to handle tunnels
+segments_gdf = city2graph.adjust_segment_connectors(segments_gdf, threshold=1.0)
+
+# Calculate the length of each segment
+segments_gdf[&quot;length&quot;] = segments_gdf.geometry.length
+
+# Create barrier_geometry column by processing each segment (excluding tunnels)
+segments_gdf[&quot;barrier_geometry&quot;] = city2graph.get_barrier_geometry(segments_gdf)
+</pre></div>
+</div>
+</div>
+</section>
+<section id="4.-Create-Morphological-Network">
+<h2>4. Create Morphological Network<a class="headerlink" href="#4.-Create-Morphological-Network" title="Link to this heading">#</a></h2>
+<p>Based on the preprocessed segments and buildings, <strong>a morphological network</strong> is created by the following process:</p>
+<div align="center"><p><img alt="City2Graph Logo" class="no-scaled-link" src="../_images/morph_net_process.png" style="width: 1000px;" /></p>
+</div><p>Morphological network is a heterogenous graph where all the spaces in cities are holistically represented as nodes.</p>
+<p>In this representation, the topological connections between public and private spaces can be captured. Unlike street network and contiguity matrix of built environment, morphological network can accomodate any of the charactors for urban forms and functions, such as POIs, land-use, street types, and etc. It will be a foundation for spatially-explicit GeoAI by graph representation learning, keeping the characters as node attributes.</p>
+<p>There are three types of connections as edges: public-to-public, private-to-private, and private-to-public. Public-to-public connections are dual representation of street networks. Private-to-private shows the contiguities between enclosed tessellations as plot systems. Private-to-public can identify the adjacency between public and private spaces.</p>
+<p><code class="docutils literal notranslate"><span class="pre">city2graph.morphological_network</span></code> can process the creation of morphological network as a dictionary of <code class="docutils literal notranslate"><span class="pre">gpd.GeoDataFrame</span></code> consisting of <code class="docutils literal notranslate"><span class="pre">['tessellations',</span> <span class="pre">'segments',</span> <span class="pre">'buildings',</span> <span class="pre">'private_to_private',</span> <span class="pre">'public_to_public',</span> <span class="pre">'private_to_public']</span></code>. Post-processing, such as mapping POIs to private spaces, can be done accordingly.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>center_point = gpd.GeoSeries([Point((-2.9879004, 53.4062724))], crs=&#39;EPSG:4326&#39;).to_crs(epsg=27700)
+
+morphological_network = city2graph.morphological_network(
+    buildings_gdf=buildings_gdf,
+    segments_gdf=segments_gdf,
+    center_point=center_point,
+    distance=500,
+    public_geom_col=&#39;barrier_geometry&#39;,
+    contiguity=&quot;queen&quot;
+    )
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/opt/anaconda3/envs/city2graph_env/lib/python3.12/site-packages/libpysal/weights/contiguity.py:347: UserWarning: The weights matrix is not fully connected:
+ There are 3 disconnected components.
+ There are 2 islands with ids: 2, 4.
+  W.__init__(self, neighbors, ids=ids, **kw)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>morphological_network.keys()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+dict_keys([&#39;tessellations&#39;, &#39;segments&#39;, &#39;buildings&#39;, &#39;private_to_private&#39;, &#39;public_to_public&#39;, &#39;private_to_public&#39;])
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Set up the figure with a nice size and background
+fig, ax = plt.subplots(figsize=(14, 12), facecolor=&#39;#f9f9f9&#39;)
+
+# Plot central point
+ax.scatter(center_point.x, center_point.y, color=&#39;black&#39;, marker=&#39;*&#39;, s=200, zorder=5, label=&#39;Center Point&#39;)
+
+# Plot background elements with improved styling
+morphological_network[&quot;tessellations&quot;].plot(ax=ax, color=&#39;#ADD8E6&#39;, edgecolor=&#39;#87CEEB&#39;, linewidth=0.2, alpha=0.2)
+morphological_network[&quot;buildings&quot;].plot(ax=ax, color=&#39;#e0e0e0&#39;, edgecolor=&#39;#c0c0c0&#39;, linewidth=0.3, alpha=0.7)
+morphological_network[&quot;segments&quot;].plot(ax=ax, color=&#39;#404040&#39;, linewidth=0.7, alpha=0.6)
+
+# Plot the three network types with distinctive styles
+morphological_network[&quot;private_to_private&quot;].plot(ax=ax, color=&#39;#B22222&#39;, linewidth=1.5, alpha=0.7)
+morphological_network[&quot;public_to_public&quot;].plot(ax=ax, color=&#39;#0000FF&#39;, linewidth=1.0, alpha=0.7)
+morphological_network[&quot;private_to_public&quot;].plot(ax=ax, color=&#39;#7B68EE&#39;, linewidth=1.0, alpha=0.7, linestyle=&#39;--&#39;)
+
+# Add nodes: private nodes from tessellation centroids (red) and public nodes as midpoints of segments (blue)
+private_nodes = morphological_network[&quot;tessellations&quot;].centroid
+ax.scatter(private_nodes.x, private_nodes.y, color=&#39;red&#39;, s=20, zorder=10, label=&#39;Private Spaces&#39;)
+
+public_nodes = morphological_network[&quot;segments&quot;].geometry.apply(lambda geom: geom.interpolate(0.5, normalized=True))
+ax.scatter(public_nodes.x, public_nodes.y, color=&#39;blue&#39;, s=20, zorder=10, label=&#39;Public Spaces&#39;)
+
+# Create a legend with clear labels
+legend_elements = [
+    plt.Line2D([0], [0], color=&#39;black&#39;, marker=&#39;*&#39;, linestyle=&#39;None&#39;, markersize=10, label=&#39;Center Point&#39;),
+    plt.Rectangle((0, 0), 1, 1, color=&#39;#e0e0e0&#39;, label=&#39;Buildings&#39;),
+    plt.Line2D([0], [0], color=&#39;#404040&#39;, lw=1.5, label=&#39;Street Segments&#39;),
+    plt.Rectangle((0, 0), 1, 1, color=&#39;#ADD8E6&#39;, alpha=0.3, label=&#39;Tessellation Cells&#39;),
+    plt.Line2D([0], [0], marker=&#39;o&#39;, color=&#39;w&#39;, markerfacecolor=&#39;red&#39;, markersize=8, linestyle=&#39;None&#39;, label=&#39;Private Nodes&#39;),
+    plt.Line2D([0], [0], marker=&#39;o&#39;, color=&#39;w&#39;, markerfacecolor=&#39;blue&#39;, markersize=8, linestyle=&#39;None&#39;, label=&#39;Public Nodes&#39;),
+    plt.Line2D([0], [0], color=&#39;red&#39;, lw=1, label=&#39;Private-to-Private&#39;),
+    plt.Line2D([0], [0], color=&#39;blue&#39;, lw=1, label=&#39;Public-to-Public&#39;),
+    plt.Line2D([0], [0], color=&#39;#7B68EE&#39;, lw=1, linestyle=&#39;--&#39;, label=&#39;Private-to-Public&#39;),
+]
+
+# Position the legend inside the plot (upper right)
+ax.legend(handles=legend_elements, loc=&#39;upper right&#39;,
+          frameon=True, facecolor=&#39;white&#39;, framealpha=0.9, fontsize=12)
+
+# Add title and remove axes
+ax.set_axis_off()
+
+# Add basemap from Stamen Terrain below everything else
+cx.add_basemap(ax, crs=&#39;EPSG:27700&#39;, source=cx.providers.CartoDB.Positron, alpha=1)
+
+plt.tight_layout()
+plt.show()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/examples_map_attributes_on_network_11_0.png" src="../_images/examples_map_attributes_on_network_11_0.png" />
+</div>
+</div>
+<section id="Interactive-Visualization-with-Folium">
+<h3>Interactive Visualization with Folium<a class="headerlink" href="#Interactive-Visualization-with-Folium" title="Link to this heading">#</a></h3>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>def add_gdf_to_map(gdf, map_obj, style_function, tooltip=None, layer_name=&#39;Layer&#39;):
+    # Create a copy and drop any problematic columns (non-JSON serializable)
+    gdf_copy = gdf.copy()
+    for col in [&#39;barrier_geometry&#39;, &#39;_original_geometry&#39;]:
+        if col in gdf_copy.columns:
+            gdf_copy = gdf_copy.drop(columns=[col])
+
+    # Add the GeoJSON layer
+    folium.GeoJson(
+        gdf_copy.to_crs(epsg=4326),
+        name=layer_name,
+        style_function=style_function,
+        tooltip=tooltip
+    ).add_to(map_obj)
+
+def add_endpoints_from_lines(gdf, map_obj, color):
+    # For each linestring, mark its start and end with CircleMarkers
+    for geom in gdf.to_crs(epsg=4326).geometry:
+        coords = list(geom.coords)
+        for coord in (coords[0], coords[-1]):
+            folium.CircleMarker(
+                location=[coord[1], coord[0]],
+                radius=3,
+                color=color,
+                fill=True,
+                fill_color=color
+            ).add_to(map_obj)
+
+# Convert the study area center to EPSG:4326 once
+center_point_4326 = center_point.to_crs(epsg=4326)
+center_lat = center_point_4326.geometry.iloc[0].y
+center_lon = center_point_4326.geometry.iloc[0].x
+
+# Create the base map
+m = folium.Map(
+    location=[center_lat, center_lon],
+    zoom_start=15,
+    tiles=&#39;https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png&#39;,
+    attr=&#39;&amp;copy; &lt;a href=&quot;https://www.openstreetmap.org/copyright&quot;&gt;OpenStreetMap&lt;/a&gt; contributors &amp;copy; &lt;a href=&quot;https://carto.com/attributions&quot;&gt;CARTO&lt;/a&gt;&#39;
+)
+
+# Configuration for layer additions from morphological_network
+layers_config = [
+    {
+        &#39;data&#39;: morphological_network[&quot;buildings&quot;],
+        &#39;name&#39;: &#39;Buildings&#39;,
+        &#39;style&#39;: lambda x: {&#39;fillColor&#39;: &#39;black&#39;, &#39;color&#39;: None, &#39;weight&#39;: 0, &#39;fillOpacity&#39;: 0.1}
+    },
+    {
+        &#39;data&#39;: morphological_network[&quot;segments&quot;],
+        &#39;name&#39;: &#39;Street Segments&#39;,
+        &#39;style&#39;: lambda x: {&#39;color&#39;: &#39;blue&#39;, &#39;weight&#39;: 2, &#39;opacity&#39;: 1},
+        &#39;tooltip&#39;: folium.GeoJsonTooltip(
+            fields=[&#39;id&#39;, &#39;class&#39;, &#39;subtype&#39;, &#39;length&#39;],
+            aliases=[&#39;ID:&#39;, &#39;Road Class:&#39;, &#39;Subtype:&#39;, &#39;Length (m):&#39;],
+            localize=True,
+            sticky=False,
+            labels=True
+        )
+    },
+    {
+        &#39;data&#39;: morphological_network[&quot;tessellations&quot;],
+        &#39;name&#39;: &#39;Tessellation&#39;,
+        &#39;style&#39;: lambda x: {&#39;fillColor&#39;: &#39;#ff0000&#39;, &#39;color&#39;: &#39;#ff0000&#39;, &#39;weight&#39;: 1, &#39;fillOpacity&#39;: 0},
+        &#39;tooltip&#39;: folium.GeoJsonTooltip(
+            fields=[&#39;tess_id&#39;, &#39;enclosure_index&#39;],
+            aliases=[&#39;Tessellation ID:&#39;, &#39;Enclosure Index:&#39;],
+            localize=True,
+            sticky=False,
+            labels=True
+        )
+    },
+    {
+        &#39;data&#39;: morphological_network[&quot;private_to_private&quot;],
+        &#39;name&#39;: &#39;Private-to-Private&#39;,
+        &#39;style&#39;: lambda x: {&#39;color&#39;: &#39;red&#39;, &#39;weight&#39;: 2, &#39;opacity&#39;: 1, &#39;dashArray&#39;: &#39;5,5&#39;},
+        &#39;tooltip&#39;: folium.GeoJsonTooltip(
+            fields=[&#39;from_private_id&#39;, &#39;to_private_id&#39;],
+            aliases=[&#39;From:&#39;, &#39;To:&#39;],
+            localize=True,
+            sticky=False,
+            labels=True
+        )
+    },
+    {
+        &#39;data&#39;: morphological_network[&quot;public_to_public&quot;],
+        &#39;name&#39;: &#39;Public-to-Public&#39;,
+        &#39;style&#39;: lambda x: {&#39;color&#39;: &#39;#0000FF&#39;, &#39;weight&#39;: 2, &#39;opacity&#39;: 1, &#39;dashArray&#39;: &#39;5,5&#39;},
+        &#39;tooltip&#39;: folium.GeoJsonTooltip(
+            fields=[&#39;from_public_id&#39;, &#39;to_public_id&#39;],
+            aliases=[&#39;From:&#39;, &#39;To:&#39;],
+            localize=True,
+            sticky=False,
+            labels=True
+        )
+    },
+    {
+        &#39;data&#39;: morphological_network[&quot;private_to_public&quot;],
+        &#39;name&#39;: &#39;Private-to-Public&#39;,
+        &#39;style&#39;: lambda x: {&#39;color&#39;: &#39;#7B68EE&#39;, &#39;weight&#39;: 2, &#39;opacity&#39;: 1, &#39;dashArray&#39;: &#39;5,5&#39;},
+        &#39;tooltip&#39;: folium.GeoJsonTooltip(
+            fields=[&#39;private_id&#39;, &#39;public_id&#39;],
+            aliases=[&#39;Private Node:&#39;, &#39;Public Node:&#39;],
+            localize=True,
+            sticky=False,
+            labels=True
+        )
+    }
+]
+
+for layer in layers_config:
+    add_gdf_to_map(layer[&#39;data&#39;], m, layer[&#39;style&#39;], tooltip=layer.get(&#39;tooltip&#39;), layer_name=layer[&#39;name&#39;])
+
+# Add endpoints for connection layers
+add_endpoints_from_lines(morphological_network[&quot;public_to_public&quot;], m, color=&#39;#0000FF&#39;)
+add_endpoints_from_lines(morphological_network[&quot;private_to_private&quot;], m, color=&#39;red&#39;)
+
+# Add layer control and display the map
+folium.LayerControl().add_to(m)
+m
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+<section id="5.-Convert-to-Graph-Representations">
+<h2>5. Convert to Graph Representations<a class="headerlink" href="#5.-Convert-to-Graph-Representations" title="Link to this heading">#</a></h2>
+<p>Now we’ll convert our morphological networks to graph representations using PyTorch Geometric for graph representation learning. As dependencies, <code class="docutils literal notranslate"><span class="pre">torch</span></code> and <code class="docutils literal notranslate"><span class="pre">torch_geometric</span></code> have to be installed in advance.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Import PyTorch and PyTorch Geometric
+import torch
+try:
+    import torch_geometric
+    HAS_TORCH_GEOMETRIC = True
+    print(&quot;PyTorch Geometric successfully imported&quot;)
+    print(f&quot;PyTorch version: {torch.__version__}&quot;)
+    print(f&quot;PyTorch Geometric version: {torch_geometric.__version__}&quot;)
+except ImportError:
+    print(&quot;PyTorch Geometric not installed. Graph functionality will be limited.&quot;)
+    HAS_TORCH_GEOMETRIC = False
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+PyTorch Geometric successfully imported
+PyTorch version: 2.4.1
+PyTorch Geometric version: 2.6.1
+</pre></div></div>
+</div>
+<section id="5.1-Create-a-Homogeneous-Graph">
+<h3>5.1 Create a Homogeneous Graph<a class="headerlink" href="#5.1-Create-a-Homogeneous-Graph" title="Link to this heading">#</a></h3>
+<p>First, let’s create a homogeneous graph of private spaces (tessellation cells) with their connections. <code class="docutils literal notranslate"><span class="pre">homogenous_graph</span></code> generates <code class="docutils literal notranslate"><span class="pre">torch_geometric.data.Data</span></code> with a single type of edges.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Import liverpool_place.geojson
+liverpool_place_gdf = gpd.read_file(&quot;liverpool_place.geojson&quot;)
+# Convert to EPSG:27700
+liverpool_place_gdf = liverpool_place_gdf.to_crs(epsg=27700)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+WARNING:pyogrio._io:Skipping field websites: unsupported OGR type: 5
+WARNING:pyogrio._io:Skipping field socials: unsupported OGR type: 5
+WARNING:pyogrio._io:Skipping field phones: unsupported OGR type: 5
+WARNING:pyogrio._io:Skipping field socials: unsupported OGR type: 5
+WARNING:pyogrio._io:Skipping field phones: unsupported OGR type: 5
+</pre></div></div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Import liverpool_land.geojson
+liverpool_land_gdf = gpd.read_file(&quot;liverpool_land.geojson&quot;)
+# Convert to EPSG:27700
+liverpool_land_gdf = liverpool_land_gdf.to_crs(epsg=27700)
+
+# Import liverpool_land_use.geojson
+liverpool_land_use_gdf = gpd.read_file(&quot;liverpool_land_use.geojson&quot;)
+# Convert to EPSG:27700
+liverpool_land_use_gdf = liverpool_land_use_gdf.to_crs(epsg=27700)
+
+# Import liverpool_land_cover.geojson
+liverpool_land_cover_gdf = gpd.read_file(&quot;liverpool_land_cover.geojson&quot;)
+# Convert to EPSG:27700
+liverpool_land_cover_gdf = liverpool_land_cover_gdf.to_crs(epsg=27700)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>liverpool_land_cover_gdf
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>id</th>
+      <th>version</th>
+      <th>sources</th>
+      <th>cartography</th>
+      <th>subtype</th>
+      <th>geometry</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>08b19510523b3fff0005d340df8ecc42</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 8, "max_zoom": 15, "sort_key": 1 }</td>
+      <td>urban</td>
+      <td>POLYGON ((332568.319 382014.093, 332575.571 38...</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>08b1951073632fff0005ddeccb5afd27</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 8, "max_zoom": 15, "sort_key": 3 }</td>
+      <td>barren</td>
+      <td>POLYGON ((333631.006 390749.979, 333657.644 39...</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>08b19510737a4fff0005dc226ef0157a</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 8, "max_zoom": 15, "sort_key": 3 }</td>
+      <td>barren</td>
+      <td>POLYGON ((333621.657 390963.912, 333639.539 39...</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>08b195107345cfff0005d580e1191be0</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 8, "max_zoom": 15, "sort_key": 3 }</td>
+      <td>barren</td>
+      <td>POLYGON ((333570.259 391094.45, 333631.448 391...</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>08b1951073433fff0005d9b17dabe047</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 8, "max_zoom": 15, "sort_key": 3 }</td>
+      <td>barren</td>
+      <td>POLYGON ((333369.945 391358.566, 333392.094 39...</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>08b1951055a2cfff0005d837237cfdf4</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 8, "max_zoom": 15, "sort_key": 2 }</td>
+      <td>forest</td>
+      <td>POLYGON ((334505.586 388910.68, 334557.394 388...</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>08b1951071454fff0005ddccf5de1115</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 8, "max_zoom": 15, "sort_key": 2 }</td>
+      <td>forest</td>
+      <td>POLYGON ((335849.645 391136.24, 335968.773 391...</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>08b19510710a3fff0005d204ec30fdcc</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 0, "max_zoom": 7, "sort_key": 1 }</td>
+      <td>urban</td>
+      <td>POLYGON ((339727.216 379993.998, 342121.156 37...</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>08b1951062a42fff0005d05c64a5511a</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 8, "max_zoom": 15, "sort_key": 1 }</td>
+      <td>urban</td>
+      <td>POLYGON ((342361.106 382068.914, 342897.882 38...</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>08b195100d9adfff0005dcaeaec9ae14</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 8, "max_zoom": 15, "sort_key": 1 }</td>
+      <td>urban</td>
+      <td>POLYGON ((333607.626 390445.575, 333625.661 39...</td>
+    </tr>
+    <tr>
+      <th>10</th>
+      <td>08b19511464b1fff0005dd317d6662e8</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 0, "max_zoom": 7, "sort_key": 6 }</td>
+      <td>crop</td>
+      <td>POLYGON ((350006.981 389869.475, 351201.45 389...</td>
+    </tr>
+    <tr>
+      <th>11</th>
+      <td>08b1950b1b894fff0005d280de616b5a</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 0, "max_zoom": 7, "sort_key": 5 }</td>
+      <td>grass</td>
+      <td>POLYGON ((174052.122 11714.112, 178894.977 195...</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>08b1ea5c92449fff0005d82b44f34b16</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "ESA WorldCover...</td>
+      <td>{ "min_zoom": 0, "max_zoom": 7, "sort_key": 2 }</td>
+      <td>forest</td>
+      <td>POLYGON ((2660039.676 -1180243.085, 2662994.10...</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import json
+
+# Function to parse the categories JSON string
+def extract_categories(cat_str):
+    if cat_str is None:
+        return {&quot;primary&quot;: None, &quot;alternate&quot;: []}
+
+    # Try parsing the JSON
+    try:
+        return json.loads(cat_str.replace(&quot;&#39;&quot;, &#39;&quot;&#39;)) if isinstance(cat_str, str) else cat_str
+    except:
+        return {&quot;primary&quot;: None, &quot;alternate&quot;: []}
+
+# Apply to the dataframe
+liverpool_place_gdf[&#39;categories_parsed&#39;] = liverpool_place_gdf[&#39;categories&#39;].apply(extract_categories)
+
+# Extract primary category and alternate categories to separate columns
+liverpool_place_gdf[&#39;primary_category&#39;] = liverpool_place_gdf[&#39;categories_parsed&#39;].apply(
+    lambda x: x.get(&#39;primary&#39;) if x else None
+)
+liverpool_place_gdf[&#39;alternate_categories&#39;] = liverpool_place_gdf[&#39;categories_parsed&#39;].apply(
+    lambda x: x.get(&#39;alternate&#39;, []) if x else []
+)
+
+# Display the distribution of primary categories
+primary_category_counts = liverpool_place_gdf[&#39;primary_category&#39;].value_counts()
+
+# Create a plot of the category distribution
+plt.figure(figsize=(12, 8))
+primary_category_counts.head(15).plot(kind=&#39;barh&#39;)
+plt.title(&#39;Top 15 Place Categories in Liverpool&#39;)
+plt.xlabel(&#39;Count&#39;)
+plt.ylabel(&#39;Category&#39;)
+plt.tight_layout()
+plt.show()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/examples_map_attributes_on_network_20_0.png" src="../_images/examples_map_attributes_on_network_20_0.png" />
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>liverpool_place_gdf
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>id</th>
+      <th>version</th>
+      <th>sources</th>
+      <th>names</th>
+      <th>categories</th>
+      <th>confidence</th>
+      <th>brand</th>
+      <th>addresses</th>
+      <th>geometry</th>
+      <th>categories_parsed</th>
+      <th>primary_category</th>
+      <th>alternate_categories</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>08f195105513493003f580dfe6a29c9b</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "meta", "record...</td>
+      <td>{ "primary": "Ливърпул", "common": null, "rule...</td>
+      <td>{ "primary": "museum", "alternate": [ "history...</td>
+      <td>0.490748</td>
+      <td>None</td>
+      <td>[ { "freeform": null, "locality": "Liverpool",...</td>
+      <td>POINT (333607.889 389705.767)</td>
+      <td>{'primary': 'museum', 'alternate': ['history_m...</td>
+      <td>museum</td>
+      <td>[history_museum, community_museum]</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>08f1951055b8d1b403e602c0253d829a</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "meta", "record...</td>
+      <td>{ "primary": "The Docks Tattoo Expo", "common"...</td>
+      <td>{ "primary": "topic_concert_venue", "alternate...</td>
+      <td>0.308564</td>
+      <td>None</td>
+      <td>[ { "freeform": "Kings docks", "locality": "Li...</td>
+      <td>POINT (334247.995 389163.127)</td>
+      <td>{'primary': 'topic_concert_venue', 'alternate'...</td>
+      <td>topic_concert_venue</td>
+      <td>None</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>08f1951055baba1a035648e7d0f1ba8e</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "meta", "record...</td>
+      <td>{ "primary": "Indoor Funfair - Liverpool Exhib...</td>
+      <td>None</td>
+      <td>0.251852</td>
+      <td>None</td>
+      <td>[ { "freeform": null, "locality": "Liverpool",...</td>
+      <td>POINT (334278.724 389175.275)</td>
+      <td>{'primary': None, 'alternate': []}</td>
+      <td>None</td>
+      <td>[]</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>08f1951055bab34903a9c78a4e74ed46</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "meta", "record...</td>
+      <td>{ "primary": "Arena &amp; Conference centre, Liver...</td>
+      <td>{ "primary": "cinema", "alternate": [ "arts_an...</td>
+      <td>0.251852</td>
+      <td>None</td>
+      <td>[ { "freeform": null, "locality": "Liverpool",...</td>
+      <td>POINT (334283.664 389177.543)</td>
+      <td>{'primary': 'cinema', 'alternate': ['arts_and_...</td>
+      <td>cinema</td>
+      <td>[arts_and_entertainment]</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>08f1951055baa883032110cf8a679da4</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "msft", "record...</td>
+      <td>{ "primary": "Pullman Liverpool Hotel", "commo...</td>
+      <td>{ "primary": "resort", "alternate": [ "hotel" ] }</td>
+      <td>0.908486</td>
+      <td>None</td>
+      <td>[ { "freeform": "Kings Dock, Monarchs Quay", "...</td>
+      <td>POINT (334234.858 389241.588)</td>
+      <td>{'primary': 'resort', 'alternate': ['hotel']}</td>
+      <td>resort</td>
+      <td>[hotel]</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>5712</th>
+      <td>08f1951071791559031a4352cb5578a2</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "meta", "record...</td>
+      <td>{ "primary": "Capstone Theatre", "common": nul...</td>
+      <td>{ "primary": "theatre", "alternate": [ "topic_...</td>
+      <td>0.948077</td>
+      <td>None</td>
+      <td>[ { "freeform": "17 Shaw Street", "locality": ...</td>
+      <td>POINT (335713.857 391159.597)</td>
+      <td>{'primary': 'theatre', 'alternate': ['topic_co...</td>
+      <td>theatre</td>
+      <td>[topic_concert_venue, arts_and_entertainment]</td>
+    </tr>
+    <tr>
+      <th>5713</th>
+      <td>08f195107179c949038600db78b4a0af</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "meta", "record...</td>
+      <td>{ "primary": "Liverpool Collegiate School", "c...</td>
+      <td>{ "primary": "school", "alternate": [ "landmar...</td>
+      <td>0.957325</td>
+      <td>None</td>
+      <td>[ { "freeform": "23\/1152, SJ 3591 SHAW STREET...</td>
+      <td>POINT (335748.076 391132.784)</td>
+      <td>{'primary': 'school', 'alternate': ['landmark_...</td>
+      <td>school</td>
+      <td>[landmark_and_historical_building, education]</td>
+    </tr>
+    <tr>
+      <th>5714</th>
+      <td>08f1951071790345030e606d03fd309e</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "meta", "record...</td>
+      <td>{ "primary": "Liverpool Hope University", "com...</td>
+      <td>{ "primary": "college_university", "alternate"...</td>
+      <td>0.957325</td>
+      <td>None</td>
+      <td>[ { "freeform": "3 Shaw Street", "locality": "...</td>
+      <td>POINT (335696.747 391176.398)</td>
+      <td>{'primary': 'college_university', 'alternate':...</td>
+      <td>college_university</td>
+      <td>[education, campus_building]</td>
+    </tr>
+    <tr>
+      <th>5715</th>
+      <td>08f195107179553203390f3f6087e2cf</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "msft", "record...</td>
+      <td>{ "primary": "Mersey Design Group Ltd.", "comm...</td>
+      <td>{ "primary": "architect", "alternate": [ "arch...</td>
+      <td>0.770000</td>
+      <td>None</td>
+      <td>[ { "freeform": "Cleveland House 41 Shaw St", ...</td>
+      <td>POINT (335709.363 391221.347)</td>
+      <td>{'primary': 'architect', 'alternate': ['archit...</td>
+      <td>architect</td>
+      <td>[architecture]</td>
+    </tr>
+    <tr>
+      <th>5716</th>
+      <td>08f195107178648c034c79d0937ace9d</td>
+      <td>0</td>
+      <td>[ { "property": "", "dataset": "meta", "record...</td>
+      <td>{ "primary": "Unity Square", "common": null, "...</td>
+      <td>{ "primary": "accommodation", "alternate": [ "...</td>
+      <td>0.939850</td>
+      <td>None</td>
+      <td>[ { "freeform": "20 Shaw Street", "locality": ...</td>
+      <td>POINT (335736.863 391206.452)</td>
+      <td>{'primary': 'accommodation', 'alternate': ['co...</td>
+      <td>accommodation</td>
+      <td>[college_university, topic_concert_venue]</td>
+    </tr>
+  </tbody>
+</table>
+<p>5717 rows × 12 columns</p>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>liverpool_place_gdf[&quot;primary_category&quot;].unique()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+array([&#39;museum&#39;, &#39;topic_concert_venue&#39;, None, &#39;cinema&#39;, &#39;resort&#39;,
+       &#39;seafood_restaurant&#39;, &#39;landmark_and_historical_building&#39;,
+       &#39;event_planning&#39;, &#39;attractions_and_activities&#39;,
+       &#39;arts_and_entertainment&#39;, &#39;accommodation&#39;, &#39;graphic_designer&#39;,
+       &#39;music_venue&#39;, &#39;hotel&#39;, &#39;professional_services&#39;, &#39;clothing_store&#39;,
+       &#39;amusement_park&#39;, &#39;indian_restaurant&#39;, &#39;pizza_restaurant&#39;,
+       &#39;restaurant&#39;, &#39;home_developer&#39;, &#39;religious_organization&#39;,
+       &#39;media_news_company&#39;, &#39;advertising_agency&#39;, &#39;education&#39;,
+       &#39;massage_therapy&#39;, &#39;charity_organization&#39;, &#39;candy_store&#39;,
+       &#39;wholesale_store&#39;, &#39;public_relations&#39;, &#39;beauty_salon&#39;,
+       &#39;cards_and_stationery_store&#39;, &#39;fashion_accessories_store&#39;,
+       &#39;gift_shop&#39;, &#39;tours&#39;, &#39;history_museum&#39;, &#39;art_gallery&#39;, &#39;monument&#39;,
+       &#39;social_service_organizations&#39;, &#39;lounge&#39;, &#39;american_restaurant&#39;,
+       &#39;insurance_agency&#39;, &#39;educational_services&#39;,
+       &#39;restaurant_equipment_and_supply&#39;,
+       &#39;information_technology_company&#39;, &#39;writing_service&#39;,
+       &#39;jewelry_store&#39;, &#39;public_and_government_association&#39;,
+       &#39;marketing_agency&#39;, &#39;bar&#39;, &#39;discount_store&#39;, &#39;event_photography&#39;,
+       &#39;software_development&#39;, &#39;fitness_trainer&#39;,
+       &#39;computer_hardware_company&#39;, &#39;travel_services&#39;,
+       &#39;employment_agencies&#39;, &#39;property_management&#39;, &#39;shopping&#39;,
+       &#39;real_estate_agent&#39;, &#39;health_and_medical&#39;,
+       &#39;telecommunications_company&#39;, &#39;internet_service_provider&#39;,
+       &#39;research_institute&#39;, &#39;internet_marketing_service&#39;, &#39;investing&#39;,
+       &#39;travel&#39;, &#39;bridal_shop&#39;, &#39;solar_installation&#39;, &#39;web_designer&#39;,
+       &#39;tutoring_center&#39;, &#39;commercial_industrial&#39;, &#39;beauty_and_spa&#39;,
+       &#39;business_management_services&#39;, &#39;occupational_medicine&#39;,
+       &#39;coffee_shop&#39;, &#39;flowers_and_gifts_shop&#39;, &#39;tattoo_and_piercing&#39;,
+       &#39;cafe&#39;, &#39;fish_and_chips_restaurant&#39;, &#39;souvenir_shop&#39;,
+       &#39;thai_restaurant&#39;, &#39;spanish_restaurant&#39;, &#39;sports_bar&#39;,
+       &#39;transportation&#39;, &#39;furniture_store&#39;, &#39;health_food_store&#39;,
+       &#39;arts_and_crafts&#39;, &#39;retail&#39;, &#39;bakery&#39;, &#39;legal_services&#39;,
+       &#39;greek_restaurant&#39;, &#39;mortgage_broker&#39;, &#39;painting&#39;,
+       &#39;divorce_and_family_law&#39;, &#39;personal_injury_law&#39;, &#39;cocktail_bar&#39;,
+       &#39;financial_service&#39;, &#39;cosmetic_and_beauty_supplies&#39;,
+       &#39;social_media_agency&#39;, &#39;lawyer&#39;, &#39;home_improvement_store&#39;,
+       &#39;toy_store&#39;, &#39;pub&#39;, &#39;italian_restaurant&#39;,
+       &#39;bike_repair_maintenance&#39;, &#39;home_health_care&#39;,
+       &#39;construction_services&#39;, &#39;rental_services&#39;, &#39;meat_wholesaler&#39;,
+       &#39;business_equipment_and_supply&#39;, &#39;business_advertising&#39;,
+       &#39;energy_company&#39;, &#39;sightseeing_tour_agency&#39;, &#39;parking&#39;,
+       &#39;escape_rooms&#39;, &#39;mexican_restaurant&#39;, &#39;boat_rental_and_training&#39;,
+       &#39;steakhouse&#39;, &#39;brokers&#39;, &#39;cultural_center&#39;,
+       &#39;broadcasting_media_production&#39;, &#39;garbage_collection_service&#39;,
+       &#39;shopping_center&#39;, &#39;doctor&#39;, &#39;educational_research_institute&#39;,
+       &#39;retirement_home&#39;, &#39;payroll_services&#39;, &#39;supermarket&#39;,
+       &#39;courier_and_delivery_services&#39;, &#39;home_service&#39;,
+       &#39;naturopathic_holistic&#39;, &#39;hair_salon&#39;, &#39;active_life&#39;, &#39;desserts&#39;,
+       &#39;real_estate_service&#39;, &#39;mass_media&#39;, &#39;print_media&#39;,
+       &#39;eat_and_drink&#39;, &#39;british_restaurant&#39;, &#39;liquor_store&#39;,
+       &#39;disability_services_and_support_organization&#39;, &#39;dance_club&#39;,
+       &#39;dentist&#39;, &#39;kitchen_supply_store&#39;, &#39;wine_bar&#39;, &#39;courthouse&#39;,
+       &#39;auto_insurance&#39;, &#39;financial_advising&#39;, &#39;auto_company&#39;,
+       &#39;life_insurance&#39;, &#39;freight_and_cargo_service&#39;, &#39;storage_facility&#39;,
+       &#39;real_estate&#39;, &#39;interior_design&#39;, &#39;pier&#39;, &#39;asian_restaurant&#39;,
+       &#39;river&#39;, &#39;music_production&#39;, &#39;media_news_website&#39;, &#39;gym&#39;,
+       &#39;town_hall&#39;, &#39;pension&#39;, &#39;psychotherapist&#39;,
+       &#39;public_service_and_government&#39;, &#39;accountant&#39;, &#39;boat_tours&#39;,
+       &#39;grocery_store&#39;, &#39;senior_citizen_services&#39;, &#39;eye_care_clinic&#39;,
+       &#39;tea_room&#39;, &#39;church_cathedral&#39;, &#39;choir&#39;, &#39;sculpture_statue&#39;,
+       &#39;civil_engineers&#39;, &#39;fertility&#39;, &#39;holiday_rental_home&#39;,
+       &#39;dog_trainer&#39;, &#39;structure_and_geography&#39;, &#39;apartments&#39;,
+       &#39;preschool&#39;, &#39;ev_charging_station&#39;, &#39;private_investigation&#39;,
+       &#39;automotive&#39;, &#39;architect&#39;,
+       &#39;domestic_business_and_trade_organizations&#39;,
+       &#39;real_estate_investment&#39;, &#39;college_university&#39;, &#39;b2b_textiles&#39;,
+       &#39;telecommunications&#39;, &#39;sports_wear&#39;, &#39;holding_companies&#39;,
+       &#39;truck_dealer_for_businesses&#39;, &#39;central_government_office&#39;,
+       &#39;home_cleaning&#39;, &#39;physical_therapy&#39;, &#39;landscaping&#39;,
+       &#39;passport_and_visa_services&#39;, &#39;music_school&#39;, &#39;airport_shuttles&#39;,
+       &#39;health_consultant&#39;, &#39;atms&#39;, &#39;taxi_service&#39;, &#39;hospital&#39;,
+       &#39;aquatic_pet_store&#39;, &#39;agriculture&#39;, &#39;educational_camp&#39;,
+       &#39;tapas_bar&#39;, &#39;sushi_restaurant&#39;, &#39;comedy_club&#39;,
+       &#39;argentine_restaurant&#39;, &#39;mobile_phone_store&#39;, &#39;health_department&#39;,
+       &#39;key_and_locksmith&#39;, &#39;marketing_consultant&#39;, &#39;diner&#39;,
+       &#39;community_services_non_profits&#39;, &#39;cabin&#39;, &#39;cupcake_shop&#39;,
+       &#39;sandwich_shop&#39;, &#39;carpenter&#39;, &#39;commercial_real_estate&#39;,
+       &#39;printing_equipment_and_supply&#39;, &#39;barber&#39;,
+       &#39;asian_fusion_restaurant&#39;, &#39;vitamins_and_supplements&#39;,
+       &#39;self_storage_facility&#39;, &#39;business_records_storage_and_management&#39;,
+       &#39;sewing_and_alterations&#39;, &#39;psychologist&#39;, &#39;real_estate_law&#39;,
+       &#39;architectural_designer&#39;, &#39;commercial_refrigeration&#39;,
+       &#39;human_resource_services&#39;, &#39;fair&#39;, &#39;corporate_office&#39;,
+       &#39;rehabilitation_center&#39;, &#39;embassy&#39;, &#39;school&#39;, &#39;trusts&#39;,
+       &#39;videographer&#39;, &#39;counseling_and_mental_health&#39;, &#39;home_security&#39;,
+       &#39;vietnamese_restaurant&#39;, &#39;life_coach&#39;,
+       &#39;local_and_state_government_offices&#39;, &#39;limo_services&#39;,
+       &#39;security_services&#39;, &#39;public_transportation&#39;, &#39;shoe_store&#39;,
+       &#39;laser_hair_removal&#39;, &#39;educational_supply_store&#39;, &#39;nutritionist&#39;,
+       &#39;pet_store&#39;, &#39;florist&#39;, &#39;public_plaza&#39;, &#39;distillery&#39;, &#39;food&#39;,
+       &#39;optometrist&#39;, &#39;newspaper_and_magazines_store&#39;, &#39;makeup_artist&#39;,
+       &#39;metal_fabricator&#39;, &#39;travel_agents&#39;, &#39;go_kart_track&#39;,
+       &#39;immigration_assistance_services&#39;, &#39;sports_club_and_league&#39;,
+       &#39;thrift_store&#39;, &#39;engineering_services&#39;, &#39;bank_credit_union&#39;,
+       &#39;casino&#39;, &#39;theatre&#39;, &#39;eyewear_and_optician&#39;,
+       &#39;brazilian_restaurant&#39;, &#39;medical_supply&#39;, &#39;topic_publisher&#39;,
+       &#39;land_surveying&#39;, &#39;photography_store_and_services&#39;, &#39;pop_up_shop&#39;,
+       &#39;party_supply&#39;, &#39;beverage_store&#39;, &#39;yoga_studio&#39;,
+       &#39;book_magazine_distribution&#39;, &#39;beer_bar&#39;, &#39;brewery&#39;,
+       &#39;fast_food_restaurant&#39;, &#39;beauty_product_supplier&#39;,
+       &#39;music_and_dvd_store&#39;, &#39;adult_entertainment&#39;, &#39;t_shirt_store&#39;,
+       &#39;turkish_restaurant&#39;, &#39;gay_bar&#39;, &#39;business&#39;, &#39;career_counseling&#39;,
+       &#39;utility_service&#39;, &#39;restaurant_wholesale&#39;, &#39;tobacco_shop&#39;,
+       &#39;bankruptcy_law&#39;, &#39;wedding_planning&#39;, &#39;language_school&#39;,
+       &#39;driving_school&#39;, &#39;immigration_law&#39;, &#39;convenience_store&#39;,
+       &#39;it_service_and_computer_repair&#39;, &#39;computer_wholesaler&#39;,
+       &#39;outdoor_gear&#39;, &#39;pest_control_service&#39;, &#39;shipping_center&#39;,
+       &#39;engine_repair_service&#39;, &#39;fashion&#39;, &#39;gastropub&#39;, &#39;employment_law&#39;,
+       &#39;e_cigarette_store&#39;, &#39;mobility_equipment_services&#39;, &#39;plumbing&#39;,
+       &#39;youth_organizations&#39;, &#39;home_goods_store&#39;, &#39;nail_salon&#39;,
+       &#39;nursing_school&#39;, &#39;skate_park&#39;, &#39;installment_loans&#39;, &#39;food_truck&#39;,
+       &#39;massage&#39;, &#39;printing_services&#39;, &#39;landscape_architect&#39;, &#39;fountain&#39;,
+       &#39;dry_cleaning&#39;, &#39;computer_coaching&#39;, &#39;chiropractor&#39;, &#39;psychic&#39;,
+       &#39;prenatal_perinatal_care&#39;, &#39;executive_search_consultants&#39;,
+       &#39;shipping_collection_services&#39;, &#39;vegetarian_restaurant&#39;,
+       &#39;contractor&#39;, &#39;park&#39;, &#39;pet_services&#39;, &#39;shredding_services&#39;,
+       &#39;ceiling_service&#39;, &#39;oil_and_gas_field_equipment_and_services&#39;,
+       &#39;tree_services&#39;, &#39;carpet_cleaning&#39;, &#39;beverage_supplier&#39;,
+       &#39;auction_house&#39;, &#39;energy_equipment_and_solution&#39;, &#39;caterer&#39;,
+       &#39;tiling&#39;, &#39;electrician&#39;, &#39;notary_public&#39;, &#39;betting_center&#39;,
+       &#39;business_law&#39;, &#39;scientific_laboratories&#39;, &#39;estate_planning_law&#39;,
+       &#39;first_aid_class&#39;, &#39;costume_store&#39;, &#39;condominium&#39;,
+       &#39;business_to_business&#39;, &#39;roofing&#39;, &#39;delicatessen&#39;, &#39;trains&#39;,
+       &#39;audiovisual_equipment_rental&#39;, &#39;tile_store&#39;, &#39;martial_arts_club&#39;,
+       &#39;coach_bus&#39;, &#39;appliance_store&#39;, &#39;environmental_testing&#39;,
+       &#39;elementary_school&#39;, &#39;patent_law&#39;, &#39;auto_loan_provider&#39;,
+       &#39;hair_replacement&#39;, &#39;water_heater_installation_repair&#39;,
+       &#39;bail_bonds_service&#39;, &#39;collection_agencies&#39;, &#39;copywriting_service&#39;,
+       &#39;car_dealer&#39;, &#39;day_spa&#39;, &#39;cosmetic_dentist&#39;,
+       &#39;translating_and_interpreting_services&#39;,
+       &#39;junk_removal_and_hauling&#39;, &#39;automotive_repair&#39;, &#39;veterinarian&#39;,
+       &#39;travel_company&#39;, &#39;motorsport_vehicle_dealer&#39;, &#39;campus_building&#39;,
+       &#39;used_car_dealer&#39;, &#39;kids_recreation_and_party&#39;,
+       &#39;smoothie_juice_bar&#39;, &#39;paintball&#39;, &#39;adult_education&#39;,
+       &#39;burger_restaurant&#39;, &#39;car_rental_agency&#39;, &#39;it_support_snd_service&#39;,
+       &#39;office_equipment&#39;, &#39;nursery_and_gardening&#39;, &#39;record_label&#39;,
+       &#39;hostel&#39;, &#39;general_festivals&#39;, &#39;organic_grocery_store&#39;,
+       &#39;international_business_and_trade_services&#39;, &#39;pet_breeder&#39;,
+       &#39;audiologist&#39;, &#39;food_delivery_service&#39;, &#39;occupational_safety&#39;,
+       &#39;e_commerce_service&#39;, &#39;linen&#39;, &#39;business_manufacturing_and_supply&#39;,
+       &#39;hvac_services&#39;, &#39;bus_service&#39;, &#39;tire_dealer_and_repair&#39;,
+       &#39;recording_and_rehearsal_studio&#39;, &#39;bingo_hall&#39;, &#39;karaoke&#39;,
+       &#39;high_school&#39;, &#39;bicycle_shop&#39;, &#39;media_agency&#39;,
+       &#39;boat_parts_and_accessories&#39;, &#39;hospital_equipment_and_supplies&#39;,
+       &#39;tax_services&#39;,
+       &#39;environmental_conservation_and_ecological_organizations&#39;,
+       &#39;venue_and_event_space&#39;, &#39;lighting_store&#39;, &#39;3d_printing_service&#39;,
+       &#39;ethical_grocery&#39;, &#39;woodworking_supply_store&#39;,
+       &#39;frozen_yoghurt_shop&#39;, &#39;shoe_repair&#39;, &#39;garage_door_service&#39;,
+       &#39;environmental_and_ecological_services_for_businesses&#39;,
+       &#39;automotive_consultant&#39;, &#39;credit_and_debt_counseling&#39;,
+       &#39;radio_station&#39;, &#39;wallpaper_installers&#39;, &#39;sporting_goods&#39;,
+       &#39;antique_store&#39;, &#39;online_shop&#39;, &#39;home_and_garden&#39;,
+       &#39;day_care_preschool&#39;, &#39;laboratory_testing&#39;,
+       &#39;video_film_production&#39;, &#39;fire_protection_service&#39;,
+       &#39;cleaning_services&#39;, &#39;vocational_and_technical_school&#39;,
+       &#39;catholic_church&#39;, &#39;chinese_restaurant&#39;, &#39;police_department&#39;,
+       &#39;mobile_phone_repair&#39;, &#39;pet_groomer&#39;, &#39;watch_store&#39;,
+       &#39;teeth_whitening&#39;, &#39;bus_station&#39;,
+       &#39;breakfast_and_brunch_restaurant&#39;, &#39;leather_goods&#39;, &#39;waxing&#39;,
+       &#39;department_store&#39;, &#39;community_center&#39;, &#39;french_restaurant&#39;,
+       &#39;buffet_restaurant&#39;, &#39;watch_repair_service&#39;, &#39;flooring_store&#39;,
+       &#39;electronics&#39;, &#39;designer_clothing&#39;, &#39;warehouses&#39;, &#39;carpet_store&#39;,
+       &#39;electronics_repair_shop&#39;, &#39;sunglasses_store&#39;, &#39;skin_care&#39;,
+       &#39;pan_asian_restaurant&#39;, &#39;chocolatier&#39;, &#39;ice_cream_shop&#39;,
+       &#39;gluten_free_restaurant&#39;, &#39;southern_restaurant&#39;, &#39;bubble_tea&#39;,
+       &#39;kiosk&#39;, &#39;german_restaurant&#39;, &#39;paving_contractor&#39;, &#39;laundromat&#39;,
+       &#39;industrial_company&#39;, &#39;sports_and_fitness_instruction&#39;,
+       &#39;hair_extensions&#39;, &#39;beer_garden&#39;, &#39;chicken_restaurant&#39;,
+       &#39;bookstore&#39;, &#39;race_track&#39;, &#39;baseball_field&#39;, &#39;perfume_store&#39;,
+       &#39;photo_booth_rental&#39;, &#39;gardener&#39;, &#39;caribbean_restaurant&#39;,
+       &#39;disability_law&#39;, &#39;party_and_event_planning&#39;,
+       &#39;government_services&#39;, &#39;auto_detailing&#39;, &#39;university_housing&#39;,
+       &#39;irish_pub&#39;, &#39;homeless_shelter&#39;, &#39;spas&#39;, &#39;japanese_restaurant&#39;,
+       &#39;hookah_bar&#39;, &#39;barbecue_restaurant&#39;, &#39;cuban_restaurant&#39;,
+       &#39;service_apartments&#39;, &#39;movers&#39;, &#39;outlet_store&#39;, &#39;hair_stylist&#39;,
+       &#39;weight_loss_center&#39;, &#39;arcade&#39;, &#39;pets&#39;, &#39;gutter_service&#39;,
+       &#39;plastic_surgeon&#39;, &#39;bar_and_grill_restaurant&#39;, &#39;computer_store&#39;,
+       &#39;theatrical_productions&#39;, &#39;temp_agency&#39;,
+       &#39;mediterranean_restaurant&#39;, &#39;korean_restaurant&#39;,
+       &#39;comic_books_store&#39;, &#39;ski_and_snowboard_shop&#39;,
+       &#39;persian_iranian_restaurant&#39;, &#39;performing_arts&#39;, &#39;dive_bar&#39;,
+       &#39;soup_restaurant&#39;, &#39;jazz_and_blues&#39;, &#39;candle_store&#39;,
+       &#39;radio_and_television_commercials&#39;, &#39;korean_grocery_store&#39;,
+       &#39;funeral_services_and_cemeteries&#39;, &#39;library&#39;,
+       &#39;auto_electrical_repair&#39;, &#39;housing_authorities&#39;, &#39;surgeon&#39;,
+       &#39;hot_dog_restaurant&#39;, &#39;pharmacy&#39;, &#39;hypnosis_hypnotherapy&#39;,
+       &#39;occupational_therapy&#39;, &#39;podiatrist&#39;, &#39;pilates_studio&#39;,
+       &#39;nurse_practitioner&#39;, &#39;surgical_appliances_and_supplies&#39;,
+       &#39;reflexology&#39;, &#39;hair_loss_center&#39;, &#39;cosmetic_surgeon&#39;,
+       &#39;furniture_assembly&#39;, &#39;dance_school&#39;,
+       &#39;abuse_and_addiction_treatment&#39;, &#39;car_wash&#39;, &#39;piercing&#39;,
+       &#39;oral_surgeon&#39;, &#39;shades_and_blinds&#39;, &#39;meat_shop&#39;, &#39;mediator&#39;,
+       &#39;appliance_repair_service&#39;, &#39;honey_farm_shop&#39;,
+       &#39;industrial_equipment&#39;, &#39;home_decor&#39;, &#39;medical_spa&#39;,
+       &#39;bounce_house_rental&#39;, &#39;musical_instrument_store&#39;,
+       &#39;personal_care_service&#39;, &#39;building_contractor&#39;, &#39;pancake_house&#39;,
+       &#39;bed_and_breakfast&#39;, &#39;middle_eastern_restaurant&#39;,
+       &#39;movie_television_studio&#39;, &#39;amateur_sports_team&#39;,
+       &#39;biotechnology_company&#39;, &#39;chemical_plant&#39;,
+       &#39;medical_research_and_development&#39;, &#39;b2b_science_and_technology&#39;,
+       &#39;soccer_stadium&#39;, &#39;science_schools&#39;, &#39;currency_exchange&#39;,
+       &#39;video_game_store&#39;, &#39;mosque&#39;, &#39;b2b_jewelers&#39;,
+       &#39;hotel_supply_service&#39;, &#39;formal_wear_store&#39;, &#39;cafetaria&#39;,
+       &#39;art_school&#39;, &#39;boutique&#39;, &#39;tanning_salon&#39;, &#39;guitar_store&#39;,
+       &#39;pawn_shop&#39;, &#39;luggage_storage&#39;, &#39;bathroom_remodeling&#39;,
+       &#39;industrial_spares_and_products_wholesaler&#39;, &#39;criminal_deense_law&#39;,
+       &#39;sign_making&#39;, &#39;nature_reserve&#39;, &#39;soccer_club&#39;, &#39;hobby_shop&#39;,
+       &#39;train_station&#39;, &#39;bowling_alley&#39;, &#39;post_office&#39;, &#39;donuts&#39;,
+       &#39;hearing_aids&#39;, &#39;dim_sum_restaurant&#39;, &#39;jewelry_repair_service&#39;,
+       &#39;butcher_shop&#39;, &#39;cosmetology_school&#39;, &#39;pool_billiards&#39;,
+       &#39;pet_boarding&#39;, &#39;contract_law&#39;, &#39;windows_installation&#39;,
+       &#39;student_union&#39;, &#39;architecture&#39;, &#39;live_and_raw_food_restaurant&#39;,
+       &#39;excavation_service&#39;, &#39;texmex_restaurant&#39;, &#39;glass_manufacturer&#39;,
+       &#39;clothing_company&#39;, &#39;labor_union&#39;, &#39;specialty_school&#39;,
+       &#39;railroad_freight&#39;, &#39;dog_walkers&#39;, &#39;water_park&#39;, &#39;guest_house&#39;,
+       &#39;hardware_store&#39;, &#39;boot_camp&#39;, &#39;used_vintage_and_consignment&#39;,
+       &#39;non_governmental_association&#39;, &#39;medical_school&#39;, &#39;game_publisher&#39;,
+       &#39;fire_department&#39;, &#39;fabric_store&#39;, &#39;medical_service_organizations&#39;,
+       &#39;b2b_sporting_and_recreation_goods&#39;, &#39;credit_union&#39;,
+       &#39;sports_and_recreation_venue&#39;, &#39;whiskey_bar&#39;, &#39;law_enforcement&#39;,
+       &#39;towing_service&#39;], dtype=object)
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Compute spatial features for tessellation cells
+morphological_network[&quot;tessellations&quot;][&#39;area&#39;] = morphological_network[&quot;tessellations&quot;].geometry.area
+morphological_network[&quot;tessellations&quot;][&#39;perimeter&#39;] = morphological_network[&quot;tessellations&quot;].geometry.length
+morphological_network[&quot;tessellations&quot;][&#39;compactness&#39;] = 4 * np.pi * morphological_network[&quot;tessellations&quot;][&#39;area&#39;] / (morphological_network[&quot;tessellations&quot;][&#39;perimeter&#39;] ** 2)
+
+# Show the feature distributions
+morphological_network[&quot;tessellations&quot;][[&#39;area&#39;, &#39;perimeter&#39;, &#39;compactness&#39;]].describe()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>area</th>
+      <th>perimeter</th>
+      <th>compactness</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>count</th>
+      <td>1.965000e+03</td>
+      <td>1.965000e+03</td>
+      <td>1965.000000</td>
+    </tr>
+    <tr>
+      <th>mean</th>
+      <td>1.181944e+03</td>
+      <td>1.409813e+02</td>
+      <td>0.577816</td>
+    </tr>
+    <tr>
+      <th>std</th>
+      <td>2.137840e+03</td>
+      <td>1.091843e+02</td>
+      <td>0.177472</td>
+    </tr>
+    <tr>
+      <th>min</th>
+      <td>1.694066e-21</td>
+      <td>1.987334e-10</td>
+      <td>0.013300</td>
+    </tr>
+    <tr>
+      <th>25%</th>
+      <td>2.537790e+02</td>
+      <td>7.579999e+01</td>
+      <td>0.461401</td>
+    </tr>
+    <tr>
+      <th>50%</th>
+      <td>5.876115e+02</td>
+      <td>1.112270e+02</td>
+      <td>0.616446</td>
+    </tr>
+    <tr>
+      <th>75%</th>
+      <td>1.199677e+03</td>
+      <td>1.657378e+02</td>
+      <td>0.716751</td>
+    </tr>
+    <tr>
+      <th>max</th>
+      <td>4.364916e+04</td>
+      <td>1.289429e+03</td>
+      <td>0.995835</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>if HAS_TORCH_GEOMETRIC:
+    # Create homogeneous graph of private spaces
+    private_graph = city2graph.homogeneous_graph(
+        nodes_gdf=morphological_network[&quot;tessellations&quot;],
+        edges_gdf=morphological_network[&quot;private_to_private&quot;],
+        node_id_col=&#39;tess_id&#39;,
+        node_feature_cols=[&#39;area&#39;, &#39;perimeter&#39;, &#39;compactness&#39;],
+        edge_source_col=&#39;from_private_id&#39;,
+        edge_target_col=&#39;to_private_id&#39;,
+    )
+
+    print(&quot;Homogeneous Graph of Private Spaces:&quot;)
+    print(f&quot;Number of nodes: {private_graph.x.size(0)}&quot;)
+    print(f&quot;Number of node features: {private_graph.x.size(1)}&quot;)
+    print(f&quot;Number of edges: {private_graph.edge_index.size(1)}&quot;)
+
+    # Display the graph object
+    print(&quot;\nGraph structure:&quot;)
+    print(private_graph)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Homogeneous Graph of Private Spaces:
+Number of nodes: 1965
+Number of node features: 3
+Number of edges: 2107
+
+Graph structure:
+Data(x=[1965, 3], edge_index=[2, 2107], edge_attr=[2107, 0], pos=[1965, 2], crs=EPSG:27700)
+</pre></div></div>
+</div>
+</section>
+<section id="5.2-Create-a-Heterogeneous-Graph">
+<h3>5.2 Create a Heterogeneous Graph<a class="headerlink" href="#5.2-Create-a-Heterogeneous-Graph" title="Link to this heading">#</a></h3>
+<p>Now, let’s create a heterogeneous graph. In this example, the generated morphological network will be used as an axample. <code class="docutils literal notranslate"><span class="pre">heterogeneous_graph</span></code> provides <code class="docutils literal notranslate"><span class="pre">torch_geometric.data.HeteroData</span></code> object.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Compute features for public spaces (street segments)
+morphological_network[&quot;segments&quot;][&#39;length&#39;] = morphological_network[&quot;segments&quot;].geometry.length
+
+# Show the feature distributions
+morphological_network[&quot;segments&quot;][[&#39;length&#39;]].describe()
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>length</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>count</th>
+      <td>2981.000000</td>
+    </tr>
+    <tr>
+      <th>mean</th>
+      <td>28.285826</td>
+    </tr>
+    <tr>
+      <th>std</th>
+      <td>30.313299</td>
+    </tr>
+    <tr>
+      <th>min</th>
+      <td>0.000000</td>
+    </tr>
+    <tr>
+      <th>25%</th>
+      <td>8.462170</td>
+    </tr>
+    <tr>
+      <th>50%</th>
+      <td>17.284542</td>
+    </tr>
+    <tr>
+      <th>75%</th>
+      <td>37.751565</td>
+    </tr>
+    <tr>
+      <th>max</th>
+      <td>316.213995</td>
+    </tr>
+  </tbody>
+</table>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>if HAS_TORCH_GEOMETRIC:
+    # Create a heterogeneous graph with both node types and multiple edge types
+    hetero_graph = city2graph.heterogeneous_graph(
+        nodes_dict={
+            &#39;private&#39;: morphological_network[&quot;tessellations&quot;],
+            &#39;public&#39;: morphological_network[&quot;segments&quot;]
+        },
+        edges_dict={
+            (&#39;private&#39;, &#39;connects_to&#39;, &#39;private&#39;): morphological_network[&quot;private_to_private&quot;],
+            (&#39;private&#39;, &#39;adjacent_to&#39;, &#39;public&#39;): morphological_network[&quot;private_to_public&quot;],
+            (&#39;public&#39;, &#39;connects_to&#39;, &#39;public&#39;): morphological_network[&quot;public_to_public&quot;]
+        },
+        node_id_cols={
+            &#39;private&#39;: &#39;tess_id&#39;,
+            &#39;public&#39;: &#39;id&#39;
+        },
+        node_feature_cols={
+            &#39;private&#39;: [&#39;area&#39;, &#39;perimeter&#39;, &#39;compactness&#39;, &#39;elongation&#39;],
+            &#39;public&#39;: [&#39;length&#39;, &#39;sinuosity&#39;, &#39;orientation&#39;]
+        },
+        edge_source_cols={
+            (&#39;private&#39;, &#39;connects_to&#39;, &#39;private&#39;): &#39;from_private_id&#39;,
+            (&#39;private&#39;, &#39;adjacent_to&#39;, &#39;public&#39;): &#39;private_id&#39;,
+            (&#39;public&#39;, &#39;connects_to&#39;, &#39;public&#39;): &#39;from_public_id&#39;
+        },
+        edge_target_cols={
+            (&#39;private&#39;, &#39;connects_to&#39;, &#39;private&#39;): &#39;to_private_id&#39;,
+            (&#39;private&#39;, &#39;adjacent_to&#39;, &#39;public&#39;): &#39;public_id&#39;,
+            (&#39;public&#39;, &#39;connects_to&#39;, &#39;public&#39;): &#39;to_public_id&#39;
+        }
+        )
+
+    print(&quot;Heterogeneous Graph:&quot;)
+    print(f&quot;Node types: {list(hetero_graph.node_types)}&quot;)
+    print(f&quot;Edge types: {list(hetero_graph.edge_types)}&quot;)
+    print(&quot;\nNode counts:&quot;)
+    for node_type in hetero_graph.node_types:
+        print(f&quot;  {node_type}: {hetero_graph[node_type].x.size(0)} nodes with {hetero_graph[node_type].x.size(1)} features&quot;)
+    print(&quot;\nEdge counts:&quot;)
+    for edge_type in hetero_graph.edge_types:
+        print(f&quot;  {edge_type}: {hetero_graph[edge_type].edge_index.size(1)} edges&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Heterogeneous Graph:
+Node types: [&#39;private&#39;, &#39;public&#39;]
+Edge types: [(&#39;private&#39;, &#39;connects_to&#39;, &#39;private&#39;), (&#39;private&#39;, &#39;adjacent_to&#39;, &#39;public&#39;), (&#39;public&#39;, &#39;connects_to&#39;, &#39;public&#39;)]
+
+Node counts:
+  private: 1965 nodes with 3 features
+  public: 2981 nodes with 1 features
+
+Edge counts:
+  (&#39;private&#39;, &#39;connects_to&#39;, &#39;private&#39;): 2107 edges
+  (&#39;private&#39;, &#39;adjacent_to&#39;, &#39;public&#39;): 11359 edges
+  (&#39;public&#39;, &#39;connects_to&#39;, &#39;public&#39;): 5919 edges
+</pre></div></div>
+</div>
+</section>
+<section id="5.3-Create-a-Morphological-Graph-(All-in-One)">
+<h3>5.3 Create a Morphological Graph (All-in-One)<a class="headerlink" href="#5.3-Create-a-Morphological-Graph-(All-in-One)" title="Link to this heading">#</a></h3>
+<p>For morphological networks, <code class="docutils literal notranslate"><span class="pre">from_morphological_network</span></code> can processes the output of <code class="docutils literal notranslate"><span class="pre">create_morphological_network</span></code>to generate <code class="docutils literal notranslate"><span class="pre">torch_geometric.data.HeteroData</span></code>.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>morphological_graph = city2graph.from_morphological_network(morphological_network)
+</pre></div>
+</div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>morphological_graph
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
+</pre></div>
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+HeteroData(
+  crs=EPSG:27700,
+  private={
+    x=[1965, 0],
+    pos=[1965, 2],
+  },
+  public={
+    x=[2981, 0],
+    pos=[2981, 2],
+  },
+  (private, connects_to, private)={
+    edge_index=[2, 2107],
+    edge_attr=[2107, 0],
+  },
+  (private, adjacent_to, public)={
+    edge_index=[2, 11359],
+    edge_attr=[11359, 0],
+  },
+  (public, connects_to, public)={
+    edge_index=[2, 5919],
+    edge_attr=[5919, 0],
+  }
+)
+</pre></div></div>
+</div>
+</section>
+</section>
+<section id="6.-Create-a-PyTorch-Geometric-Dataset">
+<h2>6. Create a PyTorch Geometric Dataset<a class="headerlink" href="#6.-Create-a-PyTorch-Geometric-Dataset" title="Link to this heading">#</a></h2>
+<p>Create a persistent dataset from our morphological graph for use in machine learning tasks.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>if HAS_TORCH_GEOMETRIC:
+    import torch
+    from torch_geometric.data import InMemoryDataset
+
+    class MorphoGraphDataset(InMemoryDataset):
+        &quot;&quot;&quot;A PyTorch Geometric dataset containing morphological graphs.&quot;&quot;&quot;
+
+        def __init__(self, root, transform=None, pre_transform=None):
+            super(MorphoGraphDataset, self).__init__(root, transform, pre_transform)
+            self.data, self.slices = torch.load(self.processed_paths[0])
+
+        @property
+        def raw_file_names(self):
+            return []  # No raw files needed
+
+        @property
+        def processed_file_names(self):
+            return [&#39;morpho_graph.pt&#39;]
+
+        def download(self):
+            # No download needed
+            pass
+
+        def process(self):
+            # Use the existing morpho_graph as our single graph sample
+            data_list = [morphological_graph]
+            data, slices = self.collate(data_list)
+            torch.save((data, slices), self.processed_paths[0])
+
+    # Create the dataset directory if it doesn&#39;t exist
+    import os
+    os.makedirs(&#39;./morpho_graph_dataset/processed&#39;, exist_ok=True)
+
+    # Instantiate the dataset
+    dataset = MorphoGraphDataset(root=&#39;./morpho_graph_dataset&#39;)
+    print(f&quot;Dataset created with {len(dataset)} graph(s)&quot;)
+
+    # Display the graph in the dataset
+    print(&quot;\nDataset graph structure:&quot;)
+    print(dataset[0])
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Dataset created with 1 graph(s)
+
+Dataset graph structure:
+HeteroData(
+  crs=EPSG:27700,
+  private={
+    x=[3662, 2],
+    pos=[3662, 2],
+  },
+  public={
+    x=[5784, 1],
+    pos=[5784, 2],
+  },
+  (private, connects_to, private)={
+    edge_index=[2, 4221],
+    edge_attr=[4221, 0],
+  },
+  (private, adjacent_to, public)={
+    edge_index=[2, 21712],
+    edge_attr=[21712, 0],
+  },
+  (public, connects_to, public)={
+    edge_index=[2, 8327],
+    edge_attr=[8327, 0],
+  }
+)
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+/var/folders/3z/298_z_mn37d5t3730s9l90mr0000gn/T/ipykernel_87434/180941762.py:10: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don&#39;t have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.data, self.slices = torch.load(self.processed_paths[0])
+</pre></div></div>
+</div>
+</section>
+<section id="7.-Convert-to-NetworkX-for-Traditional-Network-Analysis">
+<h2>7. Convert to NetworkX for Traditional Network Analysis<a class="headerlink" href="#7.-Convert-to-NetworkX-for-Traditional-Network-Analysis" title="Link to this heading">#</a></h2>
+<p>NetworkX is a powerful library for traditional network analysis. Let’s convert our PyTorch Geometric graph to a NetworkX graph.</p>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>if HAS_TORCH_GEOMETRIC:
+    import networkx as nx
+
+    # Convert the heterogeneous graph to a NetworkX graph
+    morpho_nx = nx.DiGraph()
+
+    # Add nodes with their types and attributes
+    for node_type in morphological_graph.node_types:
+        num_nodes = morphological_graph[node_type].num_nodes
+
+        # Get node positions if available
+        pos = morphological_graph[node_type].pos.numpy() if hasattr(morphological_graph[node_type], &#39;pos&#39;) else None
+
+        # Add nodes with their attributes
+        for i in range(num_nodes):
+            # Create node identifier as tuple (type, index)
+            node_id = (node_type, i)
+
+            # Add node attributes
+            attrs = {&#39;type&#39;: node_type}
+
+            # Add position if available
+            if pos is not None:
+                attrs[&#39;pos&#39;] = tuple(pos[i])
+
+            # Add features if available
+            if hasattr(morphological_graph[node_type], &#39;x&#39;):
+                x = morphological_graph[node_type].x
+                if x is not None and i &lt; len(x):
+                    for j, feat in enumerate(x[i]):
+                        attrs[f&#39;feat_{j}&#39;] = feat.item()
+
+            # Add the node to the graph
+            morpho_nx.add_node(node_id, **attrs)
+
+    # Add edges with their types
+    for edge_type in morphological_graph.edge_types:
+        src_type, rel_type, dst_type = edge_type
+
+        # Get edge indices
+        edge_index = morphological_graph[edge_type].edge_index.numpy()
+
+        # Add each edge
+        for j in range(edge_index.shape[1]):
+            src_idx, dst_idx = edge_index[0, j], edge_index[1, j]
+            src_id = (src_type, int(src_idx))
+            dst_id = (dst_type, int(dst_idx))
+
+            # Add the edge with its type
+            morpho_nx.add_edge(src_id, dst_id, type=rel_type)
+
+    print(f&quot;Created NetworkX graph with {morpho_nx.number_of_nodes()} nodes and {morpho_nx.number_of_edges()} edges&quot;)
+    print(f&quot;Node types: {set(nx.get_node_attributes(morpho_nx, &#39;type&#39;).values())}&quot;)
+    print(f&quot;Edge types: {set(nx.get_edge_attributes(morpho_nx, &#39;type&#39;).values())}&quot;)
+
+    # Compute some basic network metrics
+    print(&quot;\nNetwork Analysis:&quot;)
+    print(f&quot;Is connected: {nx.is_weakly_connected(morpho_nx)}&quot;)
+    print(f&quot;Number of weakly connected components: {nx.number_weakly_connected_components(morpho_nx)}&quot;)
+
+    # Get degree distribution
+    degrees = [d for _, d in morpho_nx.degree()]
+    print(f&quot;Average degree: {np.mean(degrees):.2f}&quot;)
+    print(f&quot;Max degree: {np.max(degrees)}&quot;)
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+Created NetworkX graph with 4946 nodes and 19385 edges
+Node types: {&#39;public&#39;, &#39;private&#39;}
+Edge types: {&#39;adjacent_to&#39;, &#39;connects_to&#39;}
+
+Network Analysis:
+Is connected: False
+Number of weakly connected components: 4
+Average degree: 7.84
+Max degree: 71
+</pre></div></div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#1.-Setup-and-Environment">1. Setup and Environment</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#2.-Data-Loading-and-Preparation">2. Data Loading and Preparation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#3.-Street-Network-Processing">3. Street Network Processing</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#4.-Create-Morphological-Network">4. Create Morphological Network</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#Interactive-Visualization-with-Folium">Interactive Visualization with Folium</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#5.-Convert-to-Graph-Representations">5. Convert to Graph Representations</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#5.1-Create-a-Homogeneous-Graph">5.1 Create a Homogeneous Graph</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#5.2-Create-a-Heterogeneous-Graph">5.2 Create a Heterogeneous Graph</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#5.3-Create-a-Morphological-Graph-(All-in-One)">5.3 Create a Morphological Graph (All-in-One)</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#6.-Create-a-PyTorch-Geometric-Dataset">6. Create a PyTorch Geometric Dataset</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#7.-Convert-to-NetworkX-for-Traditional-Network-Analysis">7. Convert to NetworkX for Traditional Network Analysis</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/examples/map_attributes_on_network.ipynb.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, city2graph developers.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>
