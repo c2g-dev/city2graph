@@ -30,7 +30,10 @@ If you need the graph neural network functionality, install with the torch optio
     # Install with PyTorch and PyTorch Geometric (CPU version)
     pip install "city2graph[torch]"
 
-This will install PyTorch and PyTorch Geometric with CPU support, suitable for development and small-scale processing.
+This will install PyTorch and PyTorch Geometric with CPU support. However, PyTorch Geometric extensions require separate installation as explained in the GPU section below.
+
+.. note::
+   The PyTorch Geometric extensions (pyg_lib, torch_scatter, etc.) are not included in the [torch] extra and must be installed separately as shown in the CUDA/GPU section below.
 
 With Specific CUDA Version (for GPU acceleration)
 -----------------------------------------------
@@ -60,6 +63,32 @@ For macOS users with Apple Silicon:
     pip install torch-geometric
     pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
     pip install city2graph
+
+Using Poetry
+----------
+
+If you're using Poetry for dependency management, the PyTorch Geometric extensions must be installed separately:
+
+.. code-block:: bash
+
+    # Step 1: Install the base package with Poetry
+    poetry add city2graph
+    
+    # Step 2: Add the torch group (optional)
+    poetry add --group torch torch torch-geometric
+    
+    # Step 3: Install PyG extensions outside of Poetry's dependency resolver
+    # For CPU version:
+    poetry run pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
+    
+    # For CUDA version (replace cu121 with your CUDA version):
+    # poetry run pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cu121.html
+    
+    # Step 4: Activate the Poetry environment
+    poetry env activate
+
+.. warning::
+   PyTorch Geometric extensions (pyg_lib, torch_scatter, etc.) cannot be managed by Poetry's dependency resolver and must be installed separately with pip as shown above.
 
 With Development or Documentation Dependencies
 -------------------------------------------

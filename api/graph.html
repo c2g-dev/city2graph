@@ -413,6 +413,9 @@ Converts geodataframes containing spatial data into PyTorch Geometric HeteroData
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.Data.html#torch_geometric.data.Data" title="(in pytorch_geometric v2.7.0)">torch_geometric.data.Data</a></p>
 </dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch and PyTorch Geometric are not installed</p>
+</dd>
 </dl>
 </dd></dl>
 
@@ -439,6 +442,9 @@ Converts geodataframes containing spatial data into PyTorch Geometric HeteroData
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.HeteroData.html#torch_geometric.data.HeteroData" title="(in pytorch_geometric v2.7.0)">torch_geometric.data.HeteroData</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch and PyTorch Geometric are not installed</p>
 </dd>
 </dl>
 </dd></dl>
@@ -472,7 +478,10 @@ otherwise a homogeneous Data object.</p>
 <dd class="field-odd"><p><a class="reference external" href="https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.HeteroData.html#torch_geometric.data.HeteroData" title="(in pytorch_geometric v2.7.0)">torch_geometric.data.HeteroData</a> or <a class="reference external" href="https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.Data.html#torch_geometric.data.Data" title="(in pytorch_geometric v2.7.0)">torch_geometric.data.Data</a></p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If required data is missing from the network_output dictionary</p>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch and PyTorch Geometric are not installed</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If required data is missing from the network_output dictionary</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -490,6 +499,20 @@ otherwise a homogeneous Data object.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>nx.Graph</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.graph.is_torch_available">
+<span class="sig-prename descclassname"><span class="pre">city2graph.graph.</span></span><span class="sig-name descname"><span class="pre">is_torch_available</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/graph.html#is_torch_available"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.graph.is_torch_available" title="Link to this definition">#</a></dt>
+<dd><p>Check if PyTorch and PyTorch Geometric are available.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>True if PyTorch and PyTorch Geometric are available, False otherwise.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)">bool</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -547,6 +570,7 @@ otherwise a homogeneous Data object.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.graph.heterogeneous_graph"><code class="docutils literal notranslate"><span class="pre">heterogeneous_graph()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.graph.from_morphological_network"><code class="docutils literal notranslate"><span class="pre">from_morphological_network()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.graph.to_networkx"><code class="docutils literal notranslate"><span class="pre">to_networkx()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.graph.is_torch_available"><code class="docutils literal notranslate"><span class="pre">is_torch_available()</span></code></a></li>
 </ul>
   </nav></div>
 
