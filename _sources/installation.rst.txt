@@ -14,6 +14,12 @@ The simplest way to install city2graph is via pip:
 
 This installs the core functionality without PyTorch and PyTorch Geometric, suitable for basic graph operations with networkx, shapely, geopandas, etc.
 
+.. raw:: html
+
+   <div class="conda-deprecation-warning">
+     <p><strong>Warning:</strong> Conda distributions are deprecated for PyTorch and PyTorch Geometric due to limited demand and compatibility issues. We recommend using pip or Poetry for the most reliable installation experience.</p>
+   </div>
+
 With PyTorch (Optional)
 ----------------------
 

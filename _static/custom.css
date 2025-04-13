@@ -1,5 +1,88 @@
 /* Custom CSS for city2graph documentation */
 
+/* Typography improvements */
+:root {
+    --main-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+    --code-font: "SFMono-Regular", Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+    --city-primary: #3498db;
+    --city-secondary: #2ecc71;
+    --city-tertiary: #9b59b6;
+    --city-accent: #e74c3c;
+    --city-light: #ecf0f1;
+    --city-dark: #2c3e50;
+}
+
+body {
+    font-family: var(--main-font);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: normal;
+    line-height: 1.5;
+    font-size: 1em;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--main-font);
+    font-weight: 600;
+    margin-top: 1.5em;
+    margin-bottom: 0.75em;
+    color: var(--city-dark);
+    letter-spacing: normal;
+}
+
+h1 {
+    font-size: 2.5em;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding-bottom: 0.3em;
+    position: relative;
+}
+
+h2 {
+    font-size: 1.8em;
+}
+
+h3 {
+    font-size: 1.4em;
+}
+
+p, ul, ol {
+    line-height: 1.7;
+    margin-bottom: 1.2em;
+    hyphens: auto;
+}
+
+a {
+    color: var(--city-primary);
+    text-decoration: none;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid transparent;
+}
+
+a:hover {
+    color: var(--city-secondary);
+    border-bottom-color: var(--city-secondary);
+    text-decoration: none;
+}
+
+/* Simple code block styling */
+pre {
+    border-radius: 6px;
+    margin: 1.5em 0;
+    padding: 1em;
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+}
+
+code {
+    font-family: var(--code-font);
+    border-radius: 4px;
+    font-size: 0.92em;
+    padding: 0.2em 0.4em;
+    background-color: rgba(0, 0, 0, 0.03);
+    color: var(--city-accent);
+}
+
 /* Light/dark mode logo display */
 .only-light {
     display: block;
@@ -15,4 +98,376 @@ html[data-theme="dark"] .only-light {
 
 html[data-theme="dark"] .only-dark {
     display: block;
+}
+
+html[data-theme="dark"] {
+    --city-dark: #f1f2f6;
+    --city-light: #2c3e50;
+    --city-code-bg: #282c34;
+    --city-code-border: #3d4352;
+}
+
+html[data-theme="dark"] h1, 
+html[data-theme="dark"] h2, 
+html[data-theme="dark"] h3, 
+html[data-theme="dark"] h4, 
+html[data-theme="dark"] h5, 
+html[data-theme="dark"] h6 {
+    color: var(--city-dark);
+}
+
+html[data-theme="dark"] h1 {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] code {
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #fd79a8;
+}
+
+/* Enhanced warning styles */
+.conda-deprecation-warning {
+    background-color: rgba(255, 193, 7, 0.08);
+    border-radius: 8px;
+    border-left: 5px solid #ffc107;
+    padding: 18px 25px;
+    margin: 30px 0;
+    color: #856404;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(8px);
+}
+
+.conda-deprecation-warning::before {
+    content: "⚠️";
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.5em;
+    opacity: 0.15;
+}
+
+.conda-deprecation-warning strong {
+    color: #e67e22;
+    font-weight: 600;
+    border-bottom: 1px dotted rgba(230, 126, 34, 0.3);
+}
+
+html[data-theme="dark"] .conda-deprecation-warning {
+    background-color: rgba(255, 193, 7, 0.04);
+    color: #ffd970;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="dark"] .conda-deprecation-warning strong {
+    color: #f39c12;
+    border-bottom: 1px dotted rgba(243, 156, 18, 0.3);
+}
+
+/* Table improvements */
+table.docutils {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 25px 0;
+    width: 100%;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+table.docutils th {
+    background: linear-gradient(120deg, var(--city-primary), var(--city-primary) 60%, #2980b9);
+    color: white;
+    padding: 12px 18px;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85em;
+    letter-spacing: 0.05em;
+}
+
+table.docutils td {
+    padding: 12px 18px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    transition: background-color 0.15s ease;
+}
+
+table.docutils tr:last-child td {
+    border-bottom: none;
+}
+
+table.docutils tr:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.015);
+}
+
+table.docutils tr:hover td {
+    background-color: rgba(52, 152, 219, 0.03);
+}
+
+html[data-theme="dark"] table.docutils {
+    border-color: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="dark"] table.docutils th {
+    background: linear-gradient(120deg, #2980b9, #3498db);
+}
+
+html[data-theme="dark"] table.docutils td {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme="dark"] table.docutils tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+html[data-theme="dark"] table.docutils tr:hover td {
+    background-color: rgba(52, 152, 219, 0.05);
+}
+
+/* Admonitions styling */
+.admonition {
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+    margin: 25px 0;
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.admonition::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+}
+
+.admonition.note::before {
+    background-color: var(--city-primary);
+}
+
+.admonition.warning::before {
+    background-color: #e67e22;
+}
+
+.admonition.important::before {
+    background-color: var(--city-tertiary);
+}
+
+.admonition.tip::before {
+    background-color: var(--city-secondary);
+}
+
+.admonition-title {
+    padding: 14px 20px;
+    margin: 0;
+    font-weight: 600;
+    font-size: 1.1em;
+    position: relative;
+    padding-left: 20px;
+    background-color: rgba(0, 0, 0, 0.02);
+    display: flex;
+    align-items: center;
+}
+
+.admonition-title::before {
+    margin-right: 10px;
+    opacity: 0.8;
+}
+
+.admonition.note .admonition-title::before {
+    content: "💡";
+}
+
+.admonition.warning .admonition-title::before {
+    content: "⚠️";
+}
+
+.admonition.important .admonition-title::before {
+    content: "❗";
+}
+
+.admonition.tip .admonition-title::before {
+    content: "💪";
+}
+
+.admonition-title + div {
+    padding: 15px 20px;
+}
+
+.admonition.note .admonition-title {
+    color: var(--city-primary);
+}
+
+.admonition.warning .admonition-title {
+    color: #e67e22;
+}
+
+.admonition.important .admonition-title {
+    color: var(--city-tertiary);
+}
+
+.admonition.tip .admonition-title {
+    color: var(--city-secondary);
+}
+
+html[data-theme="dark"] .admonition {
+    border-color: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="dark"] .admonition-title {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* Navigation improvements */
+.wy-nav-side {
+    background-color: var(--city-dark);
+}
+
+.wy-menu-vertical a {
+    padding: 12px 18px;
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+}
+
+.wy-menu-vertical a:hover {
+    background-color: rgba(52, 152, 219, 0.08);
+    border-left-color: var(--city-primary);
+}
+
+/* API documentation styling */
+dl.class, dl.function, dl.method, dl.attribute {
+    padding: 25px;
+    margin: 30px 0;
+    border-radius: 8px;
+    background-color: rgba(0, 0, 0, 0.01);
+    border-left: 4px solid var(--city-primary);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+    position: relative;
+}
+
+dl.class::before, dl.function::before, dl.method::before, dl.attribute::before {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 0.75em;
+    border-radius: 4px;
+    padding: 3px 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background-color: rgba(52, 152, 219, 0.1);
+    color: var(--city-primary);
+}
+
+dl.class::before {
+    content: "class";
+}
+
+dl.function::before {
+    content: "function";
+}
+
+dl.method::before {
+    content: "method";
+}
+
+dl.attribute::before {
+    content: "attribute";
+}
+
+dl.class dt, 
+dl.function dt, 
+dl.method dt, 
+dl.attribute dt,
+dl.py dt,
+dl.class em.property, 
+dl.function em.property, 
+dl.method em.property, 
+dl.attribute em.property {
+    font-family: var(--code-font);
+    padding: 5px 0;
+    font-weight: 600;
+}
+
+html[data-theme="dark"] dl.class, 
+html[data-theme="dark"] dl.function, 
+html[data-theme="dark"] dl.method, 
+html[data-theme="dark"] dl.attribute {
+    background-color: rgba(255, 255, 255, 0.02);
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="dark"] dl.class::before, 
+html[data-theme="dark"] dl.function::before, 
+html[data-theme="dark"] dl.method::before, 
+html[data-theme="dark"] dl.attribute::before {
+    background-color: rgba(52, 152, 219, 0.15);
+    color: #74b9ff;
+}
+
+/* API Reference styling - ensure function links use code font */
+.py-class .reference,
+.py-function .reference,
+.py-method .reference,
+.py-attribute .reference,
+.py-class .headerlink,
+.py-function .headerlink,
+.py-method .headerlink,
+.py-attribute .headerlink,
+dl.py dt .reference,
+.sig .pre,
+.sig .n {
+    font-family: var(--code-font) !important;
+    font-size: 0.92em;
+}
+
+/* Style for code in API documentation */
+.sig-param {
+    font-family: var(--code-font);
+    font-size: 0.92em;
+}
+
+/* Improve paragraph spacing in documentation */
+.section p {
+    margin-bottom: 1em;
+    text-align: justify;
+}
+
+/* Improve readability of text */
+.section {
+    max-width: 60em;
+    margin: 0 auto;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2em;
+    }
+    
+    h2 {
+        font-size: 1.5em;
+    }
+    
+    h3 {
+        font-size: 1.2em;
+    }
+    
+    .conda-deprecation-warning::before {
+        display: none;
+    }
+    
+    table.docutils th, table.docutils td {
+        padding: 8px 12px;
+    }
+    
+    dl.class, dl.function, dl.method, dl.attribute {
+        padding: 15px;
+    }
 }
