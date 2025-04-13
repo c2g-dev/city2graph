@@ -377,25 +377,63 @@
                   
   <section id="installation">
 <h1>Installation<a class="headerlink" href="#installation" title="Link to this heading">#</a></h1>
-<p>You can install city2graph with conda using the provided environment files:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># For documentation</span>
-conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>docs/environment.yml
+<section id="standard-installation">
+<h2>Standard Installation<a class="headerlink" href="#standard-installation" title="Link to this heading">#</a></h2>
+<p>The simplest way to install city2graph is via pip:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Basic installation (without PyTorch)</span>
+pip<span class="w"> </span>install<span class="w"> </span>city2graph
 </pre></div>
 </div>
-<p>Or you can install the package directly from source with pip:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Basic installation</span>
-pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+<p>This installs the core functionality without PyTorch and PyTorch Geometric, suitable for basic graph operations with networkx, shapely, geopandas, etc.</p>
+</section>
+<section id="with-pytorch-optional">
+<h2>With PyTorch (Optional)<a class="headerlink" href="#with-pytorch-optional" title="Link to this heading">#</a></h2>
+<p>If you need the graph neural network functionality, install with the torch option:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Install with PyTorch and PyTorch Geometric (CPU version)</span>
+pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;city2graph[torch]&quot;</span>
+</pre></div>
+</div>
+<p>This will install PyTorch and PyTorch Geometric with CPU support, suitable for development and small-scale processing.</p>
+</section>
+<section id="with-specific-cuda-version-for-gpu-acceleration">
+<h2>With Specific CUDA Version (for GPU acceleration)<a class="headerlink" href="#with-specific-cuda-version-for-gpu-acceleration" title="Link to this heading">#</a></h2>
+<p>For GPU acceleration with a specific CUDA version, we recommend installing PyTorch and PyTorch Geometric separately before installing city2graph:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Step 1: Install PyTorch with your desired CUDA version</span>
+<span class="c1"># Visit https://pytorch.org/get-started/locally/ and select your preferences</span>
+<span class="c1"># Example for PyTorch 2.4.0 with CUDA 12.1:</span>
+pip<span class="w"> </span>install<span class="w"> </span>torch<span class="w"> </span>torchvision<span class="w"> </span>torchaudio<span class="w"> </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/cu121
 
-<span class="c1"># With documentation dependencies</span>
-pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[docs]&quot;</span>
+<span class="c1"># Step 2: Install PyTorch Geometric and its CUDA dependencies</span>
+pip<span class="w"> </span>install<span class="w"> </span>torch-geometric
+pip<span class="w"> </span>install<span class="w"> </span>pyg_lib<span class="w"> </span>torch_scatter<span class="w"> </span>torch_sparse<span class="w"> </span>torch_cluster<span class="w"> </span>torch_spline_conv<span class="w"> </span>-f<span class="w"> </span>https://data.pyg.org/whl/torch-2.4.0+cu121.html
+
+<span class="c1"># Step 3: Now install city2graph (it will detect the pre-installed PyTorch)</span>
+pip<span class="w"> </span>install<span class="w"> </span>city2graph
+</pre></div>
+</div>
+<p>For macOS users with Apple Silicon:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># PyTorch for macOS uses MPS (Metal Performance Shaders) instead of CUDA</span>
+pip<span class="w"> </span>install<span class="w"> </span>torch<span class="w"> </span>torchvision<span class="w"> </span>torchaudio
+pip<span class="w"> </span>install<span class="w"> </span>torch-geometric
+pip<span class="w"> </span>install<span class="w"> </span>pyg_lib<span class="w"> </span>torch_scatter<span class="w"> </span>torch_sparse<span class="w"> </span>torch_cluster<span class="w"> </span>torch_spline_conv<span class="w"> </span>-f<span class="w"> </span>https://data.pyg.org/whl/torch-2.4.0+cpu.html
+pip<span class="w"> </span>install<span class="w"> </span>city2graph
+</pre></div>
+</div>
+</section>
+<section id="with-development-or-documentation-dependencies">
+<h2>With Development or Documentation Dependencies<a class="headerlink" href="#with-development-or-documentation-dependencies" title="Link to this heading">#</a></h2>
+<p>You can install city2graph with additional optional dependencies:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># With documentation dependencies</span>
+pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;city2graph[docs]&quot;</span>
 
 <span class="c1"># With development dependencies</span>
-pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
+pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;city2graph[dev]&quot;</span>
 
 <span class="c1"># With both documentation and development dependencies</span>
-pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[docs,dev]&quot;</span>
+pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;city2graph[docs,dev]&quot;</span>
 </pre></div>
 </div>
+</section>
 <section id="requirements">
 <h2>Requirements<a class="headerlink" href="#requirements" title="Link to this heading">#</a></h2>
 <p>city2graph requires the following packages:</p>
@@ -403,9 +441,19 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <li><p>networkx</p></li>
 <li><p>shapely</p></li>
 <li><p>geopandas</p></li>
-<li><p>torch_geometric</p></li>
+<li><p>libpysal</p></li>
 <li><p>momepy</p></li>
 <li><p>overturemaps</p></li>
+</ul>
+<p>For graph neural network functionality, you’ll also need:</p>
+<ul class="simple">
+<li><p>torch</p></li>
+<li><p>torch_geometric</p></li>
+<li><p>pyg_lib</p></li>
+<li><p>torch_scatter</p></li>
+<li><p>torch_sparse</p></li>
+<li><p>torch_cluster</p></li>
+<li><p>torch_spline_conv</p></li>
 </ul>
 </section>
 </section>
@@ -457,6 +505,10 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#standard-installation">Standard Installation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-pytorch-optional">With PyTorch (Optional)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-specific-cuda-version-for-gpu-acceleration">With Specific CUDA Version (for GPU acceleration)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-development-or-documentation-dependencies">With Development or Documentation Dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#requirements">Requirements</a></li>
 </ul>
   </nav></div>
