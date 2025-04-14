@@ -56,7 +56,7 @@ Examples
 
    travel_summary_gdf = city2graph.travel_summary_network(
       gtfs_data, calendar_start="20250401", calendar_end="20250401", as_gdf=True
-   ).to_crs(epsg=27700)
+   )
 
 .. figure:: _static/trav_sum_network_overview.png
    :width: 1000px
