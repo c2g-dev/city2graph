@@ -411,7 +411,7 @@ pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot
 </pre></div>
 </div>
 <p>Step 2: Install PyTorch Geometric and its CUDA dependencies</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>torch-geometric
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>torch_geometric
 pip<span class="w"> </span>install<span class="w"> </span>pyg_lib<span class="w"> </span>torch_scatter<span class="w"> </span>torch_sparse<span class="w"> </span>torch_cluster<span class="w"> </span>torch_spline_conv<span class="w"> </span>-f<span class="w"> </span>https://data.pyg.org/whl/torch-<span class="o">{</span>TORCH_VERSION<span class="o">}</span>+<span class="o">{</span>CUDA_VERSION<span class="o">}</span>.html
 </pre></div>
 </div>
@@ -433,7 +433,7 @@ pip<span class="w"> </span>install<span class="w"> </span>pyg_lib<span class="w"
 </pre></div>
 </div>
 <p>Step 2: Add the torch group (optional)</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>add<span class="w"> </span>torch<span class="w"> </span>torch-geometric<span class="w"> </span>--group<span class="w"> </span>torch
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>add<span class="w"> </span>torch<span class="w"> </span>torch_geometric<span class="w"> </span>--group<span class="w"> </span>torch
 </pre></div>
 </div>
 <p>Step 3: Install PyG extensions outside of Poetry’s dependency resolver</p>

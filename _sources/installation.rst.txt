@@ -47,7 +47,7 @@ Step 2: Install PyTorch Geometric and its CUDA dependencies
 
 .. code-block:: bash
 
-    pip install torch-geometric
+    pip install torch_geometric
     pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-{TORCH_VERSION}+{CUDA_VERSION}.html
 
 Step 3: Install city2graph (it will detect the pre-installed PyTorch)
@@ -76,7 +76,7 @@ Step 2: Add the torch group (optional)
 
 .. code-block:: bash
 
-    poetry add torch torch-geometric --group torch
+    poetry add torch torch_geometric --group torch
 
 Step 3: Install PyG extensions outside of Poetry's dependency resolver
 
