@@ -12,15 +12,12 @@ The simplest way to install city2graph is via pip:
     # Basic installation (without PyTorch)
     pip install city2graph
 
-This installs the core functionality without PyTorch and PyTorch Geometric, suitable for basic graph operations with networkx, shapely, geopandas, etc.
+This installs the core functionality without PyTorch and PyTorch Geometric.
 
-.. raw:: html
+.. warning::
+    Conda distributions are deprecated for PyTorch and PyTorch Geometric due to limited demand and compatibility issues. We recommend using pip or Poetry for the most reliable installation experience.
 
-   <div class="conda-deprecation-warning">
-     <p><strong>Warning:</strong> Conda distributions are deprecated for PyTorch and PyTorch Geometric due to limited demand and compatibility issues. We recommend using pip or Poetry for the most reliable installation experience.</p>
-   </div>
-
-With PyTorch (Optional)
+With PyTorch (CPU)
 ----------------------
 
 If you need the graph neural network functionality, install with the torch option:
@@ -30,81 +27,72 @@ If you need the graph neural network functionality, install with the torch optio
     # Install with PyTorch and PyTorch Geometric (CPU version)
     pip install "city2graph[torch]"
 
-This will install PyTorch and PyTorch Geometric with CPU support. However, PyTorch Geometric extensions require separate installation as explained in the GPU section below.
+This will install PyTorch and PyTorch Geometric with CPU support.
 
 .. note::
    The PyTorch Geometric extensions (pyg_lib, torch_scatter, etc.) are not included in the [torch] extra and must be installed separately as shown in the CUDA/GPU section below.
 
-With Specific CUDA Version (for GPU acceleration)
+With PyTorch + CUDA (GPU)
 -----------------------------------------------
 
 For GPU acceleration with a specific CUDA version, we recommend installing PyTorch and PyTorch Geometric separately before installing city2graph:
 
-.. code-block:: bash
-
-    # Step 1: Install PyTorch with your desired CUDA version
-    # Visit https://pytorch.org/get-started/locally/ and select your preferences
-    # Example for PyTorch 2.4.0 with CUDA 12.1:
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-    
-    # Step 2: Install PyTorch Geometric and its CUDA dependencies
-    pip install torch-geometric
-    pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cu121.html
-    
-    # Step 3: Now install city2graph (it will detect the pre-installed PyTorch)
-    pip install city2graph
-
-For macOS users with Apple Silicon:
+Step 1: Install PyTorch with your desired CUDA version
 
 .. code-block:: bash
 
-    # PyTorch for macOS uses MPS (Metal Performance Shaders) instead of CUDA
-    pip install torch torchvision torchaudio
+    pip install torch=={TORCH_VERSION} --index-url https://download.pytorch.org/whl/{CUDA_VERSION}
+
+Step 2: Install PyTorch Geometric and its CUDA dependencies
+
+.. code-block:: bash
+
     pip install torch-geometric
-    pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
+    pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-{TORCH_VERSION}+{CUDA_VERSION}.html
+
+Step 3: Install city2graph (it will detect the pre-installed PyTorch)
+
+.. code-block:: bash
+
     pip install city2graph
+
+Replace `{TORCH_VERSION}` with the desired PyTorch version (e.g., `'2.4.0'` or above) and `{CUDA_VERSION}` with your CUDA version (e.g., `'cu121'` for CUDA 12.1). You can find the appropriate versions on the `PyTorch website <https://pytorch.org/get-started/locally/>`_ and `PyTorch Geometric website <https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html>`_.
+
+.. note::
+   The core package of PyTorch Geometric (`torch_geometric`) is independent from CUDA or CPU. However, the extensions (`pyg_lib`, `torch_scatter`, etc.) are CUDA-specific.
 
 Using Poetry
 ----------
 
 If you're using Poetry for dependency management, the PyTorch Geometric extensions must be installed separately:
 
+Step 1: Install the base package with Poetry
+
 .. code-block:: bash
 
-    # Step 1: Install the base package with Poetry
     poetry add city2graph
-    
-    # Step 2: Add the torch group (optional)
-    poetry add --group torch torch torch-geometric
-    
-    # Step 3: Install PyG extensions outside of Poetry's dependency resolver
-    # For CPU version:
-    poetry run pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cpu.html
-    
-    # For CUDA version (replace cu121 with your CUDA version):
-    # poetry run pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cu121.html
-    
-    # Step 4: Activate the Poetry environment
+
+Step 2: Add the torch group (optional)
+
+.. code-block:: bash
+
+    poetry add torch torch-geometric --group torch
+
+Step 3: Install PyG extensions outside of Poetry's dependency resolver
+
+.. code-block:: bash
+
+    poetry run pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.6.0+cu121.html
+
+Step 4: Activate the Poetry environment
+
+.. code-block:: bash
+
     poetry env activate
 
 .. warning::
    PyTorch Geometric extensions (pyg_lib, torch_scatter, etc.) cannot be managed by Poetry's dependency resolver and must be installed separately with pip as shown above.
 
-With Development or Documentation Dependencies
--------------------------------------------
-
-You can install city2graph with additional optional dependencies:
-
-.. code-block:: bash
-    
-    # With documentation dependencies
-    pip install "city2graph[docs]"
-    
-    # With development dependencies
-    pip install "city2graph[dev]"
-    
-    # With both documentation and development dependencies
-    pip install "city2graph[docs,dev]"
 
 Requirements
 -----------

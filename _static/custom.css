@@ -3,7 +3,7 @@
 /* Typography improvements */
 :root {
     --main-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-    --code-font: "SFMono-Regular", Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+    --code-font: monospace;
     --city-primary: #3498db;
     --city-secondary: #2ecc71;
     --city-tertiary: #9b59b6;
@@ -65,22 +65,124 @@ a:hover {
     text-decoration: none;
 }
 
-/* Simple code block styling */
+/* Code block styling - light grey background for light theme, dark grey for dark theme */
+
+/* Light theme code blocks with light grey background */
 pre {
-    border-radius: 6px;
+    background-color: #f5f5f5;
+    border: none;
+    border-radius: 0;
+    color: #333333;
+    font-family: var(--code-font);
+    font-size: 13px;
+    line-height: 1.5;
     margin: 1.5em 0;
-    padding: 1em;
-    background-color: #f8f9fa;
-    border: 1px solid #e9ecef;
+    overflow-x: auto;
+    padding: 12px 14px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
+/* Light theme: darker code, lighter comments (higher contrast with comments) */
+.highlight .n { color: #222222; } /* Name - very dark grey */
+.highlight .p { color: #222222; } /* Punctuation - very dark grey */
+.highlight .o { color: #222222; } /* Operator - very dark grey */
+.highlight .c1, .highlight .c, .highlight .cm, .highlight .cp, .highlight .cs { 
+    color: #999999; 
+    font-style: italic; 
+} /* Comments in light grey */
+.highlight .s1, .highlight .s2 { color: #888888; } /* Strings in light grey */
+.highlight .mi, .highlight .mf { color: #666666; } /* Numbers in medium grey */
+.highlight .k, .highlight .kc, .highlight .kd, .highlight .kn { 
+    color: #333333; 
+    font-weight: bold; 
+} /* Keywords in dark grey */
+.highlight .nb { color: #555555; } /* Built-in in medium-dark grey */
+.highlight .bp { color: #555555; } /* Self in medium-dark grey */
+
+/* Inline code styling */
 code {
     font-family: var(--code-font);
-    border-radius: 4px;
-    font-size: 0.92em;
-    padding: 0.2em 0.4em;
-    background-color: rgba(0, 0, 0, 0.03);
-    color: var(--city-accent);
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: 3px;
+    font-size: 90%;
+    padding: 2px 4px;
+    color: #e83e8c;
+}
+
+/* Dark theme code blocks - remove border and border-radius */
+html[data-theme="dark"] pre {
+    background-color: #252525;
+    border: none;
+    border-radius: 0;
+    color: #e6e6e6;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Dark theme: lighter code, darker comments (opposite of light theme) */
+html[data-theme="dark"] .highlight .n { color: #dddddd; } /* Name - very light grey */
+html[data-theme="dark"] .highlight .p { color: #dddddd; } /* Punctuation - very light grey */
+html[data-theme="dark"] .highlight .o { color: #dddddd; } /* Operator - very light grey */
+html[data-theme="dark"] .highlight .c1, 
+html[data-theme="dark"] .highlight .c, 
+html[data-theme="dark"] .highlight .cm, 
+html[data-theme="dark"] .highlight .cp, 
+html[data-theme="dark"] .highlight .cs { 
+    color: #666666; 
+    font-style: italic;
+} /* Comments in darker grey */
+html[data-theme="dark"] .highlight .s1, 
+html[data-theme="dark"] .highlight .s2 { 
+    color: #777777; 
+} /* Strings in medium-dark grey */
+
+/* Add line number styling */
+.highlight .linenos {
+    color: #999;
+    margin-right: 0.5em;
+    user-select: none;
+}
+
+/* Add a copy button style like PyTorch's */
+.copybutton {
+    cursor: pointer;
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 24px;
+    height: 24px;
+    background-color: transparent;
+    border: none;
+    color: #999;
+    border-radius: 3px;
+    font-size: 16px;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out, background-color 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.highlight:hover .copybutton {
+    opacity: 1;
+}
+
+.copybutton:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+    color: #666;
+}
+
+html[data-theme="dark"] .copybutton {
+    color: #ccc;
+}
+
+html[data-theme="dark"] .copybutton:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+/* Style the code block container to position copy button correctly */
+div.highlight {
+    position: relative;
 }
 
 /* Light/dark mode logo display */
@@ -125,45 +227,131 @@ html[data-theme="dark"] code {
     color: #fd79a8;
 }
 
-/* Enhanced warning styles */
-.conda-deprecation-warning {
-    background-color: rgba(255, 193, 7, 0.08);
-    border-radius: 8px;
-    border-left: 5px solid #ffc107;
-    padding: 18px 25px;
+/* Enhanced warning and note styling */
+div.admonition {
+    background-color: rgba(255, 255, 255, 0.7);
+    border-radius: 12px;
+    padding: 20px 25px;
     margin: 30px 0;
-    color: #856404;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
     position: relative;
     overflow: hidden;
     backdrop-filter: blur(8px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    transition: all 0.3s ease;
 }
 
-.conda-deprecation-warning::before {
+div.admonition:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+/* Warning styling */
+div.admonition.warning {
+    border-left: 5px solid #f39c12;
+    background: linear-gradient(to right, rgba(243, 156, 18, 0.08), rgba(243, 156, 18, 0.01));
+}
+
+div.admonition.warning::before {
     content: "⚠️";
+    font-size: 1.8em;
     position: absolute;
     right: 20px;
     top: 50%;
     transform: translateY(-50%);
-    font-size: 1.5em;
     opacity: 0.15;
 }
 
-.conda-deprecation-warning strong {
+div.admonition.warning p {
+    margin-bottom: 0;
+    color: #7d5a1c;
+    position: relative;
+    z-index: 2;
+}
+
+div.admonition.warning strong {
     color: #e67e22;
     font-weight: 600;
-    border-bottom: 1px dotted rgba(230, 126, 34, 0.3);
+    border-bottom: 2px dotted rgba(230, 126, 34, 0.3);
+    padding-bottom: 2px;
 }
 
-html[data-theme="dark"] .conda-deprecation-warning {
-    background-color: rgba(255, 193, 7, 0.04);
-    color: #ffd970;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+/* Note styling - in blue */
+div.admonition.note {
+    border-left: 5px solid var(--city-primary);
+    background: linear-gradient(to right, rgba(52, 152, 219, 0.08), rgba(52, 152, 219, 0.01));
 }
 
-html[data-theme="dark"] .conda-deprecation-warning strong {
+div.admonition.note::before {
+    content: "💡";
+    font-size: 1.8em;
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.15;
+}
+
+div.admonition.note p {
+    margin-bottom: 0;
+    color: #2c6c96;
+    position: relative;
+    z-index: 2;
+}
+
+div.admonition.note strong {
+    color: var(--city-primary);
+    font-weight: 600;
+    border-bottom: 2px dotted rgba(52, 152, 219, 0.3);
+    padding-bottom: 2px;
+}
+
+/* Override default admonition styling to apply our custom styles */
+.admonition {
+    border: none !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
+}
+
+.admonition-title {
+    display: none !important;
+}
+
+.admonition > .admonition-title + div {
+    padding: 0 !important;
+}
+
+/* Dark mode styling */
+html[data-theme="dark"] div.admonition {
+    background-color: rgba(20, 30, 40, 0.7);
+    border-color: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+html[data-theme="dark"] div.admonition.warning {
+    background: linear-gradient(to right, rgba(243, 156, 18, 0.12), rgba(243, 156, 18, 0.01));
+}
+
+html[data-theme="dark"] div.admonition.warning p {
+    color: #ffc107;
+}
+
+html[data-theme="dark"] div.admonition.warning strong {
     color: #f39c12;
-    border-bottom: 1px dotted rgba(243, 156, 18, 0.3);
+    border-bottom-color: rgba(243, 156, 18, 0.4);
+}
+
+html[data-theme="dark"] div.admonition.note {
+    background: linear-gradient(to right, rgba(52, 152, 219, 0.12), rgba(52, 152, 219, 0.01));
+}
+
+html[data-theme="dark"] div.admonition.note p {
+    color: #3498db;
+}
+
+html[data-theme="dark"] div.admonition.note strong {
+    color: #74b9ff;
+    border-bottom-color: rgba(116, 185, 255, 0.4);
 }
 
 /* Table improvements */
@@ -341,98 +529,6 @@ html[data-theme="dark"] .admonition-title {
     border-left-color: var(--city-primary);
 }
 
-/* API documentation styling */
-dl.class, dl.function, dl.method, dl.attribute {
-    padding: 25px;
-    margin: 30px 0;
-    border-radius: 8px;
-    background-color: rgba(0, 0, 0, 0.01);
-    border-left: 4px solid var(--city-primary);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
-    position: relative;
-}
-
-dl.class::before, dl.function::before, dl.method::before, dl.attribute::before {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    font-size: 0.75em;
-    border-radius: 4px;
-    padding: 3px 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    background-color: rgba(52, 152, 219, 0.1);
-    color: var(--city-primary);
-}
-
-dl.class::before {
-    content: "class";
-}
-
-dl.function::before {
-    content: "function";
-}
-
-dl.method::before {
-    content: "method";
-}
-
-dl.attribute::before {
-    content: "attribute";
-}
-
-dl.class dt, 
-dl.function dt, 
-dl.method dt, 
-dl.attribute dt,
-dl.py dt,
-dl.class em.property, 
-dl.function em.property, 
-dl.method em.property, 
-dl.attribute em.property {
-    font-family: var(--code-font);
-    padding: 5px 0;
-    font-weight: 600;
-}
-
-html[data-theme="dark"] dl.class, 
-html[data-theme="dark"] dl.function, 
-html[data-theme="dark"] dl.method, 
-html[data-theme="dark"] dl.attribute {
-    background-color: rgba(255, 255, 255, 0.02);
-    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.08);
-}
-
-html[data-theme="dark"] dl.class::before, 
-html[data-theme="dark"] dl.function::before, 
-html[data-theme="dark"] dl.method::before, 
-html[data-theme="dark"] dl.attribute::before {
-    background-color: rgba(52, 152, 219, 0.15);
-    color: #74b9ff;
-}
-
-/* API Reference styling - ensure function links use code font */
-.py-class .reference,
-.py-function .reference,
-.py-method .reference,
-.py-attribute .reference,
-.py-class .headerlink,
-.py-function .headerlink,
-.py-method .headerlink,
-.py-attribute .headerlink,
-dl.py dt .reference,
-.sig .pre,
-.sig .n {
-    font-family: var(--code-font) !important;
-    font-size: 0.92em;
-}
-
-/* Style for code in API documentation */
-.sig-param {
-    font-family: var(--code-font);
-    font-size: 0.92em;
-}
-
 /* Improve paragraph spacing in documentation */
 .section p {
     margin-bottom: 1em;
@@ -457,10 +553,6 @@ dl.py dt .reference,
     
     h3 {
         font-size: 1.2em;
-    }
-    
-    .conda-deprecation-warning::before {
-        display: none;
     }
     
     table.docutils th, table.docutils td {

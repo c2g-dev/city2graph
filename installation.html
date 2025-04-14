@@ -31,7 +31,7 @@
 <link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
-    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=bc60123f" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=12dceb15" />
   
   <!-- So that users can add custom icons -->
   <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
@@ -384,85 +384,69 @@
 pip<span class="w"> </span>install<span class="w"> </span>city2graph
 </pre></div>
 </div>
-<p>This installs the core functionality without PyTorch and PyTorch Geometric, suitable for basic graph operations with networkx, shapely, geopandas, etc.</p>
-<div class="conda-deprecation-warning">
-  <p><strong>Warning:</strong> Conda distributions are deprecated for PyTorch and PyTorch Geometric due to limited demand and compatibility issues. We recommend using pip or Poetry for the most reliable installation experience.</p>
-</div></section>
-<section id="with-pytorch-optional">
-<h2>With PyTorch (Optional)<a class="headerlink" href="#with-pytorch-optional" title="Link to this heading">#</a></h2>
+<p>This installs the core functionality without PyTorch and PyTorch Geometric.</p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Conda distributions are deprecated for PyTorch and PyTorch Geometric due to limited demand and compatibility issues. We recommend using pip or Poetry for the most reliable installation experience.</p>
+</div>
+</section>
+<section id="with-pytorch-cpu">
+<h2>With PyTorch (CPU)<a class="headerlink" href="#with-pytorch-cpu" title="Link to this heading">#</a></h2>
 <p>If you need the graph neural network functionality, install with the torch option:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Install with PyTorch and PyTorch Geometric (CPU version)</span>
 pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;city2graph[torch]&quot;</span>
 </pre></div>
 </div>
-<p>This will install PyTorch and PyTorch Geometric with CPU support. However, PyTorch Geometric extensions require separate installation as explained in the GPU section below.</p>
+<p>This will install PyTorch and PyTorch Geometric with CPU support.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>The PyTorch Geometric extensions (pyg_lib, torch_scatter, etc.) are not included in the [torch] extra and must be installed separately as shown in the CUDA/GPU section below.</p>
 </div>
 </section>
-<section id="with-specific-cuda-version-for-gpu-acceleration">
-<h2>With Specific CUDA Version (for GPU acceleration)<a class="headerlink" href="#with-specific-cuda-version-for-gpu-acceleration" title="Link to this heading">#</a></h2>
+<section id="with-pytorch-cuda-gpu">
+<h2>With PyTorch + CUDA (GPU)<a class="headerlink" href="#with-pytorch-cuda-gpu" title="Link to this heading">#</a></h2>
 <p>For GPU acceleration with a specific CUDA version, we recommend installing PyTorch and PyTorch Geometric separately before installing city2graph:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Step 1: Install PyTorch with your desired CUDA version</span>
-<span class="c1"># Visit https://pytorch.org/get-started/locally/ and select your preferences</span>
-<span class="c1"># Example for PyTorch 2.4.0 with CUDA 12.1:</span>
-pip<span class="w"> </span>install<span class="w"> </span>torch<span class="w"> </span>torchvision<span class="w"> </span>torchaudio<span class="w"> </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/cu121
-
-<span class="c1"># Step 2: Install PyTorch Geometric and its CUDA dependencies</span>
-pip<span class="w"> </span>install<span class="w"> </span>torch-geometric
-pip<span class="w"> </span>install<span class="w"> </span>pyg_lib<span class="w"> </span>torch_scatter<span class="w"> </span>torch_sparse<span class="w"> </span>torch_cluster<span class="w"> </span>torch_spline_conv<span class="w"> </span>-f<span class="w"> </span>https://data.pyg.org/whl/torch-2.4.0+cu121.html
-
-<span class="c1"># Step 3: Now install city2graph (it will detect the pre-installed PyTorch)</span>
-pip<span class="w"> </span>install<span class="w"> </span>city2graph
+<p>Step 1: Install PyTorch with your desired CUDA version</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span><span class="nv">torch</span><span class="o">=={</span>TORCH_VERSION<span class="o">}</span><span class="w"> </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/<span class="o">{</span>CUDA_VERSION<span class="o">}</span>
 </pre></div>
 </div>
-<p>For macOS users with Apple Silicon:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># PyTorch for macOS uses MPS (Metal Performance Shaders) instead of CUDA</span>
-pip<span class="w"> </span>install<span class="w"> </span>torch<span class="w"> </span>torchvision<span class="w"> </span>torchaudio
-pip<span class="w"> </span>install<span class="w"> </span>torch-geometric
-pip<span class="w"> </span>install<span class="w"> </span>pyg_lib<span class="w"> </span>torch_scatter<span class="w"> </span>torch_sparse<span class="w"> </span>torch_cluster<span class="w"> </span>torch_spline_conv<span class="w"> </span>-f<span class="w"> </span>https://data.pyg.org/whl/torch-2.4.0+cpu.html
-pip<span class="w"> </span>install<span class="w"> </span>city2graph
+<p>Step 2: Install PyTorch Geometric and its CUDA dependencies</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>torch-geometric
+pip<span class="w"> </span>install<span class="w"> </span>pyg_lib<span class="w"> </span>torch_scatter<span class="w"> </span>torch_sparse<span class="w"> </span>torch_cluster<span class="w"> </span>torch_spline_conv<span class="w"> </span>-f<span class="w"> </span>https://data.pyg.org/whl/torch-<span class="o">{</span>TORCH_VERSION<span class="o">}</span>+<span class="o">{</span>CUDA_VERSION<span class="o">}</span>.html
 </pre></div>
+</div>
+<p>Step 3: Install city2graph (it will detect the pre-installed PyTorch)</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>city2graph
+</pre></div>
+</div>
+<p>Replace <cite>{TORCH_VERSION}</cite> with the desired PyTorch version (e.g., <cite>‘2.4.0’</cite> or above) and <cite>{CUDA_VERSION}</cite> with your CUDA version (e.g., <cite>‘cu121’</cite> for CUDA 12.1). You can find the appropriate versions on the <a class="reference external" href="https://pytorch.org/get-started/locally/">PyTorch website</a> and <a class="reference external" href="https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html">PyTorch Geometric website</a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The core package of PyTorch Geometric (<cite>torch_geometric</cite>) is independent from CUDA or CPU. However, the extensions (<cite>pyg_lib</cite>, <cite>torch_scatter</cite>, etc.) are CUDA-specific.</p>
 </div>
 </section>
 <section id="using-poetry">
 <h2>Using Poetry<a class="headerlink" href="#using-poetry" title="Link to this heading">#</a></h2>
 <p>If you’re using Poetry for dependency management, the PyTorch Geometric extensions must be installed separately:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Step 1: Install the base package with Poetry</span>
-poetry<span class="w"> </span>add<span class="w"> </span>city2graph
-
-<span class="c1"># Step 2: Add the torch group (optional)</span>
-poetry<span class="w"> </span>add<span class="w"> </span>--group<span class="w"> </span>torch<span class="w"> </span>torch<span class="w"> </span>torch-geometric
-
-<span class="c1"># Step 3: Install PyG extensions outside of Poetry&#39;s dependency resolver</span>
-<span class="c1"># For CPU version:</span>
-poetry<span class="w"> </span>run<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>pyg_lib<span class="w"> </span>torch_scatter<span class="w"> </span>torch_sparse<span class="w"> </span>torch_cluster<span class="w"> </span>torch_spline_conv<span class="w"> </span>-f<span class="w"> </span>https://data.pyg.org/whl/torch-2.4.0+cpu.html
-
-<span class="c1"># For CUDA version (replace cu121 with your CUDA version):</span>
-<span class="c1"># poetry run pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.4.0+cu121.html</span>
-
-<span class="c1"># Step 4: Activate the Poetry environment</span>
-poetry<span class="w"> </span>env<span class="w"> </span>activate
+<p>Step 1: Install the base package with Poetry</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>add<span class="w"> </span>city2graph
+</pre></div>
+</div>
+<p>Step 2: Add the torch group (optional)</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>add<span class="w"> </span>torch<span class="w"> </span>torch-geometric<span class="w"> </span>--group<span class="w"> </span>torch
+</pre></div>
+</div>
+<p>Step 3: Install PyG extensions outside of Poetry’s dependency resolver</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>run<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>pyg_lib<span class="w"> </span>torch_scatter<span class="w"> </span>torch_sparse<span class="w"> </span>torch_cluster<span class="w"> </span>torch_spline_conv<span class="w"> </span>-f<span class="w"> </span>https://data.pyg.org/whl/torch-2.6.0+cu121.html
+</pre></div>
+</div>
+<p>Step 4: Activate the Poetry environment</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>poetry<span class="w"> </span>env<span class="w"> </span>activate
 </pre></div>
 </div>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>PyTorch Geometric extensions (pyg_lib, torch_scatter, etc.) cannot be managed by Poetry’s dependency resolver and must be installed separately with pip as shown above.</p>
-</div>
-</section>
-<section id="with-development-or-documentation-dependencies">
-<h2>With Development or Documentation Dependencies<a class="headerlink" href="#with-development-or-documentation-dependencies" title="Link to this heading">#</a></h2>
-<p>You can install city2graph with additional optional dependencies:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># With documentation dependencies</span>
-pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;city2graph[docs]&quot;</span>
-
-<span class="c1"># With development dependencies</span>
-pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;city2graph[dev]&quot;</span>
-
-<span class="c1"># With both documentation and development dependencies</span>
-pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;city2graph[docs,dev]&quot;</span>
-</pre></div>
 </div>
 </section>
 <section id="requirements">
@@ -537,10 +521,9 @@ pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#standard-installation">Standard Installation</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-pytorch-optional">With PyTorch (Optional)</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-specific-cuda-version-for-gpu-acceleration">With Specific CUDA Version (for GPU acceleration)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-pytorch-cpu">With PyTorch (CPU)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-pytorch-cuda-gpu">With PyTorch + CUDA (GPU)</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#using-poetry">Using Poetry</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#with-development-or-documentation-dependencies">With Development or Documentation Dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#requirements">Requirements</a></li>
 </ul>
   </nav></div>
