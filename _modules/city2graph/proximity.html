@@ -378,9 +378,10 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.spatial</span><span class="w"> </span><span class="kn">import</span> <span class="n">Delaunay</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.spatial.distance</span><span class="w"> </span><span class="kn">import</span> <span class="n">pdist</span><span class="p">,</span> <span class="n">squareform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">NearestNeighbors</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;knn_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;delaunay_graph&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;knn_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;delaunay_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;gilbert_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;waxman_graph&quot;</span><span class="p">]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_build_knn_edges</span><span class="p">(</span><span class="n">indices</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">]:</span>
@@ -572,6 +573,92 @@
     <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
     
     <span class="k">return</span> <span class="n">graph</span></div>
+
+
+
+<div class="viewcode-block" id="gilbert_graph">
+<a class="viewcode-back" href="../../api/proximity.html#city2graph.proximity.gilbert_graph">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">gilbert_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">radius</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generate Gilbert disc model graph from GeoDataFrame point geometries.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    gdf : geopandas.GeoDataFrame</span>
+<span class="sd">        Input GeoDataFrame with point geometries.</span>
+<span class="sd">    radius : float</span>
+<span class="sd">        Connection radius.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    networkx.Graph</span>
+<span class="sd">        Graph with nodes and edges connecting points within radius.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">graph</span>
+    
+    <span class="c1"># Vectorized distance computation and edge creation</span>
+    <span class="n">dists</span> <span class="o">=</span> <span class="n">squareform</span><span class="p">(</span><span class="n">pdist</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>
+    <span class="n">edge_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">triu</span><span class="p">(</span><span class="n">dists</span> <span class="o">&lt;=</span> <span class="n">radius</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">edge_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">edge_mask</span><span class="p">)</span>
+    
+    <span class="c1"># Convert to node indices without loops</span>
+    <span class="n">edges</span> <span class="o">=</span> <span class="p">[(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">edge_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">edge_indices</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span>
+    
+    <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
+    <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s1">&#39;radius&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">radius</span>
+    <span class="k">return</span> <span class="n">graph</span></div>
+
+
+
+<div class="viewcode-block" id="waxman_graph">
+<a class="viewcode-back" href="../../api/proximity.html#city2graph.proximity.waxman_graph">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">waxman_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">r0</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generate Waxman random geometric graph with $H_{ij} = \beta e^{-d_{ij}/r_0}}$.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    gdf : geopandas.GeoDataFrame</span>
+<span class="sd">        Input GeoDataFrame with point geometries.</span>
+<span class="sd">    beta : float</span>
+<span class="sd">        Probability scale factor.</span>
+<span class="sd">    r0 : float</span>
+<span class="sd">        Euclidean distance scale factor.</span>
+<span class="sd">    seed : int | None, optional</span>
+<span class="sd">        Random seed for reproducibility.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    networkx.Graph</span>
+<span class="sd">        Stochastic Waxman graph with &#39;beta&#39; and &#39;r0&#39; in graph attributes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">graph</span>
+    
+    <span class="c1"># Vectorized distance computation and probability calculation</span>
+    <span class="n">dists</span> <span class="o">=</span> <span class="n">squareform</span><span class="p">(</span><span class="n">pdist</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>
+    <span class="n">probs</span> <span class="o">=</span> <span class="n">beta</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">dists</span> <span class="o">/</span> <span class="n">r0</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">()</span>
+    <span class="n">random_matrix</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="n">probs</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+    <span class="c1"># Create upper triangular mask for undirected edges</span>
+    <span class="n">edge_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">triu</span><span class="p">(</span><span class="n">random_matrix</span> <span class="o">&lt;=</span> <span class="n">probs</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">edge_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">edge_mask</span><span class="p">)</span>
+    
+    <span class="c1"># Convert to node indices without loops</span>
+    <span class="n">edges</span> <span class="o">=</span> <span class="p">[(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">edge_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">edge_indices</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span>
+    
+    <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
+    <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s1">&#39;beta&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">beta</span>
+    <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s1">&#39;r0&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">r0</span>
+    <span class="k">return</span> <span class="n">graph</span></div>
+
 
 </pre></div>
 

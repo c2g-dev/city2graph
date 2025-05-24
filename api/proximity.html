@@ -437,6 +437,48 @@ Node attributes include original data and ‘pos’ coordinates.</p>
 </dl>
 </dd></dl>
 
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.proximity.gilbert_graph">
+<span class="sig-prename descclassname"><span class="pre">city2graph.proximity.</span></span><span class="sig-name descname"><span class="pre">gilbert_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">radius</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/proximity.html#gilbert_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.proximity.gilbert_graph" title="Link to this definition">#</a></dt>
+<dd><p>Generate Gilbert disc model graph from GeoDataFrame point geometries.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – Input GeoDataFrame with point geometries.</p></li>
+<li><p><strong>radius</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>) – Connection radius.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Graph with nodes and edges connecting points within radius.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.4.2)">networkx.Graph</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.proximity.waxman_graph">
+<span class="sig-prename descclassname"><span class="pre">city2graph.proximity.</span></span><span class="sig-name descname"><span class="pre">waxman_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/proximity.html#waxman_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.proximity.waxman_graph" title="Link to this definition">#</a></dt>
+<dd><p>Generate Waxman random geometric graph with $H_{ij} = eta e^{-d_{ij}/r_0}}$.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – Input GeoDataFrame with point geometries.</p></li>
+<li><p><strong>beta</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>) – Probability scale factor.</p></li>
+<li><p><strong>r0</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>) – Euclidean distance scale factor.</p></li>
+<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em> | </em><em>None</em><em>, </em><em>optional</em>) – Random seed for reproducibility.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Stochastic Waxman graph with ‘beta’ and ‘r0’ in graph attributes.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.4.2)">networkx.Graph</a></p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
 
@@ -488,6 +530,8 @@ Node attributes include original data and ‘pos’ coordinates.</p>
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.proximity.knn_graph"><code class="docutils literal notranslate"><span class="pre">knn_graph()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.proximity.delaunay_graph"><code class="docutils literal notranslate"><span class="pre">delaunay_graph()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.proximity.gilbert_graph"><code class="docutils literal notranslate"><span class="pre">gilbert_graph()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.proximity.waxman_graph"><code class="docutils literal notranslate"><span class="pre">waxman_graph()</span></code></a></li>
 </ul>
   </nav></div>
 
