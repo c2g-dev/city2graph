@@ -1,5 +1,5 @@
 ===========
-Contiguity
+Proximity
 ===========
 
 .. automodule:: city2graph.proximity
