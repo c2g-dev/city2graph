@@ -506,13 +506,13 @@
 
 <div class="viewcode-block" id="knn_graph">
 <a class="viewcode-back" href="../../api/proximity.html#city2graph.proximity.knn_graph">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">knn_graph</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">knn_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate k-nearest neighbor graph from points or polygon centroids.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    data : geopandas.GeoDataFrame</span>
+<span class="sd">    gdf : geopandas.GeoDataFrame</span>
 <span class="sd">        Input data as a GeoDataFrame. Centroids of geometries are used.</span>
 <span class="sd">    k : int, default 5</span>
 <span class="sd">        Number of nearest neighbors to connect to each node.</span>
@@ -523,7 +523,7 @@
 <span class="sd">        Graph with nodes and k-nearest neighbor edges.</span>
 <span class="sd">        Node attributes include original data and &#39;pos&#39; coordinates.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
     
     <span class="c1"># Early return for edge cases</span>
     <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
@@ -545,13 +545,13 @@
 
 <div class="viewcode-block" id="delaunay_graph">
 <a class="viewcode-back" href="../../api/proximity.html#city2graph.proximity.delaunay_graph">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">delaunay_graph</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">delaunay_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate Delaunay graph from points or polygon centroids.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    data : geopandas.GeoDataFrame</span>
+<span class="sd">    gdf : geopandas.GeoDataFrame</span>
 <span class="sd">        Input data as a GeoDataFrame. Centroids of geometries are used.</span>
 
 <span class="sd">    Returns</span>
@@ -560,7 +560,7 @@
 <span class="sd">        Graph with nodes and Delaunay triangulation edges.</span>
 <span class="sd">        Node attributes include original data and &#39;pos&#39; coordinates.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
     
     <span class="c1"># Early return for insufficient points</span>
     <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
