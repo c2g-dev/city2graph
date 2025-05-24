@@ -9,7 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta property="og:title" content="Contiguity" />
 <meta property="og:type" content="website" />
-<meta property="og:url" content="https://city2graph.net/api/contiguity.html" />
+<meta property="og:url" content="https://city2graph.net/api/proximity.html" />
 <meta property="og:site_name" content="city2graph" />
 <meta property="og:description" content="Module for processing contiguity networks." />
 <meta property="og:image" content="https://city2graph.net/_static/social_preview.png" />
@@ -51,7 +51,7 @@
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/contiguity';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/proximity';</script>
     <link rel="icon" href="../_static/city2graph_logo.png"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -393,9 +393,30 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="module-city2graph.contiguity">
-<span id="contiguity"></span><h1>Contiguity<a class="headerlink" href="#module-city2graph.contiguity" title="Link to this heading">#</a></h1>
+  <section id="module-city2graph.proximity">
+<span id="contiguity"></span><h1>Contiguity<a class="headerlink" href="#module-city2graph.proximity" title="Link to this heading">#</a></h1>
 <p>Module for processing contiguity networks.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.proximity.knn_graph">
+<span class="sig-prename descclassname"><span class="pre">city2graph.proximity.</span></span><span class="sig-name descname"><span class="pre">knn_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/proximity.html#knn_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.proximity.knn_graph" title="Link to this definition">#</a></dt>
+<dd><p>Generate k-nearest neighbor graph from points or polygon centroids.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – Input data as a GeoDataFrame. Centroids of geometries are used.</p></li>
+<li><p><strong>k</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default 5</em>) – Number of nearest neighbors to connect to each node.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Graph with nodes and k-nearest neighbor edges.
+Node attributes include original data and ‘pos’ coordinates.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.4.2)">networkx.Graph</a></p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
 
@@ -438,10 +459,22 @@
 
 
   <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.proximity.knn_graph"><code class="docutils literal notranslate"><span class="pre">knn_graph()</span></code></a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
-      <li><a href="../_sources/api/contiguity.rst.txt"
+      <li><a href="../_sources/api/proximity.rst.txt"
             rel="nofollow">Show Source</a></li>
     </ul>
    </div></div>
