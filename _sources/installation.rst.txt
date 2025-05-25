@@ -82,7 +82,7 @@ Step 2: Install with PyTorch support (optional)
 
 or if you want to install with a specific PyTorch version:
 
-... code-block:: bash
+.. code-block:: bash
 
     uv sync --group torch --index https://download.pytorch.org/whl/{CUDA_VERSION}
 
