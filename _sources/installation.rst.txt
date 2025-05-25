@@ -15,7 +15,7 @@ The simplest way to install city2graph is via pip:
 This installs the core functionality without PyTorch and PyTorch Geometric.
 
 .. warning::
-    Conda distributions are deprecated for PyTorch and PyTorch Geometric due to limited demand and compatibility issues. We recommend using pip or Poetry for the most reliable installation experience.
+    Conda distributions are deprecated for PyTorch and PyTorch Geometric due to limited demand and compatibility issues. We recommend using pip or uv for the most reliable installation experience.
 
 With PyTorch (CPU)
 ----------------------
@@ -61,37 +61,52 @@ Replace `{TORCH_VERSION}` with the desired PyTorch version (e.g., `'2.4.0'` or a
 .. note::
    The core package of PyTorch Geometric (`torch_geometric`) is independent from CUDA or CPU. However, the extensions (`pyg_lib`, `torch_scatter`, etc.) are CUDA-specific.
 
-Using Poetry
-----------
+Using uv
+--------
 
-If you're using Poetry for dependency management, the PyTorch Geometric extensions must be installed separately:
+If you're using uv for dependency management, you can install city2graph from the source:
 
-Step 1: Install the base package with Poetry
-
-.. code-block:: bash
-
-    poetry add city2graph
-
-Step 2: Add the torch group (optional)
+Step 1: Clone the repository and install base dependencies
 
 .. code-block:: bash
 
-    poetry add torch torch_geometric --group torch
+    git clone https://github.com/c2g-dev/city2graph.git
+    cd city2graph
+    uv sync
 
-Step 3: Install PyG extensions outside of Poetry's dependency resolver
-
-.. code-block:: bash
-
-    poetry run pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.6.0+cu121.html
-
-Step 4: Activate the Poetry environment
+Step 2: Install with PyTorch support (optional)
 
 .. code-block:: bash
 
-    poetry env activate
+    uv sync --group torch
 
-.. warning::
-   PyTorch Geometric extensions (pyg_lib, torch_scatter, etc.) cannot be managed by Poetry's dependency resolver and must be installed separately with pip as shown above.
+or if you want to install with a specific PyTorch version:
+
+... code-block:: bash
+
+    uv sync --group torch --index https://download.pytorch.org/whl/{CUDA_VERSION}
+
+Step 3: Install PyG extensions for CUDA support (if needed)
+
+.. code-block:: bash
+
+    uv add pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv --index https://data.pyg.org/whl/torch-{TORCH_VERSION}+{CUDA_VERSION}.html
+
+Step 4: Install development dependencies (optional)
+
+.. code-block:: bash
+
+    uv sync --group dev
+
+Step 5: Run commands with uv
+
+.. code-block:: bash
+
+    uv run python your_script.py
+    uv run jupyter notebook
+
+.. note::
+   uv handles dependency resolution more efficiently than Poetry and can install PyTorch Geometric extensions directly through index URLs.
 
 
 Requirements
