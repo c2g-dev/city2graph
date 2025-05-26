@@ -410,7 +410,7 @@
 <section id="1.-Setup-and-Environment">
 <h2>1. Setup and Environment<a class="headerlink" href="#1.-Setup-and-Environment" title="Link to this heading">#</a></h2>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import city2graph
@@ -430,7 +430,7 @@ from IPython.display import display
 <h2>2. Retrieve Points of Interest<a class="headerlink" href="#2.-Retrieve-Points-of-Interest" title="Link to this heading">#</a></h2>
 <p>Fetch restaurant POIs around Shibuya, Tokyo using OSMnx and filter to nodes only.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>poi_tags = {
@@ -457,7 +457,7 @@ poi_gdf = poi_gdf.to_crs(epsg=6677)
 <h2>3. Define Helper Functions<a class="headerlink" href="#3.-Define-Helper-Functions" title="Link to this heading">#</a></h2>
 <p>Define functions to extract node positions and plot graphs with degree centrality and optional basemap.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[15]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>def get_node_positions(gdf):
@@ -528,7 +528,7 @@ node_positions = get_node_positions(poi_gdf)
 <h2>4. K-Nearest Neighbors (KNN) Graph<a class="headerlink" href="#4.-K-Nearest-Neighbors-(KNN)-Graph" title="Link to this heading">#</a></h2>
 <p>Create an interactive slider to plot KNN graphs for varying k values.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>def plot_knn_graph(k_value):
@@ -565,14 +565,14 @@ display(interactive_plot)
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<script type="application/vnd.jupyter.widget-view+json">{"model_id": "9dfd4090569a4154acf71df452769398", "version_major": 2, "version_minor": 0}</script></div>
+<script type="application/vnd.jupyter.widget-view+json">{"model_id": "dee4cd64b7fd435082171e4fb32b4c8f", "version_major": 2, "version_minor": 0}</script></div>
 </div>
 </section>
 <section id="5.-Delaunay-Graph">
 <h2>5. Delaunay Graph<a class="headerlink" href="#5.-Delaunay-Graph" title="Link to this heading">#</a></h2>
 <p>Generate and plot a Delaunay triangulation graph of the POIs.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[17]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>delaunay_graph = city2graph.delaunay_graph(poi_gdf)
@@ -600,7 +600,7 @@ plot_graph(delaunay_graph,
 <h2>6. Gilbert Graph (Hard Threshold Model)<a class="headerlink" href="#6.-Gilbert-Graph-(Hard-Threshold-Model)" title="Link to this heading">#</a></h2>
 <p>Interactive slider for creating Gilbert graphs with varying radius values.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[18]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>def plot_gilbert_graph(r_value):
@@ -643,7 +643,7 @@ display(interactive_plot)
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<script type="application/vnd.jupyter.widget-view+json">{"model_id": "54b4c1f77f5f48a68f12300510d584d9", "version_major": 2, "version_minor": 0}</script></div>
+<script type="application/vnd.jupyter.widget-view+json">{"model_id": "fe23db7b44b5419882bb5ff86d591473", "version_major": 2, "version_minor": 0}</script></div>
 </div>
 </section>
 <section id="7.-Waxman-Graph-(Soft-Random-Geometry-Model)">
@@ -653,7 +653,7 @@ display(interactive_plot)
 \[H_{ij} = \beta e^{-\frac{d_{ij}}{r_0}}\]</div>
 <p>where <span class="math notranslate nohighlight">\(d_{ij}\)</span> is the Euclidean distance between node <span class="math notranslate nohighlight">\(i\)</span> an <span class="math notranslate nohighlight">\(j\)</span>; <span class="math notranslate nohighlight">\(r_0\)</span> is the maximum distance between nodes; and <span class="math notranslate nohighlight">\(\beta\)</span> denotes the scaling parameter.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[19]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Use the plot_graph function from Cell 4 instead of redefining it
@@ -706,7 +706,7 @@ display(interactive_plot)
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<script type="application/vnd.jupyter.widget-view+json">{"model_id": "6f6bbf58b4d84106b60040a561d1b3e7", "version_major": 2, "version_minor": 0}</script></div>
+<script type="application/vnd.jupyter.widget-view+json">{"model_id": "05f8d0fbb9db4a85a9367e5312d6942b", "version_major": 2, "version_minor": 0}</script></div>
 </div>
 </section>
 </section>
