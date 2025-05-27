@@ -5,4 +5,4 @@ Allow: /
 Disallow: /_build/
 
 # Sitemap location
-Sitemap: https://c2g-dev.github.io/city2graph/sitemap.xml
+Sitemap: https://city2graph.net/sitemap.xml
