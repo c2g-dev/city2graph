@@ -67,6 +67,10 @@ Examples
 
 >> For details, see :doc:`examples/gtfs`
 
+.. code-block:: python
+
+   gilbert_graph = city2graph.gilbert_graph(poi_gdf, radius=100)
+
 .. raw:: html
 
    <div style="text-align:center;">
