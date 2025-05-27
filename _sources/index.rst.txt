@@ -80,7 +80,7 @@ Examples
      </video>
    </div>
 
->> For details, see :doc:`examples/gemerating_graphs_by_proximity`
+>> For details, see :doc:`examples/generating_graphs_by_proximity`
 
 Documentation
 ------------
