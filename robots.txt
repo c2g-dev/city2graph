@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Disallow crawling of build directories
+Disallow: /_build/
+
+# Sitemap location
+Sitemap: https://c2g-dev.github.io/city2graph/sitemap.xml
