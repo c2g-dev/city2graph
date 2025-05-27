@@ -31,6 +31,9 @@ Features
 Examples
 --------
 
+**Morphology**
+
+
 .. code-block:: python
 
    morphological_network = city2graph.morphological_network(
@@ -48,6 +51,8 @@ Examples
    A morphological network of 500m walking distance in Liverpool
 
 >> For details, see :doc:`examples/morphological_networks_from_overturemaps`
+
+**Transportation**
 
 .. code-block:: python
 
@@ -67,6 +72,8 @@ Examples
 
 >> For details, see :doc:`examples/gtfs`
 
+**Proximity**
+
 .. code-block:: python
 
    gilbert_graph = city2graph.gilbert_graph(poi_gdf, radius=100)
@@ -74,7 +81,7 @@ Examples
 .. raw:: html
 
    <div style="text-align:center;">
-     <video width="800px" controls>
+     <video style="width:100%; max-width:800px;" controls>
        <source src="_static/gilbert_graph.mp4" type="video/mp4">
        Your browser does not support the video tag.
      </video>

@@ -379,6 +379,7 @@ It supports <a class="reference external" href="https://pytorch-geometric.readth
 </section>
 <section id="examples">
 <h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h2>
+<p><strong>Morphology</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">morphological_network</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">morphological_network</span><span class="p">(</span>
    <span class="n">buildings_gdf</span><span class="p">,</span>
    <span class="n">segments_gdf</span><span class="p">,</span>
@@ -395,6 +396,7 @@ It supports <a class="reference external" href="https://pytorch-geometric.readth
 </figcaption>
 </figure>
 <p>&gt;&gt; For details, see <a class="reference internal" href="examples/morphological_networks_from_overturemaps.html"><span class="doc">Constructing Morphological Networks from Overture Maps</span></a></p>
+<p><strong>Transportation</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">sample_gtfs_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;./itm_london_gtfs.zip&quot;</span><span class="p">)</span>
 <span class="n">gtfs_data</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">load_gtfs</span><span class="p">(</span><span class="n">sample_gtfs_path</span><span class="p">)</span>
 
@@ -411,11 +413,12 @@ It supports <a class="reference external" href="https://pytorch-geometric.readth
 </figcaption>
 </figure>
 <p>&gt;&gt; For details, see <a class="reference internal" href="examples/gtfs.html"><span class="doc">Processing GTFS to Obtain Flows of Public Transportation</span></a></p>
+<p><strong>Proximity</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">gilbert_graph</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">gilbert_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">radius</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
 </pre></div>
 </div>
 <div style="text-align:center;">
-  <video width="800px" controls>
+  <video style="width:100%; max-width:800px;" controls>
     <source src="_static/gilbert_graph.mp4" type="video/mp4">
     Your browser does not support the video tag.
   </video>
