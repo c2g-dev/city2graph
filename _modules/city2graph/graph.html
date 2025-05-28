@@ -962,19 +962,17 @@
         <span class="p">)</span>
     
     <span class="c1"># Preprocess homogeneous graph inputs into dictionaries.</span>
+    <span class="c1"># Ensure at least empty edge type entry for homogeneous graphs</span>
     <span class="n">nodes_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">nodes_gdf</span><span class="p">}</span>
-    <span class="n">edges_dict</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">if</span> <span class="n">edges_gdf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">edges_gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
-        <span class="n">edges_dict</span><span class="p">[(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="n">edges_gdf</span>
+    <span class="c1"># Use explicit None check to avoid ambiguous truth of GeoDataFrame</span>
+    <span class="n">edges_dict</span> <span class="o">=</span> <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edges_gdf</span> <span class="k">if</span> <span class="n">edges_gdf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">()}</span>
     <span class="n">node_id_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">node_id_col</span><span class="p">}</span> <span class="k">if</span> <span class="n">node_id_col</span> <span class="k">else</span> <span class="p">{}</span>
     <span class="n">node_feature_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">node_feature_cols</span><span class="p">}</span> <span class="k">if</span> <span class="n">node_feature_cols</span> <span class="k">else</span> <span class="p">{}</span>
     <span class="n">node_label_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">node_label_cols</span><span class="p">}</span> <span class="k">if</span> <span class="n">node_label_cols</span> <span class="k">else</span> <span class="kc">None</span>
-    <span class="n">edge_source_cols</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edge_source_col</span><span class="p">}</span> <span class="k">if</span> <span class="n">edge_source_col</span> <span class="k">else</span> <span class="p">{}</span>
-    <span class="p">)</span>
-    <span class="n">edge_target_cols</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edge_target_col</span><span class="p">}</span> <span class="k">if</span> <span class="n">edge_target_col</span> <span class="k">else</span> <span class="p">{}</span>
-    <span class="p">)</span>
+    <span class="n">edge_source_cols</span> <span class="o">=</span> <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edge_source_col</span><span class="p">}</span>
+    <span class="n">edge_target_cols</span> <span class="o">=</span> <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edge_target_col</span><span class="p">}</span>
+    <span class="c1"># Wrap edge features into dict mapping for builder</span>
+    <span class="n">edge_feature_map</span> <span class="o">=</span> <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edge_feature_cols</span><span class="p">}</span> <span class="k">if</span> <span class="n">edge_feature_cols</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
 
     <span class="n">hetero_data</span> <span class="o">=</span> <span class="n">_build_graph_data</span><span class="p">(</span>
         <span class="n">nodes</span><span class="o">=</span><span class="n">nodes_dict</span><span class="p">,</span>
@@ -984,7 +982,7 @@
         <span class="n">node_label_cols</span><span class="o">=</span><span class="n">node_label_cols</span><span class="p">,</span>
         <span class="n">edge_source_cols</span><span class="o">=</span><span class="n">edge_source_cols</span><span class="p">,</span>
         <span class="n">edge_target_cols</span><span class="o">=</span><span class="n">edge_target_cols</span><span class="p">,</span>
-        <span class="n">edge_feature_cols</span><span class="o">=</span><span class="n">edge_feature_cols</span><span class="p">,</span>
+        <span class="n">edge_feature_cols</span><span class="o">=</span><span class="n">edge_feature_map</span><span class="p">,</span>
         <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
     <span class="p">)</span>
 

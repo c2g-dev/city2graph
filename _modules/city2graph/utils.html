@@ -378,7 +378,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>  <span class="c1"># needed for default series in split_segments_by_connectors</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span><span class="p">,</span> <span class="n">MultiLineString</span><span class="p">,</span> <span class="n">Polygon</span><span class="p">,</span> <span class="n">Point</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseGeometry</span>
@@ -757,8 +757,10 @@
         <span class="s2">&quot;null&quot;</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">return</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]</span>
+    <span class="c1"># Normalize Python None to JSON null for proper JSON parsing</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="n">level_rules</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;&#39;&quot;</span><span class="p">,</span> <span class="s1">&#39;&quot;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;None&#39;</span><span class="p">,</span> <span class="s1">&#39;null&#39;</span><span class="p">)</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">rules</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">level_rules</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;&#39;&quot;</span><span class="p">,</span> <span class="s1">&#39;&quot;&#39;</span><span class="p">))</span>
+        <span class="n">rules</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;JSON parse failed for level_rules: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]</span>
@@ -1024,12 +1026,17 @@
     <span class="n">valid_ids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">connectors_gdf</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">])</span>
 
     <span class="c1"># Pre-process connectors_info and level_rules for all rows at once</span>
-    <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;connector_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">segments_gdf</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;connectors&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">identify_connector_mask</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;barrier_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">segments_gdf</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;level_rules&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">identify_barrier_mask</span><span class="p">)</span>
-    <span class="p">)</span>
+    <span class="k">if</span> <span class="s2">&quot;connectors&quot;</span> <span class="ow">in</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">conn_series</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;connectors&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">conn_series</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="s2">&quot;&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">),</span> <span class="n">index</span><span class="o">=</span><span class="n">segments_gdf</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;connector_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">conn_series</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">identify_connector_mask</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="s2">&quot;level_rules&quot;</span> <span class="ow">in</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">lvl_series</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;level_rules&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">lvl_series</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="s2">&quot;&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">),</span> <span class="n">index</span><span class="o">=</span><span class="n">segments_gdf</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;barrier_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">lvl_series</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">identify_barrier_mask</span><span class="p">)</span>
 
     <span class="c1"># Prepare data structures</span>
     <span class="n">new_rows_data</span> <span class="o">=</span> <span class="p">[]</span>
@@ -1044,10 +1051,8 @@
         <span class="k">for</span> <span class="n">rows</span> <span class="ow">in</span> <span class="n">batch_results</span><span class="p">:</span>
             <span class="n">new_rows_data</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span>
 
-    <span class="c1"># Create a new GeoDataFrame from all processed rows</span>
-    <span class="n">result_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
-        <span class="n">new_rows_data</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">segments_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">segments_gdf</span><span class="o">.</span><span class="n">crs</span>
-    <span class="p">)</span>
+    <span class="c1"># Create a new GeoDataFrame from all processed rows, include split columns</span>
+    <span class="n">result_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">new_rows_data</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">segments_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
 
     <span class="c1"># Reset the index of the resulting GeoDataFrame</span>
     <span class="k">return</span> <span class="n">result_gdf</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
