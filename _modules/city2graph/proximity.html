@@ -386,63 +386,71 @@
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;knn_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;delaunay_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;gilbert_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;waxman_graph&quot;</span><span class="p">]</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_build_knn_edges</span><span class="p">(</span><span class="n">indices</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_build_knn_edges</span><span class="p">(</span>
+    <span class="n">indices</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Build k-nearest neighbor edges from indices array.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    indices : np.ndarray</span>
 <span class="sd">        Array of neighbor indices for each node.</span>
 <span class="sd">    node_indices : list | None, optional</span>
 <span class="sd">        List mapping array indices to actual node IDs. If None, uses array indices.</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    list[tuple]</span>
 <span class="sd">        List of edge tuples (source, target).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">node_indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">[(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span> 
-                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">neighbors</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span> 
-                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">neighbors</span><span class="p">[</span><span class="mi">1</span><span class="p">:]]</span>  <span class="c1"># Skip self (first neighbor)</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">neighbors</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">neighbors</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+        <span class="p">]</span>  <span class="c1"># Skip self (first neighbor)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">[(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">)</span> 
-                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">neighbors</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span> 
-                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">neighbors</span><span class="p">[</span><span class="mi">1</span><span class="p">:]]</span>  <span class="c1"># Skip self (first neighbor)</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">neighbors</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">neighbors</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+        <span class="p">]</span>  <span class="c1"># Skip self (first neighbor)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_build_delaunay_edges</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">tuple</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Build Delaunay triangulation edges from coordinates.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    coords : np.ndarray</span>
 <span class="sd">        Array of (x, y) coordinates.</span>
 <span class="sd">    node_indices : list</span>
 <span class="sd">        List of node IDs corresponding to coordinates.</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    set[tuple]</span>
 <span class="sd">        Set of unique edge tuples (source, target).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">tri</span> <span class="o">=</span> <span class="n">Delaunay</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">{(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span> 
-            <span class="k">for</span> <span class="n">simplex</span> <span class="ow">in</span> <span class="n">tri</span><span class="o">.</span><span class="n">simplices</span> 
-            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">combinations</span><span class="p">(</span><span class="n">simplex</span><span class="p">,</span> <span class="mi">2</span><span class="p">)}</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="p">(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">simplex</span> <span class="ow">in</span> <span class="n">tri</span><span class="o">.</span><span class="n">simplices</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">combinations</span><span class="p">(</span><span class="n">simplex</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="p">}</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_extract_coords_and_attrs_from_gdf</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_extract_coords_and_attrs_from_gdf</span><span class="p">(</span>
+    <span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Extract centroid coordinates and prepare node attributes from GeoDataFrame.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    gdf : gpd.GeoDataFrame</span>
 <span class="sd">        Input GeoDataFrame with geometry column.</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    tuple[np.ndarray, dict]</span>
@@ -450,34 +458,36 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">centroids</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">centroid</span>
     <span class="n">coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">centroids</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">centroids</span><span class="o">.</span><span class="n">y</span><span class="p">])</span>
-    
+
     <span class="c1"># Vectorized node attributes preparation</span>
     <span class="n">node_attrs</span> <span class="o">=</span> <span class="p">{</span>
         <span class="n">idx</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="n">geom</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">centroid</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">centroid</span><span class="o">.</span><span class="n">y</span><span class="p">)}</span>
         <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">centroid</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">gdf</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="nb">zip</span><span class="p">(</span><span class="n">gdf</span><span class="o">.</span><span class="n">geometry</span><span class="p">,</span> <span class="n">centroids</span><span class="p">))</span>
     <span class="p">}</span>
-    
+
     <span class="k">return</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_attrs</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_init_graph_and_nodes</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_init_graph_and_nodes</span><span class="p">(</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Initialize graph and extract nodes from GeoDataFrame.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Validates input, creates NetworkX graph with CRS, extracts coordinates</span>
 <span class="sd">    and node attributes, then adds nodes to the graph.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    data : gpd.GeoDataFrame</span>
 <span class="sd">        Input GeoDataFrame with geometry column.</span>
-<span class="sd">        </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    tuple[nx.Graph, np.ndarray | None, list | None]</span>
 <span class="sd">        Initialized graph, coordinate array, and node indices.</span>
 <span class="sd">        Returns None values for coords and indices if data is empty.</span>
-<span class="sd">        </span>
+
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    TypeError</span>
@@ -489,22 +499,22 @@
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Input data must be a GeoDataFrame.&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="s2">&quot;geometry&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">data</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">isna</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;GeoDataFrame must contain geometry.&quot;</span><span class="p">)</span>
-    
+
     <span class="c1"># Initialize graph with CRS</span>
     <span class="n">G</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">()</span>
     <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">crs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">G</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;crs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">crs</span>
-    
+
     <span class="c1"># Handle empty data</span>
     <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">G</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
-    
+
     <span class="c1"># Extract coordinates and attributes, add nodes to graph</span>
     <span class="n">coords</span><span class="p">,</span> <span class="n">node_attrs</span> <span class="o">=</span> <span class="n">_extract_coords_and_attrs_from_gdf</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
     <span class="n">node_indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
     <span class="n">G</span><span class="o">.</span><span class="n">add_nodes_from</span><span class="p">(</span><span class="n">node_indices</span><span class="p">)</span>
     <span class="n">nx</span><span class="o">.</span><span class="n">set_node_attributes</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">node_attrs</span><span class="p">)</span>
-    
+
     <span class="k">return</span> <span class="n">G</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span>
 
 
@@ -528,21 +538,21 @@
 <span class="sd">        Node attributes include original data and &#39;pos&#39; coordinates.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
-    
+
     <span class="c1"># Early return for edge cases</span>
     <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">graph</span>
-    
+
     <span class="c1"># Build k-nearest neighbor relationships</span>
     <span class="n">n_neighbors</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>  <span class="c1"># +1 to include self</span>
     <span class="n">nbrs</span> <span class="o">=</span> <span class="n">NearestNeighbors</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="n">n_neighbors</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">)</span>
     <span class="n">nbrs</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
     <span class="n">_</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">nbrs</span><span class="o">.</span><span class="n">kneighbors</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
-    
+
     <span class="c1"># Add edges to graph</span>
     <span class="n">edges</span> <span class="o">=</span> <span class="n">_build_knn_edges</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">)</span>
     <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
-    
+
     <span class="k">return</span> <span class="n">graph</span></div>
 
 
@@ -565,15 +575,15 @@
 <span class="sd">        Node attributes include original data and &#39;pos&#39; coordinates.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
-    
+
     <span class="c1"># Early return for insufficient points</span>
     <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">graph</span>
-    
+
     <span class="c1"># Build Delaunay triangulation edges</span>
     <span class="n">edges</span> <span class="o">=</span> <span class="n">_build_delaunay_edges</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">)</span>
     <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
-    
+
     <span class="k">return</span> <span class="n">graph</span></div>
 
 
@@ -599,24 +609,29 @@
     <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">graph</span>
-    
+
     <span class="c1"># Vectorized distance computation and edge creation</span>
     <span class="n">dists</span> <span class="o">=</span> <span class="n">squareform</span><span class="p">(</span><span class="n">pdist</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>
     <span class="n">edge_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">triu</span><span class="p">(</span><span class="n">dists</span> <span class="o">&lt;=</span> <span class="n">radius</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
     <span class="n">edge_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">edge_mask</span><span class="p">)</span>
-    
+
     <span class="c1"># Convert to node indices without loops</span>
-    <span class="n">edges</span> <span class="o">=</span> <span class="p">[(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">edge_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">edge_indices</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span>
-    
+    <span class="n">edges</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">edge_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">edge_indices</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="p">]</span>
+
     <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
-    <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s1">&#39;radius&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">radius</span>
+    <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;radius&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">radius</span>
     <span class="k">return</span> <span class="n">graph</span></div>
 
 
 
 <div class="viewcode-block" id="waxman_graph">
 <a class="viewcode-back" href="../../api/proximity.html#city2graph.proximity.waxman_graph">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">waxman_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">r0</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">waxman_graph</span><span class="p">(</span>
+    <span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">r0</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate Waxman random geometric graph with $H_{ij} = \beta e^{-d_{ij}/r_0}}$.</span>
 
@@ -639,7 +654,7 @@
     <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">graph</span>
-    
+
     <span class="c1"># Vectorized distance computation and probability calculation</span>
     <span class="n">dists</span> <span class="o">=</span> <span class="n">squareform</span><span class="p">(</span><span class="n">pdist</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>
     <span class="n">probs</span> <span class="o">=</span> <span class="n">beta</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">dists</span> <span class="o">/</span> <span class="n">r0</span><span class="p">)</span>
@@ -652,15 +667,17 @@
     <span class="c1"># Create upper triangular mask for undirected edges</span>
     <span class="n">edge_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">triu</span><span class="p">(</span><span class="n">random_matrix</span> <span class="o">&lt;=</span> <span class="n">probs</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
     <span class="n">edge_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">edge_mask</span><span class="p">)</span>
-    
-    <span class="c1"># Convert to node indices without loops</span>
-    <span class="n">edges</span> <span class="o">=</span> <span class="p">[(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">edge_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">edge_indices</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span>
-    
-    <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
-    <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s1">&#39;beta&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">beta</span>
-    <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s1">&#39;r0&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">r0</span>
-    <span class="k">return</span> <span class="n">graph</span></div>
 
+    <span class="c1"># Convert to node indices without loops</span>
+    <span class="n">edges</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">edge_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">edge_indices</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="p">]</span>
+
+    <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
+    <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;beta&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">beta</span>
+    <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;r0&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">r0</span>
+    <span class="k">return</span> <span class="n">graph</span></div>
 
 </pre></div>
 

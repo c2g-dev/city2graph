@@ -377,15 +377,18 @@
     <span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nn</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">torch_geometric.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">HeteroData</span><span class="p">,</span> <span class="n">Data</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">torch_geometric.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">to_networkx</span> <span class="k">as</span> <span class="n">pyg_to_networkx</span>
+
     <span class="n">TORCH_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="n">TORCH_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
+
     <span class="c1"># Create placeholder classes to prevent import errors</span>
     <span class="k">class</span><span class="w"> </span><span class="nc">HeteroData</span><span class="p">:</span>
         <span class="k">pass</span>
-    
+
     <span class="k">class</span><span class="w"> </span><span class="nc">Data</span><span class="p">:</span>
         <span class="k">pass</span>
+
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
@@ -418,7 +421,9 @@
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_get_device</span><span class="p">(</span><span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s1">&#39;torch.device&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="s1">&#39;torch.device&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_device</span><span class="p">(</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="s2">&quot;torch.device&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Get the appropriate torch device (CUDA if available, otherwise CPU).</span>
 
@@ -446,7 +451,7 @@
             <span class="s2">&quot;Please install them using: poetry install --with torch or &quot;</span>
             <span class="s2">&quot;pip install city2graph[torch]&quot;</span>
         <span class="p">)</span>
-    
+
     <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
@@ -592,8 +597,8 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_create_node_features</span><span class="p">(</span>
     <span class="n">node_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s1">&#39;torch.device&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">&#39;torch.Tensor&#39;</span><span class="p">:</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;torch.Tensor&quot;</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create node feature tensors from attribute columns.</span>
 
@@ -631,8 +636,8 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_create_edge_features</span><span class="p">(</span>
     <span class="n">edge_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s1">&#39;torch.device&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">&#39;torch.Tensor&#39;</span><span class="p">:</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;torch.Tensor&quot;</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create edge feature tensors from attribute columns in edge_gdf.</span>
 
@@ -767,7 +772,7 @@
     <span class="n">edge_source_cols</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">],</span>
     <span class="n">edge_target_cols</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">],</span>
     <span class="n">edge_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]],</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s1">&#39;torch.device&#39;</span><span class="p">]],</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HeteroData</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Build a heterogeneous graph (HeteroData) from node and edge GeoDataFrames.</span>
@@ -918,7 +923,7 @@
     <span class="n">edge_source_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">edge_target_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">edge_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s1">&#39;torch.device&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Data</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create a homogeneous graph Data object from nodes and edges GeoDataFrames.</span>
@@ -948,7 +953,7 @@
 <span class="sd">    -------</span>
 <span class="sd">    torch_geometric.data.Data</span>
 <span class="sd">        A PyTorch Geometric Data graph object.</span>
-<span class="sd">        </span>
+
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ImportError</span>
@@ -960,19 +965,27 @@
             <span class="s2">&quot;Please install them using: poetry install --with torch or &quot;</span>
             <span class="s2">&quot;pip install city2graph[torch]&quot;</span>
         <span class="p">)</span>
-    
+
     <span class="c1"># Preprocess homogeneous graph inputs into dictionaries.</span>
     <span class="c1"># Ensure at least empty edge type entry for homogeneous graphs</span>
     <span class="n">nodes_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">nodes_gdf</span><span class="p">}</span>
     <span class="c1"># Use explicit None check to avoid ambiguous truth of GeoDataFrame</span>
-    <span class="n">edges_dict</span> <span class="o">=</span> <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edges_gdf</span> <span class="k">if</span> <span class="n">edges_gdf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">()}</span>
+    <span class="n">edges_dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edges_gdf</span>
+        <span class="k">if</span> <span class="n">edges_gdf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">()</span>
+    <span class="p">}</span>
     <span class="n">node_id_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">node_id_col</span><span class="p">}</span> <span class="k">if</span> <span class="n">node_id_col</span> <span class="k">else</span> <span class="p">{}</span>
     <span class="n">node_feature_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">node_feature_cols</span><span class="p">}</span> <span class="k">if</span> <span class="n">node_feature_cols</span> <span class="k">else</span> <span class="p">{}</span>
     <span class="n">node_label_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">node_label_cols</span><span class="p">}</span> <span class="k">if</span> <span class="n">node_label_cols</span> <span class="k">else</span> <span class="kc">None</span>
     <span class="n">edge_source_cols</span> <span class="o">=</span> <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edge_source_col</span><span class="p">}</span>
     <span class="n">edge_target_cols</span> <span class="o">=</span> <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edge_target_col</span><span class="p">}</span>
     <span class="c1"># Wrap edge features into dict mapping for builder</span>
-    <span class="n">edge_feature_map</span> <span class="o">=</span> <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edge_feature_cols</span><span class="p">}</span> <span class="k">if</span> <span class="n">edge_feature_cols</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">edge_feature_map</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edge_feature_cols</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">edge_feature_cols</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="kc">None</span>
+    <span class="p">)</span>
 
     <span class="n">hetero_data</span> <span class="o">=</span> <span class="n">_build_graph_data</span><span class="p">(</span>
         <span class="n">nodes</span><span class="o">=</span><span class="n">nodes_dict</span><span class="p">,</span>
@@ -1011,7 +1024,7 @@
     <span class="n">edge_source_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">edge_target_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">edge_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s1">&#39;torch.device&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HeteroData</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create a heterogeneous graph HeteroData object from node and edge dictionaries.</span>
@@ -1041,7 +1054,7 @@
 <span class="sd">    -------</span>
 <span class="sd">    torch_geometric.data.HeteroData</span>
 <span class="sd">        A PyTorch Geometric HeteroData graph object.</span>
-<span class="sd">        </span>
+
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ImportError</span>
@@ -1053,7 +1066,7 @@
             <span class="s2">&quot;Please install them using: poetry install --with torch or &quot;</span>
             <span class="s2">&quot;pip install city2graph[torch]&quot;</span>
         <span class="p">)</span>
-    
+
     <span class="k">if</span> <span class="n">node_id_cols</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">node_id_cols</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">if</span> <span class="n">node_feature_cols</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -1083,11 +1096,11 @@
 <a class="viewcode-back" href="../../api/graph.html#city2graph.graph.from_morphological_network">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">from_morphological_network</span><span class="p">(</span>
     <span class="n">network_output</span><span class="p">:</span> <span class="n">Dict</span><span class="p">,</span>
-    <span class="n">private_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;tess_id&#39;</span><span class="p">,</span>
-    <span class="n">public_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;id&#39;</span><span class="p">,</span>
+    <span class="n">private_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tess_id&quot;</span><span class="p">,</span>
+    <span class="n">public_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span>
     <span class="n">private_node_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">public_node_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s1">&#39;torch.device&#39;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">HeteroData</span><span class="p">,</span> <span class="n">Data</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create a graph representation from the output of create_morphological_network.</span>
@@ -1132,32 +1145,31 @@
             <span class="s2">&quot;Please install them using: poetry install --with torch or &quot;</span>
             <span class="s2">&quot;pip install city2graph[torch]&quot;</span>
         <span class="p">)</span>
-    
+
     <span class="c1"># Validate device</span>
     <span class="n">device</span> <span class="o">=</span> <span class="n">_get_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
-    
+
     <span class="c1"># Extract data from network_output</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">network_output</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;network_output must be a dictionary returned from create_morphological_network&quot;</span><span class="p">)</span>
-    
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;network_output must be a dictionary returned from create_morphological_network&quot;</span>
+        <span class="p">)</span>
+
     <span class="c1"># Extract GeoDataFrames from the network output</span>
-    <span class="n">private_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;tessellations&#39;</span><span class="p">)</span>
-    <span class="n">public_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;segments&#39;</span><span class="p">)</span>
-    <span class="n">private_to_private_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;private_to_private&#39;</span><span class="p">)</span>
-    <span class="n">public_to_public_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;public_to_public&#39;</span><span class="p">)</span>
-    <span class="n">private_to_public_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;private_to_public&#39;</span><span class="p">)</span>
-    
+    <span class="n">private_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tessellations&quot;</span><span class="p">)</span>
+    <span class="n">public_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;segments&quot;</span><span class="p">)</span>
+    <span class="n">private_to_private_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;private_to_private&quot;</span><span class="p">)</span>
+    <span class="n">public_to_public_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;public_to_public&quot;</span><span class="p">)</span>
+    <span class="n">private_to_public_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;private_to_public&quot;</span><span class="p">)</span>
+
     <span class="c1"># Validate that required data exists</span>
     <span class="n">has_private</span> <span class="o">=</span> <span class="n">private_gdf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">private_gdf</span><span class="o">.</span><span class="n">empty</span>
     <span class="n">has_public</span> <span class="o">=</span> <span class="n">public_gdf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">public_gdf</span><span class="o">.</span><span class="n">empty</span>
-    
+
     <span class="c1"># Case 1: We have both private and public nodes - create heterogeneous graph</span>
     <span class="k">if</span> <span class="n">has_private</span> <span class="ow">and</span> <span class="n">has_public</span><span class="p">:</span>
         <span class="c1"># Create nodes dictionary</span>
-        <span class="n">nodes_dict</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;private&quot;</span><span class="p">:</span> <span class="n">private_gdf</span><span class="p">,</span>
-            <span class="s2">&quot;public&quot;</span><span class="p">:</span> <span class="n">public_gdf</span>
-        <span class="p">}</span>
+        <span class="n">nodes_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;private&quot;</span><span class="p">:</span> <span class="n">private_gdf</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">:</span> <span class="n">public_gdf</span><span class="p">}</span>
 
         <span class="c1"># Create edges dictionary with edge type tuples</span>
         <span class="n">edges_dict</span> <span class="o">=</span> <span class="p">{</span>
@@ -1167,10 +1179,7 @@
         <span class="p">}</span>
 
         <span class="c1"># Create node ID columns dictionary</span>
-        <span class="n">node_id_cols</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;private&quot;</span><span class="p">:</span> <span class="n">private_id_col</span><span class="p">,</span>
-            <span class="s2">&quot;public&quot;</span><span class="p">:</span> <span class="n">public_id_col</span>
-        <span class="p">}</span>
+        <span class="n">node_id_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;private&quot;</span><span class="p">:</span> <span class="n">private_id_col</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">:</span> <span class="n">public_id_col</span><span class="p">}</span>
 
         <span class="c1"># Create node feature columns dictionary</span>
         <span class="n">node_feature_cols</span> <span class="o">=</span> <span class="p">{}</span>
@@ -1246,12 +1255,12 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">to_networkx</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Data</span><span class="p">,</span> <span class="n">HeteroData</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Convert PyTorch Geometric Data or HeteroData to a NetworkX graph.</span>
-<span class="sd">    </span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    graph : Union[Data, HeteroData]</span>
 <span class="sd">        The PyTorch Geometric graph to convert</span>
-<span class="sd">    </span>
+
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    nx.Graph</span>
