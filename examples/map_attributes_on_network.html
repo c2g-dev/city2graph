@@ -52,7 +52,6 @@
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
     <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/map_attributes_on_network';</script>
@@ -402,18 +401,18 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">shapely</span><span class="w"> </span><span class="kn">import</span> <span class="n">Point</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">contextily</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">cx</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">city2graph</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">folium</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import numpy as np
+from shapely import Point
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import contextily as cx
+import city2graph
+import folium
 
-<span class="c1"># Configure matplotlib for better visualizations</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;figure.figsize&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;figure.dpi&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">100</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">use</span><span class="p">(</span><span class="s1">&#39;ggplot&#39;</span><span class="p">)</span>
+# Configure matplotlib for better visualizations
+plt.rcParams[&#39;figure.figsize&#39;] = (12, 10)
+plt.rcParams[&#39;figure.dpi&#39;] = 100
+plt.style.use(&#39;ggplot&#39;)
 </pre></div>
 </div>
 </div>
@@ -425,13 +424,13 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">bbox</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="mf">3.090173</span><span class="p">,</span><span class="mf">53.355487</span><span class="p">,</span><span class="o">-</span><span class="mf">2.917138</span><span class="p">,</span><span class="mf">53.465587</span><span class="p">]</span> <span class="c1"># Liverpool city centre</span>
-<span class="n">city2graph</span><span class="o">.</span><span class="n">load_overture_data</span><span class="p">(</span><span class="n">area</span><span class="o">=</span><span class="n">bbox</span><span class="p">,</span>
-                              <span class="n">types</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;segment&quot;</span><span class="p">,</span> <span class="s2">&quot;building&quot;</span><span class="p">,</span> <span class="s2">&quot;connector&quot;</span><span class="p">],</span>
-                              <span class="n">output_dir</span><span class="o">=</span><span class="s2">&quot;.&quot;</span><span class="p">,</span>
-                              <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;liverpool_&quot;</span><span class="p">,</span>
-                              <span class="n">save_to_file</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                              <span class="n">return_data</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>bbox = [-3.090173,53.355487,-2.917138,53.465587] # Liverpool city centre
+city2graph.load_overture_data(area=bbox,
+                              types=[&quot;segment&quot;, &quot;building&quot;, &quot;connector&quot;],
+                              output_dir=&quot;.&quot;,
+                              prefix=&quot;liverpool_&quot;,
+                              save_to_file=True,
+                              return_data=False)
 </pre></div>
 </div>
 </div>
@@ -448,17 +447,17 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Load GeoJSON files</span>
-<span class="n">buildings_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="s2">&quot;liverpool_building.geojson&quot;</span><span class="p">)</span>
-<span class="n">segments_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="s2">&quot;liverpool_segment.geojson&quot;</span><span class="p">)</span>
-<span class="n">connectors_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="s2">&quot;liverpool_connector.geojson&quot;</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Load GeoJSON files
+buildings_gdf = gpd.read_file(&quot;liverpool_building.geojson&quot;)
+segments_gdf = gpd.read_file(&quot;liverpool_segment.geojson&quot;)
+connectors_gdf = gpd.read_file(&quot;liverpool_connector.geojson&quot;)
 
-<span class="c1"># Convert to British National Grid (EPSG:27700)</span>
-<span class="n">buildings_gdf</span> <span class="o">=</span> <span class="n">buildings_gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">27700</span><span class="p">)</span>
-<span class="n">segments_gdf</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">27700</span><span class="p">)</span>
-<span class="n">connectors_gdf</span> <span class="o">=</span> <span class="n">connectors_gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">27700</span><span class="p">)</span>
+# Convert to British National Grid (EPSG:27700)
+buildings_gdf = buildings_gdf.to_crs(epsg=27700)
+segments_gdf = segments_gdf.to_crs(epsg=27700)
+connectors_gdf = connectors_gdf.to_crs(epsg=27700)
 
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loaded </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">buildings_gdf</span><span class="p">)</span><span class="si">}</span><span class="s2"> buildings, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">)</span><span class="si">}</span><span class="s2"> segments, and </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">connectors_gdf</span><span class="p">)</span><span class="si">}</span><span class="s2"> connectors&quot;</span><span class="p">)</span>
+print(f&quot;Loaded {len(buildings_gdf)} buildings, {len(segments_gdf)} segments, and {len(connectors_gdf)} connectors&quot;)
 </pre></div>
 </div>
 </div>
@@ -478,23 +477,23 @@ Loaded 132972 buildings, 37474 segments, and 47367 connectors
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Filter road segments and process them to handle tunnels</span>
-<span class="n">segments_gdf</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="p">[</span><span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;subtype&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;road&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Filter road segments and process them to handle tunnels
+segments_gdf = segments_gdf[segments_gdf[&quot;subtype&quot;] == &quot;road&quot;].copy()
 
-<span class="c1"># Identify tunnels and set their geometry to None</span>
-<span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;barrier_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;level_rules&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">city2graph</span><span class="o">.</span><span class="n">identify_barrier_mask</span><span class="p">)</span>
+# Identify tunnels and set their geometry to None
+segments_gdf[&quot;barrier_mask&quot;] = segments_gdf[&quot;level_rules&quot;].apply(city2graph.identify_barrier_mask)
 
-<span class="c1"># Split segments by connectors</span>
-<span class="n">segments_gdf</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">split_segments_by_connectors</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">,</span> <span class="n">connectors_gdf</span><span class="p">)</span>
+# Split segments by connectors
+segments_gdf = city2graph.split_segments_by_connectors(segments_gdf, connectors_gdf)
 
-<span class="c1"># Filter road segments and process them to handle tunnels</span>
-<span class="n">segments_gdf</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">adjust_segment_connectors</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+# Filter road segments and process them to handle tunnels
+segments_gdf = city2graph.adjust_segment_connectors(segments_gdf, threshold=1.0)
 
-<span class="c1"># Calculate the length of each segment</span>
-<span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;length&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">length</span>
+# Calculate the length of each segment
+segments_gdf[&quot;length&quot;] = segments_gdf.geometry.length
 
-<span class="c1"># Create barrier_geometry column by processing each segment (excluding tunnels)</span>
-<span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;barrier_geometry&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">get_barrier_geometry</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">)</span>
+# Create barrier_geometry column by processing each segment (excluding tunnels)
+segments_gdf[&quot;barrier_geometry&quot;] = city2graph.get_barrier_geometry(segments_gdf)
 </pre></div>
 </div>
 </div>
@@ -511,16 +510,16 @@ Loaded 132972 buildings, 37474 segments, and 47367 connectors
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">center_point</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">([</span><span class="n">Point</span><span class="p">((</span><span class="o">-</span><span class="mf">2.9879004</span><span class="p">,</span> <span class="mf">53.4062724</span><span class="p">))],</span> <span class="n">crs</span><span class="o">=</span><span class="s1">&#39;EPSG:4326&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">27700</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>center_point = gpd.GeoSeries([Point((-2.9879004, 53.4062724))], crs=&#39;EPSG:4326&#39;).to_crs(epsg=27700)
 
-<span class="n">morphological_network</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">morphological_network</span><span class="p">(</span>
-    <span class="n">buildings_gdf</span><span class="o">=</span><span class="n">buildings_gdf</span><span class="p">,</span>
-    <span class="n">segments_gdf</span><span class="o">=</span><span class="n">segments_gdf</span><span class="p">,</span>
-    <span class="n">center_point</span><span class="o">=</span><span class="n">center_point</span><span class="p">,</span>
-    <span class="n">distance</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
-    <span class="n">public_geom_col</span><span class="o">=</span><span class="s1">&#39;barrier_geometry&#39;</span><span class="p">,</span>
-    <span class="n">contiguity</span><span class="o">=</span><span class="s2">&quot;queen&quot;</span>
-    <span class="p">)</span>
+morphological_network = city2graph.morphological_network(
+    buildings_gdf=buildings_gdf,
+    segments_gdf=segments_gdf,
+    center_point=center_point,
+    distance=500,
+    public_geom_col=&#39;barrier_geometry&#39;,
+    contiguity=&quot;queen&quot;
+    )
 </pre></div>
 </div>
 </div>
@@ -539,7 +538,7 @@ Loaded 132972 buildings, 37474 segments, and 47367 connectors
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">morphological_network</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>morphological_network.keys()
 </pre></div>
 </div>
 </div>
@@ -556,54 +555,54 @@ dict_keys([&#39;tessellations&#39;, &#39;segments&#39;, &#39;buildings&#39;, &#3
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Set up the figure with a nice size and background</span>
-<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">14</span><span class="p">,</span> <span class="mi">12</span><span class="p">),</span> <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;#f9f9f9&#39;</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Set up the figure with a nice size and background
+fig, ax = plt.subplots(figsize=(14, 12), facecolor=&#39;#f9f9f9&#39;)
 
-<span class="c1"># Plot central point</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">center_point</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">center_point</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">zorder</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Center Point&#39;</span><span class="p">)</span>
+# Plot central point
+ax.scatter(center_point.x, center_point.y, color=&#39;black&#39;, marker=&#39;*&#39;, s=200, zorder=5, label=&#39;Center Point&#39;)
 
-<span class="c1"># Plot background elements with improved styling</span>
-<span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#ADD8E6&#39;</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;#87CEEB&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
-<span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;buildings&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#e0e0e0&#39;</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;#c0c0c0&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
-<span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;segments&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#404040&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">)</span>
+# Plot background elements with improved styling
+morphological_network[&quot;tessellations&quot;].plot(ax=ax, color=&#39;#ADD8E6&#39;, edgecolor=&#39;#87CEEB&#39;, linewidth=0.2, alpha=0.2)
+morphological_network[&quot;buildings&quot;].plot(ax=ax, color=&#39;#e0e0e0&#39;, edgecolor=&#39;#c0c0c0&#39;, linewidth=0.3, alpha=0.7)
+morphological_network[&quot;segments&quot;].plot(ax=ax, color=&#39;#404040&#39;, linewidth=0.7, alpha=0.6)
 
-<span class="c1"># Plot the three network types with distinctive styles</span>
-<span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;private_to_private&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#B22222&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
-<span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;public_to_public&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#0000FF&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
-<span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;private_to_public&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#7B68EE&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">)</span>
+# Plot the three network types with distinctive styles
+morphological_network[&quot;private_to_private&quot;].plot(ax=ax, color=&#39;#B22222&#39;, linewidth=1.5, alpha=0.7)
+morphological_network[&quot;public_to_public&quot;].plot(ax=ax, color=&#39;#0000FF&#39;, linewidth=1.0, alpha=0.7)
+morphological_network[&quot;private_to_public&quot;].plot(ax=ax, color=&#39;#7B68EE&#39;, linewidth=1.0, alpha=0.7, linestyle=&#39;--&#39;)
 
-<span class="c1"># Add nodes: private nodes from tessellation centroids (red) and public nodes as midpoints of segments (blue)</span>
-<span class="n">private_nodes</span> <span class="o">=</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">centroid</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">private_nodes</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">private_nodes</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">zorder</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Private Spaces&#39;</span><span class="p">)</span>
+# Add nodes: private nodes from tessellation centroids (red) and public nodes as midpoints of segments (blue)
+private_nodes = morphological_network[&quot;tessellations&quot;].centroid
+ax.scatter(private_nodes.x, private_nodes.y, color=&#39;red&#39;, s=20, zorder=10, label=&#39;Private Spaces&#39;)
 
-<span class="n">public_nodes</span> <span class="o">=</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;segments&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">geom</span><span class="p">:</span> <span class="n">geom</span><span class="o">.</span><span class="n">interpolate</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">normalized</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">public_nodes</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">public_nodes</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;blue&#39;</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">zorder</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Public Spaces&#39;</span><span class="p">)</span>
+public_nodes = morphological_network[&quot;segments&quot;].geometry.apply(lambda geom: geom.interpolate(0.5, normalized=True))
+ax.scatter(public_nodes.x, public_nodes.y, color=&#39;blue&#39;, s=20, zorder=10, label=&#39;Public Spaces&#39;)
 
-<span class="c1"># Create a legend with clear labels</span>
-<span class="n">legend_elements</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;None&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Center Point&#39;</span><span class="p">),</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">Rectangle</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#e0e0e0&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Buildings&#39;</span><span class="p">),</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#404040&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Street Segments&#39;</span><span class="p">),</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">Rectangle</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#ADD8E6&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Tessellation Cells&#39;</span><span class="p">),</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;o&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">markerfacecolor</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;None&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Private Nodes&#39;</span><span class="p">),</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;o&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">markerfacecolor</span><span class="o">=</span><span class="s1">&#39;blue&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;None&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Public Nodes&#39;</span><span class="p">),</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Private-to-Private&#39;</span><span class="p">),</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;blue&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Public-to-Public&#39;</span><span class="p">),</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#7B68EE&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Private-to-Public&#39;</span><span class="p">),</span>
-<span class="p">]</span>
+# Create a legend with clear labels
+legend_elements = [
+    plt.Line2D([0], [0], color=&#39;black&#39;, marker=&#39;*&#39;, linestyle=&#39;None&#39;, markersize=10, label=&#39;Center Point&#39;),
+    plt.Rectangle((0, 0), 1, 1, color=&#39;#e0e0e0&#39;, label=&#39;Buildings&#39;),
+    plt.Line2D([0], [0], color=&#39;#404040&#39;, lw=1.5, label=&#39;Street Segments&#39;),
+    plt.Rectangle((0, 0), 1, 1, color=&#39;#ADD8E6&#39;, alpha=0.3, label=&#39;Tessellation Cells&#39;),
+    plt.Line2D([0], [0], marker=&#39;o&#39;, color=&#39;w&#39;, markerfacecolor=&#39;red&#39;, markersize=8, linestyle=&#39;None&#39;, label=&#39;Private Nodes&#39;),
+    plt.Line2D([0], [0], marker=&#39;o&#39;, color=&#39;w&#39;, markerfacecolor=&#39;blue&#39;, markersize=8, linestyle=&#39;None&#39;, label=&#39;Public Nodes&#39;),
+    plt.Line2D([0], [0], color=&#39;red&#39;, lw=1, label=&#39;Private-to-Private&#39;),
+    plt.Line2D([0], [0], color=&#39;blue&#39;, lw=1, label=&#39;Public-to-Public&#39;),
+    plt.Line2D([0], [0], color=&#39;#7B68EE&#39;, lw=1, linestyle=&#39;--&#39;, label=&#39;Private-to-Public&#39;),
+]
 
-<span class="c1"># Position the legend inside the plot (upper right)</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">handles</span><span class="o">=</span><span class="n">legend_elements</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="s1">&#39;upper right&#39;</span><span class="p">,</span>
-          <span class="n">frameon</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span> <span class="n">framealpha</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+# Position the legend inside the plot (upper right)
+ax.legend(handles=legend_elements, loc=&#39;upper right&#39;,
+          frameon=True, facecolor=&#39;white&#39;, framealpha=0.9, fontsize=12)
 
-<span class="c1"># Add title and remove axes</span>
-<span class="n">ax</span><span class="o">.</span><span class="n">set_axis_off</span><span class="p">()</span>
+# Add title and remove axes
+ax.set_axis_off()
 
-<span class="c1"># Add basemap from Stamen Terrain below everything else</span>
-<span class="n">cx</span><span class="o">.</span><span class="n">add_basemap</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="s1">&#39;EPSG:27700&#39;</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">cx</span><span class="o">.</span><span class="n">providers</span><span class="o">.</span><span class="n">CartoDB</span><span class="o">.</span><span class="n">Positron</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+# Add basemap from Stamen Terrain below everything else
+cx.add_basemap(ax, crs=&#39;EPSG:27700&#39;, source=cx.providers.CartoDB.Positron, alpha=1)
 
-<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+plt.tight_layout()
+plt.show()
 </pre></div>
 </div>
 </div>
@@ -620,126 +619,126 @@ dict_keys([&#39;tessellations&#39;, &#39;segments&#39;, &#39;buildings&#39;, &#3
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">add_gdf_to_map</span><span class="p">(</span><span class="n">gdf</span><span class="p">,</span> <span class="n">map_obj</span><span class="p">,</span> <span class="n">style_function</span><span class="p">,</span> <span class="n">tooltip</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">layer_name</span><span class="o">=</span><span class="s1">&#39;Layer&#39;</span><span class="p">):</span>
-    <span class="c1"># Create a copy and drop any problematic columns (non-JSON serializable)</span>
-    <span class="n">gdf_copy</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-    <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;barrier_geometry&#39;</span><span class="p">,</span> <span class="s1">&#39;_original_geometry&#39;</span><span class="p">]:</span>
-        <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">gdf_copy</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
-            <span class="n">gdf_copy</span> <span class="o">=</span> <span class="n">gdf_copy</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="n">col</span><span class="p">])</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>def add_gdf_to_map(gdf, map_obj, style_function, tooltip=None, layer_name=&#39;Layer&#39;):
+    # Create a copy and drop any problematic columns (non-JSON serializable)
+    gdf_copy = gdf.copy()
+    for col in [&#39;barrier_geometry&#39;, &#39;_original_geometry&#39;]:
+        if col in gdf_copy.columns:
+            gdf_copy = gdf_copy.drop(columns=[col])
 
-    <span class="c1"># Add the GeoJSON layer</span>
-    <span class="n">folium</span><span class="o">.</span><span class="n">GeoJson</span><span class="p">(</span>
-        <span class="n">gdf_copy</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">4326</span><span class="p">),</span>
-        <span class="n">name</span><span class="o">=</span><span class="n">layer_name</span><span class="p">,</span>
-        <span class="n">style_function</span><span class="o">=</span><span class="n">style_function</span><span class="p">,</span>
-        <span class="n">tooltip</span><span class="o">=</span><span class="n">tooltip</span>
-    <span class="p">)</span><span class="o">.</span><span class="n">add_to</span><span class="p">(</span><span class="n">map_obj</span><span class="p">)</span>
+    # Add the GeoJSON layer
+    folium.GeoJson(
+        gdf_copy.to_crs(epsg=4326),
+        name=layer_name,
+        style_function=style_function,
+        tooltip=tooltip
+    ).add_to(map_obj)
 
-<span class="k">def</span><span class="w"> </span><span class="nf">add_endpoints_from_lines</span><span class="p">(</span><span class="n">gdf</span><span class="p">,</span> <span class="n">map_obj</span><span class="p">,</span> <span class="n">color</span><span class="p">):</span>
-    <span class="c1"># For each linestring, mark its start and end with CircleMarkers</span>
-    <span class="k">for</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">4326</span><span class="p">)</span><span class="o">.</span><span class="n">geometry</span><span class="p">:</span>
-        <span class="n">coords</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">geom</span><span class="o">.</span><span class="n">coords</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">coord</span> <span class="ow">in</span> <span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coords</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]):</span>
-            <span class="n">folium</span><span class="o">.</span><span class="n">CircleMarker</span><span class="p">(</span>
-                <span class="n">location</span><span class="o">=</span><span class="p">[</span><span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span>
-                <span class="n">radius</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
-                <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span>
-                <span class="n">fill</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">fill_color</span><span class="o">=</span><span class="n">color</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">add_to</span><span class="p">(</span><span class="n">map_obj</span><span class="p">)</span>
+def add_endpoints_from_lines(gdf, map_obj, color):
+    # For each linestring, mark its start and end with CircleMarkers
+    for geom in gdf.to_crs(epsg=4326).geometry:
+        coords = list(geom.coords)
+        for coord in (coords[0], coords[-1]):
+            folium.CircleMarker(
+                location=[coord[1], coord[0]],
+                radius=3,
+                color=color,
+                fill=True,
+                fill_color=color
+            ).add_to(map_obj)
 
-<span class="c1"># Convert the study area center to EPSG:4326 once</span>
-<span class="n">center_point_4326</span> <span class="o">=</span> <span class="n">center_point</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">4326</span><span class="p">)</span>
-<span class="n">center_lat</span> <span class="o">=</span> <span class="n">center_point_4326</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">y</span>
-<span class="n">center_lon</span> <span class="o">=</span> <span class="n">center_point_4326</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">x</span>
+# Convert the study area center to EPSG:4326 once
+center_point_4326 = center_point.to_crs(epsg=4326)
+center_lat = center_point_4326.geometry.iloc[0].y
+center_lon = center_point_4326.geometry.iloc[0].x
 
-<span class="c1"># Create the base map</span>
-<span class="n">m</span> <span class="o">=</span> <span class="n">folium</span><span class="o">.</span><span class="n">Map</span><span class="p">(</span>
-    <span class="n">location</span><span class="o">=</span><span class="p">[</span><span class="n">center_lat</span><span class="p">,</span> <span class="n">center_lon</span><span class="p">],</span>
-    <span class="n">zoom_start</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span>
-    <span class="n">tiles</span><span class="o">=</span><span class="s1">&#39;https://</span><span class="si">{s}</span><span class="s1">.basemaps.cartocdn.com/light_all/</span><span class="si">{z}</span><span class="s1">/</span><span class="si">{x}</span><span class="s1">/</span><span class="si">{y}{r}</span><span class="s1">.png&#39;</span><span class="p">,</span>
-    <span class="n">attr</span><span class="o">=</span><span class="s1">&#39;&amp;copy; &lt;a href=&quot;https://www.openstreetmap.org/copyright&quot;&gt;OpenStreetMap&lt;/a&gt; contributors &amp;copy; &lt;a href=&quot;https://carto.com/attributions&quot;&gt;CARTO&lt;/a&gt;&#39;</span>
-<span class="p">)</span>
+# Create the base map
+m = folium.Map(
+    location=[center_lat, center_lon],
+    zoom_start=15,
+    tiles=&#39;https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png&#39;,
+    attr=&#39;&amp;copy; &lt;a href=&quot;https://www.openstreetmap.org/copyright&quot;&gt;OpenStreetMap&lt;/a&gt; contributors &amp;copy; &lt;a href=&quot;https://carto.com/attributions&quot;&gt;CARTO&lt;/a&gt;&#39;
+)
 
-<span class="c1"># Configuration for layer additions from morphological_network</span>
-<span class="n">layers_config</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="p">{</span>
-        <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;buildings&quot;</span><span class="p">],</span>
-        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Buildings&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;style&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;fillColor&#39;</span><span class="p">:</span> <span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="s1">&#39;color&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;fillOpacity&#39;</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">}</span>
-    <span class="p">},</span>
-    <span class="p">{</span>
-        <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;segments&quot;</span><span class="p">],</span>
-        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Street Segments&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;style&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;color&#39;</span><span class="p">:</span> <span class="s1">&#39;blue&#39;</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;opacity&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
-        <span class="s1">&#39;tooltip&#39;</span><span class="p">:</span> <span class="n">folium</span><span class="o">.</span><span class="n">GeoJsonTooltip</span><span class="p">(</span>
-            <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">,</span> <span class="s1">&#39;class&#39;</span><span class="p">,</span> <span class="s1">&#39;subtype&#39;</span><span class="p">,</span> <span class="s1">&#39;length&#39;</span><span class="p">],</span>
-            <span class="n">aliases</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;ID:&#39;</span><span class="p">,</span> <span class="s1">&#39;Road Class:&#39;</span><span class="p">,</span> <span class="s1">&#39;Subtype:&#39;</span><span class="p">,</span> <span class="s1">&#39;Length (m):&#39;</span><span class="p">],</span>
-            <span class="n">localize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">sticky</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">labels</span><span class="o">=</span><span class="kc">True</span>
-        <span class="p">)</span>
-    <span class="p">},</span>
-    <span class="p">{</span>
-        <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">],</span>
-        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Tessellation&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;style&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;fillColor&#39;</span><span class="p">:</span> <span class="s1">&#39;#ff0000&#39;</span><span class="p">,</span> <span class="s1">&#39;color&#39;</span><span class="p">:</span> <span class="s1">&#39;#ff0000&#39;</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;fillOpacity&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
-        <span class="s1">&#39;tooltip&#39;</span><span class="p">:</span> <span class="n">folium</span><span class="o">.</span><span class="n">GeoJsonTooltip</span><span class="p">(</span>
-            <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;tess_id&#39;</span><span class="p">,</span> <span class="s1">&#39;enclosure_index&#39;</span><span class="p">],</span>
-            <span class="n">aliases</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;Tessellation ID:&#39;</span><span class="p">,</span> <span class="s1">&#39;Enclosure Index:&#39;</span><span class="p">],</span>
-            <span class="n">localize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">sticky</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">labels</span><span class="o">=</span><span class="kc">True</span>
-        <span class="p">)</span>
-    <span class="p">},</span>
-    <span class="p">{</span>
-        <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;private_to_private&quot;</span><span class="p">],</span>
-        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Private-to-Private&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;style&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;color&#39;</span><span class="p">:</span> <span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;opacity&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;dashArray&#39;</span><span class="p">:</span> <span class="s1">&#39;5,5&#39;</span><span class="p">},</span>
-        <span class="s1">&#39;tooltip&#39;</span><span class="p">:</span> <span class="n">folium</span><span class="o">.</span><span class="n">GeoJsonTooltip</span><span class="p">(</span>
-            <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;from_private_id&#39;</span><span class="p">,</span> <span class="s1">&#39;to_private_id&#39;</span><span class="p">],</span>
-            <span class="n">aliases</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;From:&#39;</span><span class="p">,</span> <span class="s1">&#39;To:&#39;</span><span class="p">],</span>
-            <span class="n">localize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">sticky</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">labels</span><span class="o">=</span><span class="kc">True</span>
-        <span class="p">)</span>
-    <span class="p">},</span>
-    <span class="p">{</span>
-        <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;public_to_public&quot;</span><span class="p">],</span>
-        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Public-to-Public&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;style&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;color&#39;</span><span class="p">:</span> <span class="s1">&#39;#0000FF&#39;</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;opacity&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;dashArray&#39;</span><span class="p">:</span> <span class="s1">&#39;5,5&#39;</span><span class="p">},</span>
-        <span class="s1">&#39;tooltip&#39;</span><span class="p">:</span> <span class="n">folium</span><span class="o">.</span><span class="n">GeoJsonTooltip</span><span class="p">(</span>
-            <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;from_public_id&#39;</span><span class="p">,</span> <span class="s1">&#39;to_public_id&#39;</span><span class="p">],</span>
-            <span class="n">aliases</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;From:&#39;</span><span class="p">,</span> <span class="s1">&#39;To:&#39;</span><span class="p">],</span>
-            <span class="n">localize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">sticky</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">labels</span><span class="o">=</span><span class="kc">True</span>
-        <span class="p">)</span>
-    <span class="p">},</span>
-    <span class="p">{</span>
-        <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;private_to_public&quot;</span><span class="p">],</span>
-        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Private-to-Public&#39;</span><span class="p">,</span>
-        <span class="s1">&#39;style&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;color&#39;</span><span class="p">:</span> <span class="s1">&#39;#7B68EE&#39;</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s1">&#39;opacity&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s1">&#39;dashArray&#39;</span><span class="p">:</span> <span class="s1">&#39;5,5&#39;</span><span class="p">},</span>
-        <span class="s1">&#39;tooltip&#39;</span><span class="p">:</span> <span class="n">folium</span><span class="o">.</span><span class="n">GeoJsonTooltip</span><span class="p">(</span>
-            <span class="n">fields</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;private_id&#39;</span><span class="p">,</span> <span class="s1">&#39;public_id&#39;</span><span class="p">],</span>
-            <span class="n">aliases</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;Private Node:&#39;</span><span class="p">,</span> <span class="s1">&#39;Public Node:&#39;</span><span class="p">],</span>
-            <span class="n">localize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">sticky</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">labels</span><span class="o">=</span><span class="kc">True</span>
-        <span class="p">)</span>
-    <span class="p">}</span>
-<span class="p">]</span>
+# Configuration for layer additions from morphological_network
+layers_config = [
+    {
+        &#39;data&#39;: morphological_network[&quot;buildings&quot;],
+        &#39;name&#39;: &#39;Buildings&#39;,
+        &#39;style&#39;: lambda x: {&#39;fillColor&#39;: &#39;black&#39;, &#39;color&#39;: None, &#39;weight&#39;: 0, &#39;fillOpacity&#39;: 0.1}
+    },
+    {
+        &#39;data&#39;: morphological_network[&quot;segments&quot;],
+        &#39;name&#39;: &#39;Street Segments&#39;,
+        &#39;style&#39;: lambda x: {&#39;color&#39;: &#39;blue&#39;, &#39;weight&#39;: 2, &#39;opacity&#39;: 1},
+        &#39;tooltip&#39;: folium.GeoJsonTooltip(
+            fields=[&#39;id&#39;, &#39;class&#39;, &#39;subtype&#39;, &#39;length&#39;],
+            aliases=[&#39;ID:&#39;, &#39;Road Class:&#39;, &#39;Subtype:&#39;, &#39;Length (m):&#39;],
+            localize=True,
+            sticky=False,
+            labels=True
+        )
+    },
+    {
+        &#39;data&#39;: morphological_network[&quot;tessellations&quot;],
+        &#39;name&#39;: &#39;Tessellation&#39;,
+        &#39;style&#39;: lambda x: {&#39;fillColor&#39;: &#39;#ff0000&#39;, &#39;color&#39;: &#39;#ff0000&#39;, &#39;weight&#39;: 1, &#39;fillOpacity&#39;: 0},
+        &#39;tooltip&#39;: folium.GeoJsonTooltip(
+            fields=[&#39;tess_id&#39;, &#39;enclosure_index&#39;],
+            aliases=[&#39;Tessellation ID:&#39;, &#39;Enclosure Index:&#39;],
+            localize=True,
+            sticky=False,
+            labels=True
+        )
+    },
+    {
+        &#39;data&#39;: morphological_network[&quot;private_to_private&quot;],
+        &#39;name&#39;: &#39;Private-to-Private&#39;,
+        &#39;style&#39;: lambda x: {&#39;color&#39;: &#39;red&#39;, &#39;weight&#39;: 2, &#39;opacity&#39;: 1, &#39;dashArray&#39;: &#39;5,5&#39;},
+        &#39;tooltip&#39;: folium.GeoJsonTooltip(
+            fields=[&#39;from_private_id&#39;, &#39;to_private_id&#39;],
+            aliases=[&#39;From:&#39;, &#39;To:&#39;],
+            localize=True,
+            sticky=False,
+            labels=True
+        )
+    },
+    {
+        &#39;data&#39;: morphological_network[&quot;public_to_public&quot;],
+        &#39;name&#39;: &#39;Public-to-Public&#39;,
+        &#39;style&#39;: lambda x: {&#39;color&#39;: &#39;#0000FF&#39;, &#39;weight&#39;: 2, &#39;opacity&#39;: 1, &#39;dashArray&#39;: &#39;5,5&#39;},
+        &#39;tooltip&#39;: folium.GeoJsonTooltip(
+            fields=[&#39;from_public_id&#39;, &#39;to_public_id&#39;],
+            aliases=[&#39;From:&#39;, &#39;To:&#39;],
+            localize=True,
+            sticky=False,
+            labels=True
+        )
+    },
+    {
+        &#39;data&#39;: morphological_network[&quot;private_to_public&quot;],
+        &#39;name&#39;: &#39;Private-to-Public&#39;,
+        &#39;style&#39;: lambda x: {&#39;color&#39;: &#39;#7B68EE&#39;, &#39;weight&#39;: 2, &#39;opacity&#39;: 1, &#39;dashArray&#39;: &#39;5,5&#39;},
+        &#39;tooltip&#39;: folium.GeoJsonTooltip(
+            fields=[&#39;private_id&#39;, &#39;public_id&#39;],
+            aliases=[&#39;Private Node:&#39;, &#39;Public Node:&#39;],
+            localize=True,
+            sticky=False,
+            labels=True
+        )
+    }
+]
 
-<span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="n">layers_config</span><span class="p">:</span>
-    <span class="n">add_gdf_to_map</span><span class="p">(</span><span class="n">layer</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">],</span> <span class="n">m</span><span class="p">,</span> <span class="n">layer</span><span class="p">[</span><span class="s1">&#39;style&#39;</span><span class="p">],</span> <span class="n">tooltip</span><span class="o">=</span><span class="n">layer</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;tooltip&#39;</span><span class="p">),</span> <span class="n">layer_name</span><span class="o">=</span><span class="n">layer</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">])</span>
+for layer in layers_config:
+    add_gdf_to_map(layer[&#39;data&#39;], m, layer[&#39;style&#39;], tooltip=layer.get(&#39;tooltip&#39;), layer_name=layer[&#39;name&#39;])
 
-<span class="c1"># Add endpoints for connection layers</span>
-<span class="n">add_endpoints_from_lines</span><span class="p">(</span><span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;public_to_public&quot;</span><span class="p">],</span> <span class="n">m</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;#0000FF&#39;</span><span class="p">)</span>
-<span class="n">add_endpoints_from_lines</span><span class="p">(</span><span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;private_to_private&quot;</span><span class="p">],</span> <span class="n">m</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">)</span>
+# Add endpoints for connection layers
+add_endpoints_from_lines(morphological_network[&quot;public_to_public&quot;], m, color=&#39;#0000FF&#39;)
+add_endpoints_from_lines(morphological_network[&quot;private_to_private&quot;], m, color=&#39;red&#39;)
 
-<span class="c1"># Add layer control and display the map</span>
-<span class="n">folium</span><span class="o">.</span><span class="n">LayerControl</span><span class="p">()</span><span class="o">.</span><span class="n">add_to</span><span class="p">(</span><span class="n">m</span><span class="p">)</span>
-<span class="n">m</span>
+# Add layer control and display the map
+folium.LayerControl().add_to(m)
+m
 </pre></div>
 </div>
 </div>
@@ -752,17 +751,17 @@ dict_keys([&#39;tessellations&#39;, &#39;segments&#39;, &#39;buildings&#39;, &#3
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Import PyTorch and PyTorch Geometric</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">torch_geometric</span>
-    <span class="n">HAS_TORCH_GEOMETRIC</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;PyTorch Geometric successfully imported&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;PyTorch version: </span><span class="si">{</span><span class="n">torch</span><span class="o">.</span><span class="n">__version__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;PyTorch Geometric version: </span><span class="si">{</span><span class="n">torch_geometric</span><span class="o">.</span><span class="n">__version__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;PyTorch Geometric not installed. Graph functionality will be limited.&quot;</span><span class="p">)</span>
-    <span class="n">HAS_TORCH_GEOMETRIC</span> <span class="o">=</span> <span class="kc">False</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Import PyTorch and PyTorch Geometric
+import torch
+try:
+    import torch_geometric
+    HAS_TORCH_GEOMETRIC = True
+    print(&quot;PyTorch Geometric successfully imported&quot;)
+    print(f&quot;PyTorch version: {torch.__version__}&quot;)
+    print(f&quot;PyTorch Geometric version: {torch_geometric.__version__}&quot;)
+except ImportError:
+    print(&quot;PyTorch Geometric not installed. Graph functionality will be limited.&quot;)
+    HAS_TORCH_GEOMETRIC = False
 </pre></div>
 </div>
 </div>
@@ -783,10 +782,10 @@ PyTorch Geometric version: 2.6.1
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Import liverpool_place.geojson</span>
-<span class="n">liverpool_place_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="s2">&quot;liverpool_place.geojson&quot;</span><span class="p">)</span>
-<span class="c1"># Convert to EPSG:27700</span>
-<span class="n">liverpool_place_gdf</span> <span class="o">=</span> <span class="n">liverpool_place_gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">27700</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Import liverpool_place.geojson
+liverpool_place_gdf = gpd.read_file(&quot;liverpool_place.geojson&quot;)
+# Convert to EPSG:27700
+liverpool_place_gdf = liverpool_place_gdf.to_crs(epsg=27700)
 </pre></div>
 </div>
 </div>
@@ -806,20 +805,20 @@ WARNING:pyogrio._io:Skipping field phones: unsupported OGR type: 5
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[32]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Import liverpool_land.geojson</span>
-<span class="n">liverpool_land_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="s2">&quot;liverpool_land.geojson&quot;</span><span class="p">)</span>
-<span class="c1"># Convert to EPSG:27700</span>
-<span class="n">liverpool_land_gdf</span> <span class="o">=</span> <span class="n">liverpool_land_gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">27700</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Import liverpool_land.geojson
+liverpool_land_gdf = gpd.read_file(&quot;liverpool_land.geojson&quot;)
+# Convert to EPSG:27700
+liverpool_land_gdf = liverpool_land_gdf.to_crs(epsg=27700)
 
-<span class="c1"># Import liverpool_land_use.geojson</span>
-<span class="n">liverpool_land_use_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="s2">&quot;liverpool_land_use.geojson&quot;</span><span class="p">)</span>
-<span class="c1"># Convert to EPSG:27700</span>
-<span class="n">liverpool_land_use_gdf</span> <span class="o">=</span> <span class="n">liverpool_land_use_gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">27700</span><span class="p">)</span>
+# Import liverpool_land_use.geojson
+liverpool_land_use_gdf = gpd.read_file(&quot;liverpool_land_use.geojson&quot;)
+# Convert to EPSG:27700
+liverpool_land_use_gdf = liverpool_land_use_gdf.to_crs(epsg=27700)
 
-<span class="c1"># Import liverpool_land_cover.geojson</span>
-<span class="n">liverpool_land_cover_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="s2">&quot;liverpool_land_cover.geojson&quot;</span><span class="p">)</span>
-<span class="c1"># Convert to EPSG:27700</span>
-<span class="n">liverpool_land_cover_gdf</span> <span class="o">=</span> <span class="n">liverpool_land_cover_gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">27700</span><span class="p">)</span>
+# Import liverpool_land_cover.geojson
+liverpool_land_cover_gdf = gpd.read_file(&quot;liverpool_land_cover.geojson&quot;)
+# Convert to EPSG:27700
+liverpool_land_cover_gdf = liverpool_land_cover_gdf.to_crs(epsg=27700)
 </pre></div>
 </div>
 </div>
@@ -827,7 +826,7 @@ WARNING:pyogrio._io:Skipping field phones: unsupported OGR type: 5
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[35]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">liverpool_land_cover_gdf</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>liverpool_land_cover_gdf
 </pre></div>
 </div>
 </div>
@@ -988,41 +987,41 @@ WARNING:pyogrio._io:Skipping field phones: unsupported OGR type: 5
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import json
 
-<span class="c1"># Function to parse the categories JSON string</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">extract_categories</span><span class="p">(</span><span class="n">cat_str</span><span class="p">):</span>
-    <span class="k">if</span> <span class="n">cat_str</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;primary&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;alternate&quot;</span><span class="p">:</span> <span class="p">[]}</span>
+# Function to parse the categories JSON string
+def extract_categories(cat_str):
+    if cat_str is None:
+        return {&quot;primary&quot;: None, &quot;alternate&quot;: []}
 
-    <span class="c1"># Try parsing the JSON</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">cat_str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;&#39;&quot;</span><span class="p">,</span> <span class="s1">&#39;&quot;&#39;</span><span class="p">))</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cat_str</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">cat_str</span>
-    <span class="k">except</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;primary&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;alternate&quot;</span><span class="p">:</span> <span class="p">[]}</span>
+    # Try parsing the JSON
+    try:
+        return json.loads(cat_str.replace(&quot;&#39;&quot;, &#39;&quot;&#39;)) if isinstance(cat_str, str) else cat_str
+    except:
+        return {&quot;primary&quot;: None, &quot;alternate&quot;: []}
 
-<span class="c1"># Apply to the dataframe</span>
-<span class="n">liverpool_place_gdf</span><span class="p">[</span><span class="s1">&#39;categories_parsed&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">liverpool_place_gdf</span><span class="p">[</span><span class="s1">&#39;categories&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">extract_categories</span><span class="p">)</span>
+# Apply to the dataframe
+liverpool_place_gdf[&#39;categories_parsed&#39;] = liverpool_place_gdf[&#39;categories&#39;].apply(extract_categories)
 
-<span class="c1"># Extract primary category and alternate categories to separate columns</span>
-<span class="n">liverpool_place_gdf</span><span class="p">[</span><span class="s1">&#39;primary_category&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">liverpool_place_gdf</span><span class="p">[</span><span class="s1">&#39;categories_parsed&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-    <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;primary&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="n">x</span> <span class="k">else</span> <span class="kc">None</span>
-<span class="p">)</span>
-<span class="n">liverpool_place_gdf</span><span class="p">[</span><span class="s1">&#39;alternate_categories&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">liverpool_place_gdf</span><span class="p">[</span><span class="s1">&#39;categories_parsed&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-    <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;alternate&#39;</span><span class="p">,</span> <span class="p">[])</span> <span class="k">if</span> <span class="n">x</span> <span class="k">else</span> <span class="p">[]</span>
-<span class="p">)</span>
+# Extract primary category and alternate categories to separate columns
+liverpool_place_gdf[&#39;primary_category&#39;] = liverpool_place_gdf[&#39;categories_parsed&#39;].apply(
+    lambda x: x.get(&#39;primary&#39;) if x else None
+)
+liverpool_place_gdf[&#39;alternate_categories&#39;] = liverpool_place_gdf[&#39;categories_parsed&#39;].apply(
+    lambda x: x.get(&#39;alternate&#39;, []) if x else []
+)
 
-<span class="c1"># Display the distribution of primary categories</span>
-<span class="n">primary_category_counts</span> <span class="o">=</span> <span class="n">liverpool_place_gdf</span><span class="p">[</span><span class="s1">&#39;primary_category&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">()</span>
+# Display the distribution of primary categories
+primary_category_counts = liverpool_place_gdf[&#39;primary_category&#39;].value_counts()
 
-<span class="c1"># Create a plot of the category distribution</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
-<span class="n">primary_category_counts</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">15</span><span class="p">)</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s1">&#39;barh&#39;</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Top 15 Place Categories in Liverpool&#39;</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Count&#39;</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Category&#39;</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+# Create a plot of the category distribution
+plt.figure(figsize=(12, 8))
+primary_category_counts.head(15).plot(kind=&#39;barh&#39;)
+plt.title(&#39;Top 15 Place Categories in Liverpool&#39;)
+plt.xlabel(&#39;Count&#39;)
+plt.ylabel(&#39;Category&#39;)
+plt.tight_layout()
+plt.show()
 </pre></div>
 </div>
 </div>
@@ -1037,7 +1036,7 @@ WARNING:pyogrio._io:Skipping field phones: unsupported OGR type: 5
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">liverpool_place_gdf</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>liverpool_place_gdf
 </pre></div>
 </div>
 </div>
@@ -1253,7 +1252,7 @@ WARNING:pyogrio._io:Skipping field phones: unsupported OGR type: 5
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">liverpool_place_gdf</span><span class="p">[</span><span class="s2">&quot;primary_category&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>liverpool_place_gdf[&quot;primary_category&quot;].unique()
 </pre></div>
 </div>
 </div>
@@ -1491,13 +1490,13 @@ array([&#39;museum&#39;, &#39;topic_concert_venue&#39;, None, &#39;cinema&#39;, 
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Compute spatial features for tessellation cells</span>
-<span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">][</span><span class="s1">&#39;area&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">area</span>
-<span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">][</span><span class="s1">&#39;perimeter&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">length</span>
-<span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">][</span><span class="s1">&#39;compactness&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">4</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">][</span><span class="s1">&#39;area&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">][</span><span class="s1">&#39;perimeter&#39;</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Compute spatial features for tessellation cells
+morphological_network[&quot;tessellations&quot;][&#39;area&#39;] = morphological_network[&quot;tessellations&quot;].geometry.area
+morphological_network[&quot;tessellations&quot;][&#39;perimeter&#39;] = morphological_network[&quot;tessellations&quot;].geometry.length
+morphological_network[&quot;tessellations&quot;][&#39;compactness&#39;] = 4 * np.pi * morphological_network[&quot;tessellations&quot;][&#39;area&#39;] / (morphological_network[&quot;tessellations&quot;][&#39;perimeter&#39;] ** 2)
 
-<span class="c1"># Show the feature distributions</span>
-<span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">][[</span><span class="s1">&#39;area&#39;</span><span class="p">,</span> <span class="s1">&#39;perimeter&#39;</span><span class="p">,</span> <span class="s1">&#39;compactness&#39;</span><span class="p">]]</span><span class="o">.</span><span class="n">describe</span><span class="p">()</span>
+# Show the feature distributions
+morphological_network[&quot;tessellations&quot;][[&#39;area&#39;, &#39;perimeter&#39;, &#39;compactness&#39;]].describe()
 </pre></div>
 </div>
 </div>
@@ -1585,25 +1584,25 @@ array([&#39;museum&#39;, &#39;topic_concert_venue&#39;, None, &#39;cinema&#39;, 
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[22]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">HAS_TORCH_GEOMETRIC</span><span class="p">:</span>
-    <span class="c1"># Create homogeneous graph of private spaces</span>
-    <span class="n">private_graph</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">homogeneous_graph</span><span class="p">(</span>
-        <span class="n">nodes_gdf</span><span class="o">=</span><span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">],</span>
-        <span class="n">edges_gdf</span><span class="o">=</span><span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;private_to_private&quot;</span><span class="p">],</span>
-        <span class="n">node_id_col</span><span class="o">=</span><span class="s1">&#39;tess_id&#39;</span><span class="p">,</span>
-        <span class="n">node_feature_cols</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;area&#39;</span><span class="p">,</span> <span class="s1">&#39;perimeter&#39;</span><span class="p">,</span> <span class="s1">&#39;compactness&#39;</span><span class="p">],</span>
-        <span class="n">edge_source_col</span><span class="o">=</span><span class="s1">&#39;from_private_id&#39;</span><span class="p">,</span>
-        <span class="n">edge_target_col</span><span class="o">=</span><span class="s1">&#39;to_private_id&#39;</span><span class="p">,</span>
-    <span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>if HAS_TORCH_GEOMETRIC:
+    # Create homogeneous graph of private spaces
+    private_graph = city2graph.homogeneous_graph(
+        nodes_gdf=morphological_network[&quot;tessellations&quot;],
+        edges_gdf=morphological_network[&quot;private_to_private&quot;],
+        node_id_col=&#39;tess_id&#39;,
+        node_feature_cols=[&#39;area&#39;, &#39;perimeter&#39;, &#39;compactness&#39;],
+        edge_source_col=&#39;from_private_id&#39;,
+        edge_target_col=&#39;to_private_id&#39;,
+    )
 
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Homogeneous Graph of Private Spaces:&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number of nodes: </span><span class="si">{</span><span class="n">private_graph</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number of node features: </span><span class="si">{</span><span class="n">private_graph</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number of edges: </span><span class="si">{</span><span class="n">private_graph</span><span class="o">.</span><span class="n">edge_index</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    print(&quot;Homogeneous Graph of Private Spaces:&quot;)
+    print(f&quot;Number of nodes: {private_graph.x.size(0)}&quot;)
+    print(f&quot;Number of node features: {private_graph.x.size(1)}&quot;)
+    print(f&quot;Number of edges: {private_graph.edge_index.size(1)}&quot;)
 
-    <span class="c1"># Display the graph object</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Graph structure:&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">private_graph</span><span class="p">)</span>
+    # Display the graph object
+    print(&quot;\nGraph structure:&quot;)
+    print(private_graph)
 </pre></div>
 </div>
 </div>
@@ -1629,11 +1628,11 @@ Data(x=[1965, 3], edge_index=[2, 2107], edge_attr=[2107, 0], pos=[1965, 2], crs=
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[23]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Compute features for public spaces (street segments)</span>
-<span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;segments&quot;</span><span class="p">][</span><span class="s1">&#39;length&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;segments&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">length</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Compute features for public spaces (street segments)
+morphological_network[&quot;segments&quot;][&#39;length&#39;] = morphological_network[&quot;segments&quot;].geometry.length
 
-<span class="c1"># Show the feature distributions</span>
-<span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;segments&quot;</span><span class="p">][[</span><span class="s1">&#39;length&#39;</span><span class="p">]]</span><span class="o">.</span><span class="n">describe</span><span class="p">()</span>
+# Show the feature distributions
+morphological_network[&quot;segments&quot;][[&#39;length&#39;]].describe()
 </pre></div>
 </div>
 </div>
@@ -1704,47 +1703,47 @@ Data(x=[1965, 3], edge_index=[2, 2107], edge_attr=[2107, 0], pos=[1965, 2], crs=
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[24]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">HAS_TORCH_GEOMETRIC</span><span class="p">:</span>
-    <span class="c1"># Create a heterogeneous graph with both node types and multiple edge types</span>
-    <span class="n">hetero_graph</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">heterogeneous_graph</span><span class="p">(</span>
-        <span class="n">nodes_dict</span><span class="o">=</span><span class="p">{</span>
-            <span class="s1">&#39;private&#39;</span><span class="p">:</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;tessellations&quot;</span><span class="p">],</span>
-            <span class="s1">&#39;public&#39;</span><span class="p">:</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;segments&quot;</span><span class="p">]</span>
-        <span class="p">},</span>
-        <span class="n">edges_dict</span><span class="o">=</span><span class="p">{</span>
-            <span class="p">(</span><span class="s1">&#39;private&#39;</span><span class="p">,</span> <span class="s1">&#39;connects_to&#39;</span><span class="p">,</span> <span class="s1">&#39;private&#39;</span><span class="p">):</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;private_to_private&quot;</span><span class="p">],</span>
-            <span class="p">(</span><span class="s1">&#39;private&#39;</span><span class="p">,</span> <span class="s1">&#39;adjacent_to&#39;</span><span class="p">,</span> <span class="s1">&#39;public&#39;</span><span class="p">):</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;private_to_public&quot;</span><span class="p">],</span>
-            <span class="p">(</span><span class="s1">&#39;public&#39;</span><span class="p">,</span> <span class="s1">&#39;connects_to&#39;</span><span class="p">,</span> <span class="s1">&#39;public&#39;</span><span class="p">):</span> <span class="n">morphological_network</span><span class="p">[</span><span class="s2">&quot;public_to_public&quot;</span><span class="p">]</span>
-        <span class="p">},</span>
-        <span class="n">node_id_cols</span><span class="o">=</span><span class="p">{</span>
-            <span class="s1">&#39;private&#39;</span><span class="p">:</span> <span class="s1">&#39;tess_id&#39;</span><span class="p">,</span>
-            <span class="s1">&#39;public&#39;</span><span class="p">:</span> <span class="s1">&#39;id&#39;</span>
-        <span class="p">},</span>
-        <span class="n">node_feature_cols</span><span class="o">=</span><span class="p">{</span>
-            <span class="s1">&#39;private&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;area&#39;</span><span class="p">,</span> <span class="s1">&#39;perimeter&#39;</span><span class="p">,</span> <span class="s1">&#39;compactness&#39;</span><span class="p">,</span> <span class="s1">&#39;elongation&#39;</span><span class="p">],</span>
-            <span class="s1">&#39;public&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;length&#39;</span><span class="p">,</span> <span class="s1">&#39;sinuosity&#39;</span><span class="p">,</span> <span class="s1">&#39;orientation&#39;</span><span class="p">]</span>
-        <span class="p">},</span>
-        <span class="n">edge_source_cols</span><span class="o">=</span><span class="p">{</span>
-            <span class="p">(</span><span class="s1">&#39;private&#39;</span><span class="p">,</span> <span class="s1">&#39;connects_to&#39;</span><span class="p">,</span> <span class="s1">&#39;private&#39;</span><span class="p">):</span> <span class="s1">&#39;from_private_id&#39;</span><span class="p">,</span>
-            <span class="p">(</span><span class="s1">&#39;private&#39;</span><span class="p">,</span> <span class="s1">&#39;adjacent_to&#39;</span><span class="p">,</span> <span class="s1">&#39;public&#39;</span><span class="p">):</span> <span class="s1">&#39;private_id&#39;</span><span class="p">,</span>
-            <span class="p">(</span><span class="s1">&#39;public&#39;</span><span class="p">,</span> <span class="s1">&#39;connects_to&#39;</span><span class="p">,</span> <span class="s1">&#39;public&#39;</span><span class="p">):</span> <span class="s1">&#39;from_public_id&#39;</span>
-        <span class="p">},</span>
-        <span class="n">edge_target_cols</span><span class="o">=</span><span class="p">{</span>
-            <span class="p">(</span><span class="s1">&#39;private&#39;</span><span class="p">,</span> <span class="s1">&#39;connects_to&#39;</span><span class="p">,</span> <span class="s1">&#39;private&#39;</span><span class="p">):</span> <span class="s1">&#39;to_private_id&#39;</span><span class="p">,</span>
-            <span class="p">(</span><span class="s1">&#39;private&#39;</span><span class="p">,</span> <span class="s1">&#39;adjacent_to&#39;</span><span class="p">,</span> <span class="s1">&#39;public&#39;</span><span class="p">):</span> <span class="s1">&#39;public_id&#39;</span><span class="p">,</span>
-            <span class="p">(</span><span class="s1">&#39;public&#39;</span><span class="p">,</span> <span class="s1">&#39;connects_to&#39;</span><span class="p">,</span> <span class="s1">&#39;public&#39;</span><span class="p">):</span> <span class="s1">&#39;to_public_id&#39;</span>
-        <span class="p">}</span>
-        <span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>if HAS_TORCH_GEOMETRIC:
+    # Create a heterogeneous graph with both node types and multiple edge types
+    hetero_graph = city2graph.heterogeneous_graph(
+        nodes_dict={
+            &#39;private&#39;: morphological_network[&quot;tessellations&quot;],
+            &#39;public&#39;: morphological_network[&quot;segments&quot;]
+        },
+        edges_dict={
+            (&#39;private&#39;, &#39;connects_to&#39;, &#39;private&#39;): morphological_network[&quot;private_to_private&quot;],
+            (&#39;private&#39;, &#39;adjacent_to&#39;, &#39;public&#39;): morphological_network[&quot;private_to_public&quot;],
+            (&#39;public&#39;, &#39;connects_to&#39;, &#39;public&#39;): morphological_network[&quot;public_to_public&quot;]
+        },
+        node_id_cols={
+            &#39;private&#39;: &#39;tess_id&#39;,
+            &#39;public&#39;: &#39;id&#39;
+        },
+        node_feature_cols={
+            &#39;private&#39;: [&#39;area&#39;, &#39;perimeter&#39;, &#39;compactness&#39;, &#39;elongation&#39;],
+            &#39;public&#39;: [&#39;length&#39;, &#39;sinuosity&#39;, &#39;orientation&#39;]
+        },
+        edge_source_cols={
+            (&#39;private&#39;, &#39;connects_to&#39;, &#39;private&#39;): &#39;from_private_id&#39;,
+            (&#39;private&#39;, &#39;adjacent_to&#39;, &#39;public&#39;): &#39;private_id&#39;,
+            (&#39;public&#39;, &#39;connects_to&#39;, &#39;public&#39;): &#39;from_public_id&#39;
+        },
+        edge_target_cols={
+            (&#39;private&#39;, &#39;connects_to&#39;, &#39;private&#39;): &#39;to_private_id&#39;,
+            (&#39;private&#39;, &#39;adjacent_to&#39;, &#39;public&#39;): &#39;public_id&#39;,
+            (&#39;public&#39;, &#39;connects_to&#39;, &#39;public&#39;): &#39;to_public_id&#39;
+        }
+        )
 
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Heterogeneous Graph:&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Node types: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">hetero_graph</span><span class="o">.</span><span class="n">node_types</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Edge types: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">hetero_graph</span><span class="o">.</span><span class="n">edge_types</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Node counts:&quot;</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">node_type</span> <span class="ow">in</span> <span class="n">hetero_graph</span><span class="o">.</span><span class="n">node_types</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">node_type</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">hetero_graph</span><span class="p">[</span><span class="n">node_type</span><span class="p">]</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="si">}</span><span class="s2"> nodes with </span><span class="si">{</span><span class="n">hetero_graph</span><span class="p">[</span><span class="n">node_type</span><span class="p">]</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="si">}</span><span class="s2"> features&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Edge counts:&quot;</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">edge_type</span> <span class="ow">in</span> <span class="n">hetero_graph</span><span class="o">.</span><span class="n">edge_types</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">edge_type</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">hetero_graph</span><span class="p">[</span><span class="n">edge_type</span><span class="p">]</span><span class="o">.</span><span class="n">edge_index</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="si">}</span><span class="s2"> edges&quot;</span><span class="p">)</span>
+    print(&quot;Heterogeneous Graph:&quot;)
+    print(f&quot;Node types: {list(hetero_graph.node_types)}&quot;)
+    print(f&quot;Edge types: {list(hetero_graph.edge_types)}&quot;)
+    print(&quot;\nNode counts:&quot;)
+    for node_type in hetero_graph.node_types:
+        print(f&quot;  {node_type}: {hetero_graph[node_type].x.size(0)} nodes with {hetero_graph[node_type].x.size(1)} features&quot;)
+    print(&quot;\nEdge counts:&quot;)
+    for edge_type in hetero_graph.edge_types:
+        print(f&quot;  {edge_type}: {hetero_graph[edge_type].edge_index.size(1)} edges&quot;)
 </pre></div>
 </div>
 </div>
@@ -1775,7 +1774,7 @@ Edge counts:
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[25]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">morphological_graph</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">from_morphological_network</span><span class="p">(</span><span class="n">morphological_network</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>morphological_graph = city2graph.from_morphological_network(morphological_network)
 </pre></div>
 </div>
 </div>
@@ -1783,7 +1782,7 @@ Edge counts:
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[26]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">morphological_graph</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>morphological_graph
 </pre></div>
 </div>
 </div>
@@ -1827,46 +1826,46 @@ HeteroData(
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[27]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">HAS_TORCH_GEOMETRIC</span><span class="p">:</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">torch_geometric.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">InMemoryDataset</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>if HAS_TORCH_GEOMETRIC:
+    import torch
+    from torch_geometric.data import InMemoryDataset
 
-    <span class="k">class</span><span class="w"> </span><span class="nc">MorphoGraphDataset</span><span class="p">(</span><span class="n">InMemoryDataset</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;A PyTorch Geometric dataset containing morphological graphs.&quot;&quot;&quot;</span>
+    class MorphoGraphDataset(InMemoryDataset):
+        &quot;&quot;&quot;A PyTorch Geometric dataset containing morphological graphs.&quot;&quot;&quot;
 
-        <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pre_transform</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-            <span class="nb">super</span><span class="p">(</span><span class="n">MorphoGraphDataset</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">transform</span><span class="p">,</span> <span class="n">pre_transform</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">slices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">processed_paths</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        def __init__(self, root, transform=None, pre_transform=None):
+            super(MorphoGraphDataset, self).__init__(root, transform, pre_transform)
+            self.data, self.slices = torch.load(self.processed_paths[0])
 
-        <span class="nd">@property</span>
-        <span class="k">def</span><span class="w"> </span><span class="nf">raw_file_names</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-            <span class="k">return</span> <span class="p">[]</span>  <span class="c1"># No raw files needed</span>
+        @property
+        def raw_file_names(self):
+            return []  # No raw files needed
 
-        <span class="nd">@property</span>
-        <span class="k">def</span><span class="w"> </span><span class="nf">processed_file_names</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-            <span class="k">return</span> <span class="p">[</span><span class="s1">&#39;morpho_graph.pt&#39;</span><span class="p">]</span>
+        @property
+        def processed_file_names(self):
+            return [&#39;morpho_graph.pt&#39;]
 
-        <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-            <span class="c1"># No download needed</span>
-            <span class="k">pass</span>
+        def download(self):
+            # No download needed
+            pass
 
-        <span class="k">def</span><span class="w"> </span><span class="nf">process</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-            <span class="c1"># Use the existing morpho_graph as our single graph sample</span>
-            <span class="n">data_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">morphological_graph</span><span class="p">]</span>
-            <span class="n">data</span><span class="p">,</span> <span class="n">slices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collate</span><span class="p">(</span><span class="n">data_list</span><span class="p">)</span>
-            <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">((</span><span class="n">data</span><span class="p">,</span> <span class="n">slices</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">processed_paths</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        def process(self):
+            # Use the existing morpho_graph as our single graph sample
+            data_list = [morphological_graph]
+            data, slices = self.collate(data_list)
+            torch.save((data, slices), self.processed_paths[0])
 
-    <span class="c1"># Create the dataset directory if it doesn&#39;t exist</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-    <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="s1">&#39;./morpho_graph_dataset/processed&#39;</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    # Create the dataset directory if it doesn&#39;t exist
+    import os
+    os.makedirs(&#39;./morpho_graph_dataset/processed&#39;, exist_ok=True)
 
-    <span class="c1"># Instantiate the dataset</span>
-    <span class="n">dataset</span> <span class="o">=</span> <span class="n">MorphoGraphDataset</span><span class="p">(</span><span class="n">root</span><span class="o">=</span><span class="s1">&#39;./morpho_graph_dataset&#39;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dataset created with </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span><span class="si">}</span><span class="s2"> graph(s)&quot;</span><span class="p">)</span>
+    # Instantiate the dataset
+    dataset = MorphoGraphDataset(root=&#39;./morpho_graph_dataset&#39;)
+    print(f&quot;Dataset created with {len(dataset)} graph(s)&quot;)
 
-    <span class="c1"># Display the graph in the dataset</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Dataset graph structure:&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">dataset</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    # Display the graph in the dataset
+    print(&quot;\nDataset graph structure:&quot;)
+    print(dataset[0])
 </pre></div>
 </div>
 </div>
@@ -1920,70 +1919,70 @@ HeteroData(
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[28]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">if</span> <span class="n">HAS_TORCH_GEOMETRIC</span><span class="p">:</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>if HAS_TORCH_GEOMETRIC:
+    import networkx as nx
 
-    <span class="c1"># Convert the heterogeneous graph to a NetworkX graph</span>
-    <span class="n">morpho_nx</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">DiGraph</span><span class="p">()</span>
+    # Convert the heterogeneous graph to a NetworkX graph
+    morpho_nx = nx.DiGraph()
 
-    <span class="c1"># Add nodes with their types and attributes</span>
-    <span class="k">for</span> <span class="n">node_type</span> <span class="ow">in</span> <span class="n">morphological_graph</span><span class="o">.</span><span class="n">node_types</span><span class="p">:</span>
-        <span class="n">num_nodes</span> <span class="o">=</span> <span class="n">morphological_graph</span><span class="p">[</span><span class="n">node_type</span><span class="p">]</span><span class="o">.</span><span class="n">num_nodes</span>
+    # Add nodes with their types and attributes
+    for node_type in morphological_graph.node_types:
+        num_nodes = morphological_graph[node_type].num_nodes
 
-        <span class="c1"># Get node positions if available</span>
-        <span class="n">pos</span> <span class="o">=</span> <span class="n">morphological_graph</span><span class="p">[</span><span class="n">node_type</span><span class="p">]</span><span class="o">.</span><span class="n">pos</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">morphological_graph</span><span class="p">[</span><span class="n">node_type</span><span class="p">],</span> <span class="s1">&#39;pos&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+        # Get node positions if available
+        pos = morphological_graph[node_type].pos.numpy() if hasattr(morphological_graph[node_type], &#39;pos&#39;) else None
 
-        <span class="c1"># Add nodes with their attributes</span>
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_nodes</span><span class="p">):</span>
-            <span class="c1"># Create node identifier as tuple (type, index)</span>
-            <span class="n">node_id</span> <span class="o">=</span> <span class="p">(</span><span class="n">node_type</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+        # Add nodes with their attributes
+        for i in range(num_nodes):
+            # Create node identifier as tuple (type, index)
+            node_id = (node_type, i)
 
-            <span class="c1"># Add node attributes</span>
-            <span class="n">attrs</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="n">node_type</span><span class="p">}</span>
+            # Add node attributes
+            attrs = {&#39;type&#39;: node_type}
 
-            <span class="c1"># Add position if available</span>
-            <span class="k">if</span> <span class="n">pos</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;pos&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">pos</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            # Add position if available
+            if pos is not None:
+                attrs[&#39;pos&#39;] = tuple(pos[i])
 
-            <span class="c1"># Add features if available</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">morphological_graph</span><span class="p">[</span><span class="n">node_type</span><span class="p">],</span> <span class="s1">&#39;x&#39;</span><span class="p">):</span>
-                <span class="n">x</span> <span class="o">=</span> <span class="n">morphological_graph</span><span class="p">[</span><span class="n">node_type</span><span class="p">]</span><span class="o">.</span><span class="n">x</span>
-                <span class="k">if</span> <span class="n">x</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
-                    <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">feat</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">]):</span>
-                        <span class="n">attrs</span><span class="p">[</span><span class="sa">f</span><span class="s1">&#39;feat_</span><span class="si">{</span><span class="n">j</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">feat</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            # Add features if available
+            if hasattr(morphological_graph[node_type], &#39;x&#39;):
+                x = morphological_graph[node_type].x
+                if x is not None and i &lt; len(x):
+                    for j, feat in enumerate(x[i]):
+                        attrs[f&#39;feat_{j}&#39;] = feat.item()
 
-            <span class="c1"># Add the node to the graph</span>
-            <span class="n">morpho_nx</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="n">node_id</span><span class="p">,</span> <span class="o">**</span><span class="n">attrs</span><span class="p">)</span>
+            # Add the node to the graph
+            morpho_nx.add_node(node_id, **attrs)
 
-    <span class="c1"># Add edges with their types</span>
-    <span class="k">for</span> <span class="n">edge_type</span> <span class="ow">in</span> <span class="n">morphological_graph</span><span class="o">.</span><span class="n">edge_types</span><span class="p">:</span>
-        <span class="n">src_type</span><span class="p">,</span> <span class="n">rel_type</span><span class="p">,</span> <span class="n">dst_type</span> <span class="o">=</span> <span class="n">edge_type</span>
+    # Add edges with their types
+    for edge_type in morphological_graph.edge_types:
+        src_type, rel_type, dst_type = edge_type
 
-        <span class="c1"># Get edge indices</span>
-        <span class="n">edge_index</span> <span class="o">=</span> <span class="n">morphological_graph</span><span class="p">[</span><span class="n">edge_type</span><span class="p">]</span><span class="o">.</span><span class="n">edge_index</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        # Get edge indices
+        edge_index = morphological_graph[edge_type].edge_index.numpy()
 
-        <span class="c1"># Add each edge</span>
-        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">edge_index</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
-            <span class="n">src_idx</span><span class="p">,</span> <span class="n">dst_idx</span> <span class="o">=</span> <span class="n">edge_index</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">j</span><span class="p">],</span> <span class="n">edge_index</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>
-            <span class="n">src_id</span> <span class="o">=</span> <span class="p">(</span><span class="n">src_type</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">src_idx</span><span class="p">))</span>
-            <span class="n">dst_id</span> <span class="o">=</span> <span class="p">(</span><span class="n">dst_type</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">dst_idx</span><span class="p">))</span>
+        # Add each edge
+        for j in range(edge_index.shape[1]):
+            src_idx, dst_idx = edge_index[0, j], edge_index[1, j]
+            src_id = (src_type, int(src_idx))
+            dst_id = (dst_type, int(dst_idx))
 
-            <span class="c1"># Add the edge with its type</span>
-            <span class="n">morpho_nx</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">src_id</span><span class="p">,</span> <span class="n">dst_id</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">rel_type</span><span class="p">)</span>
+            # Add the edge with its type
+            morpho_nx.add_edge(src_id, dst_id, type=rel_type)
 
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Created NetworkX graph with </span><span class="si">{</span><span class="n">morpho_nx</span><span class="o">.</span><span class="n">number_of_nodes</span><span class="p">()</span><span class="si">}</span><span class="s2"> nodes and </span><span class="si">{</span><span class="n">morpho_nx</span><span class="o">.</span><span class="n">number_of_edges</span><span class="p">()</span><span class="si">}</span><span class="s2"> edges&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Node types: </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">nx</span><span class="o">.</span><span class="n">get_node_attributes</span><span class="p">(</span><span class="n">morpho_nx</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;type&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Edge types: </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">nx</span><span class="o">.</span><span class="n">get_edge_attributes</span><span class="p">(</span><span class="n">morpho_nx</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;type&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    print(f&quot;Created NetworkX graph with {morpho_nx.number_of_nodes()} nodes and {morpho_nx.number_of_edges()} edges&quot;)
+    print(f&quot;Node types: {set(nx.get_node_attributes(morpho_nx, &#39;type&#39;).values())}&quot;)
+    print(f&quot;Edge types: {set(nx.get_edge_attributes(morpho_nx, &#39;type&#39;).values())}&quot;)
 
-    <span class="c1"># Compute some basic network metrics</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Network Analysis:&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Is connected: </span><span class="si">{</span><span class="n">nx</span><span class="o">.</span><span class="n">is_weakly_connected</span><span class="p">(</span><span class="n">morpho_nx</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number of weakly connected components: </span><span class="si">{</span><span class="n">nx</span><span class="o">.</span><span class="n">number_weakly_connected_components</span><span class="p">(</span><span class="n">morpho_nx</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    # Compute some basic network metrics
+    print(&quot;\nNetwork Analysis:&quot;)
+    print(f&quot;Is connected: {nx.is_weakly_connected(morpho_nx)}&quot;)
+    print(f&quot;Number of weakly connected components: {nx.number_weakly_connected_components(morpho_nx)}&quot;)
 
-    <span class="c1"># Get degree distribution</span>
-    <span class="n">degrees</span> <span class="o">=</span> <span class="p">[</span><span class="n">d</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">morpho_nx</span><span class="o">.</span><span class="n">degree</span><span class="p">()]</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Average degree: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">degrees</span><span class="p">)</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Max degree: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">degrees</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    # Get degree distribution
+    degrees = [d for _, d in morpho_nx.degree()]
+    print(f&quot;Average degree: {np.mean(degrees):.2f}&quot;)
+    print(f&quot;Max degree: {np.max(degrees)}&quot;)
 </pre></div>
 </div>
 </div>
