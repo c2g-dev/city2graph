@@ -42,6 +42,7 @@
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = '_modules/city2graph/graph';</script>
     <link rel="canonical" href="https://city2graph.net/_modules/city2graph/graph.html" />
     <link rel="icon" href="../../_static/city2graph_logo.png"/>
@@ -368,13 +369,14 @@
   <h1>Source code for city2graph.graph</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">Module for creating heterogeneous graph representations of urban environments.</span>
+
 <span class="sd">Converts geodataframes containing spatial data into PyTorch Geometric HeteroData objects.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nn</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">torch_geometric.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">HeteroData</span><span class="p">,</span> <span class="n">Data</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch_geometric.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">Data</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">torch_geometric.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">HeteroData</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">torch_geometric.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">to_networkx</span> <span class="k">as</span> <span class="n">pyg_to_networkx</span>
 
     <span class="n">TORCH_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
@@ -389,19 +391,22 @@
         <span class="k">pass</span>
 
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Union</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Dict</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 <span class="c1"># Define the public API for this module</span>
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s2">&quot;homogeneous_graph&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;heterogeneous_graph&quot;</span><span class="p">,</span>
     <span class="s2">&quot;from_morphological_network&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;to_networkx&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;heterogeneous_graph&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;homogeneous_graph&quot;</span><span class="p">,</span>
     <span class="s2">&quot;is_torch_available&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;to_networkx&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
 
@@ -421,7 +426,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_device</span><span class="p">(</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="s2">&quot;torch.device&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Get the appropriate torch device (CUDA if available, otherwise CPU).</span>
@@ -445,28 +450,31 @@
 <span class="sd">        If PyTorch is not installed</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">TORCH_AVAILABLE</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="s2">&quot;PyTorch and PyTorch Geometric are required for this function. &quot;</span>
             <span class="s2">&quot;Please install them using: poetry install --with torch or &quot;</span>
             <span class="s2">&quot;pip install city2graph[torch]&quot;</span>
         <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="n">msg</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">device</span>
-    <span class="k">elif</span> <span class="n">device</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="s2">&quot;cpu&quot;</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">device</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="s2">&quot;cpu&quot;</span><span class="p">]:</span>
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Device must be &#39;cuda&#39;, &#39;cpu&#39;, a torch.device object, or None&quot;</span><span class="p">)</span>
+    <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Device must be &#39;cuda&#39;, &#39;cpu&#39;, a torch.device object, or None&quot;</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_detect_edge_columns</span><span class="p">(</span>
     <span class="n">edge_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
-    <span class="n">id_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">source_hint</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">target_hint</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+    <span class="n">id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">source_hint</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">target_hint</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Detect appropriate source and target columns in an edge GeoDataFrame.</span>
 
@@ -525,7 +533,7 @@
     <span class="c1"># Fall back to first two columns if needed</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">edge_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span> <span class="ow">and</span> <span class="s2">&quot;geometry&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">edge_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">[:</span><span class="mi">2</span><span class="p">]:</span>
         <span class="k">return</span> <span class="n">edge_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">edge_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-    <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">edge_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">3</span> <span class="ow">and</span> <span class="s2">&quot;geometry&quot;</span> <span class="ow">in</span> <span class="n">edge_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">edge_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">3</span> <span class="ow">and</span> <span class="s2">&quot;geometry&quot;</span> <span class="ow">in</span> <span class="n">edge_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
         <span class="k">return</span> <span class="n">edge_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">edge_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
 
     <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
@@ -533,15 +541,13 @@
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_edge_columns</span><span class="p">(</span>
     <span class="n">edge_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
-    <span class="n">source_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-    <span class="n">target_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-    <span class="n">source_mapping</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
-    <span class="n">target_mapping</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
-    <span class="n">id_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Consolidate logic for detecting or confirming source/target columns.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">source_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">target_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">source_mapping</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
+    <span class="n">target_mapping</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
+    <span class="n">id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Consolidate logic for detecting or confirming source/target columns.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">source_col</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">target_col</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">detected_source</span><span class="p">,</span> <span class="n">detected_target</span> <span class="o">=</span> <span class="n">_detect_edge_columns</span><span class="p">(</span>
             <span class="n">edge_gdf</span><span class="p">,</span>
@@ -557,8 +563,8 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_extract_node_id_mapping</span><span class="p">(</span>
-    <span class="n">node_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">id_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="nb">str</span><span class="p">]:</span>
+    <span class="n">node_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="nb">str</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Extract a mapping from node IDs to indices.</span>
 
@@ -577,8 +583,9 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># If id_col is provided but not found, raise a ValueError to alert the user.</span>
     <span class="k">if</span> <span class="n">id_col</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">id_col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">node_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Provided id_col &#39;</span><span class="si">{</span><span class="n">id_col</span><span class="si">}</span><span class="s2">&#39; not found in node GeoDataFrame columns.&quot;</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Provided id_col &#39;</span><span class="si">{</span><span class="n">id_col</span><span class="si">}</span><span class="s2">&#39; not found in node GeoDataFrame columns.&quot;</span>
+            <span class="n">msg</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="k">if</span> <span class="n">id_col</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># Use index if id_col is None.</span>
@@ -595,8 +602,8 @@
 <span class="c1"># Modified _create_node_features: renamed parameter &quot;attribute_cols&quot; to &quot;feature_cols&quot;</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_create_node_features</span><span class="p">(</span>
     <span class="n">node_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
-    <span class="n">feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">feature_cols</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;torch.Tensor&quot;</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create node feature tensors from attribute columns.</span>
@@ -621,21 +628,21 @@
         <span class="c1"># Return empty feature tensor if no valid columns</span>
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">node_gdf</span><span class="p">),</span> <span class="mi">0</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
 
-    <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># Check which columns actually exist</span>
-        <span class="n">valid_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">feature_cols</span> <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">node_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span>
+    <span class="c1"># Check which columns actually exist</span>
+    <span class="n">valid_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">feature_cols</span> <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">node_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span>
 
-        <span class="k">if</span> <span class="n">valid_cols</span><span class="p">:</span>
-            <span class="c1"># Convert to tensor and move to appropriate device</span>
-            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
-                <span class="n">node_gdf</span><span class="p">[</span><span class="n">valid_cols</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
-            <span class="p">)</span>
+    <span class="k">if</span> <span class="n">valid_cols</span><span class="p">:</span>
+        <span class="c1"># Convert to tensor and move to appropriate device</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+            <span class="n">node_gdf</span><span class="p">[</span><span class="n">valid_cols</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="kc">None</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_create_edge_features</span><span class="p">(</span>
     <span class="n">edge_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
-    <span class="n">feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">feature_cols</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;torch.Tensor&quot;</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create edge feature tensors from attribute columns in edge_gdf.</span>
@@ -664,11 +671,9 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_map_edge_strings</span><span class="p">(</span>
-    <span class="n">edge_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">source_col</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">target_col</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">edge_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">source_col</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">target_col</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Convert source/target columns to string once for vectorized lookups.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert source/target columns to string once for vectorized lookups.&quot;&quot;&quot;</span>
     <span class="n">edge_gdf</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;__</span><span class="si">{</span><span class="n">source_col</span><span class="si">}</span><span class="s2">_str&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edge_gdf</span><span class="p">[</span><span class="n">source_col</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
     <span class="n">edge_gdf</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;__</span><span class="si">{</span><span class="n">target_col</span><span class="si">}</span><span class="s2">_str&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edge_gdf</span><span class="p">[</span><span class="n">target_col</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">edge_gdf</span>
@@ -676,11 +681,11 @@
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_create_edge_idx_pairs</span><span class="p">(</span>
     <span class="n">edge_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
-    <span class="n">source_mapping</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
-    <span class="n">target_mapping</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">source_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">target_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]]:</span>
+    <span class="n">source_mapping</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
+    <span class="n">target_mapping</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">source_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">target_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Process edges to create edge indices.</span>
 
@@ -707,7 +712,7 @@
 
     <span class="c1"># Detect columns if not provided</span>
     <span class="n">source_col</span><span class="p">,</span> <span class="n">target_col</span> <span class="o">=</span> <span class="n">_get_edge_columns</span><span class="p">(</span>
-        <span class="n">edge_gdf</span><span class="p">,</span> <span class="n">source_col</span><span class="p">,</span> <span class="n">target_col</span><span class="p">,</span> <span class="n">source_mapping</span><span class="p">,</span> <span class="n">target_mapping</span>
+        <span class="n">edge_gdf</span><span class="p">,</span> <span class="n">source_col</span><span class="p">,</span> <span class="n">target_col</span><span class="p">,</span> <span class="n">source_mapping</span><span class="p">,</span> <span class="n">target_mapping</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="c1"># Skip if we couldn&#39;t determine columns</span>
@@ -736,10 +741,10 @@
     <span class="n">edge_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">valid_edges</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">edge_count</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="p">(</span><span class="n">missing_src_count</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">missing_dst_count</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">):</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;No valid edges were found with columns </span><span class="si">{</span><span class="n">source_col</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">target_col</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-            <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span>
-            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">&quot;No valid edges were found with columns </span><span class="si">%s</span><span class="s2">, </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">source_col</span><span class="p">,</span>
+            <span class="n">target_col</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="n">valid_edges</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
@@ -748,14 +753,13 @@
         <span class="n">to_indices</span> <span class="o">=</span> <span class="n">valid_edges</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;__</span><span class="si">{</span><span class="n">target_col</span><span class="si">}</span><span class="s2">_str&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">target_mapping</span><span class="p">)</span><span class="o">.</span><span class="n">values</span>
 
         <span class="c1"># Create edge list</span>
-        <span class="n">edges</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">from_indices</span><span class="p">,</span> <span class="n">to_indices</span><span class="p">])</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">edges</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">from_indices</span><span class="p">,</span> <span class="n">to_indices</span><span class="p">])</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
 
     <span class="k">return</span> <span class="p">[]</span>
 
 
 <span class="c1"># New helper to check if an edge GeoDataFrame is valid</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">_is_valid_edge_df</span><span class="p">(</span><span class="n">edge_gdf</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_is_valid_edge_df</span><span class="p">(</span><span class="n">edge_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
     <span class="k">return</span> <span class="n">edge_gdf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">edge_gdf</span><span class="o">.</span><span class="n">empty</span>
 
 
@@ -763,15 +767,15 @@
 <span class="c1"># Updated _build_graph_data to accept node_y_attribute_cols parameter</span>
 <span class="c1"># Modified _build_graph_data: renamed parameters and references</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_build_graph_data</span><span class="p">(</span>
-    <span class="n">nodes</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
-    <span class="n">edges</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
-    <span class="n">node_id_cols</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
-    <span class="n">node_feature_cols</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
-    <span class="n">node_label_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]],</span>
-    <span class="n">edge_source_cols</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">],</span>
-    <span class="n">edge_target_cols</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">],</span>
-    <span class="n">edge_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]],</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]],</span>
+    <span class="n">nodes</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
+    <span class="n">edges</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
+    <span class="n">node_id_cols</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
+    <span class="n">node_feature_cols</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
+    <span class="n">node_label_cols</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">edge_source_cols</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">],</span>
+    <span class="n">edge_target_cols</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">],</span>
+    <span class="n">edge_feature_cols</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HeteroData</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Build a heterogeneous graph (HeteroData) from node and edge GeoDataFrames.</span>
@@ -827,7 +831,7 @@
                             <span class="k">else</span> <span class="p">[</span><span class="n">geom</span><span class="o">.</span><span class="n">centroid</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">geom</span><span class="o">.</span><span class="n">centroid</span><span class="o">.</span><span class="n">y</span><span class="p">]</span>
                         <span class="p">)</span>
                         <span class="k">for</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">node_gdf</span><span class="o">.</span><span class="n">geometry</span>
-                    <span class="p">]</span>
+                    <span class="p">],</span>
                 <span class="p">),</span>
                 <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span>
                 <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
@@ -837,30 +841,29 @@
         <span class="c1"># Update: use label columns instead of y_attribute_cols</span>
         <span class="k">if</span> <span class="n">node_label_cols</span> <span class="ow">and</span> <span class="n">node_label_cols</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">node_type</span><span class="p">):</span>
             <span class="n">data</span><span class="p">[</span><span class="n">node_type</span><span class="p">]</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="n">_create_node_features</span><span class="p">(</span>
-                <span class="n">node_gdf</span><span class="p">,</span> <span class="n">node_label_cols</span><span class="p">[</span><span class="n">node_type</span><span class="p">],</span> <span class="n">device</span>
+                <span class="n">node_gdf</span><span class="p">,</span> <span class="n">node_label_cols</span><span class="p">[</span><span class="n">node_type</span><span class="p">],</span> <span class="n">device</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="s2">&quot;y&quot;</span> <span class="ow">in</span> <span class="n">node_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
             <span class="n">data</span><span class="p">[</span><span class="n">node_type</span><span class="p">]</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
-                <span class="n">node_gdf</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+                <span class="n">node_gdf</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="p">)</span>
 
     <span class="c1"># Process edges across types</span>
     <span class="k">for</span> <span class="n">edge_type</span><span class="p">,</span> <span class="n">edge_gdf</span> <span class="ow">in</span> <span class="n">edges</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">edge_type</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">edge_type</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Edge type key must be a tuple of (source_type, relation_type, target_type). Got </span><span class="si">{</span><span class="n">edge_type</span><span class="si">}</span><span class="s2"> instead. Skipping.&quot;</span><span class="p">,</span>
-                <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span>
-                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;Edge type key must be a tuple of (source_type, relation_type, &quot;</span>
+                <span class="s2">&quot;target_type). Got </span><span class="si">%s</span><span class="s2"> instead. Skipping.&quot;</span><span class="p">,</span>
+                <span class="n">edge_type</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="k">continue</span>
 
         <span class="n">src_type</span><span class="p">,</span> <span class="n">rel_type</span><span class="p">,</span> <span class="n">dst_type</span> <span class="o">=</span> <span class="n">edge_type</span>
 
         <span class="k">if</span> <span class="n">src_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">node_id_mappings</span> <span class="ow">or</span> <span class="n">dst_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">node_id_mappings</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Edge type </span><span class="si">{</span><span class="n">edge_type</span><span class="si">}</span><span class="s2"> references node type(s) not present in nodes. Skipping.&quot;</span><span class="p">,</span>
-                <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span>
-                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;Edge type </span><span class="si">%s</span><span class="s2"> references node type(s) not present in nodes. Skipping.&quot;</span><span class="p">,</span>
+                <span class="n">edge_type</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="k">continue</span>
         <span class="n">src_mapping</span> <span class="o">=</span> <span class="n">node_id_mappings</span><span class="p">[</span><span class="n">src_type</span><span class="p">][</span><span class="s2">&quot;mapping&quot;</span><span class="p">]</span>
@@ -878,24 +881,24 @@
             <span class="p">)</span>
             <span class="k">if</span> <span class="n">pairs</span><span class="p">:</span>
                 <span class="n">data</span><span class="p">[</span><span class="n">src_type</span><span class="p">,</span> <span class="n">rel_type</span><span class="p">,</span> <span class="n">dst_type</span><span class="p">]</span><span class="o">.</span><span class="n">edge_index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
-                    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">pairs</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+                    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">pairs</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">data</span><span class="p">[</span><span class="n">src_type</span><span class="p">,</span> <span class="n">rel_type</span><span class="p">,</span> <span class="n">dst_type</span><span class="p">]</span><span class="o">.</span><span class="n">edge_index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
-                    <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+                    <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="n">feature_cols</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">edge_feature_cols</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">edge_type</span><span class="p">)</span> <span class="k">if</span> <span class="n">edge_feature_cols</span> <span class="k">else</span> <span class="kc">None</span>
             <span class="p">)</span>
             <span class="n">data</span><span class="p">[</span><span class="n">src_type</span><span class="p">,</span> <span class="n">rel_type</span><span class="p">,</span> <span class="n">dst_type</span><span class="p">]</span><span class="o">.</span><span class="n">edge_attr</span> <span class="o">=</span> <span class="n">_create_edge_features</span><span class="p">(</span>
-                <span class="n">edge_gdf</span><span class="p">,</span> <span class="n">feature_cols</span><span class="p">,</span> <span class="n">device</span>
+                <span class="n">edge_gdf</span><span class="p">,</span> <span class="n">feature_cols</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">data</span><span class="p">[</span><span class="n">src_type</span><span class="p">,</span> <span class="n">rel_type</span><span class="p">,</span> <span class="n">dst_type</span><span class="p">]</span><span class="o">.</span><span class="n">edge_index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
-                <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+                <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">data</span><span class="p">[</span><span class="n">src_type</span><span class="p">,</span> <span class="n">rel_type</span><span class="p">,</span> <span class="n">dst_type</span><span class="p">]</span><span class="o">.</span><span class="n">edge_attr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
-                <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+                <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="p">)</span>
 
     <span class="c1"># Set CRS metadata from node GeoDataFrames more efficiently</span>
@@ -906,7 +909,8 @@
     <span class="k">elif</span> <span class="nb">all</span><span class="p">(</span><span class="n">crs</span> <span class="o">==</span> <span class="n">crs_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">crs</span> <span class="ow">in</span> <span class="n">crs_values</span><span class="p">):</span>
         <span class="n">data</span><span class="o">.</span><span class="n">crs</span> <span class="o">=</span> <span class="n">crs_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;CRS mismatch among node GeoDataFrames.&quot;</span><span class="p">)</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;CRS mismatch among node GeoDataFrames.&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">data</span>
 
@@ -915,14 +919,14 @@
 <a class="viewcode-back" href="../../api/graph.html#city2graph.graph.homogeneous_graph">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">homogeneous_graph</span><span class="p">(</span>
     <span class="n">nodes_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
-    <span class="n">edges_gdf</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">node_id_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">node_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">node_label_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">edge_source_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">edge_target_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">edge_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">edges_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">node_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">node_feature_cols</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">node_label_cols</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">edge_source_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">edge_target_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">edge_feature_cols</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Data</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create a homogeneous graph Data object from nodes and edges GeoDataFrames.</span>
@@ -959,26 +963,29 @@
 <span class="sd">        If PyTorch and PyTorch Geometric are not installed</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">TORCH_AVAILABLE</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="s2">&quot;PyTorch and PyTorch Geometric are required for this function. &quot;</span>
             <span class="s2">&quot;Please install them using: poetry install --with torch or &quot;</span>
             <span class="s2">&quot;pip install city2graph[torch]&quot;</span>
         <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
     <span class="c1"># Preprocess homogeneous graph inputs into dictionaries.</span>
     <span class="c1"># Ensure at least empty edge type entry for homogeneous graphs</span>
     <span class="n">nodes_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">nodes_gdf</span><span class="p">}</span>
+
     <span class="c1"># Use explicit None check to avoid ambiguous truth of GeoDataFrame</span>
     <span class="n">edges_dict</span> <span class="o">=</span> <span class="p">{</span>
         <span class="p">(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edges_gdf</span>
         <span class="k">if</span> <span class="n">edges_gdf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-        <span class="k">else</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">()</span>
+        <span class="k">else</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(),</span>
     <span class="p">}</span>
     <span class="n">node_id_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">node_id_col</span><span class="p">}</span> <span class="k">if</span> <span class="n">node_id_col</span> <span class="k">else</span> <span class="p">{}</span>
     <span class="n">node_feature_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">node_feature_cols</span><span class="p">}</span> <span class="k">if</span> <span class="n">node_feature_cols</span> <span class="k">else</span> <span class="p">{}</span>
     <span class="n">node_label_cols</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;node&quot;</span><span class="p">:</span> <span class="n">node_label_cols</span><span class="p">}</span> <span class="k">if</span> <span class="n">node_label_cols</span> <span class="k">else</span> <span class="kc">None</span>
     <span class="n">edge_source_cols</span> <span class="o">=</span> <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edge_source_col</span><span class="p">}</span>
     <span class="n">edge_target_cols</span> <span class="o">=</span> <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edge_target_col</span><span class="p">}</span>
+
     <span class="c1"># Wrap edge features into dict mapping for builder</span>
     <span class="n">edge_feature_map</span> <span class="o">=</span> <span class="p">(</span>
         <span class="p">{(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">):</span> <span class="n">edge_feature_cols</span><span class="p">}</span>
@@ -1004,8 +1011,10 @@
         <span class="n">edge_attr</span><span class="o">=</span><span class="n">hetero_data</span><span class="p">[(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">)]</span><span class="o">.</span><span class="n">edge_attr</span><span class="p">,</span>
         <span class="n">pos</span><span class="o">=</span><span class="n">hetero_data</span><span class="p">[</span><span class="s2">&quot;node&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pos&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
     <span class="p">)</span>
+
     <span class="c1"># Assign &quot;y&quot; node attribute if exists</span>
     <span class="n">data</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="n">hetero_data</span><span class="p">[</span><span class="s2">&quot;node&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
     <span class="c1"># Assign CRS metadata from hetero_data.</span>
     <span class="n">data</span><span class="o">.</span><span class="n">crs</span> <span class="o">=</span> <span class="n">hetero_data</span><span class="o">.</span><span class="n">crs</span>
     <span class="k">return</span> <span class="n">data</span></div>
@@ -1015,15 +1024,15 @@
 <div class="viewcode-block" id="heterogeneous_graph">
 <a class="viewcode-back" href="../../api/graph.html#city2graph.graph.heterogeneous_graph">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">heterogeneous_graph</span><span class="p">(</span>
-    <span class="n">nodes_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
-    <span class="n">edges_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
-    <span class="n">node_id_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">node_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">node_label_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">edge_source_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">edge_target_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">edge_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">nodes_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
+    <span class="n">edges_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span>
+    <span class="n">node_id_cols</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">node_feature_cols</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">node_label_cols</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">edge_source_cols</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">edge_target_cols</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">edge_feature_cols</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HeteroData</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create a heterogeneous graph HeteroData object from node and edge dictionaries.</span>
@@ -1060,11 +1069,12 @@
 <span class="sd">        If PyTorch and PyTorch Geometric are not installed</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">TORCH_AVAILABLE</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="s2">&quot;PyTorch and PyTorch Geometric are required for this function. &quot;</span>
             <span class="s2">&quot;Please install them using: poetry install --with torch or &quot;</span>
             <span class="s2">&quot;pip install city2graph[torch]&quot;</span>
         <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">node_id_cols</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">node_id_cols</span> <span class="o">=</span> <span class="p">{}</span>
@@ -1075,7 +1085,7 @@
     <span class="k">if</span> <span class="n">edge_target_cols</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">edge_target_cols</span> <span class="o">=</span> <span class="p">{}</span>
 
-    <span class="n">data</span> <span class="o">=</span> <span class="n">_build_graph_data</span><span class="p">(</span>
+    <span class="k">return</span> <span class="n">_build_graph_data</span><span class="p">(</span>
         <span class="n">nodes</span><span class="o">=</span><span class="n">nodes_dict</span><span class="p">,</span>
         <span class="n">edges</span><span class="o">=</span><span class="n">edges_dict</span><span class="p">,</span>
         <span class="n">node_id_cols</span><span class="o">=</span><span class="n">node_id_cols</span><span class="p">,</span>
@@ -1085,22 +1095,21 @@
         <span class="n">edge_target_cols</span><span class="o">=</span><span class="n">edge_target_cols</span><span class="p">,</span>
         <span class="n">edge_feature_cols</span><span class="o">=</span><span class="n">edge_feature_cols</span><span class="p">,</span>
         <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
-    <span class="p">)</span>
+    <span class="p">)</span></div>
 
-    <span class="k">return</span> <span class="n">data</span></div>
 
 
 
 <div class="viewcode-block" id="from_morphological_network">
 <a class="viewcode-back" href="../../api/graph.html#city2graph.graph.from_morphological_network">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">from_morphological_network</span><span class="p">(</span>
-    <span class="n">network_output</span><span class="p">:</span> <span class="n">Dict</span><span class="p">,</span>
+    <span class="n">network_output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
     <span class="n">private_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tess_id&quot;</span><span class="p">,</span>
     <span class="n">public_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span>
-    <span class="n">private_node_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">public_node_feature_cols</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">HeteroData</span><span class="p">,</span> <span class="n">Data</span><span class="p">]:</span>
+    <span class="n">private_node_feature_cols</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">public_node_feature_cols</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HeteroData</span> <span class="o">|</span> <span class="n">Data</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create a graph representation from the output of create_morphological_network.</span>
 
@@ -1139,20 +1148,20 @@
 <span class="sd">        If required data is missing from the network_output dictionary</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">TORCH_AVAILABLE</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
             <span class="s2">&quot;PyTorch and PyTorch Geometric are required for this function. &quot;</span>
             <span class="s2">&quot;Please install them using: poetry install --with torch or &quot;</span>
             <span class="s2">&quot;pip install city2graph[torch]&quot;</span>
         <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
     <span class="c1"># Validate device</span>
     <span class="n">device</span> <span class="o">=</span> <span class="n">_get_device</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
 
     <span class="c1"># Extract data from network_output</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">network_output</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">&quot;network_output must be a dictionary returned from create_morphological_network&quot;</span>
-        <span class="p">)</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;network_output must be a dictionary returned from create_morphological_network&quot;</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
     <span class="c1"># Extract GeoDataFrames from the network output</span>
     <span class="n">private_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tessellations&quot;</span><span class="p">)</span>
@@ -1214,7 +1223,7 @@
         <span class="p">)</span>
 
     <span class="c1"># Case 2: We only have private nodes - create homogeneous graph</span>
-    <span class="k">elif</span> <span class="n">has_private</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">has_private</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">homogeneous_graph</span><span class="p">(</span>
             <span class="n">nodes_gdf</span><span class="o">=</span><span class="n">private_gdf</span><span class="p">,</span>
             <span class="n">edges_gdf</span><span class="o">=</span><span class="n">private_to_private_gdf</span><span class="p">,</span>
@@ -1228,7 +1237,7 @@
         <span class="p">)</span>
 
     <span class="c1"># Case 3: We only have public nodes - create homogeneous graph</span>
-    <span class="k">elif</span> <span class="n">has_public</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">has_public</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">homogeneous_graph</span><span class="p">(</span>
             <span class="n">nodes_gdf</span><span class="o">=</span><span class="n">public_gdf</span><span class="p">,</span>
             <span class="n">edges_gdf</span><span class="o">=</span><span class="n">public_to_public_gdf</span><span class="p">,</span>
@@ -1242,16 +1251,14 @@
         <span class="p">)</span>
 
     <span class="c1"># Case 4: No valid nodes - raise an error to prevent unintended empty graphs.</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">&quot;No valid node data provided. Cannot create a graph without nodes.&quot;</span>
-        <span class="p">)</span></div>
+    <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;No valid node data provided. Cannot create a graph without nodes.&quot;</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span></div>
 
 
 
 <div class="viewcode-block" id="to_networkx">
 <a class="viewcode-back" href="../../api/graph.html#city2graph.graph.to_networkx">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">to_networkx</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Data</span><span class="p">,</span> <span class="n">HeteroData</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">to_networkx</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">Data</span> <span class="o">|</span> <span class="n">HeteroData</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Convert PyTorch Geometric Data or HeteroData to a NetworkX graph.</span>
 
@@ -1267,7 +1274,9 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># Custom behavior for HeteroData</span>
     <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="s2">&quot;node_types&quot;</span><span class="p">):</span>
+        <span class="c1"># Create a MultiDiGraph for heterogeneous data</span>
         <span class="n">nx_graph</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">MultiDiGraph</span><span class="p">()</span>
+
         <span class="c1"># Add nodes from each node type</span>
         <span class="k">for</span> <span class="n">ntype</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">node_types</span><span class="p">:</span>
             <span class="n">num_nodes</span> <span class="o">=</span> <span class="n">graph</span><span class="p">[</span><span class="n">ntype</span><span class="p">]</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;x&quot;</span> <span class="ow">in</span> <span class="n">graph</span><span class="p">[</span><span class="n">ntype</span><span class="p">]</span> <span class="k">else</span> <span class="mi">0</span>
@@ -1279,6 +1288,7 @@
                 <span class="k">if</span> <span class="s2">&quot;pos&quot;</span> <span class="ow">in</span> <span class="n">graph</span><span class="p">[</span><span class="n">ntype</span><span class="p">]:</span>
                     <span class="n">node_attr</span><span class="p">[</span><span class="s2">&quot;pos&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">graph</span><span class="p">[</span><span class="n">ntype</span><span class="p">]</span><span class="o">.</span><span class="n">pos</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
                 <span class="n">nx_graph</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="n">node_id</span><span class="p">,</span> <span class="o">**</span><span class="n">node_attr</span><span class="p">)</span>
+
         <span class="c1"># Add edges for each edge type</span>
         <span class="k">for</span> <span class="n">edge_type</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">edge_types</span><span class="p">:</span>
             <span class="n">src_type</span><span class="p">,</span> <span class="n">rel_type</span><span class="p">,</span> <span class="n">dst_type</span> <span class="o">=</span> <span class="n">edge_type</span>
@@ -1292,19 +1302,19 @@
                 <span class="k">if</span> <span class="s2">&quot;edge_attr&quot;</span> <span class="ow">in</span> <span class="n">edge_data</span><span class="p">:</span>
                     <span class="n">attr</span><span class="p">[</span><span class="s2">&quot;edge_attr&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edge_data</span><span class="o">.</span><span class="n">edge_attr</span><span class="p">[</span><span class="n">j</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
                 <span class="n">nx_graph</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">dst</span><span class="p">,</span> <span class="o">**</span><span class="n">attr</span><span class="p">)</span>
+
         <span class="c1"># Preserve global attributes if present</span>
         <span class="k">if</span> <span class="s2">&quot;crs&quot;</span> <span class="ow">in</span> <span class="n">graph</span><span class="p">:</span>
             <span class="n">nx_graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;crs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">graph</span><span class="p">[</span><span class="s2">&quot;crs&quot;</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">nx_graph</span>
+
     <span class="c1"># Default behavior for Data</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">nx_graph</span> <span class="o">=</span> <span class="n">pyg_to_networkx</span><span class="p">(</span>
-            <span class="n">graph</span><span class="p">,</span>
-            <span class="n">node_attrs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">],</span>
-            <span class="n">edge_attrs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;edge_attr&quot;</span><span class="p">],</span>
-            <span class="n">graph_attrs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;crs&quot;</span><span class="p">],</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">nx_graph</span></div>
+    <span class="k">return</span> <span class="n">pyg_to_networkx</span><span class="p">(</span>
+        <span class="n">graph</span><span class="p">,</span>
+        <span class="n">node_attrs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">],</span>
+        <span class="n">edge_attrs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;edge_attr&quot;</span><span class="p">],</span>
+        <span class="n">graph_attrs</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;crs&quot;</span><span class="p">],</span>
+    <span class="p">)</span></div>
 
 </pre></div>
 

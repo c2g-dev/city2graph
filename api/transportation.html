@@ -51,6 +51,7 @@
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api/transportation';</script>
     <link rel="canonical" href="https://city2graph.net/api/transportation.html" />
     <link rel="icon" href="../_static/city2graph_logo.png"/>
@@ -401,23 +402,6 @@
 <span id="transportation"></span><h1>Transportation<a class="headerlink" href="#module-city2graph.transportation" title="Link to this heading">#</a></h1>
 <p>Module for loading and processing GTFS data, constructing transportation networks.</p>
 <dl class="py function">
-<dt class="sig sig-object py" id="city2graph.transportation.load_gtfs">
-<span class="sig-prename descclassname"><span class="pre">city2graph.transportation.</span></span><span class="sig-name descname"><span class="pre">load_gtfs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gtfs_zip_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/transportation.html#load_gtfs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.transportation.load_gtfs" title="Link to this definition">#</a></dt>
-<dd><p>Complete workflow to process a GTFS zip file into DataFrames with geometry columns and summary statistics.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>gtfs_zip_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> or </em><em>Path</em>) – Path to the GTFS zip file</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Dictionary with processed GTFS data including geometry objects</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="city2graph.transportation.get_od_pairs">
 <span class="sig-prename descclassname"><span class="pre">city2graph.transportation.</span></span><span class="sig-name descname"><span class="pre">get_od_pairs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gtfs_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_date</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_date</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_geometry</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_generator</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/transportation.html#get_od_pairs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.transportation.get_od_pairs" title="Link to this definition">#</a></dt>
 <dd><p>Generate origin-destination pairs with timestamps from GTFS data.</p>
@@ -440,6 +424,23 @@ If as_generator is True, returns a generator yielding (Geo)DataFrame chunks.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a> or <a class="reference external" href="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v2.2.3)">pandas.DataFrame</a> or generator</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.transportation.load_gtfs">
+<span class="sig-prename descclassname"><span class="pre">city2graph.transportation.</span></span><span class="sig-name descname"><span class="pre">load_gtfs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gtfs_zip_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/transportation.html#load_gtfs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.transportation.load_gtfs" title="Link to this definition">#</a></dt>
+<dd><p>Complete workflow to process a GTFS zip file into DataFrames with geometry columns and summary statistics.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>gtfs_zip_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> or </em><em>Path</em>) – Path to the GTFS zip file</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dictionary with processed GTFS data including geometry objects</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -517,8 +518,8 @@ If as_generator is True, returns a generator yielding (Geo)DataFrame chunks.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.transportation.load_gtfs"><code class="docutils literal notranslate"><span class="pre">load_gtfs()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.transportation.get_od_pairs"><code class="docutils literal notranslate"><span class="pre">get_od_pairs()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.transportation.load_gtfs"><code class="docutils literal notranslate"><span class="pre">load_gtfs()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.transportation.travel_summary_network"><code class="docutils literal notranslate"><span class="pre">travel_summary_network()</span></code></a></li>
 </ul>
   </nav></div>

@@ -51,6 +51,7 @@
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api/morphology';</script>
     <link rel="canonical" href="https://city2graph.net/api/morphology.html" />
     <link rel="icon" href="../_static/city2graph_logo.png"/>
@@ -403,8 +404,8 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.morphology.convert_gdf_to_dual">
 <span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">convert_gdf_to_dual</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#convert_gdf_to_dual"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.convert_gdf_to_dual" title="Link to this definition">#</a></dt>
-<dd><p>Convert a GeoDataFrame to a NetworkX graph and then back to a GeoDataFrame.
-Also detects connections where endpoints of one linestring are on another linestring.</p>
+<dd><p>Convert a GeoDataFrame to a NetworkX graph and then back to a GeoDataFrame.</p>
+<p>Also detects connections where endpoints of one linestring are on another linestring.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -430,90 +431,11 @@ If None, will use DataFrame index</p></li>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="city2graph.morphology.private_to_private_network">
-<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">private_to_private_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">private_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contiguity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'queen'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#private_to_private_network"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.private_to_private_network" title="Link to this definition">#</a></dt>
-<dd><p>Create contiguity matrices for private spaces.
-If group_col is provided, the contiguity is calculated for each group separately.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing tessellation polygons</p></li>
-<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name that uniquely identifies each private space
-If None, will use DataFrame index</p></li>
-<li><p><strong>group_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name used to group tessellation polygons
-If None, all polygons are treated as one group</p></li>
-<li><p><strong>contiguity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default &quot;queen&quot;</em>) – Type of contiguity, either ‘queen’ or ‘rook’</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>GeoDataFrame containing LineString connections between adjacent private spaces</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a></p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If input is not a GeoDataFrame</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If contiguity is not ‘queen’ or ‘rook’ or if required columns are missing</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="city2graph.morphology.private_to_public_network">
-<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">private_to_public_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">private_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#private_to_public_network"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.private_to_public_network" title="Link to this definition">#</a></dt>
-<dd><p>Creates connections between private spaces (such as tessellation polygons) and public spaces (such as streets).</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing private space polygons</p></li>
-<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing public space linestrings</p></li>
-<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in private_gdf that uniquely identifies each private space
-If None, will use DataFrame index</p></li>
-<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in public_gdf that uniquely identifies each public space
-If None, will use DataFrame index</p></li>
-<li><p><strong>public_geom_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in public_gdf containing alternative geometry to use
-If None, will use the geometry column</p></li>
-<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default 1</em>) – Buffer tolerance for spatial joins</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>GeoDataFrame containing LineString connections between private and public spaces</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="city2graph.morphology.public_to_public_network">
-<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">public_to_public_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">public_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#public_to_public_network"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.public_to_public_network" title="Link to this definition">#</a></dt>
-<dd><p>Create connections between public spaces represented as a dual graph.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing public space linestrings</p></li>
-<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name that uniquely identifies each public space
-If None, will use DataFrame index</p></li>
-<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default 1e-8</em>) – Distance tolerance for detecting endpoint connections</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>GeoDataFrame containing LineString connections between public spaces</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="city2graph.morphology.morphological_network">
 <span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">morphological_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buildings_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segments_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_point</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'tess_id'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'id'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'barrier_geometry'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contiguity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'queen'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#morphological_network"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.morphological_network" title="Link to this definition">#</a></dt>
-<dd><p>Create a complete morphological network from buildings and road segments.
-The private spaces are represented as tessellations, and the public spaces are represented as a dual graph of road segments.</p>
+<dd><p>Create a complete morphological network from buildings and road segments.</p>
+<p>The private spaces are represented as tessellations, and the public spaces are
+represented as a dual graph of road segments.</p>
 <p>This function performs a series of operations:
 1. Creates tessellations based on buildings and road barrier geometries
 2. Optionally filters the network by distance from a specified center point
@@ -561,9 +483,90 @@ If None, no distance filtering will be applied even if center_point is provided.
 <li><p>If center_point is not provided, all segments will be included.</p></li>
 <li><p>The barrier_geometry column should contain the processed geometries for road segments.
 If it doesn’t exist, the function will use the column specified in public_geom_col.</p></li>
-<li><p>The function requires the city2graph package and depends on create_tessellation, filter_network_by_distance,
-create_private_to_private, create_public_to_public, and create_private_to_public functions.</p></li>
+<li><p>The function requires the city2graph package and depends on create_tessellation,
+filter_network_by_distance, create_private_to_private, create_public_to_public,
+and create_private_to_public functions.</p></li>
 </ul>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.morphology.private_to_private_network">
+<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">private_to_private_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">private_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contiguity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'queen'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#private_to_private_network"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.private_to_private_network" title="Link to this definition">#</a></dt>
+<dd><p>Create contiguity matrices for private spaces.</p>
+<p>If group_col is provided, the contiguity is calculated for each group separately.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing tessellation polygons</p></li>
+<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name that uniquely identifies each private space
+If None, will use DataFrame index</p></li>
+<li><p><strong>group_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name used to group tessellation polygons
+If None, all polygons are treated as one group</p></li>
+<li><p><strong>contiguity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default &quot;queen&quot;</em>) – Type of contiguity, either ‘queen’ or ‘rook’</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>GeoDataFrame containing LineString connections between adjacent private spaces</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If input is not a GeoDataFrame</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If contiguity is not ‘queen’ or ‘rook’ or if required columns are missing</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.morphology.private_to_public_network">
+<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">private_to_public_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">private_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#private_to_public_network"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.private_to_public_network" title="Link to this definition">#</a></dt>
+<dd><p>Create connections between private spaces and public spaces.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing private space polygons</p></li>
+<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing public space linestrings</p></li>
+<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in private_gdf that uniquely identifies each private space
+If None, will use DataFrame index</p></li>
+<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in public_gdf that uniquely identifies each public space
+If None, will use DataFrame index</p></li>
+<li><p><strong>public_geom_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in public_gdf containing alternative geometry to use
+If None, will use the geometry column</p></li>
+<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default 1</em>) – Buffer tolerance for spatial joins</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>GeoDataFrame containing LineString connections between private and public spaces</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.morphology.public_to_public_network">
+<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">public_to_public_network</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">public_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#public_to_public_network"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.public_to_public_network" title="Link to this definition">#</a></dt>
+<dd><p>Create connections between public spaces represented as a dual graph.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing public space linestrings</p></li>
+<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name that uniquely identifies each public space
+If None, will use DataFrame index</p></li>
+<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default 1e-8</em>) – Distance tolerance for detecting endpoint connections</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>GeoDataFrame containing LineString connections between public spaces</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a></p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>
@@ -616,10 +619,10 @@ create_private_to_private, create_public_to_public, and create_private_to_public
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphology.convert_gdf_to_dual"><code class="docutils literal notranslate"><span class="pre">convert_gdf_to_dual()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphology.morphological_network"><code class="docutils literal notranslate"><span class="pre">morphological_network()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphology.private_to_private_network"><code class="docutils literal notranslate"><span class="pre">private_to_private_network()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphology.private_to_public_network"><code class="docutils literal notranslate"><span class="pre">private_to_public_network()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphology.public_to_public_network"><code class="docutils literal notranslate"><span class="pre">public_to_public_network()</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.morphology.morphological_network"><code class="docutils literal notranslate"><span class="pre">morphological_network()</span></code></a></li>
 </ul>
   </nav></div>
 

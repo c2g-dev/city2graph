@@ -52,6 +52,7 @@
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
     <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/generating_graphs_by_proximity';</script>
@@ -414,18 +415,18 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import city2graph
-import networkx as nx
-import osmnx as ox
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">city2graph</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">osmnx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ox</span>
 
-import matplotlib.pyplot as plt
-import contextily as ctx
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">contextily</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ctx</span>
 
-import matplotlib.animation as animation
-from IPython.display import Video, HTML
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.animation</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">animation</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">Video</span><span class="p">,</span> <span class="n">HTML</span>
 
-import warnings
-warnings.filterwarnings(&quot;ignore&quot;)
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -437,22 +438,22 @@ warnings.filterwarnings(&quot;ignore&quot;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>poi_tags = {
-    &quot;amenity&quot;: [
-        &quot;restaurant&quot;]}
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">poi_tags</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;amenity&quot;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="s2">&quot;restaurant&quot;</span><span class="p">]}</span>
 
-#poi_gdf = ox.features_from_place(&quot;Shibuya, Tokyo, Japan&quot;, poi_tags)
-poi_gdf = ox.features_from_point(
-    (35.658514, 139.70133),  # Tokyo Tower coordinates
-    tags=poi_tags,
-    dist=1000  # Search radius in meters
-    )
+<span class="c1">#poi_gdf = ox.features_from_place(&quot;Shibuya, Tokyo, Japan&quot;, poi_tags)</span>
+<span class="n">poi_gdf</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">features_from_point</span><span class="p">(</span>
+    <span class="p">(</span><span class="mf">35.658514</span><span class="p">,</span> <span class="mf">139.70133</span><span class="p">),</span>  <span class="c1"># Tokyo Tower coordinates</span>
+    <span class="n">tags</span><span class="o">=</span><span class="n">poi_tags</span><span class="p">,</span>
+    <span class="n">dist</span><span class="o">=</span><span class="mi">1000</span>  <span class="c1"># Search radius in meters</span>
+    <span class="p">)</span>
 
-# Filter to include only nodes, not ways and relations
-poi_gdf = poi_gdf[poi_gdf.index.get_level_values(&#39;element&#39;) == &#39;node&#39;]
+<span class="c1"># Filter to include only nodes, not ways and relations</span>
+<span class="n">poi_gdf</span> <span class="o">=</span> <span class="n">poi_gdf</span><span class="p">[</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">get_level_values</span><span class="p">(</span><span class="s1">&#39;element&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;node&#39;</span><span class="p">]</span>
 
-# Reproject to a projected CRS for accurate centroids
-poi_gdf = poi_gdf.to_crs(epsg=6677)
+<span class="c1"># Reproject to a projected CRS for accurate centroids</span>
+<span class="n">poi_gdf</span> <span class="o">=</span> <span class="n">poi_gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">6677</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -464,66 +465,66 @@ poi_gdf = poi_gdf.to_crs(epsg=6677)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>def get_node_positions(gdf):
-    &quot;&quot;&quot;Extract node positions from GeoDataFrame.&quot;&quot;&quot;
-    node_positions = {}
-    for id, geom in gdf[&#39;geometry&#39;].items():
-        if geom.geom_type == &#39;Point&#39;:
-            node_positions[id] = (geom.x, geom.y)
-        else:
-            centroid = geom.centroid
-            node_positions[id] = (centroid.x, centroid.y)
-    return node_positions
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">get_node_positions</span><span class="p">(</span><span class="n">gdf</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract node positions from GeoDataFrame.&quot;&quot;&quot;</span>
+    <span class="n">node_positions</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="nb">id</span><span class="p">,</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">gdf</span><span class="p">[</span><span class="s1">&#39;geometry&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">geom</span><span class="o">.</span><span class="n">geom_type</span> <span class="o">==</span> <span class="s1">&#39;Point&#39;</span><span class="p">:</span>
+            <span class="n">node_positions</span><span class="p">[</span><span class="nb">id</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">geom</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">geom</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">centroid</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">centroid</span>
+            <span class="n">node_positions</span><span class="p">[</span><span class="nb">id</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">centroid</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">centroid</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">node_positions</span>
 
-def plot_graph(graph, title, node_positions, node_color=&#39;skyblue&#39;, edge_color=&#39;gray&#39;,
-               add_basemap=False, crs=None):
-    &quot;&quot;&quot;Plot a network graph with color-coded nodes based on degree centrality.&quot;&quot;&quot;
-    # Compute degree centrality for node coloring
-    node_degrees = dict(graph.degree())
-    node_colors = [node_degrees.get(node, 0) for node in graph.nodes()]
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">node_positions</span><span class="p">,</span> <span class="n">node_color</span><span class="o">=</span><span class="s1">&#39;skyblue&#39;</span><span class="p">,</span> <span class="n">edge_color</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">,</span>
+               <span class="n">add_basemap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Plot a network graph with color-coded nodes based on degree centrality.&quot;&quot;&quot;</span>
+    <span class="c1"># Compute degree centrality for node coloring</span>
+    <span class="n">node_degrees</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">graph</span><span class="o">.</span><span class="n">degree</span><span class="p">())</span>
+    <span class="n">node_colors</span> <span class="o">=</span> <span class="p">[</span><span class="n">node_degrees</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">()]</span>
 
-    # Create the plot
-    fig, ax = plt.subplots(figsize=(12, 10))
+    <span class="c1"># Create the plot</span>
+    <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
 
-    # Set equal aspect ratio to maintain map proportions
-    ax.set_aspect(&#39;equal&#39;)
+    <span class="c1"># Set equal aspect ratio to maintain map proportions</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
 
-    # Plot the edges with better color
-    nx.draw_networkx_edges(graph, pos=node_positions,
-                          edge_color=&quot;grey&quot;,
-                          alpha=0.5,
-                          width=0.5,
-                          ax=ax)
+    <span class="c1"># Plot the edges with better color</span>
+    <span class="n">nx</span><span class="o">.</span><span class="n">draw_networkx_edges</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">pos</span><span class="o">=</span><span class="n">node_positions</span><span class="p">,</span>
+                          <span class="n">edge_color</span><span class="o">=</span><span class="s2">&quot;grey&quot;</span><span class="p">,</span>
+                          <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+                          <span class="n">width</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+                          <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">)</span>
 
-    # Plot the POIs with beautiful color scheme
-    nodes = nx.draw_networkx_nodes(graph, pos=node_positions,
-                          node_size=30,
-                          node_color=node_colors,
-                          cmap=plt.cm.plasma,
-                          alpha=0.9,
-                          linewidths=0.5,
-                          ax=ax)
+    <span class="c1"># Plot the POIs with beautiful color scheme</span>
+    <span class="n">nodes</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">draw_networkx_nodes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">pos</span><span class="o">=</span><span class="n">node_positions</span><span class="p">,</span>
+                          <span class="n">node_size</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+                          <span class="n">node_color</span><span class="o">=</span><span class="n">node_colors</span><span class="p">,</span>
+                          <span class="n">cmap</span><span class="o">=</span><span class="n">plt</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">plasma</span><span class="p">,</span>
+                          <span class="n">alpha</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+                          <span class="n">linewidths</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+                          <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">)</span>
 
-    # Add basemap if requested - with no buffer/margin
-    if add_basemap and crs:
-        ctx.add_basemap(ax, crs=crs, source=ctx.providers.CartoDB.Positron)
+    <span class="c1"># Add basemap if requested - with no buffer/margin</span>
+    <span class="k">if</span> <span class="n">add_basemap</span> <span class="ow">and</span> <span class="n">crs</span><span class="p">:</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">add_basemap</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">crs</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">providers</span><span class="o">.</span><span class="n">CartoDB</span><span class="o">.</span><span class="n">Positron</span><span class="p">)</span>
 
-    # Set exact limits based on node positions to avoid any buffer
-    node_xs = [pos[0] for pos in node_positions.values()]
-    node_ys = [pos[1] for pos in node_positions.values()]
-    ax.set_xlim(min(node_xs), max(node_xs))
-    ax.set_ylim(min(node_ys), max(node_ys))
+    <span class="c1"># Set exact limits based on node positions to avoid any buffer</span>
+    <span class="n">node_xs</span> <span class="o">=</span> <span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">node_positions</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+    <span class="n">node_ys</span> <span class="o">=</span> <span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">node_positions</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">node_xs</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">node_xs</span><span class="p">))</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">node_ys</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">node_ys</span><span class="p">))</span>
 
-    # Add a colorbar with better styling
-    cbar = plt.colorbar(nodes, ax=ax, label=&#39;Degree Centrality&#39;, shrink=0.8)
-    cbar.ax.tick_params(labelsize=10)
+    <span class="c1"># Add a colorbar with better styling</span>
+    <span class="n">cbar</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Degree Centrality&#39;</span><span class="p">,</span> <span class="n">shrink</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+    <span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">tick_params</span><span class="p">(</span><span class="n">labelsize</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
 
-    plt.title(title, fontsize=14, fontweight=&#39;bold&#39;, pad=20)
-    plt.axis(&#39;off&#39;)
-    plt.tight_layout()
-    plt.show()
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 
-node_positions = get_node_positions(poi_gdf)
+<span class="n">node_positions</span> <span class="o">=</span> <span class="n">get_node_positions</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -531,46 +532,46 @@ node_positions = get_node_positions(poi_gdf)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Utility functions for animations
-def compute_bounds(node_positions):
-    &quot;&quot;&quot;Return x_min, x_max, y_min, y_max for given node positions.&quot;&quot;&quot;
-    xs = [x for x, y in node_positions.values()]
-    ys = [y for x, y in node_positions.values()]
-    return min(xs), max(xs), min(ys), max(ys)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Utility functions for animations</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_bounds</span><span class="p">(</span><span class="n">node_positions</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return x_min, x_max, y_min, y_max for given node positions.&quot;&quot;&quot;</span>
+    <span class="n">xs</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="n">node_positions</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+    <span class="n">ys</span> <span class="o">=</span> <span class="p">[</span><span class="n">y</span> <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="n">node_positions</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+    <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="n">xs</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">xs</span><span class="p">),</span> <span class="nb">min</span><span class="p">(</span><span class="n">ys</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">ys</span><span class="p">)</span>
 
-def animate_frame(i, poi_gdf, graph_func, param_list, title_fmt, ax, bounds):
-    &quot;&quot;&quot;Generic animation frame function for proximity graphs.&quot;&quot;&quot;
-    node_positions = get_node_positions(poi_gdf)
-    x_min, x_max, y_min, y_max = bounds
-    params = param_list[i]
-    graph = graph_func(poi_gdf, **params)
-    ax.clear()
-    node_degrees = dict(graph.degree())
-    node_colors = [node_degrees.get(n,0) for n in graph.nodes()]
-    nx.draw_networkx_edges(graph, pos=node_positions, edge_color=&#39;gray&#39;, alpha=0.5, width=0.5, ax=ax)
-    nx.draw_networkx_nodes(graph, pos=node_positions, node_size=30, node_color=node_colors, cmap=plt.cm.plasma, alpha=0.9, linewidths=0.5, ax=ax)
-    if poi_gdf.crs:
-        ctx.add_basemap(ax, crs=poi_gdf.crs, source=ctx.providers.CartoDB.Positron)
-    ax.set_xlim(x_min, x_max)
-    ax.set_ylim(y_min, y_max)
-    ax.set_aspect(&#39;equal&#39;)
-    ax.set_title(title_fmt.format(**params), fontsize=14, fontweight=&#39;bold&#39;, pad=20)
-    ax.axis(&#39;off&#39;)
-    return ax
+<span class="k">def</span><span class="w"> </span><span class="nf">animate_frame</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">poi_gdf</span><span class="p">,</span> <span class="n">graph_func</span><span class="p">,</span> <span class="n">param_list</span><span class="p">,</span> <span class="n">title_fmt</span><span class="p">,</span> <span class="n">ax</span><span class="p">,</span> <span class="n">bounds</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Generic animation frame function for proximity graphs.&quot;&quot;&quot;</span>
+    <span class="n">node_positions</span> <span class="o">=</span> <span class="n">get_node_positions</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">)</span>
+    <span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">,</span> <span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span> <span class="o">=</span> <span class="n">bounds</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="n">param_list</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+    <span class="n">graph</span> <span class="o">=</span> <span class="n">graph_func</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+    <span class="n">node_degrees</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">graph</span><span class="o">.</span><span class="n">degree</span><span class="p">())</span>
+    <span class="n">node_colors</span> <span class="o">=</span> <span class="p">[</span><span class="n">node_degrees</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">n</span><span class="p">,</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">()]</span>
+    <span class="n">nx</span><span class="o">.</span><span class="n">draw_networkx_edges</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">pos</span><span class="o">=</span><span class="n">node_positions</span><span class="p">,</span> <span class="n">edge_color</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">)</span>
+    <span class="n">nx</span><span class="o">.</span><span class="n">draw_networkx_nodes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">pos</span><span class="o">=</span><span class="n">node_positions</span><span class="p">,</span> <span class="n">node_size</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">node_color</span><span class="o">=</span><span class="n">node_colors</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">plt</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">plasma</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">linewidths</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">poi_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">:</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">add_basemap</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">providers</span><span class="o">.</span><span class="n">CartoDB</span><span class="o">.</span><span class="n">Positron</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">title_fmt</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="n">params</span><span class="p">),</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ax</span>
 
-def animate_and_save(poi_gdf, graph_func, param_list, title_fmt, save_path, interval=200, fps=5):
-    &quot;&quot;&quot;Create and save animation for proximity graphs.&quot;&quot;&quot;
-    node_positions = get_node_positions(poi_gdf)
-    bounds = compute_bounds(node_positions)
-    fig, ax = plt.subplots(figsize=(12, 10))
+<span class="k">def</span><span class="w"> </span><span class="nf">animate_and_save</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">graph_func</span><span class="p">,</span> <span class="n">param_list</span><span class="p">,</span> <span class="n">title_fmt</span><span class="p">,</span> <span class="n">save_path</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create and save animation for proximity graphs.&quot;&quot;&quot;</span>
+    <span class="n">node_positions</span> <span class="o">=</span> <span class="n">get_node_positions</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">)</span>
+    <span class="n">bounds</span> <span class="o">=</span> <span class="n">compute_bounds</span><span class="p">(</span><span class="n">node_positions</span><span class="p">)</span>
+    <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
 
-    def animate(i):
-        return animate_frame(i, poi_gdf, graph_func, param_list, title_fmt, ax, bounds)
+    <span class="k">def</span><span class="w"> </span><span class="nf">animate</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">animate_frame</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">poi_gdf</span><span class="p">,</span> <span class="n">graph_func</span><span class="p">,</span> <span class="n">param_list</span><span class="p">,</span> <span class="n">title_fmt</span><span class="p">,</span> <span class="n">ax</span><span class="p">,</span> <span class="n">bounds</span><span class="p">)</span>
 
-    ani = animation.FuncAnimation(fig, animate, frames=len(param_list), interval=interval, repeat=True)
-    writer = animation.FFMpegWriter(fps=fps)
-    ani.save(save_path, writer=writer)
-    return ani
+    <span class="n">ani</span> <span class="o">=</span> <span class="n">animation</span><span class="o">.</span><span class="n">FuncAnimation</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">animate</span><span class="p">,</span> <span class="n">frames</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">param_list</span><span class="p">),</span> <span class="n">interval</span><span class="o">=</span><span class="n">interval</span><span class="p">,</span> <span class="n">repeat</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">writer</span> <span class="o">=</span> <span class="n">animation</span><span class="o">.</span><span class="n">FFMpegWriter</span><span class="p">(</span><span class="n">fps</span><span class="o">=</span><span class="n">fps</span><span class="p">)</span>
+    <span class="n">ani</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">save_path</span><span class="p">,</span> <span class="n">writer</span><span class="o">=</span><span class="n">writer</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ani</span>
 </pre></div>
 </div>
 </div>
@@ -582,34 +583,34 @@ def animate_and_save(poi_gdf, graph_func, param_list, title_fmt, save_path, inte
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>plt.close(&#39;all&#39;)  # Close existing figures
-plt.ioff()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="s1">&#39;all&#39;</span><span class="p">)</span>  <span class="c1"># Close existing figures</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ioff</span><span class="p">()</span>
 
-def plot_knn_graph(poi_gdf, node_positions, k_value):
-    &quot;&quot;&quot;Interactive plotting function for KNN graphs.&quot;&quot;&quot;
-    knn_graph = city2graph.knn_graph(poi_gdf, k=k_value)
-    plot_graph(
-    knn_graph,
-    f&#39;KNN Graph (k={k_value}) of Restaurants in Shibuya, Tokyo&#39;,
-    node_positions,
-    edge_color=&#39;gray&#39;,
-    add_basemap=True,
-    crs=poi_gdf.crs
-    )
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_knn_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">node_positions</span><span class="p">,</span> <span class="n">k_value</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Interactive plotting function for KNN graphs.&quot;&quot;&quot;</span>
+    <span class="n">knn_graph</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">knn_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k_value</span><span class="p">)</span>
+    <span class="n">plot_graph</span><span class="p">(</span>
+    <span class="n">knn_graph</span><span class="p">,</span>
+    <span class="sa">f</span><span class="s1">&#39;KNN Graph (k=</span><span class="si">{</span><span class="n">k_value</span><span class="si">}</span><span class="s1">) of Restaurants in Shibuya, Tokyo&#39;</span><span class="p">,</span>
+    <span class="n">node_positions</span><span class="p">,</span>
+    <span class="n">edge_color</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">,</span>
+    <span class="n">add_basemap</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">crs</span><span class="o">=</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">crs</span>
+    <span class="p">)</span>
 
-max_k = 100
-param_list = [{&#39;k&#39;: k} for k in range(1, max_k + 1)]
-ani_knn = animate_and_save(
-    poi_gdf,
-    city2graph.knn_graph,
-    param_list,
-    &#39;KNN Graph (k={k}) of Restaurants in Shibuya, Tokyo&#39;,
-    &#39;../_static/knn_graph.mp4&#39;,
-    interval=500,
-    fps=5
-)
+<span class="n">max_k</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="n">param_list</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;k&#39;</span><span class="p">:</span> <span class="n">k</span><span class="p">}</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
+<span class="n">ani_knn</span> <span class="o">=</span> <span class="n">animate_and_save</span><span class="p">(</span>
+    <span class="n">poi_gdf</span><span class="p">,</span>
+    <span class="n">city2graph</span><span class="o">.</span><span class="n">knn_graph</span><span class="p">,</span>
+    <span class="n">param_list</span><span class="p">,</span>
+    <span class="s1">&#39;KNN Graph (k=</span><span class="si">{k}</span><span class="s1">) of Restaurants in Shibuya, Tokyo&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;../_static/knn_graph.mp4&#39;</span><span class="p">,</span>
+    <span class="n">interval</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+    <span class="n">fps</span><span class="o">=</span><span class="mi">5</span>
+<span class="p">)</span>
 
-plt.close(&#39;all&#39;)  # Close existing figures
+<span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="s1">&#39;all&#39;</span><span class="p">)</span>  <span class="c1"># Close existing figures</span>
 </pre></div>
 </div>
 </div>
@@ -627,11 +628,11 @@ INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo 
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>HTML(&#39;&#39;&#39;
-&lt;video controls style=&quot;width: 100%; max-width: 800px; height: auto;&quot;&gt;
-    &lt;source src=&quot;../_static/knn_graph.mp4&quot; type=&quot;video/mp4&quot;&gt;
-&lt;/video&gt;
-&#39;&#39;&#39;)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">HTML</span><span class="p">(</span><span class="s1">&#39;&#39;&#39;</span>
+<span class="s1">&lt;video controls style=&quot;width: 100%; max-width: 800px; height: auto;&quot;&gt;</span>
+<span class="s1">    &lt;source src=&quot;../_static/knn_graph.mp4&quot; type=&quot;video/mp4&quot;&gt;</span>
+<span class="s1">&lt;/video&gt;</span>
+<span class="s1">&#39;&#39;&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -652,18 +653,18 @@ INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo 
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>plt.ion()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">ion</span><span class="p">()</span>
 
-delaunay_graph = city2graph.delaunay_graph(poi_gdf)
+<span class="n">delaunay_graph</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">delaunay_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">)</span>
 
-# Use the existing plot_graph function with basemap
-plot_graph(delaunay_graph,
-           &#39;Delaunay Graph of Restaurants in Shibuya, Tokyo&#39;,
-           node_positions,
-           node_color=&#39;skyblue&#39;,
-           edge_color=&#39;gray&#39;,
-           add_basemap=True,
-           crs=poi_gdf.crs)
+<span class="c1"># Use the existing plot_graph function with basemap</span>
+<span class="n">plot_graph</span><span class="p">(</span><span class="n">delaunay_graph</span><span class="p">,</span>
+           <span class="s1">&#39;Delaunay Graph of Restaurants in Shibuya, Tokyo&#39;</span><span class="p">,</span>
+           <span class="n">node_positions</span><span class="p">,</span>
+           <span class="n">node_color</span><span class="o">=</span><span class="s1">&#39;skyblue&#39;</span><span class="p">,</span>
+           <span class="n">edge_color</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">,</span>
+           <span class="n">add_basemap</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+           <span class="n">crs</span><span class="o">=</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
 <br/></pre></div>
 </div>
 </div>
@@ -682,32 +683,32 @@ plot_graph(delaunay_graph,
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>plt.ioff()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">ioff</span><span class="p">()</span>
 
-def plot_gilbert_graph(poi_gdf, node_positions, r_value):
-    &quot;&quot;&quot;Interactive plotting function for Gilbert graphs.&quot;&quot;&quot;
-    gilbert_graph = city2graph.gilbert_graph(poi_gdf, radius=r_value)
-    plot_graph(
-    gilbert_graph,
-    f&#39;Gilbert Graph (radius={r_value}m) of Restaurants in Shibuya, Tokyo&#39;,
-    node_positions,
-    edge_color=&#39;gray&#39;,
-    add_basemap=True,
-    crs=poi_gdf.crs
-    )
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_gilbert_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">node_positions</span><span class="p">,</span> <span class="n">r_value</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Interactive plotting function for Gilbert graphs.&quot;&quot;&quot;</span>
+    <span class="n">gilbert_graph</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">gilbert_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">radius</span><span class="o">=</span><span class="n">r_value</span><span class="p">)</span>
+    <span class="n">plot_graph</span><span class="p">(</span>
+    <span class="n">gilbert_graph</span><span class="p">,</span>
+    <span class="sa">f</span><span class="s1">&#39;Gilbert Graph (radius=</span><span class="si">{</span><span class="n">r_value</span><span class="si">}</span><span class="s1">m) of Restaurants in Shibuya, Tokyo&#39;</span><span class="p">,</span>
+    <span class="n">node_positions</span><span class="p">,</span>
+    <span class="n">edge_color</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">,</span>
+    <span class="n">add_basemap</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">crs</span><span class="o">=</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">crs</span>
+    <span class="p">)</span>
 
-max_r = 500  # max radius in meters
-frames = 100
-param_list = [{&#39;radius&#39;: (i + 1) * (max_r / frames)} for i in range(frames)]
-ani_gilbert = animate_and_save(
-    poi_gdf,
-    city2graph.gilbert_graph,
-    param_list,
-    &#39;Gilbert Graph (radius={radius:.0f}m) of Restaurants in Shibuya, Tokyo&#39;,
-    &#39;../_static/gilbert_graph.mp4&#39;,
-    interval=200,
-    fps=5
-)
+<span class="n">max_r</span> <span class="o">=</span> <span class="mi">500</span>  <span class="c1"># max radius in meters</span>
+<span class="n">frames</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="n">param_list</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;radius&#39;</span><span class="p">:</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">max_r</span> <span class="o">/</span> <span class="n">frames</span><span class="p">)}</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">frames</span><span class="p">)]</span>
+<span class="n">ani_gilbert</span> <span class="o">=</span> <span class="n">animate_and_save</span><span class="p">(</span>
+    <span class="n">poi_gdf</span><span class="p">,</span>
+    <span class="n">city2graph</span><span class="o">.</span><span class="n">gilbert_graph</span><span class="p">,</span>
+    <span class="n">param_list</span><span class="p">,</span>
+    <span class="s1">&#39;Gilbert Graph (radius=</span><span class="si">{radius:.0f}</span><span class="s1">m) of Restaurants in Shibuya, Tokyo&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;../_static/gilbert_graph.mp4&#39;</span><span class="p">,</span>
+    <span class="n">interval</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">fps</span><span class="o">=</span><span class="mi">5</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -724,11 +725,11 @@ INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo 
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>HTML(&#39;&#39;&#39;
-&lt;video controls style=&quot;width: 100%; max-width: 800px; height: auto;&quot;&gt;
-    &lt;source src=&quot;../_static/gilbert_graph.mp4&quot; type=&quot;video/mp4&quot;&gt;
-&lt;/video&gt;
-&#39;&#39;&#39;)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">HTML</span><span class="p">(</span><span class="s1">&#39;&#39;&#39;</span>
+<span class="s1">&lt;video controls style=&quot;width: 100%; max-width: 800px; height: auto;&quot;&gt;</span>
+<span class="s1">    &lt;source src=&quot;../_static/gilbert_graph.mp4&quot; type=&quot;video/mp4&quot;&gt;</span>
+<span class="s1">&lt;/video&gt;</span>
+<span class="s1">&#39;&#39;&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -752,22 +753,22 @@ INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo 
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>plt.ioff()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">ioff</span><span class="p">()</span>
 
-# Corrected parameter ranges
-r0_values = list(range(0, 255, 5))  # Every 1 from 1 to 250
-beta_values = [0.01, 0.1, 0.5, 1.0]  # 0.01, 0.1, 0.5, 1.0
+<span class="c1"># Corrected parameter ranges</span>
+<span class="n">r0_values</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>  <span class="c1"># Every 1 from 1 to 250</span>
+<span class="n">beta_values</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]</span>  <span class="c1"># 0.01, 0.1, 0.5, 1.0</span>
 
-param_list = [{&#39;r0&#39;: r0, &#39;beta&#39;: beta} for beta in beta_values for r0 in r0_values]
-ani_waxman = animate_and_save(
-    poi_gdf,
-    city2graph.waxman_graph,
-    param_list,
-    &#39;Waxman Graph (r0={r0}, beta={beta:.2f}) of Restaurants in Shibuya, Tokyo&#39;,
-    &#39;../_static/waxman_graph.mp4&#39;,
-    interval=200,
-    fps=5
-)
+<span class="n">param_list</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;r0&#39;</span><span class="p">:</span> <span class="n">r0</span><span class="p">,</span> <span class="s1">&#39;beta&#39;</span><span class="p">:</span> <span class="n">beta</span><span class="p">}</span> <span class="k">for</span> <span class="n">beta</span> <span class="ow">in</span> <span class="n">beta_values</span> <span class="k">for</span> <span class="n">r0</span> <span class="ow">in</span> <span class="n">r0_values</span><span class="p">]</span>
+<span class="n">ani_waxman</span> <span class="o">=</span> <span class="n">animate_and_save</span><span class="p">(</span>
+    <span class="n">poi_gdf</span><span class="p">,</span>
+    <span class="n">city2graph</span><span class="o">.</span><span class="n">waxman_graph</span><span class="p">,</span>
+    <span class="n">param_list</span><span class="p">,</span>
+    <span class="s1">&#39;Waxman Graph (r0=</span><span class="si">{r0}</span><span class="s1">, beta=</span><span class="si">{beta:.2f}</span><span class="s1">) of Restaurants in Shibuya, Tokyo&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;../_static/waxman_graph.mp4&#39;</span><span class="p">,</span>
+    <span class="n">interval</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">fps</span><span class="o">=</span><span class="mi">5</span>
+<span class="p">)</span>
 <br/></pre></div>
 </div>
 </div>
@@ -784,11 +785,11 @@ INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo 
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>HTML(&#39;&#39;&#39;
-&lt;video controls style=&quot;width: 100%; max-width: 800px; height: auto;&quot;&gt;
-    &lt;source src=&quot;../_static/waxman_graph.mp4&quot; type=&quot;video/mp4&quot;&gt;
-&lt;/video&gt;
-&#39;&#39;&#39;)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">HTML</span><span class="p">(</span><span class="s1">&#39;&#39;&#39;</span>
+<span class="s1">&lt;video controls style=&quot;width: 100%; max-width: 800px; height: auto;&quot;&gt;</span>
+<span class="s1">    &lt;source src=&quot;../_static/waxman_graph.mp4&quot; type=&quot;video/mp4&quot;&gt;</span>
+<span class="s1">&lt;/video&gt;</span>
+<span class="s1">&#39;&#39;&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>

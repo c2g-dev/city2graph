@@ -52,6 +52,7 @@
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
     <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'examples/gtfs';</script>
@@ -404,23 +405,23 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import os
-from pathlib import Path
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
-from shapely import LineString
-import pandas as pd
-import geopandas as gpd
+<span class="kn">from</span><span class="w"> </span><span class="nn">shapely</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
 
-import contextily as ctx
-import folium
+<span class="kn">import</span><span class="w"> </span><span class="nn">contextily</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ctx</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">folium</span>
 
-import matplotlib.pyplot as plt
-import city2graph
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">city2graph</span>
 
-# Configure matplotlib for better visualizations
-plt.rcParams[&#39;figure.figsize&#39;] = (12, 10)
-plt.rcParams[&#39;figure.dpi&#39;] = 100
-plt.style.use(&#39;ggplot&#39;)
+<span class="c1"># Configure matplotlib for better visualizations</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;figure.figsize&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;figure.dpi&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">use</span><span class="p">(</span><span class="s1">&#39;ggplot&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -432,8 +433,8 @@ plt.style.use(&#39;ggplot&#39;)
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>sample_gtfs_path = Path(&quot;./itm_london_gtfs.zip&quot;)
-gtfs_data = city2graph.load_gtfs(sample_gtfs_path)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">sample_gtfs_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;./itm_london_gtfs.zip&quot;</span><span class="p">)</span>
+<span class="n">gtfs_data</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">load_gtfs</span><span class="p">(</span><span class="n">sample_gtfs_path</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -455,7 +456,7 @@ INFO:city2graph.transportation:GTFS data processing complete
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data.keys()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gtfs_data</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -472,7 +473,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;agency&#39;].head()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gtfs_data</span><span class="p">[</span><span class="s1">&#39;agency&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -567,7 +568,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;calendar&#39;].head()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gtfs_data</span><span class="p">[</span><span class="s1">&#39;calendar&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -680,7 +681,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;calendar_dates&#39;].head()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gtfs_data</span><span class="p">[</span><span class="s1">&#39;calendar_dates&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -751,7 +752,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;routes&#39;].head()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gtfs_data</span><span class="p">[</span><span class="s1">&#39;routes&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -834,7 +835,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;stops&#39;].head()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gtfs_data</span><span class="p">[</span><span class="s1">&#39;stops&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -947,7 +948,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;stop_times&#39;].head()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gtfs_data</span><span class="p">[</span><span class="s1">&#39;stop_times&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -1066,7 +1067,7 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>gtfs_data[&#39;trips&#39;].head()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">gtfs_data</span><span class="p">[</span><span class="s1">&#39;trips&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -1179,33 +1180,33 @@ dict_keys([&#39;agency&#39;, &#39;calendar&#39;, &#39;calendar_dates&#39;, &#39;
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># Convert stops dataframe to GeoDataFrame with EPSG:4326 (WGS84) coordinates
-stops_gdf = gpd.GeoDataFrame(
-    gtfs_data[&#39;stops&#39;],
-    geometry=gpd.points_from_xy(gtfs_data[&#39;stops&#39;][&#39;stop_lon&#39;], gtfs_data[&#39;stops&#39;][&#39;stop_lat&#39;]),
-    crs=&quot;EPSG:4326&quot;
-)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Convert stops dataframe to GeoDataFrame with EPSG:4326 (WGS84) coordinates</span>
+<span class="n">stops_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+    <span class="n">gtfs_data</span><span class="p">[</span><span class="s1">&#39;stops&#39;</span><span class="p">],</span>
+    <span class="n">geometry</span><span class="o">=</span><span class="n">gpd</span><span class="o">.</span><span class="n">points_from_xy</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">[</span><span class="s1">&#39;stops&#39;</span><span class="p">][</span><span class="s1">&#39;stop_lon&#39;</span><span class="p">],</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s1">&#39;stops&#39;</span><span class="p">][</span><span class="s1">&#39;stop_lat&#39;</span><span class="p">]),</span>
+    <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span>
+<span class="p">)</span>
 
-# Reproject to British National Grid (EPSG:27700)
-stops_gdf_27700 = stops_gdf.to_crs(epsg=27700)
+<span class="c1"># Reproject to British National Grid (EPSG:27700)</span>
+<span class="n">stops_gdf_27700</span> <span class="o">=</span> <span class="n">stops_gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">27700</span><span class="p">)</span>
 
-# Create the plot in British National Grid
-fig, ax = plt.subplots(figsize=(12, 10))
-stops_gdf_27700.plot(ax=ax, alpha=0.5, c=&#39;blue&#39;, markersize=5)  # Reduced marker size
+<span class="c1"># Create the plot in British National Grid</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+<span class="n">stops_gdf_27700</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="s1">&#39;blue&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>  <span class="c1"># Reduced marker size</span>
 
-# Add a basemap appropriate for the British National Grid
-ctx.add_basemap(ax, crs=stops_gdf_27700.crs.to_string(), source=ctx.providers.CartoDB.Positron)
+<span class="c1"># Add a basemap appropriate for the British National Grid</span>
+<span class="n">ctx</span><span class="o">.</span><span class="n">add_basemap</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">stops_gdf_27700</span><span class="o">.</span><span class="n">crs</span><span class="o">.</span><span class="n">to_string</span><span class="p">(),</span> <span class="n">source</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">providers</span><span class="o">.</span><span class="n">CartoDB</span><span class="o">.</span><span class="n">Positron</span><span class="p">)</span>
 
-# Remove title and labels from coordinate axis
-ax.set_xticklabels([])
-ax.set_yticklabels([])
-ax.set_xticks([])
-ax.set_yticks([])
+<span class="c1"># Remove title and labels from coordinate axis</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xticklabels</span><span class="p">([])</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_yticklabels</span><span class="p">([])</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xticks</span><span class="p">([])</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_yticks</span><span class="p">([])</span>
 
-# Improve the aspect ratio for geographic data
-ax.set_aspect(&#39;equal&#39;)
+<span class="c1"># Improve the aspect ratio for geographic data</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
 
-plt.tight_layout()
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -1224,9 +1225,9 @@ plt.tight_layout()
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>travel_summary_gdf = city2graph.travel_summary_network(
-    gtfs_data, calendar_start=&quot;20250401&quot;, calendar_end=&quot;20250401&quot;, as_gdf=True
-).to_crs(epsg=27700)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">travel_summary_gdf</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">travel_summary_network</span><span class="p">(</span>
+    <span class="n">gtfs_data</span><span class="p">,</span> <span class="n">calendar_start</span><span class="o">=</span><span class="s2">&quot;20250401&quot;</span><span class="p">,</span> <span class="n">calendar_end</span><span class="o">=</span><span class="s2">&quot;20250401&quot;</span><span class="p">,</span> <span class="n">as_gdf</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">27700</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -1234,7 +1235,7 @@ plt.tight_layout()
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[13]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>travel_summary_gdf.head()
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">travel_summary_gdf</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 </div>
 </div>
@@ -1317,109 +1318,109 @@ plt.tight_layout()
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[14]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from shapely.geometry import box
-import matplotlib.pyplot as plt
-import matplotlib.lines as mlines
-import geopandas as gpd
-import contextily as ctx
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">box</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.lines</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mlines</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">contextily</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ctx</span>
 
-# Define the bounding box for Greater London
-london_bbox = (-0.489, 51.28, 0.236, 51.686)
+<span class="c1"># Define the bounding box for Greater London</span>
+<span class="n">london_bbox</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mf">0.489</span><span class="p">,</span> <span class="mf">51.28</span><span class="p">,</span> <span class="mf">0.236</span><span class="p">,</span> <span class="mf">51.686</span><span class="p">)</span>
 
-# Create a box (polygon) from the bounding box
-bbox = box(*london_bbox)
+<span class="c1"># Create a box (polygon) from the bounding box</span>
+<span class="n">bbox</span> <span class="o">=</span> <span class="n">box</span><span class="p">(</span><span class="o">*</span><span class="n">london_bbox</span><span class="p">)</span>
 
-# Create a GeoDataFrame from the box and project to British National Grid (EPSG:27700)
-bbox_gdf = gpd.GeoDataFrame({&quot;geometry&quot;: [bbox]}, crs=&quot;EPSG:4326&quot;).to_crs(epsg=27700)
+<span class="c1"># Create a GeoDataFrame from the box and project to British National Grid (EPSG:27700)</span>
+<span class="n">bbox_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">({</span><span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">bbox</span><span class="p">]},</span> <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">27700</span><span class="p">)</span>
 
-# Perform the spatial join (filtering travel times under 300 seconds)
-travel_summary_gdf_cropped = gpd.sjoin(
-    travel_summary_gdf[travel_summary_gdf[&quot;travel_time&quot;] &lt; 300],
-    bbox_gdf,
-    how=&quot;inner&quot;,
-    predicate=&quot;within&quot;
-)
+<span class="c1"># Perform the spatial join (filtering travel times under 300 seconds)</span>
+<span class="n">travel_summary_gdf_cropped</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">sjoin</span><span class="p">(</span>
+    <span class="n">travel_summary_gdf</span><span class="p">[</span><span class="n">travel_summary_gdf</span><span class="p">[</span><span class="s2">&quot;travel_time&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">300</span><span class="p">],</span>
+    <span class="n">bbox_gdf</span><span class="p">,</span>
+    <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span><span class="p">,</span>
+    <span class="n">predicate</span><span class="o">=</span><span class="s2">&quot;within&quot;</span>
+<span class="p">)</span>
 
-# Create a visually appealing color map
-cmap = plt.cm.viridis
+<span class="c1"># Create a visually appealing color map</span>
+<span class="n">cmap</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">viridis</span>
 
-# Create a larger figure and axis for visualization
-fig, ax = plt.subplots(figsize=(15, 12))
+<span class="c1"># Create a larger figure and axis for visualization</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="mi">12</span><span class="p">))</span>
 
-# Plot the data with styling based on travel_time and frequency.
-# The auto-generated legend for travel time is set to &#39;lower right&#39;
-travel_summary_gdf_cropped.plot(
-    column=&quot;travel_time&quot;,
-    cmap=cmap,
-    scheme=&quot;quantiles&quot;,
-    k=5,
-    linewidth=travel_summary_gdf_cropped[&#39;frequency&#39;] / 500,  # Scale line width by frequency
-    alpha=0.7,
-    ax=ax,
-    legend=True,
-    legend_kwds={&#39;title&#39;: &#39;Travel Time (seconds)&#39;, &#39;loc&#39;: &#39;lower right&#39;}
-)
+<span class="c1"># Plot the data with styling based on travel_time and frequency.</span>
+<span class="c1"># The auto-generated legend for travel time is set to &#39;lower right&#39;</span>
+<span class="n">travel_summary_gdf_cropped</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span>
+    <span class="n">column</span><span class="o">=</span><span class="s2">&quot;travel_time&quot;</span><span class="p">,</span>
+    <span class="n">cmap</span><span class="o">=</span><span class="n">cmap</span><span class="p">,</span>
+    <span class="n">scheme</span><span class="o">=</span><span class="s2">&quot;quantiles&quot;</span><span class="p">,</span>
+    <span class="n">k</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">linewidth</span><span class="o">=</span><span class="n">travel_summary_gdf_cropped</span><span class="p">[</span><span class="s1">&#39;frequency&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="mi">500</span><span class="p">,</span>  <span class="c1"># Scale line width by frequency</span>
+    <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span>
+    <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span>
+    <span class="n">legend</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">legend_kwds</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;title&#39;</span><span class="p">:</span> <span class="s1">&#39;Travel Time (seconds)&#39;</span><span class="p">,</span> <span class="s1">&#39;loc&#39;</span><span class="p">:</span> <span class="s1">&#39;lower right&#39;</span><span class="p">}</span>
+<span class="p">)</span>
 
-# Capture the auto-generated travel time legend
-travel_time_legend = ax.get_legend()
+<span class="c1"># Capture the auto-generated travel time legend</span>
+<span class="n">travel_time_legend</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">get_legend</span><span class="p">()</span>
 
-# Reposition the travel time legend to the lower-right corner with explicit bbox coordinates.
-# Its lower-right corner is anchored at (1, 0)
-travel_time_legend.set_bbox_to_anchor((1, 0))
-travel_time_legend.set_loc(&#39;lower right&#39;)
+<span class="c1"># Reposition the travel time legend to the lower-right corner with explicit bbox coordinates.</span>
+<span class="c1"># Its lower-right corner is anchored at (1, 0)</span>
+<span class="n">travel_time_legend</span><span class="o">.</span><span class="n">set_bbox_to_anchor</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+<span class="n">travel_time_legend</span><span class="o">.</span><span class="n">set_loc</span><span class="p">(</span><span class="s1">&#39;lower right&#39;</span><span class="p">)</span>
 
-# Create custom legend handles for frequency values
-freq_values = [500, 1000, 1500]
-freq_legend_elements = []
-for freq in freq_values:
-    freq_legend_elements.append(
-        mlines.Line2D([0], [0],
-                      color=&#39;black&#39;,
-                      linewidth=freq/500,
-                      label=f&#39;{freq} trips/day&#39;)
-    )
+<span class="c1"># Create custom legend handles for frequency values</span>
+<span class="n">freq_values</span> <span class="o">=</span> <span class="p">[</span><span class="mi">500</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">1500</span><span class="p">]</span>
+<span class="n">freq_legend_elements</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">freq</span> <span class="ow">in</span> <span class="n">freq_values</span><span class="p">:</span>
+    <span class="n">freq_legend_elements</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="n">mlines</span><span class="o">.</span><span class="n">Line2D</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                      <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span>
+                      <span class="n">linewidth</span><span class="o">=</span><span class="n">freq</span><span class="o">/</span><span class="mi">500</span><span class="p">,</span>
+                      <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">freq</span><span class="si">}</span><span class="s1"> trips/day&#39;</span><span class="p">)</span>
+    <span class="p">)</span>
 
-# Add the frequency legend to the plot
-freq_legend = ax.legend(
-    handles=freq_legend_elements,
-    title=&quot;Frequency (trips/day)&quot;,
-    loc=&quot;lower right&quot;,
-    bbox_to_anchor=(1, 0.12),
-    frameon=True,
-    framealpha=0.8
-)
+<span class="c1"># Add the frequency legend to the plot</span>
+<span class="n">freq_legend</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span>
+    <span class="n">handles</span><span class="o">=</span><span class="n">freq_legend_elements</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Frequency (trips/day)&quot;</span><span class="p">,</span>
+    <span class="n">loc</span><span class="o">=</span><span class="s2">&quot;lower right&quot;</span><span class="p">,</span>
+    <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">),</span>
+    <span class="n">frameon</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">framealpha</span><span class="o">=</span><span class="mf">0.8</span>
+<span class="p">)</span>
 
-# Add the travel time legend back so that both legends are visible.
-ax.add_artist(travel_time_legend)
+<span class="c1"># Add the travel time legend back so that both legends are visible.</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">add_artist</span><span class="p">(</span><span class="n">travel_time_legend</span><span class="p">)</span>
 
-# Add a basemap appropriate for the British National Grid.
-ctx.add_basemap(
-    ax,
-    crs=travel_summary_gdf_cropped.crs.to_string(),
-    source=ctx.providers.CartoDB.Positron,
-    alpha=0.5
-)
+<span class="c1"># Add a basemap appropriate for the British National Grid.</span>
+<span class="n">ctx</span><span class="o">.</span><span class="n">add_basemap</span><span class="p">(</span>
+    <span class="n">ax</span><span class="p">,</span>
+    <span class="n">crs</span><span class="o">=</span><span class="n">travel_summary_gdf_cropped</span><span class="o">.</span><span class="n">crs</span><span class="o">.</span><span class="n">to_string</span><span class="p">(),</span>
+    <span class="n">source</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">providers</span><span class="o">.</span><span class="n">CartoDB</span><span class="o">.</span><span class="n">Positron</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span>
+<span class="p">)</span>
 
-# Remove axis labels and ticks for a cleaner look.
-ax.set_xticklabels([])
-ax.set_yticklabels([])
-ax.set_xticks([])
-ax.set_yticks([])
+<span class="c1"># Remove axis labels and ticks for a cleaner look.</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xticklabels</span><span class="p">([])</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_yticklabels</span><span class="p">([])</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xticks</span><span class="p">([])</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_yticks</span><span class="p">([])</span>
 
-# Add a border around the plot.
-for spine in ax.spines.values():
-    spine.set_visible(True)
-    spine.set_linewidth(1)
-    spine.set_color(&#39;#333333&#39;)
+<span class="c1"># Add a border around the plot.</span>
+<span class="k">for</span> <span class="n">spine</span> <span class="ow">in</span> <span class="n">ax</span><span class="o">.</span><span class="n">spines</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+    <span class="n">spine</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">spine</span><span class="o">.</span><span class="n">set_linewidth</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">spine</span><span class="o">.</span><span class="n">set_color</span><span class="p">(</span><span class="s1">&#39;#333333&#39;</span><span class="p">)</span>
 
-# Ensure the aspect ratio is equal (important for geographic data).
-ax.set_aspect(&quot;equal&quot;)
+<span class="c1"># Ensure the aspect ratio is equal (important for geographic data).</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s2">&quot;equal&quot;</span><span class="p">)</span>
 
-# Add title and remove axes
-ax.set_axis_off()
+<span class="c1"># Add title and remove axes</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_axis_off</span><span class="p">()</span>
 
-plt.tight_layout()
-plt.show()
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 <br/></pre></div>
 </div>
 </div>
@@ -1438,7 +1439,7 @@ plt.show()
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>od_gdf = city2graph.get_od_pairs(gtfs_data, start_date=&quot;20250401&quot;, end_date=&quot;20250401&quot;, include_geometry=True, as_generator=False)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">od_gdf</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">get_od_pairs</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">,</span> <span class="n">start_date</span><span class="o">=</span><span class="s2">&quot;20250401&quot;</span><span class="p">,</span> <span class="n">end_date</span><span class="o">=</span><span class="s2">&quot;20250401&quot;</span><span class="p">,</span> <span class="n">include_geometry</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">as_generator</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -1446,12 +1447,12 @@ plt.show()
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># To iterate over chunks and process/write them immediately
-for od_chunk in city2graph.get_od_pairs(gtfs_data, as_generator=True, chunk_size=5000):
-    # Process or write the chunk to disk
-    print(od_chunk.shape)
-    # Optionally, write to a file in append mode:
-    od_chunk.to_csv(&#39;gtfs_od_pairs_chunk.csv&#39;, mode=&#39;a&#39;, header=not os.path.exists(&#39;gtfs_od_pairs_chunk.csv&#39;), index=False)
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># To iterate over chunks and process/write them immediately</span>
+<span class="k">for</span> <span class="n">od_chunk</span> <span class="ow">in</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">get_od_pairs</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">,</span> <span class="n">as_generator</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="mi">5000</span><span class="p">):</span>
+    <span class="c1"># Process or write the chunk to disk</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">od_chunk</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="c1"># Optionally, write to a file in append mode:</span>
+    <span class="n">od_chunk</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s1">&#39;gtfs_od_pairs_chunk.csv&#39;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="s1">&#39;gtfs_od_pairs_chunk.csv&#39;</span><span class="p">),</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>

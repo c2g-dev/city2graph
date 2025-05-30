@@ -51,6 +51,7 @@
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
     <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
     <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api/proximity';</script>
@@ -405,27 +406,6 @@
 <p>This module provides functions to create k-nearest neighbor and Delaunay
 triangulation graphs from GeoDataFrame geometries.</p>
 <dl class="py function">
-<dt class="sig sig-object py" id="city2graph.proximity.knn_graph">
-<span class="sig-prename descclassname"><span class="pre">city2graph.proximity.</span></span><span class="sig-name descname"><span class="pre">knn_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/proximity.html#knn_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.proximity.knn_graph" title="Link to this definition">#</a></dt>
-<dd><p>Generate k-nearest neighbor graph from points or polygon centroids.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – Input data as a GeoDataFrame. Centroids of geometries are used.</p></li>
-<li><p><strong>k</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default 5</em>) – Number of nearest neighbors to connect to each node.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Graph with nodes and k-nearest neighbor edges.
-Node attributes include original data and ‘pos’ coordinates.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.4.2)">networkx.Graph</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="city2graph.proximity.delaunay_graph">
 <span class="sig-prename descclassname"><span class="pre">city2graph.proximity.</span></span><span class="sig-name descname"><span class="pre">delaunay_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/proximity.html#delaunay_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.proximity.delaunay_graph" title="Link to this definition">#</a></dt>
 <dd><p>Generate Delaunay graph from points or polygon centroids.</p>
@@ -438,7 +418,7 @@ Node attributes include original data and ‘pos’ coordinates.</p>
 Node attributes include original data and ‘pos’ coordinates.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.4.2)">networkx.Graph</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.5)">networkx.Graph</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -458,7 +438,28 @@ Node attributes include original data and ‘pos’ coordinates.</p>
 <dd class="field-even"><p>Graph with nodes and edges connecting points within radius.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.4.2)">networkx.Graph</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.5)">networkx.Graph</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.proximity.knn_graph">
+<span class="sig-prename descclassname"><span class="pre">city2graph.proximity.</span></span><span class="sig-name descname"><span class="pre">knn_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/proximity.html#knn_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.proximity.knn_graph" title="Link to this definition">#</a></dt>
+<dd><p>Generate k-nearest neighbor graph from points or polygon centroids.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – Input data as a GeoDataFrame. Centroids of geometries are used.</p></li>
+<li><p><strong>k</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default 5</em>) – Number of nearest neighbors to connect to each node.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Graph with nodes and k-nearest neighbor edges.
+Node attributes include original data and ‘pos’ coordinates.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.5)">networkx.Graph</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -466,7 +467,7 @@ Node attributes include original data and ‘pos’ coordinates.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.proximity.waxman_graph">
 <span class="sig-prename descclassname"><span class="pre">city2graph.proximity.</span></span><span class="sig-name descname"><span class="pre">waxman_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/proximity.html#waxman_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.proximity.waxman_graph" title="Link to this definition">#</a></dt>
-<dd><p>Generate Waxman random geometric graph with $H_{ij} = eta e^{-d_{ij}/r_0}}$.</p>
+<dd><p>Generate Waxman random geometric graph with $H_{ij} = beta e^{-d_{ij}/r_0}}$.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -480,7 +481,7 @@ Node attributes include original data and ‘pos’ coordinates.</p>
 <dd class="field-even"><p>Stochastic Waxman graph with ‘beta’ and ‘r0’ in graph attributes.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.4.2)">networkx.Graph</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.5)">networkx.Graph</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -542,9 +543,9 @@ Node attributes include original data and ‘pos’ coordinates.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.proximity.knn_graph"><code class="docutils literal notranslate"><span class="pre">knn_graph()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.proximity.delaunay_graph"><code class="docutils literal notranslate"><span class="pre">delaunay_graph()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.proximity.gilbert_graph"><code class="docutils literal notranslate"><span class="pre">gilbert_graph()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.proximity.knn_graph"><code class="docutils literal notranslate"><span class="pre">knn_graph()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.proximity.waxman_graph"><code class="docutils literal notranslate"><span class="pre">waxman_graph()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#examples">Examples</a></li>
 </ul>
