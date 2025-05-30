@@ -385,7 +385,7 @@
 <span class="c1"># Define the public API for this module</span>
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;convert_gdf_to_dual&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;morphological_network&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;morphological_graph&quot;</span><span class="p">,</span>
     <span class="s2">&quot;private_to_private_network&quot;</span><span class="p">,</span>
     <span class="s2">&quot;private_to_public_network&quot;</span><span class="p">,</span>
     <span class="s2">&quot;public_to_public_network&quot;</span><span class="p">,</span>
@@ -1326,9 +1326,9 @@
 
 
 
-<div class="viewcode-block" id="morphological_network">
-<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.morphological_network">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">morphological_network</span><span class="p">(</span>
+<div class="viewcode-block" id="morphological_graph">
+<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.morphological_graph">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">morphological_graph</span><span class="p">(</span>
     <span class="n">buildings_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">segments_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">center_point</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1338,7 +1338,7 @@
     <span class="n">public_geom_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;barrier_geometry&quot;</span><span class="p">,</span>
     <span class="n">contiguity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;queen&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Create a complete morphological network from buildings and road segments.</span>
+<span class="sd">    Create a morphological graph from buildings and road segments.</span>
 
 <span class="sd">    The private spaces are represented as tessellations, and the public spaces are</span>
 <span class="sd">    represented as a dual graph of road segments.</span>

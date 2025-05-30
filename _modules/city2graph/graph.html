@@ -402,7 +402,7 @@
 
 <span class="c1"># Define the public API for this module</span>
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s2">&quot;from_morphological_network&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;from_morphological_graph&quot;</span><span class="p">,</span>
     <span class="s2">&quot;heterogeneous_graph&quot;</span><span class="p">,</span>
     <span class="s2">&quot;homogeneous_graph&quot;</span><span class="p">,</span>
     <span class="s2">&quot;is_torch_available&quot;</span><span class="p">,</span>
@@ -1100,9 +1100,9 @@
 
 
 
-<div class="viewcode-block" id="from_morphological_network">
-<a class="viewcode-back" href="../../api/graph.html#city2graph.graph.from_morphological_network">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">from_morphological_network</span><span class="p">(</span>
+<div class="viewcode-block" id="from_morphological_graph">
+<a class="viewcode-back" href="../../api/graph.html#city2graph.graph.from_morphological_graph">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">from_morphological_graph</span><span class="p">(</span>
     <span class="n">network_output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
     <span class="n">private_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tess_id&quot;</span><span class="p">,</span>
     <span class="n">public_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span>
@@ -1111,12 +1111,12 @@
     <span class="n">device</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;torch.device&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">HeteroData</span> <span class="o">|</span> <span class="n">Data</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Create a graph representation from the output of create_morphological_network.</span>
+<span class="sd">    Create a graph representation from the output of morphological_graph.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    network_output : dict</span>
-<span class="sd">        Output dictionary from create_morphological_network containing:</span>
+<span class="sd">        Output dictionary from morphological_graph containing:</span>
 <span class="sd">        - &#39;tessellation&#39;: GeoDataFrame of tessellation cells (private spaces)</span>
 <span class="sd">        - &#39;segments&#39;: GeoDataFrame of road segments (public spaces)</span>
 <span class="sd">        - &#39;private_to_private&#39;: GeoDataFrame of connections between tessellation cells</span>
@@ -1160,7 +1160,7 @@
 
     <span class="c1"># Extract data from network_output</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">network_output</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;network_output must be a dictionary returned from create_morphological_network&quot;</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;network_output must be a dictionary returned from morphological_graph&quot;</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
     <span class="c1"># Extract GeoDataFrames from the network output</span>
@@ -1196,7 +1196,7 @@
         <span class="k">if</span> <span class="n">public_node_feature_cols</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">node_feature_cols</span><span class="p">[</span><span class="s2">&quot;public&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">public_node_feature_cols</span>
 
-        <span class="c1"># Prepare edge source/target column mappings based on morphological_network.py function output columns</span>
+        <span class="c1"># Prepare edge source/target column mappings based on morphological_graph output columns</span>
         <span class="n">edge_source_cols</span> <span class="o">=</span> <span class="p">{</span>
             <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;connects_to&quot;</span><span class="p">,</span> <span class="s2">&quot;private&quot;</span><span class="p">):</span> <span class="s2">&quot;from_private_id&quot;</span><span class="p">,</span>
             <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;adjacent_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="s2">&quot;private_id&quot;</span><span class="p">,</span>
