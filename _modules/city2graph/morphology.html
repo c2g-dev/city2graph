@@ -380,15 +380,15 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">shapely</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">city2graph.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_tessellation</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">city2graph.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">filter_network_by_distance</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">city2graph.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">filter_graph_by_distance</span>
 
 <span class="c1"># Define the public API for this module</span>
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;convert_gdf_to_dual&quot;</span><span class="p">,</span>
     <span class="s2">&quot;morphological_graph&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;private_to_private_network&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;private_to_public_network&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;public_to_public_network&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;private_to_private_graph&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;private_to_public_graph&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;public_to_public_graph&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
 
@@ -1041,9 +1041,9 @@
     <span class="k">return</span> <span class="n">w_nx</span><span class="p">,</span> <span class="n">pos_to_id_mapping</span>
 
 
-<div class="viewcode-block" id="private_to_private_network">
-<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.private_to_private_network">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">private_to_private_network</span><span class="p">(</span>
+<div class="viewcode-block" id="private_to_private_graph">
+<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.private_to_private_graph">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">private_to_private_graph</span><span class="p">(</span>
     <span class="n">private_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">private_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">group_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1181,9 +1181,9 @@
 
 
 
-<div class="viewcode-block" id="private_to_public_network">
-<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.private_to_public_network">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">private_to_public_network</span><span class="p">(</span>
+<div class="viewcode-block" id="private_to_public_graph">
+<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.private_to_public_graph">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">private_to_public_graph</span><span class="p">(</span>
     <span class="n">private_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">public_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">private_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1242,9 +1242,9 @@
 
 
 
-<div class="viewcode-block" id="public_to_public_network">
-<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.public_to_public_network">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">public_to_public_network</span><span class="p">(</span>
+<div class="viewcode-block" id="public_to_public_graph">
+<a class="viewcode-back" href="../../api/morphology.html#city2graph.morphology.public_to_public_graph">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">public_to_public_graph</span><span class="p">(</span>
     <span class="n">public_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">public_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
@@ -1393,7 +1393,7 @@
 <span class="sd">    - The barrier_geometry column should contain the processed geometries for road segments.</span>
 <span class="sd">      If it doesn&#39;t exist, the function will use the column specified in public_geom_col.</span>
 <span class="sd">    - The function requires the city2graph package and depends on create_tessellation,</span>
-<span class="sd">      filter_network_by_distance, create_private_to_private, create_public_to_public,</span>
+<span class="sd">      filter_graph_by_distance, create_private_to_private, create_public_to_public,</span>
 <span class="sd">      and create_private_to_public functions.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># Check if public_geom_col exists in segments_gdf</span>
@@ -1411,7 +1411,7 @@
 
     <span class="c1"># Optionally filter the network by distance from a specified center point</span>
     <span class="k">if</span> <span class="n">center_point</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">distance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">segments_subset</span> <span class="o">=</span> <span class="n">filter_network_by_distance</span><span class="p">(</span>
+        <span class="n">segments_subset</span> <span class="o">=</span> <span class="n">filter_graph_by_distance</span><span class="p">(</span>
             <span class="n">segments_gdf</span><span class="p">,</span> <span class="n">center_point</span><span class="p">,</span> <span class="n">distance</span><span class="o">=</span><span class="n">distance</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
@@ -1433,7 +1433,7 @@
     <span class="p">]</span>
 
     <span class="c1"># Create connections between adjacent private spaces (tessellation cells)</span>
-    <span class="n">private_to_private</span> <span class="o">=</span> <span class="n">private_to_private_network</span><span class="p">(</span>
+    <span class="n">private_to_private</span> <span class="o">=</span> <span class="n">private_to_private_graph</span><span class="p">(</span>
         <span class="n">tess_subset</span><span class="p">,</span>
         <span class="n">private_id_col</span><span class="o">=</span><span class="n">private_id_col</span><span class="p">,</span>
         <span class="n">group_col</span><span class="o">=</span><span class="s2">&quot;enclosure_index&quot;</span><span class="p">,</span>
@@ -1441,13 +1441,13 @@
     <span class="p">)</span>
 
     <span class="c1"># Create connections between street segments</span>
-    <span class="n">public_to_public</span> <span class="o">=</span> <span class="n">public_to_public_network</span><span class="p">(</span>
+    <span class="n">public_to_public</span> <span class="o">=</span> <span class="n">public_to_public_graph</span><span class="p">(</span>
         <span class="n">segments_subset</span><span class="p">,</span>
         <span class="n">public_id_col</span><span class="o">=</span><span class="n">public_id_col</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="c1"># Create connections between private spaces and public spaces</span>
-    <span class="n">private_to_public</span> <span class="o">=</span> <span class="n">private_to_public_network</span><span class="p">(</span>
+    <span class="n">private_to_public</span> <span class="o">=</span> <span class="n">private_to_public_graph</span><span class="p">(</span>
         <span class="n">tess_subset</span><span class="p">,</span>
         <span class="n">segments_subset</span><span class="p">,</span>
         <span class="n">private_id_col</span><span class="o">=</span><span class="n">private_id_col</span><span class="p">,</span>

@@ -390,7 +390,7 @@
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;adjust_segment_connectors&quot;</span><span class="p">,</span>
     <span class="s2">&quot;create_tessellation&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;filter_network_by_distance&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;filter_graph_by_distance&quot;</span><span class="p">,</span>
     <span class="s2">&quot;get_barrier_geometry&quot;</span><span class="p">,</span>
     <span class="s2">&quot;identify_barrier_mask&quot;</span><span class="p">,</span>
     <span class="s2">&quot;identify_connector_mask&quot;</span><span class="p">,</span>
@@ -1396,9 +1396,9 @@
     <span class="k">return</span> <span class="n">nodes_gdf</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">nearest_idx</span><span class="p">,</span> <span class="n">node_id</span><span class="p">]</span>
 
 
-<div class="viewcode-block" id="filter_network_by_distance">
-<a class="viewcode-back" href="../../api/utils.html#city2graph.utils.filter_network_by_distance">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">filter_network_by_distance</span><span class="p">(</span>
+<div class="viewcode-block" id="filter_graph_by_distance">
+<a class="viewcode-back" href="../../api/utils.html#city2graph.utils.filter_graph_by_distance">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">filter_graph_by_distance</span><span class="p">(</span>
     <span class="n">network</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
     <span class="n">center_point</span><span class="p">:</span> <span class="n">Point</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
