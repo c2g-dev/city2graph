@@ -446,8 +446,10 @@ otherwise a homogeneous Data object.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>nodes_dict</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>) – Dictionary of GeoDataFrames for each node type.</p></li>
-<li><p><strong>edges_dict</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>) – Dictionary of GeoDataFrames for each edge type, with keys as (source_type, relation, target_type).</p></li>
+<li><p><strong>nodes_dict</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em> or </em><em>GeoDataFrame</em>) – Dictionary of GeoDataFrames for each node type, or a single GeoDataFrame
+with a ‘type’ column to automatically split by node type.</p></li>
+<li><p><strong>edges_dict</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em> or </em><em>GeoDataFrame</em>) – Dictionary of GeoDataFrames for each edge type, with keys as (source_type, relation, target_type),
+or a single GeoDataFrame with an ‘edge_type’ column.</p></li>
 <li><p><strong>node_id_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Dictionary mapping node types to their ID column.</p></li>
 <li><p><strong>node_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Dictionary mapping node types to lists of feature columns.</p></li>
 <li><p><strong>node_label_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Dictionary mapping node types to lists of label columns.</p></li>
