@@ -1360,15 +1360,21 @@
             <span class="n">clip</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="n">tessellation</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">enclosed_tessellation</span><span class="p">(</span>
-            <span class="n">geometry</span><span class="o">=</span><span class="n">geometry</span><span class="p">,</span>
-            <span class="n">enclosures</span><span class="o">=</span><span class="n">enclosures</span><span class="p">,</span>
-            <span class="n">shrink</span><span class="o">=</span><span class="n">shrink</span><span class="p">,</span>
-            <span class="n">segment</span><span class="o">=</span><span class="n">segment</span><span class="p">,</span>
-            <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">,</span>
-            <span class="n">n_jobs</span><span class="o">=</span><span class="n">n_jobs</span><span class="p">,</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">tessellation</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">enclosed_tessellation</span><span class="p">(</span>
+                <span class="n">geometry</span><span class="o">=</span><span class="n">geometry</span><span class="p">,</span>
+                <span class="n">enclosures</span><span class="o">=</span><span class="n">enclosures</span><span class="p">,</span>
+                <span class="n">shrink</span><span class="o">=</span><span class="n">shrink</span><span class="p">,</span>
+                <span class="n">segment</span><span class="o">=</span><span class="n">segment</span><span class="p">,</span>
+                <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">,</span>
+                <span class="n">n_jobs</span><span class="o">=</span><span class="n">n_jobs</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;No objects to concatenate&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;incorrect geometry type&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">):</span>
+                <span class="c1"># Return empty tessellation when momepy can&#39;t create valid tessellations</span>
+                <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">],</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">geometry</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+            <span class="k">raise</span>
 
         <span class="c1"># Apply ID handling for enclosed tessellation</span>
         <span class="n">tessellation</span><span class="p">[</span><span class="s2">&quot;tess_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
@@ -1382,9 +1388,15 @@
             <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Geometry is in a geographic CRS&quot;</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
         <span class="c1"># Create morphological tessellation</span>
-        <span class="n">tessellation</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">morphological_tessellation</span><span class="p">(</span>
-            <span class="n">geometry</span><span class="o">=</span><span class="n">geometry</span><span class="p">,</span> <span class="n">clip</span><span class="o">=</span><span class="s2">&quot;bounding_box&quot;</span><span class="p">,</span> <span class="n">shrink</span><span class="o">=</span><span class="n">shrink</span><span class="p">,</span> <span class="n">segment</span><span class="o">=</span><span class="n">segment</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">tessellation</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">morphological_tessellation</span><span class="p">(</span>
+                <span class="n">geometry</span><span class="o">=</span><span class="n">geometry</span><span class="p">,</span> <span class="n">clip</span><span class="o">=</span><span class="s2">&quot;bounding_box&quot;</span><span class="p">,</span> <span class="n">shrink</span><span class="o">=</span><span class="n">shrink</span><span class="p">,</span> <span class="n">segment</span><span class="o">=</span><span class="n">segment</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;No objects to concatenate&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;incorrect geometry type&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">):</span>
+                <span class="c1"># Return empty tessellation when momepy can&#39;t create valid tessellations</span>
+                <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">],</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">geometry</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+            <span class="k">raise</span>
         <span class="n">tessellation</span><span class="p">[</span><span class="s2">&quot;tess_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tessellation</span><span class="o">.</span><span class="n">index</span>
 
     <span class="k">return</span> <span class="n">tessellation</span></div>

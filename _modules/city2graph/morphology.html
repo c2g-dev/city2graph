@@ -663,6 +663,10 @@
     <span class="k">if</span> <span class="n">line_gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">connections</span>
 
+    <span class="c1"># Ensure id_col exists on line_gdf</span>
+    <span class="k">if</span> <span class="n">id_col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">line_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">line_gdf</span><span class="p">[</span><span class="n">id_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">line_gdf</span><span class="o">.</span><span class="n">index</span>
+
     <span class="c1"># Extract endpoints vectorized</span>
     <span class="n">endpoints_data</span> <span class="o">=</span> <span class="p">[]</span>
 
@@ -672,16 +676,20 @@
             <span class="k">continue</span>
 
         <span class="n">coords</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">coords</span><span class="p">)</span>
+
+        <span class="c1"># Safely get the ID value, using index if column doesn&#39;t exist</span>
+        <span class="n">id_value</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="n">id_col</span><span class="p">]</span> <span class="k">if</span> <span class="n">id_col</span> <span class="ow">in</span> <span class="n">row</span><span class="o">.</span><span class="n">index</span> <span class="k">else</span> <span class="n">idx</span>
+
         <span class="n">endpoints_data</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
             <span class="p">[</span>
                 <span class="p">{</span>
                     <span class="s2">&quot;line_idx&quot;</span><span class="p">:</span> <span class="n">idx</span><span class="p">,</span>
-                    <span class="n">id_col</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="n">id_col</span><span class="p">],</span>
+                    <span class="n">id_col</span><span class="p">:</span> <span class="n">id_value</span><span class="p">,</span>
                     <span class="s2">&quot;endpoint&quot;</span><span class="p">:</span> <span class="n">shapely</span><span class="o">.</span><span class="n">Point</span><span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
                 <span class="p">},</span>
                 <span class="p">{</span>
                     <span class="s2">&quot;line_idx&quot;</span><span class="p">:</span> <span class="n">idx</span><span class="p">,</span>
-                    <span class="n">id_col</span><span class="p">:</span> <span class="n">row</span><span class="p">[</span><span class="n">id_col</span><span class="p">],</span>
+                    <span class="n">id_col</span><span class="p">:</span> <span class="n">id_value</span><span class="p">,</span>
                     <span class="s2">&quot;endpoint&quot;</span><span class="p">:</span> <span class="n">shapely</span><span class="o">.</span><span class="n">Point</span><span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
                 <span class="p">},</span>
             <span class="p">],</span>
@@ -788,7 +796,11 @@
     <span class="c1"># Check for empty DataFrame</span>
     <span class="k">if</span> <span class="n">gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Input GeoDataFrame is empty&quot;</span><span class="p">,</span> <span class="ne">RuntimeWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="n">id_col</span><span class="p">]</span> <span class="k">if</span> <span class="n">id_col</span> <span class="k">else</span> <span class="p">[],</span> <span class="n">crs</span><span class="o">=</span><span class="n">gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">),</span> <span class="p">{})</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+            <span class="p">{</span><span class="n">id_col</span><span class="p">:</span> <span class="p">[]}</span> <span class="k">if</span> <span class="n">id_col</span> <span class="k">else</span> <span class="p">[],</span>
+            <span class="n">geometry</span><span class="o">=</span><span class="p">[],</span>
+            <span class="n">crs</span><span class="o">=</span><span class="n">gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
+        <span class="p">),</span> <span class="p">{})</span>
 
     <span class="c1"># Validate geometry types</span>
     <span class="n">invalid_geoms</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
@@ -808,7 +820,10 @@
         <span class="n">gdf</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">])</span>
 
     <span class="c1"># Handle ID column</span>
-    <span class="k">if</span> <span class="n">id_col</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">id_col</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">id_col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">gdf</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">gdf</span><span class="p">[</span><span class="n">id_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">index</span>
+    <span class="k">elif</span> <span class="n">id_col</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">gdf</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="n">gdf</span><span class="p">[</span><span class="s2">&quot;temp_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">index</span>
         <span class="n">id_col</span> <span class="o">=</span> <span class="s2">&quot;temp_id&quot;</span>
@@ -1405,8 +1420,24 @@
         <span class="n">public_geom_col</span> <span class="o">=</span> <span class="s2">&quot;geometry&quot;</span>
 
     <span class="c1"># Create tessellations based on buildings and road barrier geometries</span>
+    <span class="c1"># Create a GeoDataFrame with the barrier geometry for tessellation</span>
+    <span class="k">if</span> <span class="n">public_geom_col</span> <span class="o">==</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span>
+        <span class="c1"># If using the main geometry column, just use the segments as-is</span>
+        <span class="n">barrier_gdf</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Create a completely new GeoDataFrame with the barrier geometry</span>
+        <span class="n">barrier_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+            <span class="n">segments_gdf</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">]),</span>
+            <span class="n">geometry</span><span class="o">=</span><span class="n">segments_gdf</span><span class="p">[</span><span class="n">public_geom_col</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
+            <span class="n">crs</span><span class="o">=</span><span class="n">segments_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Ensure barrier_gdf has the same CRS as buildings_gdf</span>
+    <span class="k">if</span> <span class="n">barrier_gdf</span><span class="o">.</span><span class="n">crs</span> <span class="o">!=</span> <span class="n">buildings_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">:</span>
+        <span class="n">barrier_gdf</span> <span class="o">=</span> <span class="n">barrier_gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">buildings_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+
     <span class="n">enclosed_tess</span> <span class="o">=</span> <span class="n">create_tessellation</span><span class="p">(</span>
-        <span class="n">buildings_gdf</span><span class="p">,</span> <span class="n">primary_barriers</span><span class="o">=</span><span class="n">segments_gdf</span><span class="p">[</span><span class="n">public_geom_col</span><span class="p">],</span>
+        <span class="n">buildings_gdf</span><span class="p">,</span> <span class="n">primary_barriers</span><span class="o">=</span><span class="n">barrier_gdf</span><span class="p">,</span>
     <span class="p">)</span>
 
     <span class="c1"># Optionally filter the network by distance from a specified center point</span>
@@ -1418,19 +1449,37 @@
         <span class="n">segments_subset</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
     <span class="c1"># Get the enclosure indices that are adjacent to the segments using a spatial join</span>
-    <span class="n">adjacent_enclosure_indices</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">sjoin</span><span class="p">(</span>
-        <span class="n">enclosed_tess</span><span class="p">,</span> <span class="n">segments_subset</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span><span class="p">,</span> <span class="n">predicate</span><span class="o">=</span><span class="s2">&quot;intersects&quot;</span><span class="p">,</span>
-    <span class="p">)[</span><span class="s2">&quot;enclosure_index&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">enclosed_tess</span><span class="o">.</span><span class="n">empty</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">segments_subset</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="n">adjacent_enclosure_indices</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">sjoin</span><span class="p">(</span>
+            <span class="n">enclosed_tess</span><span class="p">,</span> <span class="n">segments_subset</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span><span class="p">,</span> <span class="n">predicate</span><span class="o">=</span><span class="s2">&quot;intersects&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
 
-    <span class="c1"># Get enclosed tessellation for the adjacent enclosures</span>
-    <span class="n">tess_subset</span> <span class="o">=</span> <span class="n">enclosed_tess</span><span class="p">[</span>
-        <span class="n">enclosed_tess</span><span class="p">[</span><span class="s2">&quot;enclosure_index&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">adjacent_enclosure_indices</span><span class="p">)</span>
-    <span class="p">]</span>
+        <span class="c1"># Check if the tessellation has an enclosure_index column (from enclosed tessellation)</span>
+        <span class="c1"># If not, use the tessellation index as the enclosure index</span>
+        <span class="k">if</span> <span class="s2">&quot;enclosure_index&quot;</span> <span class="ow">in</span> <span class="n">adjacent_enclosure_indices</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">enclosure_indices</span> <span class="o">=</span> <span class="n">adjacent_enclosure_indices</span><span class="p">[</span><span class="s2">&quot;enclosure_index&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># For morphological tessellation, use the tessellation index</span>
+            <span class="n">enclosure_indices</span> <span class="o">=</span> <span class="n">adjacent_enclosure_indices</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+
+        <span class="c1"># Get enclosed tessellation for the adjacent enclosures</span>
+        <span class="k">if</span> <span class="s2">&quot;enclosure_index&quot;</span> <span class="ow">in</span> <span class="n">enclosed_tess</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">tess_subset</span> <span class="o">=</span> <span class="n">enclosed_tess</span><span class="p">[</span>
+                <span class="n">enclosed_tess</span><span class="p">[</span><span class="s2">&quot;enclosure_index&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">enclosure_indices</span><span class="p">)</span>
+            <span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># For morphological tessellation, filter by index</span>
+            <span class="n">tess_subset</span> <span class="o">=</span> <span class="n">enclosed_tess</span><span class="p">[</span><span class="n">enclosed_tess</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">enclosure_indices</span><span class="p">)]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">tess_subset</span> <span class="o">=</span> <span class="n">enclosed_tess</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>  <span class="c1"># Use all tessellations if spatial join fails</span>
 
     <span class="c1"># Filter buildings that intersect with the enclosed tessellation</span>
-    <span class="n">buildings_subset</span> <span class="o">=</span> <span class="n">buildings_gdf</span><span class="p">[</span>
-        <span class="n">buildings_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">intersects</span><span class="p">(</span><span class="n">tess_subset</span><span class="o">.</span><span class="n">unary_union</span><span class="p">)</span>
-    <span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">tess_subset</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="n">buildings_subset</span> <span class="o">=</span> <span class="n">buildings_gdf</span><span class="p">[</span>
+            <span class="n">buildings_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">intersects</span><span class="p">(</span><span class="n">tess_subset</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">union_all</span><span class="p">())</span>
+        <span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">buildings_subset</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="p">[],</span> <span class="n">crs</span><span class="o">=</span><span class="n">buildings_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
 
     <span class="c1"># Create connections between adjacent private spaces (tessellation cells)</span>
     <span class="n">private_to_private</span> <span class="o">=</span> <span class="n">private_to_private_graph</span><span class="p">(</span>
@@ -1457,7 +1506,7 @@
 
     <span class="c1"># Return all created elements</span>
     <span class="k">return</span> <span class="p">{</span>
-        <span class="s2">&quot;tessellations&quot;</span><span class="p">:</span> <span class="n">tess_subset</span><span class="p">,</span>
+        <span class="s2">&quot;tessellation&quot;</span><span class="p">:</span> <span class="n">tess_subset</span><span class="p">,</span>
         <span class="s2">&quot;segments&quot;</span><span class="p">:</span> <span class="n">segments_subset</span><span class="p">,</span>
         <span class="s2">&quot;buildings&quot;</span><span class="p">:</span> <span class="n">buildings_subset</span><span class="p">,</span>
         <span class="s2">&quot;private_to_private&quot;</span><span class="p">:</span> <span class="n">private_to_private</span><span class="p">,</span>
