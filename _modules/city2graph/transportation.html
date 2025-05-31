@@ -383,7 +383,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Point</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;get_od_pairs&quot;</span><span class="p">,</span> <span class="s2">&quot;load_gtfs&quot;</span><span class="p">,</span> <span class="s2">&quot;travel_summary_network&quot;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;get_od_pairs&quot;</span><span class="p">,</span> <span class="s2">&quot;load_gtfs&quot;</span><span class="p">,</span> <span class="s2">&quot;travel_summary_graph&quot;</span><span class="p">]</span>
 
 <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -1160,9 +1160,9 @@
     <span class="k">return</span> <span class="n">time_series</span>
 
 
-<div class="viewcode-block" id="travel_summary_network">
-<a class="viewcode-back" href="../../api/transportation.html#city2graph.transportation.travel_summary_network">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">travel_summary_network</span><span class="p">(</span>
+<div class="viewcode-block" id="travel_summary_graph">
+<a class="viewcode-back" href="../../api/transportation.html#city2graph.transportation.travel_summary_graph">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">travel_summary_graph</span><span class="p">(</span>
     <span class="n">gtfs_data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
     <span class="n">start_time</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">end_time</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1170,7 +1170,7 @@
     <span class="n">calendar_end</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">as_gdf</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Create a network representing travel times and frequencies between stops.</span>
+<span class="sd">    Create a graph representing travel times and frequencies between stops.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
