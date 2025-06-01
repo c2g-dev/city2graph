@@ -1,0 +1,1366 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>city2graph.overture &#8212; city2graph</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=88d739cf" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../_static/documentation_options.js?v=01f34227"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/city2graph/overture';</script>
+    <link rel="canonical" href="https://city2graph.net/_modules/city2graph/overture.html" />
+    <link rel="icon" href="../../_static/city2graph_logo.png"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/city2graph_logo_wide.png" class="logo__image only-light" alt="city2graph - Home"/>
+    <img src="../../_static/city2graph_logo_wide_dark.png" class="logo__image only-dark pst-js-only" alt="city2graph - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../examples/index.html">
+    Examples
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributing.html">
+    Contributing
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/c2g-dev/city2graph" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../installation.html">
+    Installation
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../examples/index.html">
+    Examples
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../api/index.html">
+    API Reference
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../contributing.html">
+    Contributing
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/c2g-dev/city2graph" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">city2graph.overture</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for city2graph.overture</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Module for loading and processing geospatial data from Overture Maps.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">subprocess</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiLineString</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Point</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Polygon</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseGeometry</span>
+
+<span class="c1"># Define the public API for this module</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;load_overture_data&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;process_overture_segments&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="c1"># Valid Overture Maps data types</span>
+<span class="n">VALID_OVERTURE_TYPES</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;address&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;bathymetry&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;building&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;building_part&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;division&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;division_area&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;division_boundary&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;place&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;segment&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;connector&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;infrastructure&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;land&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;land_cover&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;land_use&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;water&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_overture_types</span><span class="p">(</span><span class="n">types</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate and return overture data types.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">types</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">VALID_OVERTURE_TYPES</span><span class="p">)</span>
+
+    <span class="n">invalid_types</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">types</span> <span class="k">if</span> <span class="n">t</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">VALID_OVERTURE_TYPES</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">invalid_types</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Invalid Overture Maps data type(s): </span><span class="si">{</span><span class="n">invalid_types</span><span class="si">}</span><span class="s2">. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Valid types are: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">VALID_OVERTURE_TYPES</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">types</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_prepare_polygon_area</span><span class="p">(</span><span class="n">area</span><span class="p">:</span> <span class="n">Polygon</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">Polygon</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Transform polygon to WGS84 and extract bounding box.&quot;&quot;&quot;</span>
+    <span class="n">wgs84_crs</span> <span class="o">=</span> <span class="s2">&quot;EPSG:4326&quot;</span>
+    <span class="n">original_polygon</span> <span class="o">=</span> <span class="n">area</span>
+
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">area</span><span class="p">,</span> <span class="s2">&quot;crs&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">area</span><span class="o">.</span><span class="n">crs</span> <span class="ow">and</span> <span class="n">area</span><span class="o">.</span><span class="n">crs</span> <span class="o">!=</span> <span class="n">wgs84_crs</span><span class="p">:</span>
+        <span class="c1"># Reproject polygon to WGS84</span>
+        <span class="n">original_polygon</span> <span class="o">=</span> <span class="n">area</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">wgs84_crs</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Transformed polygon from </span><span class="si">%s</span><span class="s2"> to WGS84 (EPSG:4326)&quot;</span><span class="p">,</span> <span class="n">area</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+
+    <span class="c1"># Extract and round bounding box coordinates</span>
+    <span class="n">minx</span><span class="p">,</span> <span class="n">miny</span><span class="p">,</span> <span class="n">maxx</span><span class="p">,</span> <span class="n">maxy</span> <span class="o">=</span> <span class="n">original_polygon</span><span class="o">.</span><span class="n">bounds</span>
+    <span class="n">bbox</span> <span class="o">=</span> <span class="p">[</span><span class="nb">round</span><span class="p">(</span><span class="n">minx</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="nb">round</span><span class="p">(</span><span class="n">miny</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="nb">round</span><span class="p">(</span><span class="n">maxx</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="nb">round</span><span class="p">(</span><span class="n">maxy</span><span class="p">,</span> <span class="mi">10</span><span class="p">)]</span>
+    <span class="k">return</span> <span class="n">bbox</span><span class="p">,</span> <span class="n">original_polygon</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_read_overture_data</span><span class="p">(</span>
+    <span class="n">output_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">process</span><span class="p">:</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">CompletedProcess</span><span class="p">,</span> <span class="n">save_to_file</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">data_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Read data from file or stdout and return GeoDataFrame.&quot;&quot;&quot;</span>
+    <span class="n">WGS84_CRS</span> <span class="o">=</span> <span class="s2">&quot;EPSG:4326&quot;</span>
+
+    <span class="k">if</span> <span class="n">save_to_file</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_path</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_path</span><span class="p">)</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="n">output_path</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;No data returned for </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">data_type</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">process</span><span class="o">.</span><span class="n">stdout</span> <span class="ow">and</span> <span class="n">process</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="n">process</span><span class="o">.</span><span class="n">stdout</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">,</span> <span class="ne">UnicodeDecodeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Could not parse GeoJSON for </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">data_type</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="p">[],</span> <span class="n">crs</span><span class="o">=</span><span class="n">WGS84_CRS</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_clip_to_polygon</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">polygon</span><span class="p">:</span> <span class="n">Polygon</span><span class="p">,</span> <span class="n">data_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Clip GeoDataFrame to polygon boundaries.&quot;&quot;&quot;</span>
+    <span class="n">WGS84_CRS</span> <span class="o">=</span> <span class="s2">&quot;EPSG:4326&quot;</span>
+
+    <span class="k">if</span> <span class="n">polygon</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gdf</span>
+
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="p">[</span><span class="n">polygon</span><span class="p">],</span> <span class="n">crs</span><span class="o">=</span><span class="n">WGS84_CRS</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">gdf</span><span class="o">.</span><span class="n">crs</span> <span class="o">!=</span> <span class="n">mask</span><span class="o">.</span><span class="n">crs</span><span class="p">:</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">gdf</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Error clipping </span><span class="si">%s</span><span class="s2"> to polygon: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">data_type</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">gdf</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_process_single_overture_type</span><span class="p">(</span>
+    <span class="n">data_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">bbox_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">save_to_file</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">return_data</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">original_polygon</span><span class="p">:</span> <span class="n">Polygon</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Process a single overture data type.&quot;&quot;&quot;</span>
+    <span class="n">WGS84_CRS</span> <span class="o">=</span> <span class="s2">&quot;EPSG:4326&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_raise_invalid_data_type</span><span class="p">(</span><span class="n">data_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Raise ValueError for invalid data type.&quot;&quot;&quot;</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid data type: </span><span class="si">{</span><span class="n">data_type</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_raise_invalid_bbox_format</span><span class="p">(</span><span class="n">error_msg</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Invalid bbox format&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Raise ValueError for invalid bbox format.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
+
+    <span class="c1"># Validate data_type against known safe values to prevent injection</span>
+    <span class="k">if</span> <span class="n">data_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">VALID_OVERTURE_TYPES</span><span class="p">:</span>
+        <span class="n">_raise_invalid_data_type</span><span class="p">(</span><span class="n">data_type</span><span class="p">)</span>
+
+    <span class="c1"># Validate and sanitize bbox_str to prevent injection</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">bbox_parts</span> <span class="o">=</span> <span class="n">bbox_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">bbox_parts</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="n">_raise_invalid_bbox_format</span><span class="p">()</span>
+        <span class="c1"># Validate that all parts are valid floats</span>
+        <span class="n">validated_bbox</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">part</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span> <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">bbox_parts</span><span class="p">]</span>
+        <span class="n">safe_bbox_str</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">validated_bbox</span><span class="p">))</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Invalid bbox format: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+
+    <span class="c1"># Validate output directory and prefix to prevent path traversal</span>
+    <span class="n">safe_output_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+    <span class="n">safe_prefix</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="n">prefix</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+
+    <span class="n">output_filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">safe_prefix</span><span class="si">}{</span><span class="n">data_type</span><span class="si">}</span><span class="s2">.geojson&quot;</span> <span class="k">if</span> <span class="n">safe_prefix</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">data_type</span><span class="si">}</span><span class="s2">.geojson&quot;</span>
+    <span class="n">output_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">safe_output_dir</span><span class="p">)</span> <span class="o">/</span> <span class="n">output_filename</span>
+
+    <span class="n">cmd_parts</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">&quot;overturemaps&quot;</span><span class="p">,</span> <span class="s2">&quot;download&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;--bbox=</span><span class="si">{</span><span class="n">safe_bbox_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;-f&quot;</span><span class="p">,</span> <span class="s2">&quot;geojson&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;--type=</span><span class="si">{</span><span class="n">data_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">save_to_file</span><span class="p">:</span>
+        <span class="n">cmd_parts</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s2">&quot;-o&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">output_path</span><span class="p">)])</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">process</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+            <span class="n">cmd_parts</span><span class="p">,</span>
+            <span class="n">check</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">save_to_file</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">return_data</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="n">gdf</span> <span class="o">=</span> <span class="n">_read_overture_data</span><span class="p">(</span><span class="n">output_path</span><span class="p">,</span> <span class="n">process</span><span class="p">,</span> <span class="n">save_to_file</span><span class="p">,</span> <span class="n">data_type</span><span class="p">)</span>
+        <span class="n">gdf</span> <span class="o">=</span> <span class="n">_clip_to_polygon</span><span class="p">(</span><span class="n">gdf</span><span class="p">,</span> <span class="n">original_polygon</span><span class="p">,</span> <span class="n">data_type</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">gdf</span><span class="o">.</span><span class="n">empty</span> <span class="ow">and</span> <span class="s2">&quot;geometry&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">gdf</span><span class="p">:</span>
+            <span class="n">gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="p">[],</span> <span class="n">crs</span><span class="o">=</span><span class="n">gdf</span><span class="o">.</span><span class="n">crs</span> <span class="ow">or</span> <span class="n">WGS84_CRS</span><span class="p">)</span>
+
+        <span class="c1"># Successfully processed data type</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Successfully processed </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">data_type</span><span class="p">)</span>
+
+    <span class="k">except</span> <span class="p">(</span><span class="ne">OSError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Error processing </span><span class="si">%s</span><span class="s2"> data: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">data_type</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="p">[],</span> <span class="n">crs</span><span class="o">=</span><span class="n">WGS84_CRS</span><span class="p">)</span> <span class="k">if</span> <span class="n">return_data</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="k">except</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">CalledProcessError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Error downloading </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">data_type</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="p">[],</span> <span class="n">crs</span><span class="o">=</span><span class="n">WGS84_CRS</span><span class="p">)</span> <span class="k">if</span> <span class="n">return_data</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gdf</span>
+
+
+<div class="viewcode-block" id="load_overture_data">
+<a class="viewcode-back" href="../../api/overture.html#city2graph.overture.load_overture_data">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_overture_data</span><span class="p">(</span>
+    <span class="n">area</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="n">Polygon</span><span class="p">,</span>
+    <span class="n">types</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">output_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span>
+    <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="n">save_to_file</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">return_data</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Load data from Overture Maps using the CLI tool and optionally save to GeoJSON files.</span>
+
+<span class="sd">    Can accept either a bounding box or a Polygon as the area parameter.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    area : Union[List[float], Polygon]</span>
+<span class="sd">        Either a bounding box as [min_lon, min_lat, max_lon, max_lat] in WGS84 coordinates</span>
+<span class="sd">        or a Polygon in WGS84 coordinates (EPSG:4326). If provided in another CRS,</span>
+<span class="sd">        it will be automatically transformed to WGS84.</span>
+<span class="sd">        If a Polygon is provided, its bounding box will be used for the query and</span>
+<span class="sd">        the results will be clipped to the Polygon boundaries.</span>
+<span class="sd">    types : Optional[List[str]], default=None</span>
+<span class="sd">        Types of data to download. If None, downloads all available types.</span>
+<span class="sd">        Must be valid Overture Maps data types: address, bathymetry, building,</span>
+<span class="sd">        building_part, division, division_area, division_boundary, place, segment,</span>
+<span class="sd">        connector, infrastructure, land, land_cover, land_use, water.</span>
+<span class="sd">    output_dir : str, default=&quot;.&quot;</span>
+<span class="sd">        Directory to save the GeoJSON files</span>
+<span class="sd">    prefix : str, default=&quot;&quot;</span>
+<span class="sd">        Prefix to add to the output filenames</span>
+<span class="sd">    save_to_file : bool, default=True</span>
+<span class="sd">        Whether to save the data to GeoJSON files</span>
+<span class="sd">    return_data : bool, default=True</span>
+<span class="sd">        Whether to return the data as GeoDataFrames</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Dict[str, gpd.GeoDataFrame]</span>
+<span class="sd">        Dictionary mapping types to GeoDataFrames if return_data is True,</span>
+<span class="sd">        otherwise an empty dict</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If any of the provided types are not valid Overture Maps data types</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The Overture Maps API requires coordinates in WGS84 (EPSG:4326) format.</span>
+<span class="sd">    For more information, see https://docs.overturemaps.org/</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">types</span> <span class="o">=</span> <span class="n">_validate_overture_types</span><span class="p">(</span><span class="n">types</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">save_to_file</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="n">Path</span><span class="p">(</span><span class="n">output_dir</span><span class="p">)</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">area</span><span class="p">,</span> <span class="n">Polygon</span><span class="p">):</span>
+        <span class="n">bbox</span><span class="p">,</span> <span class="n">original_polygon</span> <span class="o">=</span> <span class="n">_prepare_polygon_area</span><span class="p">(</span><span class="n">area</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">bbox</span><span class="p">,</span> <span class="n">original_polygon</span> <span class="o">=</span> <span class="n">area</span><span class="p">,</span> <span class="kc">None</span>
+
+    <span class="n">bbox_str</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">bbox</span><span class="p">))</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">data_type</span> <span class="ow">in</span> <span class="n">types</span><span class="p">:</span>
+        <span class="n">gdf</span> <span class="o">=</span> <span class="n">_process_single_overture_type</span><span class="p">(</span>
+            <span class="n">data_type</span><span class="p">,</span> <span class="n">bbox_str</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span>
+            <span class="n">save_to_file</span><span class="p">,</span> <span class="n">return_data</span><span class="p">,</span> <span class="n">original_polygon</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">return_data</span><span class="p">:</span>
+            <span class="n">result</span><span class="p">[</span><span class="n">data_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">gdf</span>
+
+    <span class="k">return</span> <span class="n">result</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_extract_line_segment</span><span class="p">(</span>
+    <span class="n">line</span><span class="p">:</span> <span class="n">LineString</span><span class="p">,</span>
+    <span class="n">start_point</span><span class="p">:</span> <span class="n">Point</span><span class="p">,</span>
+    <span class="n">end_point</span><span class="p">:</span> <span class="n">Point</span><span class="p">,</span>
+    <span class="n">start_dist</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">end_dist</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LineString</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create a LineString segment between two points on a line.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    line : LineString</span>
+<span class="sd">        Original line</span>
+<span class="sd">    start_point : Point</span>
+<span class="sd">        Starting point on the line</span>
+<span class="sd">    end_point : Point</span>
+<span class="sd">        Ending point on the line</span>
+<span class="sd">    start_dist : float</span>
+<span class="sd">        Distance of start_point from the start of line</span>
+<span class="sd">    end_dist : float</span>
+<span class="sd">        Distance of end_point from the start of line</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Optional[LineString]</span>
+<span class="sd">        The extracted line segment</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">coords</span><span class="p">)</span>
+    <span class="n">new_coords</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># Add the start point</span>
+    <span class="n">new_coords</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">start_point</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">start_point</span><span class="o">.</span><span class="n">y</span><span class="p">))</span>
+
+    <span class="c1"># Find all intermediate vertices</span>
+    <span class="n">current_dist</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">p1</span><span class="p">,</span> <span class="n">p2</span> <span class="o">=</span> <span class="n">coords</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">coords</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">seg</span> <span class="o">=</span> <span class="n">LineString</span><span class="p">([</span><span class="n">p1</span><span class="p">,</span> <span class="n">p2</span><span class="p">])</span>
+        <span class="n">seg_length</span> <span class="o">=</span> <span class="n">seg</span><span class="o">.</span><span class="n">length</span>
+        <span class="n">next_dist</span> <span class="o">=</span> <span class="n">current_dist</span> <span class="o">+</span> <span class="n">seg_length</span>
+
+        <span class="c1"># If this segment is after our start point and before our end point</span>
+        <span class="k">if</span> <span class="n">next_dist</span> <span class="o">&gt;</span> <span class="n">start_dist</span> <span class="ow">and</span> <span class="n">current_dist</span> <span class="o">&lt;</span> <span class="n">end_dist</span><span class="p">:</span>
+            <span class="c1"># If this vertex is after start but before end, include it</span>
+            <span class="k">if</span> <span class="n">current_dist</span> <span class="o">&gt;=</span> <span class="n">start_dist</span><span class="p">:</span>
+                <span class="n">new_coords</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">p1</span><span class="p">)</span>
+
+            <span class="c1"># If next vertex is after end, add the endpoint and break</span>
+            <span class="k">if</span> <span class="n">next_dist</span> <span class="o">&gt;=</span> <span class="n">end_dist</span><span class="p">:</span>
+                <span class="n">new_coords</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">end_point</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">end_point</span><span class="o">.</span><span class="n">y</span><span class="p">))</span>
+                <span class="k">break</span>
+
+        <span class="n">current_dist</span> <span class="o">=</span> <span class="n">next_dist</span>
+
+    <span class="c1"># If we have at least two points, create a LineString</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">new_coords</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">LineString</span><span class="p">(</span><span class="n">new_coords</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">new_coords</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="c1"># Edge case: create a very short line</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">new_coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">LineString</span><span class="p">([(</span><span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mf">1e-9</span><span class="p">,</span> <span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mf">1e-9</span><span class="p">)])</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_substring</span><span class="p">(</span>
+    <span class="n">line</span><span class="p">:</span> <span class="n">LineString</span><span class="p">,</span> <span class="n">start_pct</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">end_pct</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LineString</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract substring of a line between start_pct and end_pct.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    line : LineString</span>
+<span class="sd">        The input line</span>
+<span class="sd">    start_pct : float</span>
+<span class="sd">        Start percentage (0-1)</span>
+<span class="sd">    end_pct : float</span>
+<span class="sd">        End percentage (0-1)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Optional[LineString]</span>
+<span class="sd">        The substring or None if invalid</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Validate input parameters</span>
+    <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">LineString</span><span class="p">)</span> <span class="ow">or</span>
+        <span class="n">start_pct</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">end_pct</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">start_pct</span> <span class="o">&gt;=</span> <span class="n">end_pct</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="c1"># For full line or nearly full line, return the original</span>
+    <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">start_pct</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">1e-9</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">end_pct</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">1e-9</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">line</span>
+
+    <span class="c1"># Calculate distances along the line</span>
+    <span class="n">total_length</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">length</span>
+    <span class="n">start_dist</span> <span class="o">=</span> <span class="n">start_pct</span> <span class="o">*</span> <span class="n">total_length</span>
+    <span class="n">end_dist</span> <span class="o">=</span> <span class="n">end_pct</span> <span class="o">*</span> <span class="n">total_length</span>
+
+    <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">end_dist</span> <span class="o">-</span> <span class="n">start_dist</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">1e-9</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Get points at the specified distances</span>
+        <span class="n">start_point</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">interpolate</span><span class="p">(</span><span class="n">start_dist</span><span class="p">)</span>
+        <span class="n">end_point</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">interpolate</span><span class="p">(</span><span class="n">end_dist</span><span class="p">)</span>
+
+        <span class="c1"># Handle case where start and end are at endpoints</span>
+        <span class="k">if</span> <span class="n">start_dist</span> <span class="o">&lt;=</span> <span class="mf">1e-9</span> <span class="ow">and</span> <span class="n">end_dist</span> <span class="o">&gt;=</span> <span class="n">total_length</span> <span class="o">-</span> <span class="mf">1e-9</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">line</span>
+
+        <span class="k">return</span> <span class="n">_extract_line_segment</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">start_point</span><span class="p">,</span> <span class="n">end_point</span><span class="p">,</span> <span class="n">start_dist</span><span class="p">,</span> <span class="n">end_dist</span><span class="p">)</span>
+
+    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Error creating line substring: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_identify_barrier_mask</span><span class="p">(</span><span class="n">level_rules</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute non-barrier intervals (barrier mask) from level_rules JSON.</span>
+
+<span class="sd">    Only rules with &quot;value&quot; equal to 0 are considered as barriers.</span>
+<span class="sd">    If any such rule has &quot;between&quot; equal to null, then the entire interval [0, 1]</span>
+<span class="sd">    is treated as non-barrier.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    level_rules : str</span>
+<span class="sd">        JSON string containing level rules with &quot;value&quot; and &quot;between&quot; fields.</span>
+<span class="sd">        Example: &#39;[{&quot;value&quot;: 0, &quot;between&quot;: [0.177, 0.836]}]&#39;</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        List of non-barrier intervals as [start, end] pairs.</span>
+<span class="sd">        Each interval represents a continuous non-barrier section.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; level_rules = &#39;[{&quot;value&quot;: 0, &quot;between&quot;: [0.177, 0.836]}, {&quot;value&quot;: 0, &quot;between&quot;: [0.957, 0.959]}]&#39;</span>
+<span class="sd">    &gt;&gt;&gt; _identify_barrier_mask(level_rules)</span>
+<span class="sd">    [[0.0, 0.177], [0.836, 0.957], [0.959, 1.0]]</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    If any rule for which &quot;value&quot; equals 0 has &quot;between&quot; as null, then</span>
+<span class="sd">    the function returns [[0.0, 1.0]].</span>
+
+<span class="sd">    The barrier intervals are extracted from rules where &quot;value&quot; != 0,</span>
+<span class="sd">    and the returned intervals represent the complement (non-barrier sections).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">level_rules</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="n">level_rules</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;none&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;null&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]</span>
+    <span class="c1"># Normalize Python None to JSON null for proper JSON parsing</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="n">level_rules</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;&#39;&quot;</span><span class="p">,</span> <span class="s1">&#39;&quot;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;None&quot;</span><span class="p">,</span> <span class="s2">&quot;null&quot;</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">rules</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;JSON parse failed for level_rules: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rules</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="n">rules</span> <span class="o">=</span> <span class="p">[</span><span class="n">rules</span><span class="p">]</span>
+    <span class="n">barrier_intervals</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">rule</span> <span class="ow">in</span> <span class="n">rules</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rule</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="n">rule</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;value&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">rule</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;value&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">between</span> <span class="o">=</span> <span class="n">rule</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;between&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">between</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">between</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">between</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">barrier_intervals</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="nb">float</span><span class="p">(</span><span class="n">between</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">between</span><span class="p">[</span><span class="mi">1</span><span class="p">])))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">barrier_intervals</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]</span>
+    <span class="n">barrier_intervals</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">current</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="k">for</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="ow">in</span> <span class="n">barrier_intervals</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">start</span> <span class="o">&gt;</span> <span class="n">current</span><span class="p">:</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">current</span><span class="p">,</span> <span class="n">start</span><span class="p">])</span>
+        <span class="n">current</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">current</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">current</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">current</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_extract_barriers_from_mask</span><span class="p">(</span><span class="n">line</span><span class="p">:</span> <span class="n">LineString</span><span class="p">,</span> <span class="n">mask</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseGeometry</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract barrier parts from the line using the provided barrier mask.</span>
+
+<span class="sd">    The mask is expected to be a list of [start, end] intervals.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">parts</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">interval</span> <span class="ow">in</span> <span class="n">mask</span><span class="p">:</span>
+        <span class="n">seg</span> <span class="o">=</span> <span class="n">_get_substring</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">interval</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">interval</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">seg</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">seg</span><span class="o">.</span><span class="n">is_empty</span><span class="p">:</span>
+            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">seg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">parts</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">MultiLineString</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_barrier_geometry</span><span class="p">(</span><span class="n">row</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseGeometry</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="s2">&quot;barrier_mask&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">row</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Column &#39;barrier_mask&#39; not found in input row&quot;</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="n">barrier_mask</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;barrier_mask&quot;</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">barrier_mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">if</span> <span class="n">barrier_mask</span> <span class="o">==</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]:</span>
+        <span class="k">return</span> <span class="n">row</span><span class="o">.</span><span class="n">geometry</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">geom</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">geometry</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">MultiLineString</span><span class="p">):</span>
+            <span class="n">parts</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">geom</span><span class="o">.</span><span class="n">geoms</span><span class="p">:</span>
+                <span class="n">clipped</span> <span class="o">=</span> <span class="n">_extract_barriers_from_mask</span><span class="p">(</span><span class="n">part</span><span class="p">,</span> <span class="n">barrier_mask</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">clipped</span><span class="p">:</span>
+                    <span class="n">parts</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                        <span class="n">clipped</span><span class="o">.</span><span class="n">geoms</span>
+                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">clipped</span><span class="p">,</span> <span class="n">MultiLineString</span><span class="p">)</span>
+                        <span class="k">else</span> <span class="p">[</span><span class="n">clipped</span><span class="p">],</span>
+                    <span class="p">)</span>
+            <span class="k">return</span> <span class="p">(</span>
+                <span class="kc">None</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">parts</span>
+                <span class="k">else</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+                <span class="k">else</span> <span class="n">MultiLineString</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">_extract_barriers_from_mask</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">barrier_mask</span><span class="p">)</span>
+
+    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_identify_connector_mask</span><span class="p">(</span><span class="n">connectors_info</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Parse connectors_info and return a connector mask list.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    connectors_info : str</span>
+<span class="sd">        JSON string containing connector information with &quot;at&quot; fields.</span>
+<span class="sd">        Example: &#39;[{&quot;connector_id&quot;: &quot;123&quot;, &quot;at&quot;: 0.5}]&#39;</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        List of floats starting with 0.0 and ending with 1.0.</span>
+<span class="sd">        If connectors_info is empty or invalid, returns [0.0, 1.0].</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; connectors_info = &#39;[{&quot;connector_id&quot;: &quot;123&quot;, &quot;at&quot;: 0.3}, {&quot;connector_id&quot;: &quot;456&quot;, &quot;at&quot;: 0.7}]&#39;</span>
+<span class="sd">    &gt;&gt;&gt; _identify_connector_mask(connectors_info)</span>
+<span class="sd">    [0.0, 0.3, 0.7, 1.0]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">connectors_info</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">str</span><span class="p">(</span><span class="n">connectors_info</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+        <span class="k">return</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">parsed</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">connectors_info</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;&#39;&quot;</span><span class="p">,</span> <span class="s1">&#39;&quot;&#39;</span><span class="p">))</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">parsed</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">connectors_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">parsed</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">parsed</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="n">connectors_list</span> <span class="o">=</span> <span class="n">parsed</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]</span>
+        <span class="n">valid_ps</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">connectors_list</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                <span class="n">at_val</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;at&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">at_val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">valid_ps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">at_val</span><span class="p">))</span>
+        <span class="n">valid_ps</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+    <span class="k">except</span> <span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="o">*</span><span class="n">valid_ps</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_recalc_barrier_mask</span><span class="p">(</span><span class="n">original_mask</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">sub_start</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">sub_end</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Recalculate barrier_mask for a subsegment defined by [sub_start, sub_end].&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">original_mask</span> <span class="o">==</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">original_mask</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">original_mask</span>
+    <span class="n">new_mask</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">seg_length</span> <span class="o">=</span> <span class="n">sub_end</span> <span class="o">-</span> <span class="n">sub_start</span>
+    <span class="k">for</span> <span class="n">interval</span> <span class="ow">in</span> <span class="n">original_mask</span><span class="p">:</span>
+        <span class="n">inter_start</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">interval</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">sub_start</span><span class="p">)</span>
+        <span class="n">inter_end</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">interval</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">sub_end</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">inter_start</span> <span class="o">&lt;</span> <span class="n">inter_end</span><span class="p">:</span>
+            <span class="n">new_mask</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">[</span>
+                    <span class="p">(</span><span class="n">inter_start</span> <span class="o">-</span> <span class="n">sub_start</span><span class="p">)</span> <span class="o">/</span> <span class="n">seg_length</span><span class="p">,</span>
+                    <span class="p">(</span><span class="n">inter_end</span> <span class="o">-</span> <span class="n">sub_start</span><span class="p">)</span> <span class="o">/</span> <span class="n">seg_length</span><span class="p">,</span>
+                <span class="p">],</span>
+            <span class="p">)</span>
+    <span class="k">return</span> <span class="n">new_mask</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_parse_connectors_info</span><span class="p">(</span><span class="n">connectors_info</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse and validate connectors info from row data.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">connectors_info</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">str</span><span class="p">(</span><span class="n">connectors_info</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+        <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">parsed</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">connectors_info</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;&#39;&quot;</span><span class="p">,</span> <span class="s1">&#39;&quot;&#39;</span><span class="p">))</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">parsed</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">parsed</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">parsed</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">parsed</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="k">except</span> <span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_extract_valid_connectors</span><span class="p">(</span><span class="n">connectors_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">],</span> <span class="n">valid_ids</span><span class="p">:</span> <span class="nb">set</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract valid connector positions from connector list.&quot;&quot;&quot;</span>
+    <span class="n">valid_connectors</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">connectors_list</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">continue</span>
+
+        <span class="n">connector_id</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;connector_id&quot;</span><span class="p">)</span>
+        <span class="n">at_value</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;at&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">connector_id</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">at_value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">connector_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">valid_ids</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="n">valid_connectors</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">at_value</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">valid_connectors</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_create_connector_mask</span><span class="p">(</span><span class="n">valid_connectors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create connector mask from valid connector positions.&quot;&quot;&quot;</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">valid_connectors</span> <span class="ow">or</span> <span class="n">valid_connectors</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="n">mask</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">mask</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">valid_connectors</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">mask</span> <span class="ow">or</span> <span class="n">mask</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="n">mask</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mask</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_create_split_row</span><span class="p">(</span><span class="n">row</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span>
+                      <span class="n">part</span><span class="p">:</span> <span class="n">LineString</span><span class="p">,</span>
+                      <span class="n">start_pct</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                      <span class="n">end_pct</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                      <span class="n">mask</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
+                      <span class="n">barrier_mask</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+                      <span class="n">original_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span><span class="p">,</span>
+                      <span class="n">counter</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a new row for a split segment part.&quot;&quot;&quot;</span>
+    <span class="n">new_row</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">new_row</span><span class="o">.</span><span class="n">geometry</span> <span class="o">=</span> <span class="n">part</span>
+    <span class="n">new_row</span><span class="p">[</span><span class="s2">&quot;split_from&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">start_pct</span>
+    <span class="n">new_row</span><span class="p">[</span><span class="s2">&quot;split_to&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">end_pct</span>
+    <span class="n">new_row</span><span class="p">[</span><span class="s2">&quot;connector_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">mask</span>
+    <span class="n">new_row</span><span class="p">[</span><span class="s2">&quot;barrier_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_recalc_barrier_mask</span><span class="p">(</span><span class="n">barrier_mask</span><span class="p">,</span> <span class="n">start_pct</span><span class="p">,</span> <span class="n">end_pct</span><span class="p">)</span>
+    <span class="n">new_row</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">original_id</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">counter</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">return</span> <span class="n">new_row</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_process_segment</span><span class="p">(</span><span class="n">row</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span> <span class="n">valid_ids</span><span class="p">:</span> <span class="nb">set</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Process a single segment row for splitting by connectors.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    row : pd.Series</span>
+<span class="sd">        A row from the segments GeoDataFrame</span>
+<span class="sd">    valid_ids : set</span>
+<span class="sd">        Set of valid connector IDs</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list[pd.Series]</span>
+<span class="sd">        List of new rows created from splitting the segment</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">geom</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">geometry</span>
+    <span class="n">connectors_info</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;connectors&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Parse connectors info</span>
+    <span class="n">connectors_list</span> <span class="o">=</span> <span class="n">_parse_connectors_info</span><span class="p">(</span><span class="n">connectors_info</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">connectors_list</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">row</span><span class="p">]</span>
+
+    <span class="c1"># Extract valid connectors</span>
+    <span class="n">valid_connectors</span> <span class="o">=</span> <span class="n">_extract_valid_connectors</span><span class="p">(</span><span class="n">connectors_list</span><span class="p">,</span> <span class="n">valid_ids</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">valid_connectors</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">row</span><span class="p">]</span>
+
+    <span class="c1"># Create connector mask</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">_create_connector_mask</span><span class="p">(</span><span class="n">valid_connectors</span><span class="p">)</span>
+
+    <span class="c1"># Generate split geometries</span>
+    <span class="n">split_rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">start_pct</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">counter</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">original_id</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="n">row</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+    <span class="n">barrier_mask</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;barrier_mask&quot;</span><span class="p">]</span>
+
+    <span class="c1"># Process each connector split</span>
+    <span class="k">for</span> <span class="n">at</span> <span class="ow">in</span> <span class="n">valid_connectors</span><span class="p">:</span>
+        <span class="n">part</span> <span class="o">=</span> <span class="n">_get_substring</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">start_pct</span><span class="p">,</span> <span class="n">at</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">part</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">part</span><span class="o">.</span><span class="n">is_empty</span><span class="p">:</span>
+            <span class="n">split_row</span> <span class="o">=</span> <span class="n">_create_split_row</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">part</span><span class="p">,</span> <span class="n">start_pct</span><span class="p">,</span> <span class="n">at</span><span class="p">,</span> <span class="n">mask</span><span class="p">,</span> <span class="n">barrier_mask</span><span class="p">,</span> <span class="n">original_id</span><span class="p">,</span> <span class="n">counter</span><span class="p">)</span>
+            <span class="n">split_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">split_row</span><span class="p">)</span>
+            <span class="n">counter</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">start_pct</span> <span class="o">=</span> <span class="n">at</span>
+
+    <span class="c1"># Process the last segment</span>
+    <span class="n">part</span> <span class="o">=</span> <span class="n">_get_substring</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">start_pct</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">part</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">part</span><span class="o">.</span><span class="n">is_empty</span><span class="p">:</span>
+        <span class="n">split_row</span> <span class="o">=</span> <span class="n">_create_split_row</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">part</span><span class="p">,</span> <span class="n">start_pct</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">mask</span><span class="p">,</span> <span class="n">barrier_mask</span><span class="p">,</span> <span class="n">original_id</span><span class="p">,</span> <span class="n">counter</span><span class="p">)</span>
+        <span class="n">split_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">split_row</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">split_rows</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_split_segments_by_connectors</span><span class="p">(</span>
+    <span class="n">segments_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">connectors_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Split segments at connector points and update barrier masks accordingly.</span>
+
+<span class="sd">    Optimized for performance with batch processing.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    segments_gdf : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing segments to be split</span>
+<span class="sd">    connectors_gdf : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing connector points</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    gpd.GeoDataFrame</span>
+<span class="sd">        New GeoDataFrame with split segments</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Precompute valid connector ids for a fast membership check</span>
+    <span class="n">valid_ids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">connectors_gdf</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">])</span>
+
+    <span class="c1"># Pre-process connectors_info and level_rules for all rows at once</span>
+    <span class="k">if</span> <span class="s2">&quot;connectors&quot;</span> <span class="ow">in</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">conn_series</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;connectors&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">conn_series</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="s2">&quot;&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">),</span> <span class="n">index</span><span class="o">=</span><span class="n">segments_gdf</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;connector_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">conn_series</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_identify_connector_mask</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="s2">&quot;level_rules&quot;</span> <span class="ow">in</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">lvl_series</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;level_rules&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">lvl_series</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="s2">&quot;&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">),</span> <span class="n">index</span><span class="o">=</span><span class="n">segments_gdf</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;barrier_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">lvl_series</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_identify_barrier_mask</span><span class="p">)</span>
+
+    <span class="c1"># Prepare data structures</span>
+    <span class="n">new_rows_data</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># Process segments in batches to reduce memory pressure</span>
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="mi">1000</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">),</span> <span class="n">batch_size</span><span class="p">):</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">]</span>
+        <span class="n">batch_results</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">row</span><span class="p">:</span> <span class="n">_process_segment</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">valid_ids</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">rows</span> <span class="ow">in</span> <span class="n">batch_results</span><span class="p">:</span>
+            <span class="n">new_rows_data</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span>
+
+    <span class="c1"># Create a new GeoDataFrame from all processed rows, include split columns</span>
+    <span class="n">result_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">new_rows_data</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">segments_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+
+    <span class="c1"># Reset the index of the resulting GeoDataFrame</span>
+    <span class="k">return</span> <span class="n">result_gdf</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_rebuild_geometry</span><span class="p">(</span>
+    <span class="n">seg_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">geom</span><span class="p">:</span> <span class="n">LineString</span><span class="p">,</span>
+    <span class="n">pivot_df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Rebuild the geometry of a segment by replacing its endpoints with quantized centroids.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    seg_id : Any</span>
+<span class="sd">        Identifier for the segment in the pivot_df</span>
+<span class="sd">    geom : LineString</span>
+<span class="sd">        Original geometry of the segment</span>
+<span class="sd">    pivot_df : pd.DataFrame</span>
+<span class="sd">        DataFrame containing quantized centroid coordinates for endpoints</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    List[Tuple[float, float]]</span>
+<span class="sd">        List of coordinate tuples for the rebuilt geometry</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">pivot_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">seg_id</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;x_centroid&quot;</span><span class="p">,</span> <span class="s2">&quot;start&quot;</span><span class="p">)],</span>
+        <span class="n">pivot_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">seg_id</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;y_centroid&quot;</span><span class="p">,</span> <span class="s2">&quot;start&quot;</span><span class="p">)],</span>
+    <span class="p">)</span>
+    <span class="n">end</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">pivot_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">seg_id</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;x_centroid&quot;</span><span class="p">,</span> <span class="s2">&quot;end&quot;</span><span class="p">)],</span>
+        <span class="n">pivot_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">seg_id</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;y_centroid&quot;</span><span class="p">,</span> <span class="s2">&quot;end&quot;</span><span class="p">)],</span>
+    <span class="p">)</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">geom</span><span class="o">.</span><span class="n">coords</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">start</span><span class="p">]</span> <span class="o">+</span> <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">end</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">2</span> <span class="k">else</span> <span class="p">[</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_adjust_segment_connectors</span><span class="p">(</span>
+    <span class="n">segments_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Adjust segment connector endpoints by clustering endpoints within a threshold distance.</span>
+
+<span class="sd">    This function identifies endpoints that are within a threshold distance of each other</span>
+<span class="sd">    and replaces them with their cluster&#39;s centroid, creating more precise connections</span>
+<span class="sd">    between LineString segments.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    segments_gdf : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing segment geometries (LineStrings)</span>
+<span class="sd">    threshold : float</span>
+<span class="sd">        Distance threshold for clustering endpoints. Endpoints whose coordinates</span>
+<span class="sd">        quantize to the same bin (based on this threshold) will be merged.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame with adjusted LineString geometries where endpoints</span>
+<span class="sd">        that were within the threshold have been merged to a common point</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The function works by:</span>
+<span class="sd">    1. Extracting start and end points from all LineStrings</span>
+<span class="sd">    2. Quantizing coordinates to bins based on the threshold</span>
+<span class="sd">    3. Computing the centroid for each bin</span>
+<span class="sd">    4. Rebuilding LineStrings with the new endpoint coordinates</span>
+
+<span class="sd">    Only LineString geometries are processed; other geometry types are left unchanged.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Filter to only process LineString geometries</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;LineString&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">segments_gdf</span>
+
+    <span class="n">valid</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">valid</span><span class="p">[</span><span class="s2">&quot;seg_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">valid</span><span class="o">.</span><span class="n">index</span>
+
+    <span class="c1"># Extract start and end points from all LineStrings</span>
+    <span class="n">starts</span> <span class="o">=</span> <span class="p">[(</span><span class="n">geom</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span> <span class="n">geom</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span> <span class="k">for</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">valid</span><span class="o">.</span><span class="n">geometry</span><span class="p">]</span>
+    <span class="n">ends</span> <span class="o">=</span> <span class="p">[(</span><span class="n">geom</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span> <span class="n">geom</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span> <span class="k">for</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">valid</span><span class="o">.</span><span class="n">geometry</span><span class="p">]</span>
+
+    <span class="c1"># Create DataFrame with all endpoints for easier processing</span>
+    <span class="n">endpoints_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;seg_id&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">valid</span><span class="p">[</span><span class="s2">&quot;seg_id&quot;</span><span class="p">])</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span>
+            <span class="s2">&quot;pos&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;start&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">valid</span><span class="p">)</span> <span class="o">+</span> <span class="p">[</span><span class="s2">&quot;end&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">valid</span><span class="p">),</span>
+            <span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">pt</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">pt</span> <span class="ow">in</span> <span class="n">starts</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">pt</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">pt</span> <span class="ow">in</span> <span class="n">ends</span><span class="p">],</span>
+            <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">pt</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">pt</span> <span class="ow">in</span> <span class="n">starts</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">pt</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">pt</span> <span class="ow">in</span> <span class="n">ends</span><span class="p">],</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Quantize coordinates to bins based on threshold</span>
+    <span class="n">endpoints_df</span><span class="p">[</span><span class="s2">&quot;bin_x&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">endpoints_df</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">threshold</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">endpoints_df</span><span class="p">[</span><span class="s2">&quot;bin_y&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">endpoints_df</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">threshold</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">endpoints_df</span><span class="p">[</span><span class="s2">&quot;bin&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">endpoints_df</span><span class="p">[</span><span class="s2">&quot;bin_x&quot;</span><span class="p">],</span> <span class="n">endpoints_df</span><span class="p">[</span><span class="s2">&quot;bin_y&quot;</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+
+    <span class="c1"># Calculate centroids for each bin</span>
+    <span class="n">centroids</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">endpoints_df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;bin&quot;</span><span class="p">)[[</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">]]</span>
+        <span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="s2">&quot;x_centroid&quot;</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="s2">&quot;y_centroid&quot;</span><span class="p">})</span>
+    <span class="p">)</span>
+    <span class="n">endpoints_df</span> <span class="o">=</span> <span class="n">endpoints_df</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">centroids</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s2">&quot;bin&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Pivot the dataframe to get centroid coordinates by segment and position</span>
+    <span class="n">pivot_df</span> <span class="o">=</span> <span class="n">endpoints_df</span><span class="o">.</span><span class="n">pivot_table</span><span class="p">(</span>
+        <span class="n">index</span><span class="o">=</span><span class="s2">&quot;seg_id&quot;</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="s2">&quot;pos&quot;</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;x_centroid&quot;</span><span class="p">,</span> <span class="s2">&quot;y_centroid&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Rebuild geometries using the centroid coordinates</span>
+    <span class="n">valid</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">valid</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">row</span><span class="p">:</span> <span class="n">LineString</span><span class="p">(</span>
+            <span class="n">_rebuild_geometry</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;seg_id&quot;</span><span class="p">],</span> <span class="n">row</span><span class="o">.</span><span class="n">geometry</span><span class="p">,</span> <span class="n">pivot_df</span><span class="p">),</span>
+        <span class="p">),</span>
+        <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Update the original GeoDataFrame with the new geometries</span>
+    <span class="n">segments_gdf</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">valid</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">segments_gdf</span>
+
+
+<div class="viewcode-block" id="process_overture_segments">
+<a class="viewcode-back" href="../../api/overture.html#city2graph.overture.process_overture_segments">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">process_overture_segments</span><span class="p">(</span>
+    <span class="n">segments_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+    <span class="n">get_barriers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">connectors_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Process segments from Overture Maps to be split by connectors and extract barriers.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    segments_gdf : gpd.GeoDataFrame</span>
+<span class="sd">        Input segments with &#39;subtype&#39; and &#39;level_rules&#39;.</span>
+<span class="sd">    get_barriers : bool</span>
+<span class="sd">        If True, add &#39;barrier_geometry&#39; column to output.</span>
+<span class="sd">    connectors_gdf : Optional[gpd.GeoDataFrame]</span>
+<span class="sd">        Connectors for splitting; if None connectors step is skipped.</span>
+<span class="sd">    threshold : float</span>
+<span class="sd">        Distance threshold for adjusting connectors.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    gpd.GeoDataFrame</span>
+<span class="sd">        Processed road segments, including &#39;length&#39; and optional &#39;barrier_geometry&#39;.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">get_barriers</span><span class="p">:</span>
+        <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;barrier_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;level_rules&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_identify_barrier_mask</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">connectors_gdf</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">segments_gdf</span> <span class="o">=</span> <span class="n">_split_segments_by_connectors</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">,</span> <span class="n">connectors_gdf</span><span class="p">)</span>
+        <span class="n">segments_gdf</span> <span class="o">=</span> <span class="n">_adjust_segment_connectors</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">)</span>
+
+    <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;length&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">length</span>
+
+    <span class="k">if</span> <span class="n">get_barriers</span><span class="p">:</span>
+        <span class="n">barrier_geoms</span> <span class="o">=</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_get_barrier_geometry</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">segments_gdf</span><span class="p">[</span><span class="s2">&quot;barrier_geometry&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">(</span><span class="n">barrier_geoms</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">segments_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+
+
+    <span class="k">return</span> <span class="n">segments_gdf</span></div>
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, Yuta Sato &amp; city2graph developers.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.1.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

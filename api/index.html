@@ -52,8 +52,6 @@
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@^1.0.1/dist/embed-amd.js"></script>
-    <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api/index';</script>
     <link rel="canonical" href="https://city2graph.net/api/index.html" />
     <link rel="icon" href="../_static/city2graph_logo.png"/>
@@ -335,10 +333,8 @@
 <li class="toctree-l1"><a class="reference internal" href="graph.html">Graph</a></li>
 <li class="toctree-l1"><a class="reference internal" href="morphology.html">Morphology</a></li>
 <li class="toctree-l1"><a class="reference internal" href="transportation.html">Transportation</a></li>
-<li class="toctree-l1 has-children"><a class="reference internal" href="proximity.html">Proximity</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../examples/generating_graphs_by_proximity.html">Generating Various Types of Graphs by Proximity</a></li>
-</ul>
-</details></li>
+<li class="toctree-l1"><a class="reference internal" href="proximity.html">Proximity</a></li>
+<li class="toctree-l1"><a class="reference internal" href="overture.html">Overture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="utils.html">Utils</a></li>
 </ul>
 </div>
@@ -429,18 +425,16 @@
 <li class="toctree-l2"><a class="reference internal" href="proximity.html#city2graph.proximity.gilbert_graph"><code class="docutils literal notranslate"><span class="pre">gilbert_graph()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="proximity.html#city2graph.proximity.knn_graph"><code class="docutils literal notranslate"><span class="pre">knn_graph()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="proximity.html#city2graph.proximity.waxman_graph"><code class="docutils literal notranslate"><span class="pre">waxman_graph()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="proximity.html#examples">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="overture.html">Overture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="overture.html#city2graph.overture.load_overture_data"><code class="docutils literal notranslate"><span class="pre">load_overture_data()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="overture.html#city2graph.overture.process_overture_segments"><code class="docutils literal notranslate"><span class="pre">process_overture_segments()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="utils.html">Utils</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="utils.html#city2graph.utils.adjust_segment_connectors"><code class="docutils literal notranslate"><span class="pre">adjust_segment_connectors()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="utils.html#city2graph.utils.create_tessellation"><code class="docutils literal notranslate"><span class="pre">create_tessellation()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="utils.html#city2graph.utils.filter_graph_by_distance"><code class="docutils literal notranslate"><span class="pre">filter_graph_by_distance()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="utils.html#city2graph.utils.get_barrier_geometry"><code class="docutils literal notranslate"><span class="pre">get_barrier_geometry()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="utils.html#city2graph.utils.identify_barrier_mask"><code class="docutils literal notranslate"><span class="pre">identify_barrier_mask()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="utils.html#city2graph.utils.identify_connector_mask"><code class="docutils literal notranslate"><span class="pre">identify_connector_mask()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="utils.html#city2graph.utils.load_overture_data"><code class="docutils literal notranslate"><span class="pre">load_overture_data()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="utils.html#city2graph.utils.split_segments_by_connectors"><code class="docutils literal notranslate"><span class="pre">split_segments_by_connectors()</span></code></a></li>
 </ul>
 </li>
 </ul>
