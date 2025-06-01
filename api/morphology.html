@@ -409,7 +409,7 @@
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing LineString geometries to convert</p></li>
+<li><p><strong>gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing LineString geometries to convert</p></li>
 <li><p><strong>id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name that uniquely identifies each feature
 If None, will use DataFrame index</p></li>
 <li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default 1e-8</em>) – Distance tolerance for detecting endpoint connections</p></li>
@@ -451,8 +451,8 @@ represented as a dual graph of road segments.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>buildings_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing building polygons</p></li>
-<li><p><strong>segments_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing road segments as LineStrings.
+<li><p><strong>buildings_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing building polygons</p></li>
+<li><p><strong>segments_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing road segments as LineStrings.
 Should include a ‘barrier_geometry’ column or the column specified in public_geom_col.</p></li>
 <li><p><strong>center_point</strong> (<em>Union</em><em>[</em><em>Point</em><em>, </em><em>gpd.GeoSeries</em><em>, </em><em>gpd.GeoDataFrame</em><em>]</em><em>, </em><em>optional</em>) – Optional center point for filtering the network by distance.
 If provided, only segments within the specified distance will be included.</p></li>
@@ -497,7 +497,7 @@ and create_private_to_public functions.</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing tessellation polygons</p></li>
+<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing tessellation polygons</p></li>
 <li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name that uniquely identifies each private space
 If None, will use DataFrame index</p></li>
 <li><p><strong>group_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name used to group tessellation polygons
@@ -509,7 +509,7 @@ If None, all polygons are treated as one group</p></li>
 <dd class="field-even"><p>GeoDataFrame containing LineString connections between adjacent private spaces</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a></p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
@@ -527,8 +527,8 @@ If None, all polygons are treated as one group</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing private space polygons</p></li>
-<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing public space linestrings</p></li>
+<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing private space polygons</p></li>
+<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing public space linestrings</p></li>
 <li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in private_gdf that uniquely identifies each private space
 If None, will use DataFrame index</p></li>
 <li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in public_gdf that uniquely identifies each public space
@@ -542,7 +542,7 @@ If None, will use the geometry column</p></li>
 <dd class="field-even"><p>GeoDataFrame containing LineString connections between private and public spaces</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -554,7 +554,7 @@ If None, will use the geometry column</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing public space linestrings</p></li>
+<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing public space linestrings</p></li>
 <li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name that uniquely identifies each public space
 If None, will use DataFrame index</p></li>
 <li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default 1e-8</em>) – Distance tolerance for detecting endpoint connections</p></li>
@@ -564,7 +564,7 @@ If None, will use DataFrame index</p></li>
 <dd class="field-even"><p>GeoDataFrame containing LineString connections between public spaces</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.0.1)">geopandas.GeoDataFrame</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a></p>
 </dd>
 </dl>
 </dd></dl>

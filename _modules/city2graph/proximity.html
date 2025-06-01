@@ -379,6 +379,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.spatial.qhull</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.spatial</span><span class="w"> </span><span class="kn">import</span> <span class="n">Delaunay</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.spatial.distance</span><span class="w"> </span><span class="kn">import</span> <span class="n">pdist</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.spatial.distance</span><span class="w"> </span><span class="kn">import</span> <span class="n">squareform</span>
@@ -433,12 +434,16 @@
 <span class="sd">    set[tuple]</span>
 <span class="sd">        Set of unique edge tuples (source, target).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">tri</span> <span class="o">=</span> <span class="n">Delaunay</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">{</span>
-        <span class="p">(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
-        <span class="k">for</span> <span class="n">simplex</span> <span class="ow">in</span> <span class="n">tri</span><span class="o">.</span><span class="n">simplices</span>
-        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">combinations</span><span class="p">(</span><span class="n">simplex</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-    <span class="p">}</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">tri</span> <span class="o">=</span> <span class="n">Delaunay</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="p">(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">simplex</span> <span class="ow">in</span> <span class="n">tri</span><span class="o">.</span><span class="n">simplices</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">combinations</span><span class="p">(</span><span class="n">simplex</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="p">}</span>
+    <span class="k">except</span> <span class="n">scipy</span><span class="o">.</span><span class="n">spatial</span><span class="o">.</span><span class="n">qhull</span><span class="o">.</span><span class="n">QhullError</span><span class="p">:</span>
+        <span class="c1"># Handle collinear points or other geometric issues</span>
+        <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_extract_coords_and_attrs_from_gdf</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>

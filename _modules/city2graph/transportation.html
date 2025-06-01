@@ -615,10 +615,14 @@
     <span class="n">gtfs_data</span> <span class="o">=</span> <span class="n">_get_gtfs_df</span><span class="p">(</span><span class="n">gtfs_zip_path</span><span class="p">)</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Loaded </span><span class="si">%d</span><span class="s2"> GTFS files&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">))</span>
 
+    <span class="c1"># Return empty dict if no data was loaded</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">gtfs_data</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Processing GTFS DataFrames...&quot;</span><span class="p">)</span>
     <span class="n">gtfs_data</span> <span class="o">=</span> <span class="n">_process_gtfs_df</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;stops&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stops&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Creating stops geometry...&quot;</span><span class="p">)</span>
         <span class="n">stops_geometry</span> <span class="o">=</span> <span class="n">_get_stops_geometry</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;stops&quot;</span><span class="p">])</span>
 
@@ -628,7 +632,7 @@
                 <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;stops&quot;</span><span class="p">],</span> <span class="n">geometry</span><span class="o">=</span><span class="n">stops_geometry</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="s2">&quot;EPSG:4326&quot;</span><span class="p">,</span>
             <span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;shapes&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">gtfs_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;shapes&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Creating shapes geometry...&quot;</span><span class="p">)</span>
         <span class="n">shapes_geometry</span> <span class="o">=</span> <span class="n">_get_shapes_geometry</span><span class="p">(</span><span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;shapes&quot;</span><span class="p">])</span>
 
@@ -1288,6 +1292,12 @@
     <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span>
         <span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;stop_id&quot;</span><span class="p">:</span> <span class="s2">&quot;from_stop_id&quot;</span><span class="p">,</span> <span class="s2">&quot;next_stop_id&quot;</span><span class="p">:</span> <span class="s2">&quot;to_stop_id&quot;</span><span class="p">},</span>
     <span class="p">)</span>
+
+    <span class="c1"># Check if stops data exists</span>
+    <span class="k">if</span> <span class="s2">&quot;stops&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">gtfs_data</span> <span class="ow">or</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;stops&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;No stops data available for GeoDataFrame creation&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span>
+
     <span class="n">stops</span> <span class="o">=</span> <span class="n">gtfs_data</span><span class="p">[</span><span class="s2">&quot;stops&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">&quot;stop_id&quot;</span><span class="p">)</span>
 
     <span class="c1"># Create GeoDataFrame</span>
