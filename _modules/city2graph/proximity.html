@@ -385,6 +385,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.spatial.distance</span><span class="w"> </span><span class="kn">import</span> <span class="n">squareform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">NearestNeighbors</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">city2graph.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">nx_to_gdf</span>
+
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;delaunay_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;gilbert_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;knn_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;waxman_graph&quot;</span><span class="p">]</span>
 
 
@@ -524,7 +526,8 @@
 <div class="viewcode-block" id="knn_graph">
 <a class="viewcode-back" href="../../api/proximity.html#city2graph.proximity.knn_graph">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">knn_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
-              <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+              <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
+              <span class="n">as_gdf</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate k-nearest neighbor graph from points or polygon centroids.</span>
 
@@ -534,17 +537,22 @@
 <span class="sd">        Input data as a GeoDataFrame. Centroids of geometries are used.</span>
 <span class="sd">    k : int, default 5</span>
 <span class="sd">        Number of nearest neighbors to connect to each node.</span>
+<span class="sd">    as_gdf : bool, default False</span>
+<span class="sd">        If True, return edges as a GeoDataFrame instead of NetworkX graph.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    networkx.Graph</span>
+<span class="sd">    networkx.Graph or geopandas.GeoDataFrame</span>
 <span class="sd">        Graph with nodes and k-nearest neighbor edges.</span>
 <span class="sd">        Node attributes include original data and &#39;pos&#39; coordinates.</span>
+<span class="sd">        If as_gdf=True, returns GeoDataFrame of edges.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
 
     <span class="c1"># Early return for edge cases</span>
     <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">graph</span>
 
     <span class="c1"># Build k-nearest neighbor relationships</span>
@@ -557,13 +565,16 @@
     <span class="n">edges</span> <span class="o">=</span> <span class="n">_build_knn_edges</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">)</span>
     <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
 
+    <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">graph</span></div>
 
 
 
 <div class="viewcode-block" id="delaunay_graph">
 <a class="viewcode-back" href="../../api/proximity.html#city2graph.proximity.delaunay_graph">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">delaunay_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">delaunay_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+                   <span class="n">as_gdf</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate Delaunay graph from points or polygon centroids.</span>
 
@@ -571,23 +582,30 @@
 <span class="sd">    ----------</span>
 <span class="sd">    gdf : geopandas.GeoDataFrame</span>
 <span class="sd">        Input data as a GeoDataFrame. Centroids of geometries are used.</span>
+<span class="sd">    as_gdf : bool, default False</span>
+<span class="sd">        If True, return edges as a GeoDataFrame instead of NetworkX graph.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    networkx.Graph</span>
+<span class="sd">    networkx.Graph or geopandas.GeoDataFrame</span>
 <span class="sd">        Graph with nodes and Delaunay triangulation edges.</span>
 <span class="sd">        Node attributes include original data and &#39;pos&#39; coordinates.</span>
+<span class="sd">        If as_gdf=True, returns GeoDataFrame of edges.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
 
     <span class="c1"># Early return for insufficient points</span>
     <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">graph</span>
 
     <span class="c1"># Build Delaunay triangulation edges</span>
     <span class="n">edges</span> <span class="o">=</span> <span class="n">_build_delaunay_edges</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">)</span>
     <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
 
+    <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">graph</span></div>
 
 
@@ -595,7 +613,8 @@
 <div class="viewcode-block" id="gilbert_graph">
 <a class="viewcode-back" href="../../api/proximity.html#city2graph.proximity.gilbert_graph">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">gilbert_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
-                  <span class="n">radius</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+                  <span class="n">radius</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                  <span class="n">as_gdf</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate Gilbert disc model graph from GeoDataFrame point geometries.</span>
 
@@ -605,14 +624,19 @@
 <span class="sd">        Input GeoDataFrame with point geometries.</span>
 <span class="sd">    radius : float</span>
 <span class="sd">        Connection radius.</span>
+<span class="sd">    as_gdf : bool, default False</span>
+<span class="sd">        If True, return edges as a GeoDataFrame instead of NetworkX graph.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    networkx.Graph</span>
+<span class="sd">    networkx.Graph or geopandas.GeoDataFrame</span>
 <span class="sd">        Graph with nodes and edges connecting points within radius.</span>
+<span class="sd">        If as_gdf=True, returns GeoDataFrame of edges.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">graph</span>
 
     <span class="c1"># Vectorized distance computation and edge creation</span>
@@ -628,6 +652,9 @@
 
     <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
     <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;radius&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">radius</span>
+    
+    <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">graph</span></div>
 
 
@@ -638,7 +665,8 @@
     <span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">r0</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">as_gdf</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate Waxman random geometric graph with $H_{ij} = \beta e^{-d_{ij}/r_0}}$.</span>
 
@@ -652,14 +680,19 @@
 <span class="sd">        Euclidean distance scale factor.</span>
 <span class="sd">    seed : int | None, optional</span>
 <span class="sd">        Random seed for reproducibility.</span>
+<span class="sd">    as_gdf : bool, default False</span>
+<span class="sd">        If True, return edges as a GeoDataFrame instead of NetworkX graph.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    networkx.Graph</span>
+<span class="sd">    networkx.Graph or geopandas.GeoDataFrame</span>
 <span class="sd">        Stochastic Waxman graph with &#39;beta&#39; and &#39;r0&#39; in graph attributes.</span>
+<span class="sd">        If as_gdf=True, returns GeoDataFrame of edges.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">graph</span>
 
     <span class="c1"># Vectorized distance computation and probability calculation</span>
@@ -681,6 +714,9 @@
     <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
     <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;beta&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">beta</span>
     <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;r0&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">r0</span>
+    
+    <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">graph</span></div>
 
 </pre></div>
