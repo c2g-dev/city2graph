@@ -370,17 +370,21 @@
 <span></span><span class="sd">&quot;&quot;&quot;Module for loading and processing geospatial data from Overture Maps.&quot;&quot;&quot;</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">momepy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shapely</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Point</span>
 
 <span class="c1"># Define the public API for this module</span>
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;create_tessellation&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;dual_graph&quot;</span><span class="p">,</span>
     <span class="s2">&quot;filter_graph_by_distance&quot;</span><span class="p">,</span>
     <span class="s2">&quot;gdf_to_nx&quot;</span><span class="p">,</span>
     <span class="s2">&quot;nx_to_gdf&quot;</span><span class="p">,</span>
@@ -677,12 +681,19 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_validate_gdf</span><span class="p">(</span><span class="n">nodes</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
                   <span class="n">edges</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate node and edge GeoDataFrames for correct geometry types and matching CRS.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">edges</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">LineString</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
-        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Edges GeoDataFrame must have LineString geometries&quot;</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="c1"># Validate nodes GeoDataFrame for correct geometry types</span>
     <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">nodes</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">Point</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
         <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Nodes GeoDataFrame must have Point geometries&quot;</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="c1"># Validate edges GeoDataFrame for correct geometry types</span>
+    <span class="k">if</span> <span class="n">edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">edges</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="p">(</span><span class="n">LineString</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">MultiLineString</span><span class="p">))</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Edges GeoDataFrame must have LineString or MultiLineString geometries&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="c1"># Validate CRS of nodes and edges</span>
     <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">nodes</span><span class="o">.</span><span class="n">crs</span> <span class="o">!=</span> <span class="n">edges</span><span class="o">.</span><span class="n">crs</span><span class="p">:</span>
         <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;CRS of nodes and edges must match&quot;</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
@@ -965,6 +976,310 @@
     <span class="k">if</span> <span class="n">nodes</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">_create_nodes_gdf_from_graph</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">_create_edges_gdf_from_graph</span><span class="p">(</span><span class="n">G</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_extract_dual_graph_nodes</span><span class="p">(</span><span class="n">dual_graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
+                              <span class="n">id_col</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+                              <span class="n">gdf_crs</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract nodes from dual graph into a GeoDataFrame.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dual_graph : networkx.Graph</span>
+<span class="sd">        Dual graph representation of the network</span>
+<span class="sd">    id_col : str</span>
+<span class="sd">        Column name for the node identifiers</span>
+<span class="sd">    gdf_crs : pyproj.CRS</span>
+<span class="sd">        Coordinate reference system for the output GeoDataFrame</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    geopandas.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing nodes from the dual graph</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Extract nodes data efficiently</span>
+    <span class="n">nodes_data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>
+        <span class="nb">dict</span><span class="p">(</span><span class="n">dual_graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span> <span class="n">orient</span><span class="o">=</span><span class="s2">&quot;index&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">nodes_data</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+            <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="n">id_col</span><span class="p">,</span> <span class="s2">&quot;geometry&quot;</span><span class="p">],</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">gdf_crs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Check if id_col exists before filtering</span>
+    <span class="k">if</span> <span class="n">id_col</span> <span class="ow">in</span> <span class="n">nodes_data</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">nodes_data</span> <span class="o">=</span> <span class="n">nodes_data</span><span class="p">[</span><span class="n">nodes_data</span><span class="p">[</span><span class="n">id_col</span><span class="p">]</span><span class="o">.</span><span class="n">notna</span><span class="p">()]</span>
+
+        <span class="c1"># Create geometries from coordinates</span>
+        <span class="n">nodes_data</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">Point</span><span class="p">(</span><span class="n">coord</span><span class="p">)</span> <span class="k">for</span> <span class="n">coord</span> <span class="ow">in</span> <span class="n">nodes_data</span><span class="o">.</span><span class="n">index</span><span class="p">]</span>
+
+        <span class="c1"># Create a GeoDataFrame</span>
+        <span class="n">dual_node_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">nodes_data</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">gdf_crs</span><span class="p">)</span>
+
+        <span class="c1"># Set the index of the dual_gdf</span>
+        <span class="k">return</span> <span class="n">dual_node_gdf</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">dual_node_gdf</span><span class="p">[</span><span class="n">id_col</span><span class="p">])</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span>
+            <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="n">id_col</span><span class="p">],</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+        <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="n">id_col</span><span class="p">,</span> <span class="s2">&quot;geometry&quot;</span><span class="p">],</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">gdf_crs</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_extract_node_connections</span><span class="p">(</span><span class="n">dual_graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
+                              <span class="n">id_col</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract connections between nodes from dual graph.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dual_graph : networkx.Graph</span>
+<span class="sd">        Dual graph representation of the network</span>
+<span class="sd">    id_col : str</span>
+<span class="sd">        Column name for the node identifiers</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Dictionary mapping node IDs to lists of connected node IDs</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Extract connections using dictionary comprehension</span>
+    <span class="n">connections</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">dual_graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">():</span>
+        <span class="n">node_id</span> <span class="o">=</span> <span class="n">dual_graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">[</span><span class="n">node</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">id_col</span><span class="p">,</span> <span class="n">node</span><span class="p">)</span>
+        <span class="n">connections</span><span class="p">[</span><span class="n">node_id</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">dual_graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">[</span><span class="n">n</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">id_col</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">dual_graph</span><span class="o">.</span><span class="n">neighbors</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+        <span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">connections</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_find_additional_connections</span><span class="p">(</span><span class="n">line_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+                                 <span class="n">id_col</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+                                 <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                                 <span class="n">connections</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Find additional connections between lines based on endpoint proximity.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    line_gdf : geopandas.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing LineString geometries</span>
+<span class="sd">    id_col : str</span>
+<span class="sd">        Column name for the line identifiers</span>
+<span class="sd">    tolerance : float</span>
+<span class="sd">        Distance tolerance for endpoint connections</span>
+<span class="sd">    connections : dict, optional</span>
+<span class="sd">        Existing connections dictionary to update</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Updated dictionary of connections</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">connections</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">connections</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">if</span> <span class="n">line_gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">connections</span>
+
+    <span class="c1"># Ensure id_col exists on line_gdf</span>
+    <span class="k">if</span> <span class="n">id_col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">line_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">line_gdf</span><span class="p">[</span><span class="n">id_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">line_gdf</span><span class="o">.</span><span class="n">index</span>
+
+    <span class="c1"># Extract endpoints vectorized</span>
+    <span class="n">endpoints_data</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># This part builds a list of endpoints for each linestring</span>
+    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">line_gdf</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">geometry</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">LineString</span><span class="p">):</span>
+            <span class="k">continue</span>
+
+        <span class="n">coords</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">coords</span><span class="p">)</span>
+
+        <span class="c1"># Safely get the ID value, using index if column doesn&#39;t exist</span>
+        <span class="n">id_value</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="n">id_col</span><span class="p">]</span> <span class="k">if</span> <span class="n">id_col</span> <span class="ow">in</span> <span class="n">row</span><span class="o">.</span><span class="n">index</span> <span class="k">else</span> <span class="n">idx</span>
+
+        <span class="n">endpoints_data</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;line_idx&quot;</span><span class="p">:</span> <span class="n">idx</span><span class="p">,</span>
+                    <span class="n">id_col</span><span class="p">:</span> <span class="n">id_value</span><span class="p">,</span>
+                    <span class="s2">&quot;endpoint&quot;</span><span class="p">:</span> <span class="n">Point</span><span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+                <span class="p">},</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;line_idx&quot;</span><span class="p">:</span> <span class="n">idx</span><span class="p">,</span>
+                    <span class="n">id_col</span><span class="p">:</span> <span class="n">id_value</span><span class="p">,</span>
+                    <span class="s2">&quot;endpoint&quot;</span><span class="p">:</span> <span class="n">Point</span><span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
+                <span class="p">},</span>
+            <span class="p">],</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">endpoints_data</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">connections</span>
+
+    <span class="c1"># Create GeoDataFrame of endpoints</span>
+    <span class="n">endpoints_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+        <span class="n">endpoints_data</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;endpoint&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">line_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Create buffers around endpoints for spatial join</span>
+    <span class="n">endpoints_gdf</span><span class="p">[</span><span class="s2">&quot;buffer_geom&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">endpoints_gdf</span><span class="o">.</span><span class="n">endpoint</span><span class="o">.</span><span class="n">buffer</span><span class="p">(</span><span class="n">tolerance</span><span class="p">)</span>
+
+    <span class="c1"># Prepare lines for joining</span>
+    <span class="n">lines_for_join</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">line_gdf</span><span class="p">[[</span><span class="n">id_col</span><span class="p">,</span> <span class="s2">&quot;geometry&quot;</span><span class="p">]]</span>
+        <span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="s2">&quot;line_index&quot;</span><span class="p">})</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Spatial join buffered endpoints with lines</span>
+    <span class="n">joined</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">sjoin</span><span class="p">(</span>
+        <span class="n">endpoints_gdf</span><span class="o">.</span><span class="n">set_geometry</span><span class="p">(</span><span class="s2">&quot;buffer_geom&quot;</span><span class="p">),</span>
+        <span class="n">lines_for_join</span><span class="p">,</span>
+        <span class="n">predicate</span><span class="o">=</span><span class="s2">&quot;intersects&quot;</span><span class="p">,</span>
+        <span class="n">how</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Filter out self-matches</span>
+    <span class="n">joined</span> <span class="o">=</span> <span class="n">joined</span><span class="p">[</span><span class="n">joined</span><span class="o">.</span><span class="n">line_idx</span> <span class="o">!=</span> <span class="n">joined</span><span class="o">.</span><span class="n">line_index</span><span class="p">]</span>
+
+    <span class="c1"># Update connections dictionary based on endpoint intersections</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">joined</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="c1"># Determine column names</span>
+        <span class="n">orig_id_col</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">id_col</span><span class="si">}</span><span class="s2">_left&quot;</span> <span class="k">if</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">id_col</span><span class="si">}</span><span class="s2">_left&quot;</span> <span class="ow">in</span> <span class="n">joined</span><span class="o">.</span><span class="n">columns</span> <span class="k">else</span> <span class="n">id_col</span>
+        <span class="n">other_id_col</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">id_col</span><span class="si">}</span><span class="s2">_right&quot;</span> <span class="k">if</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">id_col</span><span class="si">}</span><span class="s2">_right&quot;</span> <span class="ow">in</span> <span class="n">joined</span><span class="o">.</span><span class="n">columns</span> <span class="k">else</span> <span class="n">id_col</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Process each valid connection</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">joined</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
+            <span class="n">orig_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="n">orig_id_col</span><span class="p">]</span>
+            <span class="n">other_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="n">other_id_col</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">orig_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">connections</span><span class="p">:</span>
+                <span class="n">connections</span><span class="p">[</span><span class="n">orig_id</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="n">other_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">connections</span><span class="p">[</span><span class="n">orig_id</span><span class="p">]:</span>
+                <span class="n">connections</span><span class="p">[</span><span class="n">orig_id</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">other_id</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">other_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">connections</span><span class="p">:</span>
+                <span class="n">connections</span><span class="p">[</span><span class="n">other_id</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="n">orig_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">connections</span><span class="p">[</span><span class="n">other_id</span><span class="p">]:</span>
+                <span class="n">connections</span><span class="p">[</span><span class="n">other_id</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">orig_id</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">connections</span>
+
+
+<div class="viewcode-block" id="dual_graph">
+<a class="viewcode-back" href="../../api/utils.html#city2graph.utils.dual_graph">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">dual_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+               <span class="n">id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+               <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Convert a GeoDataFrame to a NetworkX graph and then back to a GeoDataFrame.</span>
+
+<span class="sd">    Also detects connections where endpoints of one linestring are on another linestring.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    gdf : geopandas.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing LineString geometries to convert</span>
+<span class="sd">    id_col : str, default None</span>
+<span class="sd">        Column name that uniquely identifies each feature</span>
+<span class="sd">        If None, will use DataFrame index</span>
+<span class="sd">    tolerance : float, default 1e-8</span>
+<span class="sd">        Distance tolerance for detecting endpoint connections</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple</span>
+<span class="sd">        (GeoDataFrame of nodes, dict of connections)</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If input is not a GeoDataFrame or if tolerance is not a number</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If GeoDataFrame is empty or contains invalid geometries</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Input validation</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">gdf</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">):</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Input must be a GeoDataFrame&quot;</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tolerance</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Tolerance must be a number&quot;</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">tolerance</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Tolerance must be non-negative&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="c1"># Check for empty DataFrame</span>
+    <span class="k">if</span> <span class="n">gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Input GeoDataFrame is empty&quot;</span><span class="p">,</span> <span class="ne">RuntimeWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+            <span class="p">{</span><span class="n">id_col</span><span class="p">:</span> <span class="p">[]}</span> <span class="k">if</span> <span class="n">id_col</span> <span class="k">else</span> <span class="p">[],</span>
+            <span class="n">geometry</span><span class="o">=</span><span class="p">[],</span>
+            <span class="n">crs</span><span class="o">=</span><span class="n">gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
+        <span class="p">),</span> <span class="p">{})</span>
+
+    <span class="c1"># Check for null geometries first</span>
+    <span class="k">if</span> <span class="n">gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">isna</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Found null geometries in input GeoDataFrame&quot;</span><span class="p">,</span> <span class="ne">RuntimeWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">gdf</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">])</span>
+
+    <span class="c1"># Check for invalid geometry types and filter them out</span>
+    <span class="n">invalid_geoms</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="p">(</span><span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">LineString</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">MultiLineString</span><span class="p">))</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">invalid_geoms</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Found </span><span class="si">{</span><span class="n">invalid_geoms</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="si">}</span><span class="s2"> geometries that are not LineString or MultiLineString. &quot;</span>
+            <span class="s2">&quot;Filtering to valid geometries only.&quot;</span><span class="p">,</span>
+            <span class="ne">RuntimeWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">gdf</span> <span class="o">=</span> <span class="n">gdf</span><span class="p">[</span><span class="o">~</span><span class="n">invalid_geoms</span><span class="p">]</span>
+
+    <span class="c1"># Check if we have any valid geometries left after filtering</span>
+    <span class="k">if</span> <span class="n">gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;No valid geometries remaining after filtering&quot;</span><span class="p">,</span> <span class="ne">RuntimeWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+            <span class="p">{</span><span class="n">id_col</span><span class="p">:</span> <span class="p">[]}</span> <span class="k">if</span> <span class="n">id_col</span> <span class="k">else</span> <span class="p">[],</span>
+            <span class="n">geometry</span><span class="o">=</span><span class="p">[],</span>
+            <span class="n">crs</span><span class="o">=</span><span class="n">gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
+        <span class="p">),</span> <span class="p">{})</span>
+
+    <span class="c1"># Use _validate_gdf to check geometry types - treat gdf as edges</span>
+    <span class="c1"># This should now pass since we&#39;ve filtered invalid geometries</span>
+    <span class="n">_validate_gdf</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="n">gdf</span><span class="p">)</span>
+
+    <span class="c1"># Handle ID column</span>
+    <span class="k">if</span> <span class="n">id_col</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">id_col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">gdf</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">gdf</span><span class="p">[</span><span class="n">id_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">index</span>
+    <span class="k">elif</span> <span class="n">id_col</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">gdf</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">gdf</span><span class="p">[</span><span class="s2">&quot;temp_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">index</span>
+        <span class="n">id_col</span> <span class="o">=</span> <span class="s2">&quot;temp_id&quot;</span>
+
+    <span class="c1"># Convert to NetworkX graph</span>
+    <span class="n">dual_graph_nx</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">gdf_to_nx</span><span class="p">(</span><span class="n">gdf</span><span class="p">,</span> <span class="n">approach</span><span class="o">=</span><span class="s2">&quot;dual&quot;</span><span class="p">,</span> <span class="n">preserve_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Extract nodes as GeoDataFrame</span>
+    <span class="n">dual_node_gdf</span> <span class="o">=</span> <span class="n">_extract_dual_graph_nodes</span><span class="p">(</span><span class="n">dual_graph_nx</span><span class="p">,</span> <span class="n">id_col</span><span class="p">,</span> <span class="n">gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+
+    <span class="c1"># Extract node connections from graph</span>
+    <span class="n">connections</span> <span class="o">=</span> <span class="n">_extract_node_connections</span><span class="p">(</span><span class="n">dual_graph_nx</span><span class="p">,</span> <span class="n">id_col</span><span class="p">)</span>
+
+    <span class="c1"># Find additional connections based on endpoints</span>
+    <span class="n">line_gdf</span> <span class="o">=</span> <span class="n">gdf</span><span class="p">[</span>
+        <span class="n">gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">LineString</span><span class="p">))</span>
+    <span class="p">]</span>
+    <span class="n">connections</span> <span class="o">=</span> <span class="n">_find_additional_connections</span><span class="p">(</span><span class="n">line_gdf</span><span class="p">,</span> <span class="n">id_col</span><span class="p">,</span> <span class="n">tolerance</span><span class="p">,</span> <span class="n">connections</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">dual_node_gdf</span><span class="p">,</span> <span class="n">connections</span></div>
 
 </pre></div>
 
