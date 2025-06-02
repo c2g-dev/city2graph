@@ -388,9 +388,8 @@
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;delaunay_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;gilbert_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;knn_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;waxman_graph&quot;</span><span class="p">]</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_build_knn_edges</span><span class="p">(</span>
-    <span class="n">indices</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">node_indices</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_build_knn_edges</span><span class="p">(</span><span class="n">indices</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+                     <span class="n">node_indices</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Build k-nearest neighbor edges from indices array.</span>
 
@@ -472,8 +471,7 @@
     <span class="k">return</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_attrs</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_init_graph_and_nodes</span><span class="p">(</span>
-    <span class="n">data</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_init_graph_and_nodes</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Initialize graph and extract nodes from GeoDataFrame.</span>
 

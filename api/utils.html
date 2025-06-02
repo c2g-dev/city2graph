@@ -445,7 +445,7 @@ These can include parameters specific to the tessellation method used.</p></li>
 <li><p><strong>network</strong> (<em>Union</em><em>[</em><em>gpd.GeoDataFrame</em><em>, </em><em>nx.Graph</em><em>]</em>) – Input network data as either a GeoDataFrame of edges or a NetworkX graph.</p></li>
 <li><p><strong>center_point</strong> (<em>Union</em><em>[</em><em>Point</em><em>, </em><em>gpd.GeoSeries</em><em>, </em><em>gpd.GeoDataFrame</em><em>]</em>) – Center point(s) for distance calculation.
 Can be a single Point, GeoSeries of points, or GeoDataFrame with point geometries.</p></li>
-<li><p><strong>distance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1000</em>) – Maximum shortest-path distance from any center node.</p></li>
+<li><p><strong>distance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>) – Maximum shortest-path distance from any center node.</p></li>
 <li><p><strong>edge_attr</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default=&quot;length&quot;</em>) – Edge attribute to use as weight for distance calculation.</p></li>
 <li><p><strong>node_id_col</strong> (<em>Optional</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>, </em><em>default=None</em>) – Column name in nodes GeoDataFrame to use as node identifier.
 If None, will use auto-generated node IDs.</p></li>
@@ -457,6 +457,53 @@ Returns the same type as the input (either GeoDataFrame or NetworkX graph).</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Union[gpd.GeoDataFrame, nx.Graph]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.utils.gdf_to_nx">
+<span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">gdf_to_nx</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nodes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edges</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_geom</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#gdf_to_nx"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.gdf_to_nx" title="Link to this definition">#</a></dt>
+<dd><p>Convert GeoDataFrames of nodes and edges to a NetworkX graph.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>nodes</strong> (<em>GeoDataFrame</em><em>, </em><em>optional</em>) – Point geometries for graph nodes; node attributes preserved.</p></li>
+<li><p><strong>edges</strong> (<em>GeoDataFrame</em>) – LineString geometries for graph edges; edge attributes preserved.</p></li>
+<li><p><strong>node_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name to use for node identifiers; if None, sequential IDs are assigned.</p></li>
+<li><p><strong>edge_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name to use for edge identifiers; if None, sequential IDs are assigned.</p></li>
+<li><p><strong>keep_geom</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=True</em>) – If True, include original geometry columns on edges.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Graph with ‘crs’, ‘node_geom_cols’, ‘edge_geom_cols’, node ‘pos’, and attributes.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.5)">networkx.Graph</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="city2graph.utils.nx_to_gdf">
+<span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">nx_to_gdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">G</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edges</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#nx_to_gdf"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.nx_to_gdf" title="Link to this definition">#</a></dt>
+<dd><p>Convert a NetworkX graph to a GeoDataFrame for nodes or edges.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>G</strong> (<a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.5)"><em>networkx.Graph</em></a>) – Graph with ‘crs’, ‘node_geom_cols’, and ‘edge_geom_cols’ in G.graph.</p></li>
+<li><p><strong>nodes</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=False</em>) – If True, return node GeoDataFrame.</p></li>
+<li><p><strong>edges</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=False</em>) – If True, return edge GeoDataFrame.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>GeoDataFrame with correct CRS and all geometry columns as GeoSeries.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If required ‘pos’ or geometry attributes are missing, or if both/neither flags are set.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -512,6 +559,8 @@ Returns the same type as the input (either GeoDataFrame or NetworkX graph).</p>
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.create_tessellation"><code class="docutils literal notranslate"><span class="pre">create_tessellation()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.filter_graph_by_distance"><code class="docutils literal notranslate"><span class="pre">filter_graph_by_distance()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.gdf_to_nx"><code class="docutils literal notranslate"><span class="pre">gdf_to_nx()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.utils.nx_to_gdf"><code class="docutils literal notranslate"><span class="pre">nx_to_gdf()</span></code></a></li>
 </ul>
   </nav></div>
 

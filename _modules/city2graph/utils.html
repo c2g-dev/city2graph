@@ -375,12 +375,15 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">momepy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Point</span>
 
 <span class="c1"># Define the public API for this module</span>
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;create_tessellation&quot;</span><span class="p">,</span>
     <span class="s2">&quot;filter_graph_by_distance&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;gdf_to_nx&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;nx_to_gdf&quot;</span><span class="p">,</span>
 <span class="p">]</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -509,15 +512,95 @@
     <span class="k">return</span> <span class="n">nodes_gdf</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">nearest_idx</span><span class="p">,</span> <span class="n">node_id</span><span class="p">]</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_extract_node_positions</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract node positions from a NetworkX graph.&quot;&quot;&quot;</span>
+    <span class="n">pos_dict</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">get_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">pos_dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">pos_dict</span>
+
+    <span class="c1"># Handle case where graph has no pos attributes</span>
+    <span class="n">nodes_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">())</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">nodes_list</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="c1"># Check if nodes are coordinate tuples (common when using momepy.gdf_to_nx)</span>
+    <span class="n">first_node</span> <span class="o">=</span> <span class="n">nodes_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">first_node</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">first_node</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">node_id</span><span class="p">:</span> <span class="n">node_id</span> <span class="k">for</span> <span class="n">node_id</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">()}</span>
+
+    <span class="c1"># Check if nodes have x,y attributes</span>
+    <span class="n">node_attrs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">node_attrs</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="s2">&quot;x&quot;</span> <span class="ow">in</span> <span class="n">attrs</span> <span class="ow">and</span> <span class="s2">&quot;y&quot;</span> <span class="ow">in</span> <span class="n">attrs</span> <span class="k">for</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">node_attrs</span><span class="o">.</span><span class="n">values</span><span class="p">()):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">node_id</span><span class="p">:</span> <span class="p">(</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">],</span> <span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">node_id</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">node_attrs</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+
+    <span class="k">return</span> <span class="p">{}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_create_nodes_gdf</span><span class="p">(</span><span class="n">pos_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]],</span>
+                      <span class="n">node_id_col</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+                      <span class="n">crs</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a GeoDataFrame from node positions.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">pos_dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">({</span><span class="n">node_id_col</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="p">[]},</span> <span class="n">crs</span><span class="o">=</span><span class="n">crs</span><span class="p">)</span>
+
+    <span class="n">node_ids</span><span class="p">,</span> <span class="n">coordinates</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">pos_dict</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">geometries</span> <span class="o">=</span> <span class="p">[</span><span class="n">Point</span><span class="p">(</span><span class="n">coord</span><span class="p">)</span> <span class="k">for</span> <span class="n">coord</span> <span class="ow">in</span> <span class="n">coordinates</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+        <span class="p">{</span><span class="n">node_id_col</span><span class="p">:</span> <span class="n">node_ids</span><span class="p">,</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="n">geometries</span><span class="p">},</span>
+        <span class="n">crs</span><span class="o">=</span><span class="n">crs</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compute_nodes_within_distance</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
+                                   <span class="n">center_points</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Point</span><span class="p">]</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">,</span>
+                                   <span class="n">nodes_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+                                   <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                                   <span class="n">edge_attr</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+                                   <span class="n">node_id_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute all nodes within distance from any center point.&quot;&quot;&quot;</span>
+    <span class="n">nodes_within_distance</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+    <span class="k">for</span> <span class="n">point</span> <span class="ow">in</span> <span class="n">center_points</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">nearest_node</span> <span class="o">=</span> <span class="n">_get_nearest_node</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">nodes_gdf</span><span class="p">,</span> <span class="n">node_id</span><span class="o">=</span><span class="n">node_id_name</span><span class="p">)</span>
+            <span class="n">distance_dict</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">shortest_path_length</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">nearest_node</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="n">edge_attr</span><span class="p">)</span>
+
+            <span class="c1"># Add nodes within distance from this center</span>
+            <span class="n">nodes_within_distance</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="n">node_id</span> <span class="k">for</span> <span class="n">node_id</span><span class="p">,</span> <span class="n">dist</span> <span class="ow">in</span> <span class="n">distance_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">dist</span> <span class="o">&lt;</span> <span class="n">distance</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="n">nx</span><span class="o">.</span><span class="n">NetworkXNoPath</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">NodeNotFound</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Could not compute paths from a center point: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">nodes_within_distance</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_normalize_center_points</span><span class="p">(</span><span class="n">center_point</span><span class="p">:</span> <span class="n">Point</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+                             <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Point</span><span class="p">]</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize center point input to a consistent format.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">center_point</span><span class="o">.</span><span class="n">geometry</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">center_point</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">center_point</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_create_empty_result</span><span class="p">(</span><span class="n">is_graph_input</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">original_crs</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create an empty result in the appropriate format.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">is_graph_input</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="p">[],</span> <span class="n">crs</span><span class="o">=</span><span class="n">original_crs</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="filter_graph_by_distance">
 <a class="viewcode-back" href="../../api/utils.html#city2graph.utils.filter_graph_by_distance">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">filter_graph_by_distance</span><span class="p">(</span>
-    <span class="n">network</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
-    <span class="n">center_point</span><span class="p">:</span> <span class="n">Point</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
-    <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">edge_attr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;length&quot;</span><span class="p">,</span>
-    <span class="n">node_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">filter_graph_by_distance</span><span class="p">(</span><span class="n">network</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
+                             <span class="n">center_point</span><span class="p">:</span> <span class="n">Point</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+                             <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                             <span class="n">edge_attr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;length&quot;</span><span class="p">,</span>
+                             <span class="n">node_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Extract a filtered network containing only elements within a given shortest-path distance.</span>
 
@@ -530,7 +613,7 @@
 <span class="sd">    center_point : Union[Point, gpd.GeoSeries, gpd.GeoDataFrame]</span>
 <span class="sd">        Center point(s) for distance calculation.</span>
 <span class="sd">        Can be a single Point, GeoSeries of points, or GeoDataFrame with point geometries.</span>
-<span class="sd">    distance : float, default=1000</span>
+<span class="sd">    distance : float</span>
 <span class="sd">        Maximum shortest-path distance from any center node.</span>
 <span class="sd">    edge_attr : str, default=&quot;length&quot;</span>
 <span class="sd">        Edge attribute to use as weight for distance calculation.</span>
@@ -544,81 +627,344 @@
 <span class="sd">        Filtered network containing only elements within distance of any center point.</span>
 <span class="sd">        Returns the same type as the input (either GeoDataFrame or NetworkX graph).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># Determine input type</span>
     <span class="n">is_graph_input</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">)</span>
 
-    <span class="c1"># Convert to NetworkX graph if input is GeoDataFrame</span>
+    <span class="c1"># Convert input to graph and preserve CRS</span>
     <span class="k">if</span> <span class="n">is_graph_input</span><span class="p">:</span>
-        <span class="n">G</span> <span class="o">=</span> <span class="n">network</span>
+        <span class="n">graph</span> <span class="o">=</span> <span class="n">network</span>
         <span class="n">original_crs</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">G</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">gdf_to_nx</span><span class="p">(</span><span class="n">network</span><span class="p">)</span>
+        <span class="n">graph</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">gdf_to_nx</span><span class="p">(</span><span class="n">network</span><span class="p">)</span>
         <span class="n">original_crs</span> <span class="o">=</span> <span class="n">network</span><span class="o">.</span><span class="n">crs</span>
 
-    <span class="c1"># Build a GeoDataFrame for the nodes using their &#39;x&#39; and &#39;y&#39; attributes</span>
-    <span class="n">node_ids</span><span class="p">,</span> <span class="n">node_geometries</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span>
-        <span class="o">*</span><span class="p">[</span>
-            <span class="p">(</span><span class="n">nid</span><span class="p">,</span> <span class="n">Point</span><span class="p">([</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">),</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;y&quot;</span><span class="p">)]))</span>
-            <span class="k">for</span> <span class="n">nid</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">G</span><span class="o">.</span><span class="n">nodes</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span>
+    <span class="c1"># Extract node positions or return empty result if not available</span>
+    <span class="n">pos_dict</span> <span class="o">=</span> <span class="n">_extract_node_positions</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">pos_dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_create_empty_result</span><span class="p">(</span><span class="n">is_graph_input</span><span class="p">,</span> <span class="n">original_crs</span><span class="p">)</span>
 
-    <span class="c1"># Use provided node_id_col or default</span>
+    <span class="c1"># Create nodes GeoDataFrame</span>
     <span class="n">node_id_name</span> <span class="o">=</span> <span class="n">node_id_col</span> <span class="ow">or</span> <span class="s2">&quot;node_id&quot;</span>
+    <span class="n">nodes_gdf</span> <span class="o">=</span> <span class="n">_create_nodes_gdf</span><span class="p">(</span><span class="n">pos_dict</span><span class="p">,</span> <span class="n">node_id_name</span><span class="p">,</span> <span class="n">original_crs</span><span class="p">)</span>
 
-    <span class="n">nodes_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
-        <span class="p">{</span><span class="n">node_id_name</span><span class="p">:</span> <span class="n">node_ids</span><span class="p">,</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="n">node_geometries</span><span class="p">},</span> <span class="n">crs</span><span class="o">=</span><span class="n">original_crs</span><span class="p">,</span>
+    <span class="c1"># Normalize center points</span>
+    <span class="n">center_points</span> <span class="o">=</span> <span class="n">_normalize_center_points</span><span class="p">(</span><span class="n">center_point</span><span class="p">)</span>
+
+    <span class="c1"># Compute nodes within distance</span>
+    <span class="n">nodes_within_distance</span> <span class="o">=</span> <span class="n">_compute_nodes_within_distance</span><span class="p">(</span>
+        <span class="n">graph</span><span class="p">,</span> <span class="n">center_points</span><span class="p">,</span> <span class="n">nodes_gdf</span><span class="p">,</span> <span class="n">distance</span><span class="p">,</span> <span class="n">edge_attr</span><span class="p">,</span> <span class="n">node_id_name</span><span class="p">,</span>
     <span class="p">)</span>
 
-    <span class="c1"># Initialize a set to collect nodes within distance from any center point</span>
-    <span class="n">nodes_within_distance</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="c1"># Return subgraph or empty result</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">nodes_within_distance</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_create_empty_result</span><span class="p">(</span><span class="n">is_graph_input</span><span class="p">,</span> <span class="n">original_crs</span><span class="p">)</span>
 
-    <span class="c1"># Handle different types of center_point input</span>
-    <span class="n">center_points</span> <span class="o">=</span> <span class="n">center_point</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="p">(</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)):</span>
-        <span class="c1"># If it&#39;s a GeoDataFrame, convert to GeoSeries</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">):</span>
-            <span class="n">center_points</span> <span class="o">=</span> <span class="n">center_point</span><span class="o">.</span><span class="n">geometry</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># Convert single point to a list</span>
-        <span class="n">center_points</span> <span class="o">=</span> <span class="p">[</span><span class="n">center_point</span><span class="p">]</span>
+    <span class="n">subgraph</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">subgraph</span><span class="p">(</span><span class="n">nodes_within_distance</span><span class="p">)</span>
 
-    <span class="c1"># Process each center point</span>
-    <span class="k">for</span> <span class="n">point</span> <span class="ow">in</span> <span class="n">center_points</span><span class="p">:</span>
-        <span class="c1"># Find the nearest node to this center</span>
-        <span class="n">nearest_node</span> <span class="o">=</span> <span class="n">_get_nearest_node</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">nodes_gdf</span><span class="p">,</span> <span class="n">node_id</span><span class="o">=</span><span class="n">node_id_name</span><span class="p">)</span>
-
-        <span class="c1"># Compute shortest path lengths from this center</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">distance_dict</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">shortest_path_length</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">nearest_node</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="n">edge_attr</span><span class="p">)</span>
-            <span class="c1"># Add nodes within distance from this center</span>
-            <span class="n">nodes_within_distance</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
-                <span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">distance_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="o">&lt;</span> <span class="n">distance</span>
-            <span class="p">)</span>
-        <span class="k">except</span> <span class="p">(</span><span class="n">nx</span><span class="o">.</span><span class="n">NetworkXNoPath</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">NodeNotFound</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Could not compute paths from a center point: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-
-    <span class="c1"># Extract subgraph for nodes within distance from any center</span>
-    <span class="k">if</span> <span class="n">nodes_within_distance</span><span class="p">:</span>
-        <span class="c1"># Create a subgraph from the original graph</span>
-        <span class="n">subgraph</span> <span class="o">=</span> <span class="n">G</span><span class="o">.</span><span class="n">subgraph</span><span class="p">(</span><span class="n">nodes_within_distance</span><span class="p">)</span>
-
-        <span class="c1"># Return the result in the same format as the input</span>
-        <span class="k">if</span> <span class="n">is_graph_input</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">subgraph</span>
-        <span class="n">filtered_gdf</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">subgraph</span><span class="p">,</span> <span class="n">points</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-
-        <span class="c1"># Ensure that the geometry column is properly set as GeoSeries</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">filtered_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">):</span>
-            <span class="n">filtered_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
-                <span class="n">filtered_gdf</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">original_crs</span><span class="p">,</span>
-            <span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">filtered_gdf</span>
-    <span class="c1"># Return empty result in the same format as the input</span>
     <span class="k">if</span> <span class="n">is_graph_input</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="p">[],</span> <span class="n">crs</span><span class="o">=</span><span class="n">original_crs</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">subgraph</span>
+
+    <span class="c1"># Convert back to GeoDataFrame</span>
+    <span class="n">filtered_gdf</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">subgraph</span><span class="p">,</span> <span class="n">points</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">filtered_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">):</span>
+        <span class="n">filtered_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+            <span class="n">filtered_gdf</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">original_crs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">filtered_gdf</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_gdf</span><span class="p">(</span><span class="n">nodes</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+                  <span class="n">edges</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate node and edge GeoDataFrames for correct geometry types and matching CRS.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">edges</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">LineString</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Edges GeoDataFrame must have LineString geometries&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">nodes</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">Point</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Nodes GeoDataFrame must have Point geometries&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">nodes</span><span class="o">.</span><span class="n">crs</span> <span class="o">!=</span> <span class="n">edges</span><span class="o">.</span><span class="n">crs</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;CRS of nodes and edges must match&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_prepare_dataframes</span><span class="p">(</span><span class="n">nodes</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+                        <span class="n">edges</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+                        <span class="n">node_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+                        <span class="n">edge_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Prepare and standardize node and edge dataframes.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">edges</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Must provide edges GeoDataFrame&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="n">_validate_gdf</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">edges</span><span class="p">)</span>
+
+    <span class="c1"># Standardize node IDs</span>
+    <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">node_id_col</span> <span class="ow">and</span> <span class="n">node_id_col</span> <span class="ow">in</span> <span class="n">nodes</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">nodes</span> <span class="o">=</span> <span class="n">nodes</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">node_id_col</span><span class="p">,</span> <span class="n">drop</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">nodes</span> <span class="o">=</span> <span class="n">nodes</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Standardize edge IDs</span>
+    <span class="k">if</span> <span class="n">edge_id_col</span> <span class="ow">and</span> <span class="n">edge_id_col</span> <span class="ow">in</span> <span class="n">edges</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">edges</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">edge_id_col</span><span class="p">,</span> <span class="n">drop</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">edges</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">nodes</span><span class="p">,</span> <span class="n">edges</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_add_nodes_to_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span> <span class="n">nodes</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Add nodes and their attributes to the graph.&quot;&quot;&quot;</span>
+    <span class="n">graph</span><span class="o">.</span><span class="n">add_nodes_from</span><span class="p">(</span><span class="n">nodes</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="n">node_attrs</span> <span class="o">=</span> <span class="n">nodes</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">)</span>
+    <span class="n">nx</span><span class="o">.</span><span class="n">set_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">node_attrs</span><span class="p">)</span>
+    <span class="n">pos</span> <span class="o">=</span> <span class="p">{</span><span class="n">idx</span><span class="p">:</span> <span class="p">(</span><span class="n">geom</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">geom</span><span class="o">.</span><span class="n">y</span><span class="p">)</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">nodes</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">nx</span><span class="o">.</span><span class="n">set_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_prepare_edge_dataframe</span><span class="p">(</span><span class="n">edges</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+                           <span class="n">nodes</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+                           <span class="n">keep_geom</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Prepare edge dataframe with node mappings and select appropriate columns.&quot;&quot;&quot;</span>
+    <span class="n">edges_df</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Determine edge node IDs based on provided nodes or coordinate tuples</span>
+    <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">coord_map</span> <span class="o">=</span> <span class="p">{(</span><span class="n">geom</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">geom</span><span class="o">.</span><span class="n">y</span><span class="p">):</span> <span class="n">idx</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">nodes</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="n">edges_df</span><span class="p">[</span><span class="s2">&quot;u&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="n">coord_map</span><span class="p">[</span><span class="n">g</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span>
+        <span class="n">edges_df</span><span class="p">[</span><span class="s2">&quot;v&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="n">coord_map</span><span class="p">[</span><span class="n">g</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">edges_df</span><span class="p">[</span><span class="s2">&quot;u&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="n">g</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">edges_df</span><span class="p">[</span><span class="s2">&quot;v&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="n">g</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+
+    <span class="c1"># Select edge attributes based on keep_geom parameter</span>
+    <span class="k">if</span> <span class="n">keep_geom</span><span class="p">:</span>
+        <span class="n">edge_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">columns</span> <span class="k">if</span> <span class="n">col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;u&quot;</span><span class="p">,</span> <span class="s2">&quot;v&quot;</span><span class="p">]]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">geom_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">columns</span>
+                    <span class="k">if</span> <span class="n">edges_df</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="s2">&quot;geom_type&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">()]</span>
+        <span class="n">edge_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">columns</span>
+                    <span class="k">if</span> <span class="n">col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;u&quot;</span><span class="p">,</span> <span class="s2">&quot;v&quot;</span><span class="p">]</span> <span class="ow">and</span> <span class="n">col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">geom_cols</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">edges_df</span><span class="p">,</span> <span class="n">edge_cols</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_add_edges_to_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
+                       <span class="n">edges_df</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+                       <span class="n">edge_cols</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Add edges to the graph using vectorized operations.&quot;&quot;&quot;</span>
+    <span class="n">graph_with_edges</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">from_pandas_edgelist</span><span class="p">(</span>
+        <span class="n">edges_df</span><span class="p">,</span>
+        <span class="n">source</span><span class="o">=</span><span class="s2">&quot;u&quot;</span><span class="p">,</span>
+        <span class="n">target</span><span class="o">=</span><span class="s2">&quot;v&quot;</span><span class="p">,</span>
+        <span class="n">edge_attr</span><span class="o">=</span><span class="n">edge_cols</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">graph_with_edges</span><span class="o">.</span><span class="n">edges</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+
+
+<div class="viewcode-block" id="gdf_to_nx">
+<a class="viewcode-back" href="../../api/utils.html#city2graph.utils.gdf_to_nx">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">gdf_to_nx</span><span class="p">(</span><span class="n">nodes</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+              <span class="n">edges</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+              <span class="n">node_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+              <span class="n">edge_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+              <span class="n">keep_geom</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Convert GeoDataFrames of nodes and edges to a NetworkX graph.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    nodes : GeoDataFrame, optional</span>
+<span class="sd">        Point geometries for graph nodes; node attributes preserved.</span>
+<span class="sd">    edges : GeoDataFrame</span>
+<span class="sd">        LineString geometries for graph edges; edge attributes preserved.</span>
+<span class="sd">    node_id_col : str, optional</span>
+<span class="sd">        Column name to use for node identifiers; if None, sequential IDs are assigned.</span>
+<span class="sd">    edge_id_col : str, optional</span>
+<span class="sd">        Column name to use for edge identifiers; if None, sequential IDs are assigned.</span>
+<span class="sd">    keep_geom : bool, default=True</span>
+<span class="sd">        If True, include original geometry columns on edges.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    networkx.Graph</span>
+<span class="sd">        Graph with &#39;crs&#39;, &#39;node_geom_cols&#39;, &#39;edge_geom_cols&#39;, node &#39;pos&#39;, and attributes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Prepare and validate dataframes</span>
+    <span class="n">nodes</span><span class="p">,</span> <span class="n">edges</span> <span class="o">=</span> <span class="n">_prepare_dataframes</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">edges</span><span class="p">,</span> <span class="n">node_id_col</span><span class="p">,</span> <span class="n">edge_id_col</span><span class="p">)</span>
+
+    <span class="c1"># Initialize graph with metadata</span>
+    <span class="n">graph</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">()</span>
+    <span class="n">crs</span> <span class="o">=</span> <span class="n">nodes</span><span class="o">.</span><span class="n">crs</span> <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">edges</span><span class="o">.</span><span class="n">crs</span>
+    <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">update</span><span class="p">({</span>
+        <span class="s2">&quot;crs&quot;</span><span class="p">:</span> <span class="n">crs</span><span class="p">,</span>
+        <span class="s2">&quot;node_index_col&quot;</span><span class="p">:</span> <span class="n">node_id_col</span><span class="p">,</span>
+        <span class="s2">&quot;edge_index_col&quot;</span><span class="p">:</span> <span class="n">edge_id_col</span><span class="p">,</span>
+    <span class="p">})</span>
+
+    <span class="c1"># Store geometry column names</span>
+    <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;node_geom_cols&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">nodes</span><span class="o">.</span><span class="n">select_dtypes</span><span class="p">(</span><span class="n">include</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;edge_geom_cols&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">edges</span><span class="o">.</span><span class="n">select_dtypes</span><span class="p">(</span><span class="n">include</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
+
+    <span class="c1"># Add nodes if provided</span>
+    <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_add_nodes_to_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">nodes</span><span class="p">)</span>
+
+    <span class="c1"># Add edges</span>
+    <span class="n">edges_df</span><span class="p">,</span> <span class="n">edge_cols</span> <span class="o">=</span> <span class="n">_prepare_edge_dataframe</span><span class="p">(</span><span class="n">edges</span><span class="p">,</span> <span class="n">nodes</span><span class="p">,</span> <span class="n">keep_geom</span><span class="p">)</span>
+    <span class="n">_add_edges_to_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges_df</span><span class="p">,</span> <span class="n">edge_cols</span><span class="p">)</span>
+
+    <span class="c1"># Ensure node positions exist for fallback</span>
+    <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">pos</span> <span class="o">=</span> <span class="p">{</span><span class="n">node</span><span class="p">:</span> <span class="n">node</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">()}</span>
+        <span class="n">nx</span><span class="o">.</span><span class="n">set_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">graph</span></div>
+
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_nx</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span> <span class="n">nodes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate NetworkX graph before converting to GeoDataFrame.&quot;&quot;&quot;</span>
+    <span class="n">crs</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;crs&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">crs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Missing CRS in graph attributes&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="n">pos</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">get_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">nodes</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">pos</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Missing &#39;pos&#39; attribute for nodes&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">nodes</span><span class="p">:</span>
+        <span class="c1"># For edges, check if we have either geometry or pos for creating LineStrings</span>
+        <span class="n">has_geometry</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;geometry&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                          <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">edges</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">has_geometry</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">pos</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Missing edge geometry and node positions&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_create_nodes_gdf_from_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create nodes GeoDataFrame from NetworkX graph.&quot;&quot;&quot;</span>
+    <span class="n">pos</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">get_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
+    <span class="n">crs</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;crs&quot;</span><span class="p">)</span>
+    <span class="n">node_geom_cols</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;node_geom_cols&quot;</span><span class="p">,</span> <span class="p">[])</span>
+
+    <span class="n">records</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;node_id&quot;</span><span class="p">:</span> <span class="n">nid</span><span class="p">,</span>
+            <span class="o">**</span><span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">attrs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">&quot;pos&quot;</span><span class="p">},</span>
+            <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="n">Point</span><span class="p">(</span><span class="o">*</span><span class="n">pos</span><span class="p">[</span><span class="n">nid</span><span class="p">])</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pos</span><span class="p">[</span><span class="n">nid</span><span class="p">],</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">))</span> <span class="k">else</span> <span class="n">Point</span><span class="p">(</span><span class="n">pos</span><span class="p">[</span><span class="n">nid</span><span class="p">],</span> <span class="mi">0</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">for</span> <span class="n">nid</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="p">]</span>
+
+    <span class="n">gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">records</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">crs</span><span class="p">)</span>
+
+    <span class="c1"># Convert geometry columns to GeoSeries</span>
+    <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">node_geom_cols</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">gdf</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">(</span><span class="n">gdf</span><span class="p">[</span><span class="n">col</span><span class="p">],</span> <span class="n">crs</span><span class="o">=</span><span class="n">crs</span><span class="p">)</span>
+
+    <span class="c1"># Restore original node index</span>
+    <span class="n">node_index_col</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;node_index_col&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">node_index_col</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gdf</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">&quot;node_id&quot;</span><span class="p">,</span> <span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">rename_axis</span><span class="p">(</span><span class="n">node_index_col</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">gdf</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">&quot;node_id&quot;</span><span class="p">,</span> <span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">rename_axis</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_create_edges_gdf_from_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create edges GeoDataFrame from NetworkX graph.&quot;&quot;&quot;</span>
+    <span class="n">pos</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">get_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
+    <span class="n">crs</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;crs&quot;</span><span class="p">)</span>
+    <span class="n">edge_geom_cols</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;edge_geom_cols&quot;</span><span class="p">,</span> <span class="p">[])</span>
+
+    <span class="n">edge_data</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">graph</span><span class="o">.</span><span class="n">edges</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+    <span class="n">records</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="o">**</span><span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">attrs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">&quot;geometry&quot;</span><span class="p">},</span>
+            <span class="s2">&quot;u&quot;</span><span class="p">:</span> <span class="n">u</span><span class="p">,</span>
+            <span class="s2">&quot;v&quot;</span><span class="p">:</span> <span class="n">v</span><span class="p">,</span>
+            <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;geometry&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;geometry&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">LineString</span><span class="p">([</span><span class="n">pos</span><span class="p">[</span><span class="n">u</span><span class="p">],</span> <span class="n">pos</span><span class="p">[</span><span class="n">v</span><span class="p">]])</span>
+            <span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">for</span> <span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">edge_data</span>
+    <span class="p">]</span>
+
+    <span class="n">gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">records</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">crs</span><span class="p">)</span>
+
+    <span class="c1"># Convert geometry columns to GeoSeries</span>
+    <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">edge_geom_cols</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">gdf</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">(</span><span class="n">gdf</span><span class="p">[</span><span class="n">col</span><span class="p">],</span> <span class="n">crs</span><span class="o">=</span><span class="n">crs</span><span class="p">)</span>
+
+    <span class="c1"># Restore original edge index if available</span>
+    <span class="n">edge_index_col</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;edge_index_col&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">edge_index_col</span> <span class="ow">and</span> <span class="n">edge_index_col</span> <span class="ow">in</span> <span class="n">gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">gdf</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">edge_index_col</span><span class="p">,</span> <span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">gdf</span>
+
+
+<div class="viewcode-block" id="nx_to_gdf">
+<a class="viewcode-back" href="../../api/utils.html#city2graph.utils.nx_to_gdf">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">nx_to_gdf</span><span class="p">(</span>
+    <span class="n">G</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
+    <span class="n">nodes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">edges</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Convert a NetworkX graph to a GeoDataFrame for nodes or edges.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    G : networkx.Graph</span>
+<span class="sd">        Graph with &#39;crs&#39;, &#39;node_geom_cols&#39;, and &#39;edge_geom_cols&#39; in G.graph.</span>
+<span class="sd">    nodes : bool, default=False</span>
+<span class="sd">        If True, return node GeoDataFrame.</span>
+<span class="sd">    edges : bool, default=False</span>
+<span class="sd">        If True, return edge GeoDataFrame.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    geopandas.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame with correct CRS and all geometry columns as GeoSeries.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If required &#39;pos&#39; or geometry attributes are missing, or if both/neither flags are set.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Both requested: return node and edge frames via separate calls</span>
+    <span class="k">if</span> <span class="n">nodes</span> <span class="ow">and</span> <span class="n">edges</span><span class="p">:</span>
+        <span class="n">nodes_gdf</span> <span class="o">=</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">nodes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">edges_gdf</span> <span class="o">=</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">nodes</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">nodes_gdf</span><span class="p">,</span> <span class="n">edges_gdf</span>
+
+    <span class="c1"># Require exactly one of nodes or edges</span>
+    <span class="k">if</span> <span class="n">nodes</span> <span class="o">==</span> <span class="n">edges</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Specify exactly one of &#39;nodes&#39; or &#39;edges&#39;&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="c1"># Fallback for nodes-only graphs: treat node IDs as coords</span>
+    <span class="k">if</span> <span class="n">nodes</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">nx</span><span class="o">.</span><span class="n">get_node_attributes</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">):</span>
+        <span class="n">fallback</span> <span class="o">=</span> <span class="p">{</span><span class="n">n</span><span class="p">:</span> <span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">G</span><span class="o">.</span><span class="n">nodes</span><span class="p">()}</span>
+        <span class="n">nx</span><span class="o">.</span><span class="n">set_node_attributes</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">fallback</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Validate the graph structure</span>
+    <span class="n">_validate_nx</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">nodes</span><span class="o">=</span><span class="n">nodes</span><span class="p">)</span>
+
+    <span class="c1"># Create and return appropriate GeoDataFrame</span>
+    <span class="k">if</span> <span class="n">nodes</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_create_nodes_gdf_from_graph</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_create_edges_gdf_from_graph</span><span class="p">(</span><span class="n">G</span><span class="p">)</span></div>
 
 </pre></div>
 
