@@ -418,20 +418,12 @@ It supports <a class="reference external" href="https://pytorch-geometric.readth
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">gilbert_graph</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">gilbert_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">radius</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>morphological_graph</p>
-<blockquote>
-<div><dl>
-<dt>&lt;div style=”text-align:center;”&gt;</dt><dd><dl class="simple">
-<dt>&lt;video style=”width:100%; max-width:800px;” controls&gt;</dt><dd><p>&lt;source src=”_static/gilbert_graph.mp4” type=”video/mp4”&gt;
-Your browser does not support the video tag.</p>
-</dd>
-</dl>
-<p>&lt;/video&gt;</p>
-</dd>
-</dl>
-<p>&lt;/div&gt;</p>
-</div></blockquote>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">wax_l1</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">waxman_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span>
+<div style="text-align:center;">
+  <video style="width:100%; max-width:800px;" controls>
+    <source src="_static/gilbert_graph.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+</div><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">wax_l1</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">waxman_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span>
                                  <span class="n">distance_metric</span><span class="o">=</span><span class="s2">&quot;manhattan&quot;</span><span class="p">,</span>
                                  <span class="n">r0</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
                                  <span class="n">beta</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
