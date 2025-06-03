@@ -383,9 +383,11 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.spatial</span><span class="w"> </span><span class="kn">import</span> <span class="n">Delaunay</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.spatial.distance</span><span class="w"> </span><span class="kn">import</span> <span class="n">pdist</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.spatial.distance</span><span class="w"> </span><span class="kn">import</span> <span class="n">squareform</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">NearestNeighbors</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">city2graph.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">nx_to_gdf</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">gdf_to_nx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">nx_to_gdf</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;delaunay_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;gilbert_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;knn_graph&quot;</span><span class="p">,</span> <span class="s2">&quot;waxman_graph&quot;</span><span class="p">]</span>
 
@@ -445,6 +447,149 @@
     <span class="k">except</span> <span class="n">scipy</span><span class="o">.</span><span class="n">spatial</span><span class="o">.</span><span class="n">qhull</span><span class="o">.</span><span class="n">QhullError</span><span class="p">:</span>
         <span class="c1"># Handle collinear points or other geometric issues</span>
         <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_network_compatibility</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> 
+                                   <span class="n">network_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate that the input GeoDataFrame and network have compatible CRS.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    gdf : gpd.GeoDataFrame</span>
+<span class="sd">        Input GeoDataFrame with point/polygon geometries.</span>
+<span class="sd">    network_gdf : gpd.GeoDataFrame</span>
+<span class="sd">        Network GeoDataFrame for distance calculations.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If CRS don&#39;t match or network is invalid.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">gdf</span><span class="o">.</span><span class="n">crs</span> <span class="o">!=</span> <span class="n">network_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;CRS mismatch: input data CRS </span><span class="si">{</span><span class="n">gdf</span><span class="o">.</span><span class="n">crs</span><span class="si">}</span><span class="s2"> != network CRS </span><span class="si">{</span><span class="n">network_gdf</span><span class="o">.</span><span class="n">crs</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">network_gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Network GeoDataFrame is empty&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_network_positions</span><span class="p">(</span><span class="n">network_graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract node positions from network graph.&quot;&quot;&quot;</span>
+    <span class="n">pos_dict</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">get_node_attributes</span><span class="p">(</span><span class="n">network_graph</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">pos_dict</span><span class="p">:</span>
+        <span class="c1"># Fallback: use node coordinates if available</span>
+        <span class="n">node_attrs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">network_graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+        <span class="n">pos_dict</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">node_id</span><span class="p">:</span> <span class="p">(</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">node_id</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">node_attrs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="s2">&quot;x&quot;</span> <span class="ow">in</span> <span class="n">attrs</span> <span class="ow">and</span> <span class="s2">&quot;y&quot;</span> <span class="ow">in</span> <span class="n">attrs</span>
+        <span class="p">}</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">pos_dict</span><span class="p">:</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Network graph missing node position information&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">pos_dict</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_find_nearest_network_nodes</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+                               <span class="n">network_graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Find nearest network nodes for each input coordinate.&quot;&quot;&quot;</span>
+    <span class="n">pos_dict</span> <span class="o">=</span> <span class="n">_get_network_positions</span><span class="p">(</span><span class="n">network_graph</span><span class="p">)</span>
+
+    <span class="c1"># Create network coordinates array</span>
+    <span class="n">network_coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">pos_dict</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
+    <span class="n">network_node_ids</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">pos_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+    <span class="c1"># Find nearest network nodes using sklearn</span>
+    <span class="n">nbrs</span> <span class="o">=</span> <span class="n">NearestNeighbors</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">)</span>
+    <span class="n">nbrs</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">network_coords</span><span class="p">)</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">nbrs</span><span class="o">.</span><span class="n">kneighbors</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">[</span><span class="n">network_node_ids</span><span class="p">[</span><span class="n">idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">indices</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compute_network_distances</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+                              <span class="n">node_indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+                              <span class="n">network_graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute network distances between all pairs of points.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[np.ndarray, list]</span>
+<span class="sd">        Distance matrix and list of nearest network nodes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">nearest_network_nodes</span> <span class="o">=</span> <span class="n">_find_nearest_network_nodes</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">network_graph</span><span class="p">)</span>
+
+    <span class="c1"># Initialize distance matrix</span>
+    <span class="n">n_points</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">node_indices</span><span class="p">)</span>
+    <span class="n">distance_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">n_points</span><span class="p">,</span> <span class="n">n_points</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">fill_diagonal</span><span class="p">(</span><span class="n">distance_matrix</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="c1"># Check if edges have length attribute</span>
+    <span class="n">has_length</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="s2">&quot;length&quot;</span> <span class="ow">in</span> <span class="n">attrs</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">network_graph</span><span class="o">.</span><span class="n">edges</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+
+    <span class="c1"># Precompute distances from all unique network nodes</span>
+    <span class="n">unique_nodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">nearest_network_nodes</span><span class="p">))</span>
+    <span class="n">all_distances</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">source_node</span> <span class="ow">in</span> <span class="n">unique_nodes</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">has_length</span><span class="p">:</span>
+                <span class="n">distances</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">single_source_dijkstra_path_length</span><span class="p">(</span>
+                    <span class="n">network_graph</span><span class="p">,</span> <span class="n">source_node</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="s2">&quot;length&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">distances</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">single_source_shortest_path_length</span><span class="p">(</span>
+                    <span class="n">network_graph</span><span class="p">,</span> <span class="n">source_node</span>
+                <span class="p">)</span>
+            <span class="n">all_distances</span><span class="p">[</span><span class="n">source_node</span><span class="p">]</span> <span class="o">=</span> <span class="n">distances</span>
+        <span class="k">except</span> <span class="n">nx</span><span class="o">.</span><span class="n">NetworkXNoPath</span><span class="p">:</span>
+            <span class="n">all_distances</span><span class="p">[</span><span class="n">source_node</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># Fill distance matrix using precomputed distances (vectorized)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_points</span><span class="p">):</span>
+        <span class="n">source_net_node</span> <span class="o">=</span> <span class="n">nearest_network_nodes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">source_distances</span> <span class="o">=</span> <span class="n">all_distances</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">source_net_node</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="k">if</span> <span class="n">source_distances</span><span class="p">:</span>
+            <span class="c1"># Vectorized assignment for all targets at once</span>
+            <span class="n">target_nodes</span> <span class="o">=</span> <span class="n">nearest_network_nodes</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:]</span>
+            <span class="n">target_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n_points</span><span class="p">)</span>
+
+            <span class="c1"># Get distances for all targets</span>
+            <span class="n">target_dists</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+                <span class="n">source_distances</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">target_node</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span> 
+                <span class="k">for</span> <span class="n">target_node</span> <span class="ow">in</span> <span class="n">target_nodes</span>
+            <span class="p">])</span>
+
+            <span class="c1"># Assign to both upper and lower triangular parts</span>
+            <span class="n">distance_matrix</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">target_indices</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_dists</span>
+            <span class="n">distance_matrix</span><span class="p">[</span><span class="n">target_indices</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_dists</span>
+
+    <span class="k">return</span> <span class="n">distance_matrix</span><span class="p">,</span> <span class="n">nearest_network_nodes</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_setup_network_computation</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+                              <span class="n">network_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+                              <span class="n">coords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+                              <span class="n">node_indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Set up network computation by validating network and computing distances.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[nx.Graph, np.ndarray, list]</span>
+<span class="sd">        Network graph, distance matrix, and nearest network nodes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_validate_network_compatibility</span><span class="p">(</span><span class="n">gdf</span><span class="p">,</span> <span class="n">network_gdf</span><span class="p">)</span>
+    <span class="n">network_graph</span> <span class="o">=</span> <span class="n">gdf_to_nx</span><span class="p">(</span><span class="n">edges</span><span class="o">=</span><span class="n">network_gdf</span><span class="p">)</span>
+    <span class="n">distance_matrix</span><span class="p">,</span> <span class="n">nearest_network_nodes</span> <span class="o">=</span> <span class="n">_compute_network_distances</span><span class="p">(</span>
+        <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">,</span> <span class="n">network_graph</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">network_graph</span><span class="p">,</span> <span class="n">distance_matrix</span><span class="p">,</span> <span class="n">nearest_network_nodes</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_extract_coords_and_attrs_from_gdf</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
@@ -527,6 +672,8 @@
 <a class="viewcode-back" href="../../api/proximity.html#city2graph.proximity.knn_graph">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">knn_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
               <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
+              <span class="n">distance_metric</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;euclidean&quot;</span><span class="p">,</span>
+              <span class="n">network_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
               <span class="n">as_gdf</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate k-nearest neighbor graph from points or polygon centroids.</span>
@@ -537,36 +684,78 @@
 <span class="sd">        Input data as a GeoDataFrame. Centroids of geometries are used.</span>
 <span class="sd">    k : int, default 5</span>
 <span class="sd">        Number of nearest neighbors to connect to each node.</span>
+<span class="sd">    distance_metric : str, default &quot;euclidean&quot;</span>
+<span class="sd">        Distance metric to use. Options: &quot;euclidean&quot;, &quot;manhattan&quot;, or &quot;network&quot;.</span>
+<span class="sd">    network_gdf : geopandas.GeoDataFrame, optional</span>
+<span class="sd">        Network GeoDataFrame for network distance calculations.</span>
+<span class="sd">        Required when distance_metric=&quot;network&quot;.</span>
 <span class="sd">    as_gdf : bool, default False</span>
-<span class="sd">        If True, return edges as a GeoDataFrame instead of NetworkX graph.</span>
+<span class="sd">        If True, return edges as GeoDataFrame instead of NetworkX graph.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    networkx.Graph or geopandas.GeoDataFrame</span>
 <span class="sd">        Graph with nodes and k-nearest neighbor edges.</span>
-<span class="sd">        Node attributes include original data and &#39;pos&#39; coordinates.</span>
 <span class="sd">        If as_gdf=True, returns GeoDataFrame of edges.</span>
+<span class="sd">        Node attributes include original data and &#39;pos&#39; coordinates.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
 
     <span class="c1"># Early return for edge cases</span>
     <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">graph</span>
 
-    <span class="c1"># Build k-nearest neighbor relationships</span>
-    <span class="n">n_neighbors</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>  <span class="c1"># +1 to include self</span>
-    <span class="n">nbrs</span> <span class="o">=</span> <span class="n">NearestNeighbors</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="n">n_neighbors</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">)</span>
-    <span class="n">nbrs</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
-    <span class="n">_</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">nbrs</span><span class="o">.</span><span class="n">kneighbors</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+    <span class="c1"># Initialize variables</span>
+    <span class="n">network_graph</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">nearest_network_nodes</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">if</span> <span class="n">distance_metric</span> <span class="o">==</span> <span class="s2">&quot;network&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">network_gdf</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;network_gdf is required when distance_metric=&#39;network&#39;&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+        <span class="c1"># Setup network computation</span>
+        <span class="n">network_graph</span><span class="p">,</span> <span class="n">distance_matrix</span><span class="p">,</span> <span class="n">nearest_network_nodes</span> <span class="o">=</span> <span class="n">_setup_network_computation</span><span class="p">(</span>
+            <span class="n">gdf</span><span class="p">,</span> <span class="n">network_gdf</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Find k nearest neighbors based on network distances</span>
+        <span class="n">k_nearest_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">distance_matrix</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)[:,</span> <span class="p">:</span><span class="n">k</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="c1"># Create edges list efficiently (vectorized)</span>
+        <span class="c1"># Get all valid edges at once using vectorized operations</span>
+        <span class="n">valid_mask</span> <span class="o">=</span> <span class="n">distance_matrix</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+        <span class="n">node_pairs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">node_indices</span><span class="p">)):</span>
+            <span class="n">valid_neighbors</span> <span class="o">=</span> <span class="n">k_nearest_indices</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span><span class="n">k</span><span class="o">+</span><span class="mi">1</span><span class="p">][</span><span class="n">valid_mask</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">k_nearest_indices</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span><span class="n">k</span><span class="o">+</span><span class="mi">1</span><span class="p">]]]</span>
+            <span class="n">node_pairs</span><span class="o">.</span><span class="n">extend</span><span class="p">([(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">valid_neighbors</span><span class="p">])</span>
+        <span class="n">edges</span> <span class="o">=</span> <span class="n">node_pairs</span>
+    <span class="k">elif</span> <span class="n">distance_metric</span> <span class="o">==</span> <span class="s2">&quot;manhattan&quot;</span><span class="p">:</span>
+        <span class="c1"># Manhattan distance</span>
+        <span class="n">n_neighbors</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>  <span class="c1"># +1 to include self</span>
+        <span class="n">nbrs</span> <span class="o">=</span> <span class="n">NearestNeighbors</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="n">n_neighbors</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s2">&quot;manhattan&quot;</span><span class="p">)</span>
+        <span class="n">nbrs</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">nbrs</span><span class="o">.</span><span class="n">kneighbors</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+        <span class="n">edges</span> <span class="o">=</span> <span class="n">_build_knn_edges</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Euclidean distance (original implementation)</span>
+        <span class="n">n_neighbors</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>  <span class="c1"># +1 to include self</span>
+        <span class="n">nbrs</span> <span class="o">=</span> <span class="n">NearestNeighbors</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="n">n_neighbors</span><span class="p">,</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">)</span>
+        <span class="n">nbrs</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">nbrs</span><span class="o">.</span><span class="n">kneighbors</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+        <span class="n">edges</span> <span class="o">=</span> <span class="n">_build_knn_edges</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">)</span>
 
     <span class="c1"># Add edges to graph</span>
-    <span class="n">edges</span> <span class="o">=</span> <span class="n">_build_knn_edges</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">)</span>
     <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
 
+    <span class="c1"># Add edge geometries</span>
+    <span class="n">_add_edge_geometries</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">,</span> <span class="n">distance_metric</span><span class="p">,</span>
+                        <span class="n">network_graph</span><span class="p">,</span> <span class="n">nearest_network_nodes</span><span class="p">)</span>
+
+    <span class="c1"># Return as GeoDataFrame if requested</span>
     <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
     <span class="k">return</span> <span class="n">graph</span></div>
 
 
@@ -574,6 +763,8 @@
 <div class="viewcode-block" id="delaunay_graph">
 <a class="viewcode-back" href="../../api/proximity.html#city2graph.proximity.delaunay_graph">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">delaunay_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+                   <span class="n">distance_metric</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;euclidean&quot;</span><span class="p">,</span>
+                   <span class="n">network_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
                    <span class="n">as_gdf</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate Delaunay graph from points or polygon centroids.</span>
@@ -582,30 +773,48 @@
 <span class="sd">    ----------</span>
 <span class="sd">    gdf : geopandas.GeoDataFrame</span>
 <span class="sd">        Input data as a GeoDataFrame. Centroids of geometries are used.</span>
+<span class="sd">    distance_metric : str, default &quot;euclidean&quot;</span>
+<span class="sd">        Distance metric to use. Options: &quot;euclidean&quot;, &quot;manhattan&quot;, or &quot;network&quot;.</span>
+<span class="sd">        Network metric only affects edge weights, not topology.</span>
+<span class="sd">    network_gdf : geopandas.GeoDataFrame, optional</span>
+<span class="sd">        Network GeoDataFrame for network distance calculations.</span>
+<span class="sd">        Required when distance_metric=&quot;network&quot;.</span>
 <span class="sd">    as_gdf : bool, default False</span>
-<span class="sd">        If True, return edges as a GeoDataFrame instead of NetworkX graph.</span>
+<span class="sd">        If True, return edges as GeoDataFrame instead of NetworkX graph.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    networkx.Graph or geopandas.GeoDataFrame</span>
 <span class="sd">        Graph with nodes and Delaunay triangulation edges.</span>
-<span class="sd">        Node attributes include original data and &#39;pos&#39; coordinates.</span>
 <span class="sd">        If as_gdf=True, returns GeoDataFrame of edges.</span>
+<span class="sd">        Node attributes include original data and &#39;pos&#39; coordinates.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
 
     <span class="c1"># Early return for insufficient points</span>
     <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">graph</span>
 
-    <span class="c1"># Build Delaunay triangulation edges</span>
+    <span class="c1"># Build Delaunay triangulation edges (always uses Euclidean for topology)</span>
     <span class="n">edges</span> <span class="o">=</span> <span class="n">_build_delaunay_edges</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">)</span>
     <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
 
+    <span class="c1"># Calculate distance matrix and get network information if needed</span>
+    <span class="n">distance_matrix</span><span class="p">,</span> <span class="n">network_graph</span><span class="p">,</span> <span class="n">nearest_network_nodes</span> <span class="o">=</span> <span class="n">_calculate_distance_matrix</span><span class="p">(</span>
+        <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">,</span> <span class="n">distance_metric</span><span class="p">,</span> <span class="n">network_gdf</span><span class="p">,</span> <span class="n">gdf</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Add distance weights to edges</span>
+    <span class="n">_add_distance_weights</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">edges</span><span class="p">),</span> <span class="n">node_indices</span><span class="p">,</span> <span class="n">distance_matrix</span><span class="p">)</span>
+
+    <span class="c1"># Add edge geometries based on distance metric</span>
+    <span class="n">_add_edge_geometries</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">,</span> <span class="n">distance_metric</span><span class="p">,</span>
+                        <span class="n">network_graph</span><span class="p">,</span> <span class="n">nearest_network_nodes</span><span class="p">)</span>
+
+    <span class="c1"># Return as GeoDataFrame if requested</span>
     <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
     <span class="k">return</span> <span class="n">graph</span></div>
 
 
@@ -614,6 +823,8 @@
 <a class="viewcode-back" href="../../api/proximity.html#city2graph.proximity.gilbert_graph">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">gilbert_graph</span><span class="p">(</span><span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
                   <span class="n">radius</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                  <span class="n">distance_metric</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;euclidean&quot;</span><span class="p">,</span>
+                  <span class="n">network_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
                   <span class="n">as_gdf</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate Gilbert disc model graph from GeoDataFrame point geometries.</span>
@@ -624,8 +835,13 @@
 <span class="sd">        Input GeoDataFrame with point geometries.</span>
 <span class="sd">    radius : float</span>
 <span class="sd">        Connection radius.</span>
+<span class="sd">    distance_metric : str, default &quot;euclidean&quot;</span>
+<span class="sd">        Distance metric to use. Options: &quot;euclidean&quot;, &quot;manhattan&quot;, or &quot;network&quot;.</span>
+<span class="sd">    network_gdf : geopandas.GeoDataFrame, optional</span>
+<span class="sd">        Network GeoDataFrame for network distance calculations.</span>
+<span class="sd">        Required when distance_metric=&quot;network&quot;.</span>
 <span class="sd">    as_gdf : bool, default False</span>
-<span class="sd">        If True, return edges as a GeoDataFrame instead of NetworkX graph.</span>
+<span class="sd">        If True, return edges as GeoDataFrame instead of NetworkX graph.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -635,26 +851,56 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">graph</span>
 
-    <span class="c1"># Vectorized distance computation and edge creation</span>
-    <span class="n">dists</span> <span class="o">=</span> <span class="n">squareform</span><span class="p">(</span><span class="n">pdist</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>
-    <span class="n">edge_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">triu</span><span class="p">(</span><span class="n">dists</span> <span class="o">&lt;=</span> <span class="n">radius</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">edge_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">edge_mask</span><span class="p">)</span>
+    <span class="c1"># Calculate distance matrix and get network information</span>
+    <span class="n">distance_matrix</span><span class="p">,</span> <span class="n">network_graph</span><span class="p">,</span> <span class="n">nearest_network_nodes</span> <span class="o">=</span> <span class="n">_calculate_distance_matrix</span><span class="p">(</span>
+        <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">,</span> <span class="n">distance_metric</span><span class="p">,</span> <span class="n">network_gdf</span><span class="p">,</span> <span class="n">gdf</span>
+    <span class="p">)</span>
 
-    <span class="c1"># Convert to node indices without loops</span>
-    <span class="n">edges</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="p">(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
-        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">edge_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">edge_indices</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="p">]</span>
+    <span class="c1"># Create edges within radius</span>
+    <span class="k">if</span> <span class="n">distance_metric</span> <span class="o">==</span> <span class="s2">&quot;network&quot;</span><span class="p">:</span>
+        <span class="c1"># Network distance edges</span>
+        <span class="n">within_radius_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">distance_matrix</span> <span class="o">&lt;=</span> <span class="n">radius</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">distance_matrix</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+        <span class="n">upper_tri_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">triu</span><span class="p">(</span><span class="n">within_radius_mask</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">edge_pairs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">upper_tri_mask</span><span class="p">)</span>
+        <span class="n">edges</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">edge_pairs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">edge_pairs</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Euclidean or Manhattan distance edges</span>
+        <span class="n">edge_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">triu</span><span class="p">(</span><span class="n">distance_matrix</span> <span class="o">&lt;=</span> <span class="n">radius</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">edge_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">edge_mask</span><span class="p">)</span>
+        <span class="n">edges</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">node_indices</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">edge_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">edge_indices</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="p">]</span>
 
-    <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
+    <span class="c1"># Add edges with weights (vectorized)</span>
+    <span class="k">if</span> <span class="n">edges</span><span class="p">:</span>
+        <span class="c1"># Create node index mapping for faster lookups</span>
+        <span class="n">node_idx_map</span> <span class="o">=</span> <span class="p">{</span><span class="n">node</span><span class="p">:</span> <span class="n">idx</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">node</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">node_indices</span><span class="p">)}</span>
+
+        <span class="c1"># Vectorized edge weight calculation</span>
+        <span class="n">edge_weights</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">u</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">edges</span><span class="p">:</span>
+            <span class="n">i</span> <span class="o">=</span> <span class="n">node_idx_map</span><span class="p">[</span><span class="n">u</span><span class="p">]</span>
+            <span class="n">j</span> <span class="o">=</span> <span class="n">node_idx_map</span><span class="p">[</span><span class="n">v</span><span class="p">]</span>
+            <span class="n">edge_weights</span><span class="p">[(</span><span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">)]</span> <span class="o">=</span> <span class="n">distance_matrix</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>
+
+        <span class="c1"># Add edges with weights all at once</span>
+        <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">([(</span><span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;weight&quot;</span><span class="p">:</span> <span class="n">w</span><span class="p">})</span> <span class="k">for</span> <span class="p">(</span><span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">),</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">edge_weights</span><span class="o">.</span><span class="n">items</span><span class="p">()])</span>
+
     <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;radius&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">radius</span>
-    
+
+    <span class="c1"># Add edge geometries</span>
+    <span class="n">_add_edge_geometries</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">,</span> <span class="n">distance_metric</span><span class="p">,</span>
+                        <span class="n">network_graph</span><span class="p">,</span> <span class="n">nearest_network_nodes</span><span class="p">)</span>
+
     <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
     <span class="k">return</span> <span class="n">graph</span></div>
 
 
@@ -666,6 +912,8 @@
     <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">r0</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">distance_metric</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;euclidean&quot;</span><span class="p">,</span>
+    <span class="n">network_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">as_gdf</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Generate Waxman random geometric graph with $H_{ij} = \beta e^{-d_{ij}/r_0}}$.</span>
@@ -680,8 +928,14 @@
 <span class="sd">        Euclidean distance scale factor.</span>
 <span class="sd">    seed : int | None, optional</span>
 <span class="sd">        Random seed for reproducibility.</span>
+<span class="sd">    distance_metric : str, default &quot;euclidean&quot;</span>
+<span class="sd">        Distance metric to use. Options: &quot;euclidean&quot;, &quot;manhattan&quot;, or &quot;network&quot;.</span>
+<span class="sd">        Note: Waxman model uses distance for probability calculation.</span>
+<span class="sd">    network_gdf : geopandas.GeoDataFrame, optional</span>
+<span class="sd">        Network GeoDataFrame for network distance calculations.</span>
+<span class="sd">        Required when distance_metric=&quot;network&quot;.</span>
 <span class="sd">    as_gdf : bool, default False</span>
-<span class="sd">        If True, return edges as a GeoDataFrame instead of NetworkX graph.</span>
+<span class="sd">        If True, return edges as GeoDataFrame instead of NetworkX graph.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -691,13 +945,40 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span> <span class="o">=</span> <span class="n">_init_graph_and_nodes</span><span class="p">(</span><span class="n">gdf</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">graph</span>
 
-    <span class="c1"># Vectorized distance computation and probability calculation</span>
-    <span class="n">dists</span> <span class="o">=</span> <span class="n">squareform</span><span class="p">(</span><span class="n">pdist</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>
-    <span class="n">probs</span> <span class="o">=</span> <span class="n">beta</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">dists</span> <span class="o">/</span> <span class="n">r0</span><span class="p">)</span>
+    <span class="c1"># Initialize variables for geometry creation</span>
+    <span class="n">network_graph</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">nearest_network_nodes</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">if</span> <span class="n">distance_metric</span> <span class="o">==</span> <span class="s2">&quot;network&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">network_gdf</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;network_gdf is required when distance_metric=&#39;network&#39;&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+        <span class="c1"># Setup network computation using the helper function</span>
+        <span class="n">network_graph</span><span class="p">,</span> <span class="n">distance_matrix</span><span class="p">,</span> <span class="n">nearest_network_nodes</span> <span class="o">=</span> <span class="n">_setup_network_computation</span><span class="p">(</span>
+            <span class="n">gdf</span><span class="p">,</span> <span class="n">network_gdf</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Calculate probabilities based on network distances</span>
+        <span class="n">probs</span> <span class="o">=</span> <span class="n">beta</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">distance_matrix</span> <span class="o">/</span> <span class="n">r0</span><span class="p">)</span>
+        <span class="c1"># Set infinite distances to zero probability</span>
+        <span class="n">probs</span><span class="p">[</span><span class="n">distance_matrix</span> <span class="o">==</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">elif</span> <span class="n">distance_metric</span> <span class="o">==</span> <span class="s2">&quot;manhattan&quot;</span><span class="p">:</span>
+        <span class="c1"># Manhattan distance</span>
+        <span class="n">dists</span> <span class="o">=</span> <span class="n">squareform</span><span class="p">(</span><span class="n">pdist</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s2">&quot;cityblock&quot;</span><span class="p">))</span>
+        <span class="n">probs</span> <span class="o">=</span> <span class="n">beta</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">dists</span> <span class="o">/</span> <span class="n">r0</span><span class="p">)</span>
+        <span class="n">network_graph</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">nearest_network_nodes</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Euclidean distance (original implementation)</span>
+        <span class="n">dists</span> <span class="o">=</span> <span class="n">squareform</span><span class="p">(</span><span class="n">pdist</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>
+        <span class="n">probs</span> <span class="o">=</span> <span class="n">beta</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">dists</span> <span class="o">/</span> <span class="n">r0</span><span class="p">)</span>
+        <span class="n">network_graph</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">nearest_network_nodes</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># Generate random connections based on probabilities</span>
     <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span> <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">()</span>
     <span class="n">random_matrix</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="n">probs</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
 
@@ -714,11 +995,245 @@
     <span class="n">graph</span><span class="o">.</span><span class="n">add_edges_from</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
     <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;beta&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">beta</span>
     <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;r0&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">r0</span>
-    
+
+    <span class="c1"># Add edge weights based on distance metric (vectorized)</span>
+    <span class="k">if</span> <span class="n">distance_metric</span> <span class="o">==</span> <span class="s2">&quot;network&quot;</span><span class="p">:</span>
+        <span class="c1"># Vectorized network distance weights</span>
+        <span class="n">edge_weights</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">edge</span><span class="p">:</span> <span class="n">distance_matrix</span><span class="p">[</span><span class="n">node_indices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">edge</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">node_indices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">edge</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span>
+            <span class="k">for</span> <span class="n">edge</span> <span class="ow">in</span> <span class="n">edges</span>
+        <span class="p">}</span>
+    <span class="k">elif</span> <span class="n">distance_metric</span> <span class="o">==</span> <span class="s2">&quot;manhattan&quot;</span><span class="p">:</span>
+        <span class="c1"># Vectorized Manhattan distance weights</span>
+        <span class="n">edge_weights</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">edge</span><span class="p">:</span> <span class="n">dists</span><span class="p">[</span><span class="n">node_indices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">edge</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">node_indices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">edge</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span>
+            <span class="k">for</span> <span class="n">edge</span> <span class="ow">in</span> <span class="n">edges</span>
+        <span class="p">}</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Vectorized Euclidean distance weights</span>
+        <span class="n">edge_weights</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">edge</span><span class="p">:</span> <span class="n">dists</span><span class="p">[</span><span class="n">node_indices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">edge</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">node_indices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">edge</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span>
+            <span class="k">for</span> <span class="n">edge</span> <span class="ow">in</span> <span class="n">edges</span>
+        <span class="p">}</span>
+
+    <span class="c1"># Set all weights at once</span>
+    <span class="n">nx</span><span class="o">.</span><span class="n">set_edge_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edge_weights</span><span class="p">,</span> <span class="s2">&quot;weight&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Add edge geometries based on distance metric</span>
+    <span class="n">_add_edge_geometries</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">,</span> <span class="n">distance_metric</span><span class="p">,</span> <span class="n">network_graph</span><span class="p">,</span> <span class="n">nearest_network_nodes</span><span class="p">)</span>
+
+    <span class="c1"># Return as GeoDataFrame if requested</span>
     <span class="k">if</span> <span class="n">as_gdf</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
     <span class="k">return</span> <span class="n">graph</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_create_manhattan_linestring</span><span class="p">(</span><span class="n">coord1</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">coord2</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LineString</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create Manhattan distance LineString geometry between two coordinates.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    coord1 : tuple</span>
+<span class="sd">        First coordinate (x, y).</span>
+<span class="sd">    coord2 : tuple</span>
+<span class="sd">        Second coordinate (x, y).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    LineString</span>
+<span class="sd">        L-shaped path representing Manhattan distance.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">x1</span><span class="p">,</span> <span class="n">y1</span> <span class="o">=</span> <span class="n">coord1</span>
+    <span class="n">x2</span><span class="p">,</span> <span class="n">y2</span> <span class="o">=</span> <span class="n">coord2</span>
+
+    <span class="c1"># Create L-shaped path: horizontal first, then vertical</span>
+    <span class="k">return</span> <span class="n">LineString</span><span class="p">([(</span><span class="n">x1</span><span class="p">,</span> <span class="n">y1</span><span class="p">),</span> <span class="p">(</span><span class="n">x2</span><span class="p">,</span> <span class="n">y1</span><span class="p">),</span> <span class="p">(</span><span class="n">x2</span><span class="p">,</span> <span class="n">y2</span><span class="p">)])</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_create_network_linestring</span><span class="p">(</span><span class="n">source_node</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span><span class="p">,</span>
+                              <span class="n">target_node</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span><span class="p">,</span>
+                              <span class="n">network_graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
+                              <span class="n">node_indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+                              <span class="n">nearest_network_nodes</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LineString</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create network path LineString geometry between two nodes.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    source_node : str | int</span>
+<span class="sd">        Source node ID in the input data.</span>
+<span class="sd">    target_node : str | int</span>
+<span class="sd">        Target node ID in the input data.</span>
+<span class="sd">    network_graph : nx.Graph</span>
+<span class="sd">        NetworkX graph representation of the network.</span>
+<span class="sd">    node_indices : list</span>
+<span class="sd">        List of input node indices.</span>
+<span class="sd">    nearest_network_nodes : list</span>
+<span class="sd">        List mapping input nodes to nearest network nodes.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    LineString | None</span>
+<span class="sd">        Network path geometry, or None if no path exists.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Get network node IDs for source and target</span>
+        <span class="n">source_idx</span> <span class="o">=</span> <span class="n">node_indices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">source_node</span><span class="p">)</span>
+        <span class="n">target_idx</span> <span class="o">=</span> <span class="n">node_indices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">target_node</span><span class="p">)</span>
+        <span class="n">source_net_node</span> <span class="o">=</span> <span class="n">nearest_network_nodes</span><span class="p">[</span><span class="n">source_idx</span><span class="p">]</span>
+        <span class="n">target_net_node</span> <span class="o">=</span> <span class="n">nearest_network_nodes</span><span class="p">[</span><span class="n">target_idx</span><span class="p">]</span>
+
+        <span class="c1"># Get shortest path</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">shortest_path</span><span class="p">(</span><span class="n">network_graph</span><span class="p">,</span> <span class="n">source_net_node</span><span class="p">,</span> <span class="n">target_net_node</span><span class="p">)</span>
+
+        <span class="c1"># Extract coordinates for path nodes</span>
+        <span class="n">pos_dict</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">get_node_attributes</span><span class="p">(</span><span class="n">network_graph</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">pos_dict</span><span class="p">:</span>
+            <span class="c1"># Fallback to x,y attributes</span>
+            <span class="n">node_attrs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">network_graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+            <span class="n">pos_dict</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">node_id</span><span class="p">:</span> <span class="p">(</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+                <span class="k">for</span> <span class="n">node_id</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">node_attrs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                <span class="k">if</span> <span class="s2">&quot;x&quot;</span> <span class="ow">in</span> <span class="n">attrs</span> <span class="ow">and</span> <span class="s2">&quot;y&quot;</span> <span class="ow">in</span> <span class="n">attrs</span>
+            <span class="p">}</span>
+
+        <span class="k">if</span> <span class="n">pos_dict</span><span class="p">:</span>
+            <span class="n">path_coords</span> <span class="o">=</span> <span class="p">[</span><span class="n">pos_dict</span><span class="p">[</span><span class="n">node</span><span class="p">]</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">path</span> <span class="k">if</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">pos_dict</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">path_coords</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">LineString</span><span class="p">(</span><span class="n">path_coords</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="n">nx</span><span class="o">.</span><span class="n">NetworkXNoPath</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_add_edge_geometries</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
+                        <span class="n">coords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+                        <span class="n">node_indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+                        <span class="n">distance_metric</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+                        <span class="n">network_graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                        <span class="n">nearest_network_nodes</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Add appropriate edge geometries based on distance metric.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    graph : nx.Graph</span>
+<span class="sd">        Graph to add geometries to.</span>
+<span class="sd">    coords : np.ndarray</span>
+<span class="sd">        Array of coordinates.</span>
+<span class="sd">    node_indices : list</span>
+<span class="sd">        List of node indices.</span>
+<span class="sd">    distance_metric : str</span>
+<span class="sd">        Distance metric used.</span>
+<span class="sd">    network_graph : nx.Graph, optional</span>
+<span class="sd">        Network graph for network distance geometries.</span>
+<span class="sd">    nearest_network_nodes : list, optional</span>
+<span class="sd">        Mapping to nearest network nodes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">coord_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">node_indices</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span> <span class="n">coords</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">node_indices</span><span class="p">))}</span>
+
+    <span class="c1"># Vectorized geometry creation</span>
+    <span class="n">edge_geometries</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">u</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">edges</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">distance_metric</span> <span class="o">==</span> <span class="s2">&quot;network&quot;</span> <span class="ow">and</span> <span class="n">network_graph</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">nearest_network_nodes</span><span class="p">:</span>
+            <span class="c1"># Create network path geometry</span>
+            <span class="n">geom</span> <span class="o">=</span> <span class="n">_create_network_linestring</span><span class="p">(</span><span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">network_graph</span><span class="p">,</span> <span class="n">node_indices</span><span class="p">,</span> <span class="n">nearest_network_nodes</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">geom</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Fallback to straight line if no network path</span>
+                <span class="n">geom</span> <span class="o">=</span> <span class="n">LineString</span><span class="p">([</span><span class="n">coord_dict</span><span class="p">[</span><span class="n">u</span><span class="p">],</span> <span class="n">coord_dict</span><span class="p">[</span><span class="n">v</span><span class="p">]])</span>
+        <span class="k">elif</span> <span class="n">distance_metric</span> <span class="o">==</span> <span class="s2">&quot;manhattan&quot;</span><span class="p">:</span>
+            <span class="c1"># Create Manhattan distance geometry</span>
+            <span class="n">geom</span> <span class="o">=</span> <span class="n">_create_manhattan_linestring</span><span class="p">(</span><span class="n">coord_dict</span><span class="p">[</span><span class="n">u</span><span class="p">],</span> <span class="n">coord_dict</span><span class="p">[</span><span class="n">v</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Default: straight line for Euclidean distance</span>
+            <span class="n">geom</span> <span class="o">=</span> <span class="n">LineString</span><span class="p">([</span><span class="n">coord_dict</span><span class="p">[</span><span class="n">u</span><span class="p">],</span> <span class="n">coord_dict</span><span class="p">[</span><span class="n">v</span><span class="p">]])</span>
+
+        <span class="n">edge_geometries</span><span class="p">[(</span><span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">)]</span> <span class="o">=</span> <span class="n">geom</span>
+
+    <span class="c1"># Set all geometries at once</span>
+    <span class="n">nx</span><span class="o">.</span><span class="n">set_edge_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edge_geometries</span><span class="p">,</span> <span class="s2">&quot;geometry&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_calculate_distance_matrix</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+                             <span class="n">node_indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+                             <span class="n">distance_metric</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+                             <span class="n">network_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                             <span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                             <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate distance matrix based on the specified metric.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    coords : np.ndarray</span>
+<span class="sd">        Array of coordinates.</span>
+<span class="sd">    node_indices : list</span>
+<span class="sd">        List of node indices.</span>
+<span class="sd">    distance_metric : str</span>
+<span class="sd">        Distance metric to use.</span>
+<span class="sd">    network_gdf : gpd.GeoDataFrame, optional</span>
+<span class="sd">        Network GeoDataFrame for network distances.</span>
+<span class="sd">    gdf : gpd.GeoDataFrame, optional</span>
+<span class="sd">        Original GeoDataFrame for CRS validation.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[np.ndarray, nx.Graph | None, list | None]</span>
+<span class="sd">        Distance matrix, network graph (if used), and nearest network nodes (if used).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">distance_metric</span> <span class="o">==</span> <span class="s2">&quot;network&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">network_gdf</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">gdf</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;network_gdf and gdf are required when distance_metric=&#39;network&#39;&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+        <span class="n">network_graph</span><span class="p">,</span> <span class="n">distance_matrix</span><span class="p">,</span> <span class="n">nearest_network_nodes</span> <span class="o">=</span> <span class="n">_setup_network_computation</span><span class="p">(</span>
+            <span class="n">gdf</span><span class="p">,</span> <span class="n">network_gdf</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">node_indices</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">distance_matrix</span><span class="p">,</span> <span class="n">network_graph</span><span class="p">,</span> <span class="n">nearest_network_nodes</span>
+
+    <span class="k">if</span> <span class="n">distance_metric</span> <span class="o">==</span> <span class="s2">&quot;manhattan&quot;</span><span class="p">:</span>
+        <span class="n">distance_matrix</span> <span class="o">=</span> <span class="n">squareform</span><span class="p">(</span><span class="n">pdist</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s2">&quot;cityblock&quot;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">distance_matrix</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+
+    <span class="c1"># Default to euclidean</span>
+    <span class="n">distance_matrix</span> <span class="o">=</span> <span class="n">squareform</span><span class="p">(</span><span class="n">pdist</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">distance_matrix</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_add_distance_weights</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
+                         <span class="n">edges</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+                         <span class="n">node_indices</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+                         <span class="n">distance_matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Add distance weights to graph edges using vectorized operations.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    graph : nx.Graph</span>
+<span class="sd">        Graph to add weights to.</span>
+<span class="sd">    edges : list</span>
+<span class="sd">        List of edges.</span>
+<span class="sd">    node_indices : list</span>
+<span class="sd">        List of node indices.</span>
+<span class="sd">    distance_matrix : np.ndarray</span>
+<span class="sd">        Precomputed distance matrix.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create node index mapping for O(1) lookup</span>
+    <span class="n">node_idx_map</span> <span class="o">=</span> <span class="p">{</span><span class="n">node</span><span class="p">:</span> <span class="n">idx</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">node</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">node_indices</span><span class="p">)}</span>
+
+    <span class="c1"># Vectorized weight calculation</span>
+    <span class="n">edge_weights</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">(</span><span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span> <span class="n">distance_matrix</span><span class="p">[</span><span class="n">node_idx_map</span><span class="p">[</span><span class="n">u</span><span class="p">],</span> <span class="n">node_idx_map</span><span class="p">[</span><span class="n">v</span><span class="p">]]</span>
+        <span class="k">for</span> <span class="n">u</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">edges</span>
+    <span class="p">}</span>
+
+    <span class="c1"># Set all weights at once</span>
+    <span class="n">nx</span><span class="o">.</span><span class="n">set_edge_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edge_weights</span><span class="p">,</span> <span class="s2">&quot;weight&quot;</span><span class="p">)</span>
 </pre></div>
 
                 </article>

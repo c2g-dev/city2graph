@@ -415,17 +415,17 @@
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[1]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">city2graph</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">contextily</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ctx</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">osmnx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ox</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">HTML</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">animation</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">contextily</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ctx</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">city2graph</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.animation</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">animation</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">Video</span><span class="p">,</span> <span class="n">HTML</span>
-
-<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -446,11 +446,11 @@
 <span class="n">poi_gdf</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">features_from_point</span><span class="p">(</span>
     <span class="p">(</span><span class="mf">35.658514</span><span class="p">,</span> <span class="mf">139.70133</span><span class="p">),</span>  <span class="c1"># Tokyo Tower coordinates</span>
     <span class="n">tags</span><span class="o">=</span><span class="n">poi_tags</span><span class="p">,</span>
-    <span class="n">dist</span><span class="o">=</span><span class="mi">1000</span>  <span class="c1"># Search radius in meters</span>
+    <span class="n">dist</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>  <span class="c1"># Search radius in meters</span>
     <span class="p">)</span>
 
 <span class="c1"># Filter to include only nodes, not ways and relations</span>
-<span class="n">poi_gdf</span> <span class="o">=</span> <span class="n">poi_gdf</span><span class="p">[</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">get_level_values</span><span class="p">(</span><span class="s1">&#39;element&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;node&#39;</span><span class="p">]</span>
+<span class="n">poi_gdf</span> <span class="o">=</span> <span class="n">poi_gdf</span><span class="p">[</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">get_level_values</span><span class="p">(</span><span class="s2">&quot;element&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;node&quot;</span><span class="p">]</span>
 
 <span class="c1"># Reproject to a projected CRS for accurate centroids</span>
 <span class="n">poi_gdf</span> <span class="o">=</span> <span class="n">poi_gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">6677</span><span class="p">)</span>
@@ -462,21 +462,21 @@
 <h2>3. Define Helper Functions<a class="headerlink" href="#3.-Define-Helper-Functions" title="Link to this heading">#</a></h2>
 <p>Define functions to extract node positions and plot graphs with degree centrality and optional basemap.</p>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">get_node_positions</span><span class="p">(</span><span class="n">gdf</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract node positions from GeoDataFrame.&quot;&quot;&quot;</span>
     <span class="n">node_positions</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">for</span> <span class="nb">id</span><span class="p">,</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">gdf</span><span class="p">[</span><span class="s1">&#39;geometry&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="k">if</span> <span class="n">geom</span><span class="o">.</span><span class="n">geom_type</span> <span class="o">==</span> <span class="s1">&#39;Point&#39;</span><span class="p">:</span>
+    <span class="k">for</span> <span class="nb">id</span><span class="p">,</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">gdf</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">geom</span><span class="o">.</span><span class="n">geom_type</span> <span class="o">==</span> <span class="s2">&quot;Point&quot;</span><span class="p">:</span>
             <span class="n">node_positions</span><span class="p">[</span><span class="nb">id</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">geom</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">geom</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">centroid</span> <span class="o">=</span> <span class="n">geom</span><span class="o">.</span><span class="n">centroid</span>
             <span class="n">node_positions</span><span class="p">[</span><span class="nb">id</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">centroid</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">centroid</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">node_positions</span>
 
-<span class="k">def</span><span class="w"> </span><span class="nf">plot_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">node_positions</span><span class="p">,</span> <span class="n">node_color</span><span class="o">=</span><span class="s1">&#39;skyblue&#39;</span><span class="p">,</span> <span class="n">edge_color</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">,</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">node_positions</span><span class="p">,</span> <span class="n">node_color</span><span class="o">=</span><span class="s2">&quot;skyblue&quot;</span><span class="p">,</span> <span class="n">edge_color</span><span class="o">=</span><span class="s2">&quot;gray&quot;</span><span class="p">,</span>
                <span class="n">add_basemap</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Plot a network graph with color-coded nodes based on degree centrality.&quot;&quot;&quot;</span>
     <span class="c1"># Compute degree centrality for node coloring</span>
@@ -487,7 +487,7 @@
     <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">12</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
 
     <span class="c1"># Set equal aspect ratio to maintain map proportions</span>
-    <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s2">&quot;equal&quot;</span><span class="p">)</span>
 
     <span class="c1"># Plot the edges with better color</span>
     <span class="n">nx</span><span class="o">.</span><span class="n">draw_networkx_edges</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">pos</span><span class="o">=</span><span class="n">node_positions</span><span class="p">,</span>
@@ -516,11 +516,11 @@
     <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">node_ys</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">node_ys</span><span class="p">))</span>
 
     <span class="c1"># Add a colorbar with better styling</span>
-    <span class="n">cbar</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Degree Centrality&#39;</span><span class="p">,</span> <span class="n">shrink</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+    <span class="n">cbar</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Degree Centrality&quot;</span><span class="p">,</span> <span class="n">shrink</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
     <span class="n">cbar</span><span class="o">.</span><span class="n">ax</span><span class="o">.</span><span class="n">tick_params</span><span class="p">(</span><span class="n">labelsize</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
 
-    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
-    <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="n">title</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s2">&quot;bold&quot;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s2">&quot;off&quot;</span><span class="p">)</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
     <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 
@@ -529,7 +529,7 @@
 </div>
 </div>
 <div class="nbinput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
 </pre></div>
 </div>
 <div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Utility functions for animations</span>
@@ -548,15 +548,15 @@
     <span class="n">ax</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
     <span class="n">node_degrees</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">graph</span><span class="o">.</span><span class="n">degree</span><span class="p">())</span>
     <span class="n">node_colors</span> <span class="o">=</span> <span class="p">[</span><span class="n">node_degrees</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">n</span><span class="p">,</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">()]</span>
-    <span class="n">nx</span><span class="o">.</span><span class="n">draw_networkx_edges</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">pos</span><span class="o">=</span><span class="n">node_positions</span><span class="p">,</span> <span class="n">edge_color</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">)</span>
+    <span class="n">nx</span><span class="o">.</span><span class="n">draw_networkx_edges</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">pos</span><span class="o">=</span><span class="n">node_positions</span><span class="p">,</span> <span class="n">edge_color</span><span class="o">=</span><span class="s2">&quot;gray&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">)</span>
     <span class="n">nx</span><span class="o">.</span><span class="n">draw_networkx_nodes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">pos</span><span class="o">=</span><span class="n">node_positions</span><span class="p">,</span> <span class="n">node_size</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">node_color</span><span class="o">=</span><span class="n">node_colors</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">plt</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">plasma</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">linewidths</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">poi_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">:</span>
         <span class="n">ctx</span><span class="o">.</span><span class="n">add_basemap</span><span class="p">(</span><span class="n">ax</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">providers</span><span class="o">.</span><span class="n">CartoDB</span><span class="o">.</span><span class="n">Positron</span><span class="p">)</span>
     <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">)</span>
     <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span><span class="p">)</span>
-    <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
-    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">title_fmt</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="n">params</span><span class="p">),</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
-    <span class="n">ax</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s1">&#39;off&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s2">&quot;equal&quot;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">title_fmt</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="n">params</span><span class="p">),</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s2">&quot;bold&quot;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">axis</span><span class="p">(</span><span class="s2">&quot;off&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">ax</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">animate_and_save</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">graph_func</span><span class="p">,</span> <span class="n">param_list</span><span class="p">,</span> <span class="n">title_fmt</span><span class="p">,</span> <span class="n">save_path</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
@@ -580,10 +580,118 @@
 <h2>4. K-Nearest Neighbors (KNN) Graph<a class="headerlink" href="#4.-K-Nearest-Neighbors-(KNN)-Graph" title="Link to this heading">#</a></h2>
 <p>Create an interactive slider to plot KNN graphs for varying k values.</p>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[5]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="s1">&#39;all&#39;</span><span class="p">)</span>  <span class="c1"># Close existing figures</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">city2graph</span><span class="o">.</span><span class="n">knn_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">as_gdf</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[12]:
+</pre></div>
+</div>
+<div class="output_area rendered_html docutils container">
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>u</th>
+      <th>v</th>
+      <th>geometry</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>(node, 597694711)</td>
+      <td>(node, 4284075892)</td>
+      <td>LINESTRING (-12505.002 -37383.921, -12499.441 ...</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>(node, 597694711)</td>
+      <td>(node, 4142499501)</td>
+      <td>LINESTRING (-12505.002 -37383.921, -12491.712 ...</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>(node, 597694711)</td>
+      <td>(node, 7169158195)</td>
+      <td>LINESTRING (-12505.002 -37383.921, -12524.754 ...</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>(node, 597694711)</td>
+      <td>(node, 10816128806)</td>
+      <td>LINESTRING (-12505.002 -37383.921, -12526.728 ...</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>(node, 597694711)</td>
+      <td>(node, 7169158194)</td>
+      <td>LINESTRING (-12505.002 -37383.921, -12541.832 ...</td>
+    </tr>
+    <tr>
+      <th>...</th>
+      <td>...</td>
+      <td>...</td>
+      <td>...</td>
+    </tr>
+    <tr>
+      <th>1760</th>
+      <td>(node, 12452551995)</td>
+      <td>(node, 12452551999)</td>
+      <td>LINESTRING (-11891.355 -37894.74, -11875.963 -...</td>
+    </tr>
+    <tr>
+      <th>1761</th>
+      <td>(node, 12452551995)</td>
+      <td>(node, 12452577427)</td>
+      <td>LINESTRING (-11891.355 -37894.74, -11871.955 -...</td>
+    </tr>
+    <tr>
+      <th>1762</th>
+      <td>(node, 12452551999)</td>
+      <td>(node, 12452577427)</td>
+      <td>LINESTRING (-11875.963 -37894.594, -11871.955 ...</td>
+    </tr>
+    <tr>
+      <th>1763</th>
+      <td>(node, 12452551999)</td>
+      <td>(node, 12452552000)</td>
+      <td>LINESTRING (-11875.963 -37894.594, -11882.456 ...</td>
+    </tr>
+    <tr>
+      <th>1764</th>
+      <td>(node, 12452552000)</td>
+      <td>(node, 12452577427)</td>
+      <td>LINESTRING (-11882.456 -37902.629, -11871.955 ...</td>
+    </tr>
+  </tbody>
+</table>
+<p>1765 rows × 3 columns</p>
+</div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[7]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="s2">&quot;all&quot;</span><span class="p">)</span>  <span class="c1"># Close existing figures</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">ioff</span><span class="p">()</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">plot_knn_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">node_positions</span><span class="p">,</span> <span class="n">k_value</span><span class="p">):</span>
@@ -591,26 +699,26 @@
     <span class="n">knn_graph</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">knn_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k_value</span><span class="p">)</span>
     <span class="n">plot_graph</span><span class="p">(</span>
     <span class="n">knn_graph</span><span class="p">,</span>
-    <span class="sa">f</span><span class="s1">&#39;KNN Graph (k=</span><span class="si">{</span><span class="n">k_value</span><span class="si">}</span><span class="s1">) of Restaurants in Shibuya, Tokyo&#39;</span><span class="p">,</span>
+    <span class="sa">f</span><span class="s2">&quot;KNN Graph (k=</span><span class="si">{</span><span class="n">k_value</span><span class="si">}</span><span class="s2">) of Restaurants in Shibuya, Tokyo&quot;</span><span class="p">,</span>
     <span class="n">node_positions</span><span class="p">,</span>
-    <span class="n">edge_color</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">,</span>
+    <span class="n">edge_color</span><span class="o">=</span><span class="s2">&quot;gray&quot;</span><span class="p">,</span>
     <span class="n">add_basemap</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">crs</span><span class="o">=</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">crs</span>
+    <span class="n">crs</span><span class="o">=</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
     <span class="p">)</span>
 
 <span class="n">max_k</span> <span class="o">=</span> <span class="mi">100</span>
-<span class="n">param_list</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;k&#39;</span><span class="p">:</span> <span class="n">k</span><span class="p">}</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
+<span class="n">param_list</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;k&quot;</span><span class="p">:</span> <span class="n">k</span><span class="p">}</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
 <span class="n">ani_knn</span> <span class="o">=</span> <span class="n">animate_and_save</span><span class="p">(</span>
     <span class="n">poi_gdf</span><span class="p">,</span>
     <span class="n">city2graph</span><span class="o">.</span><span class="n">knn_graph</span><span class="p">,</span>
     <span class="n">param_list</span><span class="p">,</span>
-    <span class="s1">&#39;KNN Graph (k=</span><span class="si">{k}</span><span class="s1">) of Restaurants in Shibuya, Tokyo&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;../_static/knn_graph.mp4&#39;</span><span class="p">,</span>
+    <span class="s2">&quot;KNN Graph (k=</span><span class="si">{k}</span><span class="s2">) of Restaurants in Shibuya, Tokyo&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;../_static/knn_graph.mp4&quot;</span><span class="p">,</span>
     <span class="n">interval</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
-    <span class="n">fps</span><span class="o">=</span><span class="mi">5</span>
+    <span class="n">fps</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="s1">&#39;all&#39;</span><span class="p">)</span>  <span class="c1"># Close existing figures</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="s2">&quot;all&quot;</span><span class="p">)</span>  <span class="c1"># Close existing figures</span>
 </pre></div>
 </div>
 </div>
@@ -621,23 +729,22 @@
 <div class="highlight"><pre>
 INFO:matplotlib.animation:Animation.save using &lt;class &#39;matplotlib.animation.FFMpegWriter&#39;&gt;
 INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo -vcodec rawvideo -s 1200x1000 -pix_fmt rgba -framerate 5 -loglevel error -i pipe: -vcodec h264 -pix_fmt yuv420p -y ../_static/knn_graph.mp4
-INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo -vcodec rawvideo -s 1200x1000 -pix_fmt rgba -framerate 5 -loglevel error -i pipe: -vcodec h264 -pix_fmt yuv420p -y ../_static/knn_graph.mp4
 </pre></div></div>
 </div>
 <div class="nbinput docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">HTML</span><span class="p">(</span><span class="s1">&#39;&#39;&#39;</span>
-<span class="s1">&lt;video controls style=&quot;width: 100%; max-width: 800px; height: auto;&quot;&gt;</span>
-<span class="s1">    &lt;source src=&quot;../_static/knn_graph.mp4&quot; type=&quot;video/mp4&quot;&gt;</span>
-<span class="s1">&lt;/video&gt;</span>
-<span class="s1">&#39;&#39;&#39;</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">HTML</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">&lt;video controls style=&quot;width: 100%; max-width: 800px; height: auto;&quot;&gt;</span>
+<span class="s2">    &lt;source src=&quot;../_static/knn_graph.mp4&quot; type=&quot;video/mp4&quot;&gt;</span>
+<span class="s2">&lt;/video&gt;</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
 <div class="nboutput nblast docutils container">
-<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[6]:
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
 </pre></div>
 </div>
 <div class="output_area rendered_html docutils container">
@@ -659,10 +766,10 @@ INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo 
 
 <span class="c1"># Use the existing plot_graph function with basemap</span>
 <span class="n">plot_graph</span><span class="p">(</span><span class="n">delaunay_graph</span><span class="p">,</span>
-           <span class="s1">&#39;Delaunay Graph of Restaurants in Shibuya, Tokyo&#39;</span><span class="p">,</span>
+           <span class="s2">&quot;Delaunay Graph of Restaurants in Shibuya, Tokyo&quot;</span><span class="p">,</span>
            <span class="n">node_positions</span><span class="p">,</span>
-           <span class="n">node_color</span><span class="o">=</span><span class="s1">&#39;skyblue&#39;</span><span class="p">,</span>
-           <span class="n">edge_color</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">,</span>
+           <span class="n">node_color</span><span class="o">=</span><span class="s2">&quot;skyblue&quot;</span><span class="p">,</span>
+           <span class="n">edge_color</span><span class="o">=</span><span class="s2">&quot;gray&quot;</span><span class="p">,</span>
            <span class="n">add_basemap</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
            <span class="n">crs</span><span class="o">=</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
 <br/></pre></div>
@@ -672,7 +779,7 @@ INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo 
 <div class="prompt empty docutils container">
 </div>
 <div class="output_area docutils container">
-<img alt="../_images/examples_generating_graphs_by_proximity_13_0.png" src="../_images/examples_generating_graphs_by_proximity_13_0.png" />
+<img alt="../_images/examples_generating_graphs_by_proximity_14_0.png" src="../_images/examples_generating_graphs_by_proximity_14_0.png" />
 </div>
 </div>
 </section>
@@ -690,24 +797,24 @@ INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo 
     <span class="n">gilbert_graph</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">gilbert_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">radius</span><span class="o">=</span><span class="n">r_value</span><span class="p">)</span>
     <span class="n">plot_graph</span><span class="p">(</span>
     <span class="n">gilbert_graph</span><span class="p">,</span>
-    <span class="sa">f</span><span class="s1">&#39;Gilbert Graph (radius=</span><span class="si">{</span><span class="n">r_value</span><span class="si">}</span><span class="s1">m) of Restaurants in Shibuya, Tokyo&#39;</span><span class="p">,</span>
+    <span class="sa">f</span><span class="s2">&quot;Gilbert Graph (radius=</span><span class="si">{</span><span class="n">r_value</span><span class="si">}</span><span class="s2">m) of Restaurants in Shibuya, Tokyo&quot;</span><span class="p">,</span>
     <span class="n">node_positions</span><span class="p">,</span>
-    <span class="n">edge_color</span><span class="o">=</span><span class="s1">&#39;gray&#39;</span><span class="p">,</span>
+    <span class="n">edge_color</span><span class="o">=</span><span class="s2">&quot;gray&quot;</span><span class="p">,</span>
     <span class="n">add_basemap</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">crs</span><span class="o">=</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">crs</span>
+    <span class="n">crs</span><span class="o">=</span><span class="n">poi_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
     <span class="p">)</span>
 
 <span class="n">max_r</span> <span class="o">=</span> <span class="mi">500</span>  <span class="c1"># max radius in meters</span>
 <span class="n">frames</span> <span class="o">=</span> <span class="mi">100</span>
-<span class="n">param_list</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;radius&#39;</span><span class="p">:</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">max_r</span> <span class="o">/</span> <span class="n">frames</span><span class="p">)}</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">frames</span><span class="p">)]</span>
+<span class="n">param_list</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;radius&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">max_r</span> <span class="o">/</span> <span class="n">frames</span><span class="p">)}</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">frames</span><span class="p">)]</span>
 <span class="n">ani_gilbert</span> <span class="o">=</span> <span class="n">animate_and_save</span><span class="p">(</span>
     <span class="n">poi_gdf</span><span class="p">,</span>
     <span class="n">city2graph</span><span class="o">.</span><span class="n">gilbert_graph</span><span class="p">,</span>
     <span class="n">param_list</span><span class="p">,</span>
-    <span class="s1">&#39;Gilbert Graph (radius=</span><span class="si">{radius:.0f}</span><span class="s1">m) of Restaurants in Shibuya, Tokyo&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;../_static/gilbert_graph.mp4&#39;</span><span class="p">,</span>
+    <span class="s2">&quot;Gilbert Graph (radius=</span><span class="si">{radius:.0f}</span><span class="s2">m) of Restaurants in Shibuya, Tokyo&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;../_static/gilbert_graph.mp4&quot;</span><span class="p">,</span>
     <span class="n">interval</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
-    <span class="n">fps</span><span class="o">=</span><span class="mi">5</span>
+    <span class="n">fps</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -725,11 +832,11 @@ INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo 
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[9]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">HTML</span><span class="p">(</span><span class="s1">&#39;&#39;&#39;</span>
-<span class="s1">&lt;video controls style=&quot;width: 100%; max-width: 800px; height: auto;&quot;&gt;</span>
-<span class="s1">    &lt;source src=&quot;../_static/gilbert_graph.mp4&quot; type=&quot;video/mp4&quot;&gt;</span>
-<span class="s1">&lt;/video&gt;</span>
-<span class="s1">&#39;&#39;&#39;</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">HTML</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">&lt;video controls style=&quot;width: 100%; max-width: 800px; height: auto;&quot;&gt;</span>
+<span class="s2">    &lt;source src=&quot;../_static/gilbert_graph.mp4&quot; type=&quot;video/mp4&quot;&gt;</span>
+<span class="s2">&lt;/video&gt;</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -759,15 +866,15 @@ INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo 
 <span class="n">r0_values</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>  <span class="c1"># Every 1 from 1 to 250</span>
 <span class="n">beta_values</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]</span>  <span class="c1"># 0.01, 0.1, 0.5, 1.0</span>
 
-<span class="n">param_list</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;r0&#39;</span><span class="p">:</span> <span class="n">r0</span><span class="p">,</span> <span class="s1">&#39;beta&#39;</span><span class="p">:</span> <span class="n">beta</span><span class="p">}</span> <span class="k">for</span> <span class="n">beta</span> <span class="ow">in</span> <span class="n">beta_values</span> <span class="k">for</span> <span class="n">r0</span> <span class="ow">in</span> <span class="n">r0_values</span><span class="p">]</span>
+<span class="n">param_list</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;r0&quot;</span><span class="p">:</span> <span class="n">r0</span><span class="p">,</span> <span class="s2">&quot;beta&quot;</span><span class="p">:</span> <span class="n">beta</span><span class="p">}</span> <span class="k">for</span> <span class="n">beta</span> <span class="ow">in</span> <span class="n">beta_values</span> <span class="k">for</span> <span class="n">r0</span> <span class="ow">in</span> <span class="n">r0_values</span><span class="p">]</span>
 <span class="n">ani_waxman</span> <span class="o">=</span> <span class="n">animate_and_save</span><span class="p">(</span>
     <span class="n">poi_gdf</span><span class="p">,</span>
     <span class="n">city2graph</span><span class="o">.</span><span class="n">waxman_graph</span><span class="p">,</span>
     <span class="n">param_list</span><span class="p">,</span>
-    <span class="s1">&#39;Waxman Graph (r0=</span><span class="si">{r0}</span><span class="s1">, beta=</span><span class="si">{beta:.2f}</span><span class="s1">) of Restaurants in Shibuya, Tokyo&#39;</span><span class="p">,</span>
-    <span class="s1">&#39;../_static/waxman_graph.mp4&#39;</span><span class="p">,</span>
+    <span class="s2">&quot;Waxman Graph (r0=</span><span class="si">{r0}</span><span class="s2">, beta=</span><span class="si">{beta:.2f}</span><span class="s2">) of Restaurants in Shibuya, Tokyo&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;../_static/waxman_graph.mp4&quot;</span><span class="p">,</span>
     <span class="n">interval</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
-    <span class="n">fps</span><span class="o">=</span><span class="mi">5</span>
+    <span class="n">fps</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
 <span class="p">)</span>
 <br/></pre></div>
 </div>
@@ -785,11 +892,11 @@ INFO:matplotlib.animation:MovieWriter._run: running command: ffmpeg -f rawvideo 
 <div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
 </pre></div>
 </div>
-<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">HTML</span><span class="p">(</span><span class="s1">&#39;&#39;&#39;</span>
-<span class="s1">&lt;video controls style=&quot;width: 100%; max-width: 800px; height: auto;&quot;&gt;</span>
-<span class="s1">    &lt;source src=&quot;../_static/waxman_graph.mp4&quot; type=&quot;video/mp4&quot;&gt;</span>
-<span class="s1">&lt;/video&gt;</span>
-<span class="s1">&#39;&#39;&#39;</span><span class="p">)</span>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="n">HTML</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">&lt;video controls style=&quot;width: 100%; max-width: 800px; height: auto;&quot;&gt;</span>
+<span class="s2">    &lt;source src=&quot;../_static/waxman_graph.mp4&quot; type=&quot;video/mp4&quot;&gt;</span>
+<span class="s2">&lt;/video&gt;</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
