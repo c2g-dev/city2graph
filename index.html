@@ -381,7 +381,7 @@ It supports <a class="reference external" href="https://pytorch-geometric.readth
 <section id="examples">
 <h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h2>
 <p><strong>Morphology</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">morphological_network</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">morphological_network</span><span class="p">(</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">morphological_graph</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">morphological_graph</span><span class="p">(</span>
    <span class="n">buildings_gdf</span><span class="p">,</span>
    <span class="n">segments_gdf</span><span class="p">,</span>
    <span class="n">center_point</span><span class="p">,</span>
@@ -390,10 +390,10 @@ It supports <a class="reference external" href="https://pytorch-geometric.readth
 </pre></div>
 </div>
 <figure class="align-center" id="id1">
-<a class="reference internal image-reference" href="_images/morph_net_overview.png"><img alt="A morphological network in Liverpool" src="_images/morph_net_overview.png" style="width: 1000px;" />
+<a class="reference internal image-reference" href="_images/morph_net_overview.png"><img alt="A morphological graph in Liverpool" src="_images/morph_net_overview.png" style="width: 1000px;" />
 </a>
 <figcaption>
-<p><span class="caption-text">A morphological network of 500m walking distance in Liverpool</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+<p><span class="caption-text">A morphological graph of 500m walking distance in Liverpool</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 <p>&gt;&gt; For details, see <a class="reference internal" href="examples/morphological_networks_from_overturemaps.html"><span class="doc">Constructing Morphological Networks from Overture Maps</span></a></p>
@@ -407,10 +407,10 @@ It supports <a class="reference external" href="https://pytorch-geometric.readth
 </pre></div>
 </div>
 <figure class="align-center" id="id2">
-<a class="reference internal image-reference" href="_images/trav_sum_network_overview.png"><img alt="A bus transportation network in London" src="_images/trav_sum_network_overview.png" style="width: 1000px;" />
+<a class="reference internal image-reference" href="_images/trav_sum_network_overview.png"><img alt="A bus transportation graph in London" src="_images/trav_sum_network_overview.png" style="width: 1000px;" />
 </a>
 <figcaption>
-<p><span class="caption-text">A bus transportation network between stops in London</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
+<p><span class="caption-text">A travel summary graph of bus transportation between stops in London</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 <p>&gt;&gt; For details, see <a class="reference internal" href="examples/gtfs.html"><span class="doc">Processing GTFS to Obtain Flows of Public Transportation</span></a></p>
@@ -418,12 +418,44 @@ It supports <a class="reference external" href="https://pytorch-geometric.readth
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">gilbert_graph</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">gilbert_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span> <span class="n">radius</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
 </pre></div>
 </div>
-<div style="text-align:center;">
-  <video style="width:100%; max-width:800px;" controls>
-    <source src="_static/gilbert_graph.mp4" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
-</div><p>&gt;&gt; For details, see <a class="reference internal" href="examples/generating_graphs_by_proximity.html"><span class="doc">Generating Various Types of Graphs by Proximity</span></a></p>
+<p>morphological_graph</p>
+<blockquote>
+<div><dl>
+<dt>&lt;div style=”text-align:center;”&gt;</dt><dd><dl class="simple">
+<dt>&lt;video style=”width:100%; max-width:800px;” controls&gt;</dt><dd><p>&lt;source src=”_static/gilbert_graph.mp4” type=”video/mp4”&gt;
+Your browser does not support the video tag.</p>
+</dd>
+</dl>
+<p>&lt;/video&gt;</p>
+</dd>
+</dl>
+<p>&lt;/div&gt;</p>
+</div></blockquote>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">wax_l1</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">waxman_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span>
+                                 <span class="n">distance_metric</span><span class="o">=</span><span class="s2">&quot;manhattan&quot;</span><span class="p">,</span>
+                                 <span class="n">r0</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+                                 <span class="n">beta</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+                                 <span class="n">as_gdf</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">wax_l2</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">waxman_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span>
+                                 <span class="n">distance_metric</span><span class="o">=</span><span class="s2">&quot;euclidean&quot;</span><span class="p">,</span>
+                                 <span class="n">r0</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+                                 <span class="n">beta</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+                                 <span class="n">as_gdf</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">wax_net</span> <span class="o">=</span> <span class="n">city2graph</span><span class="o">.</span><span class="n">waxman_graph</span><span class="p">(</span><span class="n">poi_gdf</span><span class="p">,</span>
+                                 <span class="n">distance_metric</span><span class="o">=</span><span class="s2">&quot;network&quot;</span><span class="p">,</span>
+                                 <span class="n">r0</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+                                 <span class="n">beta</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+                                 <span class="n">network_gdf</span><span class="o">=</span><span class="n">segments_gdf</span><span class="o">.</span><span class="n">to_crs</span><span class="p">(</span><span class="n">epsg</span><span class="o">=</span><span class="mi">6677</span><span class="p">),</span>
+                                 <span class="n">as_gdf</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<figure class="align-center">
+<a class="reference internal image-reference" href="_images/waxman_graph.png"><img alt="Waxman graph of points of interest in Liverpool" src="_images/waxman_graph.png" style="width: 1000px;" />
+</a>
+</figure>
+<p>&gt;&gt; For details, see <a class="reference internal" href="examples/generating_graphs_by_proximity.html"><span class="doc">Generating Various Types of Graphs by Proximity</span></a></p>
 </section>
 <section id="documentation">
 <h2>Documentation<a class="headerlink" href="#documentation" title="Link to this heading">#</a></h2>

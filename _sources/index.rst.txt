@@ -36,7 +36,7 @@ Examples
 
 .. code-block:: python
 
-   morphological_network = city2graph.morphological_network(
+   morphological_graph = city2graph.morphological_graph(
       buildings_gdf,
       segments_gdf,
       center_point,
@@ -45,10 +45,10 @@ Examples
 
 .. figure:: _static/morph_net_overview.png
    :width: 1000px
-   :alt: A morphological network in Liverpool
+   :alt: A morphological graph in Liverpool
    :align: center
    
-   A morphological network of 500m walking distance in Liverpool
+   A morphological graph of 500m walking distance in Liverpool
 
 >> For details, see :doc:`examples/morphological_networks_from_overturemaps`
 
@@ -65,10 +65,10 @@ Examples
 
 .. figure:: _static/trav_sum_network_overview.png
    :width: 1000px
-   :alt: A bus transportation network in London
+   :alt: A bus transportation graph in London
    :align: center
 
-   A bus transportation network between stops in London
+   A travel summary graph of bus transportation between stops in London
 
 >> For details, see :doc:`examples/gtfs`
 
@@ -80,12 +80,40 @@ Examples
 
 .. raw:: html
 
+morphological_graph
+
    <div style="text-align:center;">
      <video style="width:100%; max-width:800px;" controls>
        <source src="_static/gilbert_graph.mp4" type="video/mp4">
        Your browser does not support the video tag.
      </video>
    </div>
+
+.. code-block:: python
+
+   wax_l1 = city2graph.waxman_graph(poi_gdf,
+                                    distance_metric="manhattan",
+                                    r0=100,
+                                    beta=0.5,
+                                    as_gdf=True)
+
+   wax_l2 = city2graph.waxman_graph(poi_gdf,
+                                    distance_metric="euclidean",
+                                    r0=100,
+                                    beta=0.5,
+                                    as_gdf=True)
+
+   wax_net = city2graph.waxman_graph(poi_gdf,
+                                    distance_metric="network",
+                                    r0=100,
+                                    beta=0.5,
+                                    network_gdf=segments_gdf.to_crs(epsg=6677),
+                                    as_gdf=True)
+
+.. figure:: _static/waxman_graph.png
+   :width: 1000px
+   :alt: Waxman graph of points of interest in Liverpool
+   :align: center
 
 >> For details, see :doc:`examples/generating_graphs_by_proximity`
 
