@@ -843,7 +843,7 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate NetworkX graph before converting to GeoDataFrame.&quot;&quot;&quot;</span>
     <span class="n">crs</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;crs&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">crs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Missing CRS in graph attributes&quot;</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Missing CRS in graph attributes. Set &#39;crs&#39; in graph.graph.&quot;</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
     <span class="n">pos</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">get_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
