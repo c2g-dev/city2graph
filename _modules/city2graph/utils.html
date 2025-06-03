@@ -600,20 +600,20 @@
 
 <div class="viewcode-block" id="filter_graph_by_distance">
 <a class="viewcode-back" href="../../api/utils.html#city2graph.utils.filter_graph_by_distance">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">filter_graph_by_distance</span><span class="p">(</span><span class="n">network</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">filter_graph_by_distance</span><span class="p">(</span><span class="n">graph</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
                              <span class="n">center_point</span><span class="p">:</span> <span class="n">Point</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
                              <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
                              <span class="n">edge_attr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;length&quot;</span><span class="p">,</span>
                              <span class="n">node_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Extract a filtered network containing only elements within a given shortest-path distance.</span>
+<span class="sd">    Extract a filtered graph containing only elements within a given shortest-path distance.</span>
 
-<span class="sd">    Filters network elements based on distance from specified center point(s).</span>
+<span class="sd">    Filters graph elements based on distance from specified center point(s).</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    network : Union[gpd.GeoDataFrame, nx.Graph]</span>
-<span class="sd">        Input network data as either a GeoDataFrame of edges or a NetworkX graph.</span>
+<span class="sd">    graph : Union[gpd.GeoDataFrame, nx.Graph]</span>
+<span class="sd">        Input graph data as either a GeoDataFrame of edges or a NetworkX graph.</span>
 <span class="sd">    center_point : Union[Point, gpd.GeoSeries, gpd.GeoDataFrame]</span>
 <span class="sd">        Center point(s) for distance calculation.</span>
 <span class="sd">        Can be a single Point, GeoSeries of points, or GeoDataFrame with point geometries.</span>
@@ -628,18 +628,18 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    Union[gpd.GeoDataFrame, nx.Graph]</span>
-<span class="sd">        Filtered network containing only elements within distance of any center point.</span>
+<span class="sd">        Filtered graph containing only elements within distance of any center point.</span>
 <span class="sd">        Returns the same type as the input (either GeoDataFrame or NetworkX graph).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">is_graph_input</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">network</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">)</span>
+    <span class="n">is_graph_input</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">)</span>
 
     <span class="c1"># Convert input to graph and preserve CRS</span>
     <span class="k">if</span> <span class="n">is_graph_input</span><span class="p">:</span>
-        <span class="n">graph</span> <span class="o">=</span> <span class="n">network</span>
-        <span class="n">original_crs</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">_validate_nx</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
+        <span class="n">original_crs</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;crs&quot;</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">graph</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">gdf_to_nx</span><span class="p">(</span><span class="n">network</span><span class="p">)</span>
-        <span class="n">original_crs</span> <span class="o">=</span> <span class="n">network</span><span class="o">.</span><span class="n">crs</span>
+        <span class="n">graph</span> <span class="o">=</span> <span class="n">gdf_to_nx</span><span class="p">(</span><span class="n">edges</span><span class="o">=</span><span class="n">graph</span><span class="p">)</span>
+        <span class="n">original_crs</span> <span class="o">=</span> <span class="n">graph</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;crs&quot;</span><span class="p">]</span>
 
     <span class="c1"># Extract node positions or return empty result if not available</span>
     <span class="n">pos_dict</span> <span class="o">=</span> <span class="n">_extract_node_positions</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
@@ -668,7 +668,7 @@
         <span class="k">return</span> <span class="n">subgraph</span>
 
     <span class="c1"># Convert back to GeoDataFrame</span>
-    <span class="n">filtered_gdf</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">subgraph</span><span class="p">,</span> <span class="n">points</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">filtered_gdf</span> <span class="o">=</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">subgraph</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">filtered_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">):</span>
         <span class="n">filtered_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
             <span class="n">filtered_gdf</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">original_crs</span><span class="p">,</span>
@@ -688,7 +688,7 @@
 
     <span class="c1"># Validate edges GeoDataFrame for correct geometry types</span>
     <span class="k">if</span> <span class="n">edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">edges</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-        <span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="p">(</span><span class="n">LineString</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">MultiLineString</span><span class="p">))</span>
+        <span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="p">(</span><span class="n">LineString</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">MultiLineString</span><span class="p">)),</span>
     <span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
         <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Edges GeoDataFrame must have LineString or MultiLineString geometries&quot;</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
@@ -1232,7 +1232,7 @@
 
     <span class="c1"># Check for invalid geometry types and filter them out</span>
     <span class="n">invalid_geoms</span> <span class="o">=</span> <span class="n">gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-        <span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="p">(</span><span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">LineString</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">MultiLineString</span><span class="p">))</span>
+        <span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="p">(</span><span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">LineString</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">MultiLineString</span><span class="p">)),</span>
     <span class="p">)</span>
     <span class="k">if</span> <span class="n">invalid_geoms</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
@@ -1281,6 +1281,58 @@
 
     <span class="k">return</span> <span class="n">dual_node_gdf</span><span class="p">,</span> <span class="n">connections</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">create_heterogeneous_graph</span><span class="p">(</span><span class="n">graphs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">MultiDiGraph</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create a heterogeneous graph from multiple graphs.</span>
+
+<span class="sd">    Each input graph&#39;s nodes and edges will be added with &quot;node_type&quot; and &quot;edge_type&quot; attributes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">G</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">MultiDiGraph</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">type_name</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">graphs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">g</span><span class="o">.</span><span class="n">nodes</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="n">attrs_copy</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">attrs_copy</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">type_name</span>
+            <span class="n">G</span><span class="o">.</span><span class="n">add_node</span><span class="p">((</span><span class="n">type_name</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="o">**</span><span class="n">attrs_copy</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">attrs</span> <span class="ow">in</span> <span class="n">g</span><span class="o">.</span><span class="n">edges</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="n">u_new</span><span class="p">,</span> <span class="n">v_new</span> <span class="o">=</span> <span class="p">(</span><span class="n">type_name</span><span class="p">,</span> <span class="n">u</span><span class="p">),</span> <span class="p">(</span><span class="n">type_name</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+            <span class="n">attrs_copy</span> <span class="o">=</span> <span class="n">attrs</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">attrs_copy</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">type_name</span>
+            <span class="n">G</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">u_new</span><span class="p">,</span> <span class="n">v_new</span><span class="p">,</span> <span class="o">**</span><span class="n">attrs_copy</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">G</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">project_homogeneous_graph_from_heterogeneous</span><span class="p">(</span><span class="n">hetero_g</span><span class="p">:</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span> <span class="n">meta_path</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Project a homogeneous graph through a specified meta-path.</span>
+
+<span class="sd">    meta_path: sequence of node_types, e.g. [&quot;A&quot;,&quot;B&quot;,&quot;A&quot;]</span>
+<span class="sd">    Returns a graph connecting nodes of type meta_path[0] based on counts of meta-path instances.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">start_type</span> <span class="o">=</span> <span class="n">meta_path</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">homo</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">()</span>
+    <span class="c1"># find all start nodes</span>
+    <span class="n">starts</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">hetero_g</span><span class="o">.</span><span class="n">nodes</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">if</span> <span class="n">d</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;node_type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="n">start_type</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">src</span> <span class="ow">in</span> <span class="n">starts</span><span class="p">:</span>
+        <span class="n">paths</span> <span class="o">=</span> <span class="p">[(</span><span class="n">src</span><span class="p">,)]</span>
+        <span class="k">for</span> <span class="n">level</span> <span class="ow">in</span> <span class="n">meta_path</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+            <span class="n">next_paths</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
+                <span class="n">last</span> <span class="o">=</span> <span class="n">path</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">nbr</span> <span class="ow">in</span> <span class="n">hetero_g</span><span class="o">.</span><span class="n">neighbors</span><span class="p">(</span><span class="n">last</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">hetero_g</span><span class="o">.</span><span class="n">nodes</span><span class="p">[</span><span class="n">nbr</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;node_type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="n">level</span><span class="p">:</span>
+                        <span class="n">next_paths</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="n">nbr</span><span class="p">))</span>
+            <span class="n">paths</span> <span class="o">=</span> <span class="n">next_paths</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
+            <span class="n">u</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="n">path</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">path</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">u</span> <span class="o">==</span> <span class="n">v</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">homo</span><span class="o">.</span><span class="n">has_edge</span><span class="p">(</span><span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span>
+                <span class="n">homo</span><span class="p">[</span><span class="n">u</span><span class="p">][</span><span class="n">v</span><span class="p">][</span><span class="s2">&quot;weight&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">homo</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">homo</span>
 </pre></div>
 
                 </article>

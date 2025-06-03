@@ -1242,7 +1242,7 @@
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
     <span class="c1"># Extract GeoDataFrames from the network output</span>
-    <span class="n">private_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tessellations&quot;</span><span class="p">)</span>
+    <span class="n">private_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tessellation&quot;</span><span class="p">)</span>
     <span class="n">public_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;segments&quot;</span><span class="p">)</span>
     <span class="n">private_to_private_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;private_to_private&quot;</span><span class="p">)</span>
     <span class="n">public_to_public_gdf</span> <span class="o">=</span> <span class="n">network_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;public_to_public&quot;</span><span class="p">)</span>
@@ -1259,9 +1259,9 @@
 
         <span class="c1"># Create edges dictionary with edge type tuples</span>
         <span class="n">edges_dict</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;connects_to&quot;</span><span class="p">,</span> <span class="s2">&quot;private&quot;</span><span class="p">):</span> <span class="n">private_to_private_gdf</span><span class="p">,</span>
-            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;adjacent_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="n">private_to_public_gdf</span><span class="p">,</span>
-            <span class="p">(</span><span class="s2">&quot;public&quot;</span><span class="p">,</span> <span class="s2">&quot;connects_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="n">public_to_public_gdf</span><span class="p">,</span>
+            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;touched_to&quot;</span><span class="p">,</span> <span class="s2">&quot;private&quot;</span><span class="p">):</span> <span class="n">private_to_private_gdf</span><span class="p">,</span>
+            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;faced_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="n">private_to_public_gdf</span><span class="p">,</span>
+            <span class="p">(</span><span class="s2">&quot;public&quot;</span><span class="p">,</span> <span class="s2">&quot;connected_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="n">public_to_public_gdf</span><span class="p">,</span>
         <span class="p">}</span>
 
         <span class="c1"># Create node ID columns dictionary</span>
@@ -1276,15 +1276,15 @@
 
         <span class="c1"># Prepare edge source/target column mappings based on morphological_graph output columns</span>
         <span class="n">edge_source_cols</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;connects_to&quot;</span><span class="p">,</span> <span class="s2">&quot;private&quot;</span><span class="p">):</span> <span class="s2">&quot;from_private_id&quot;</span><span class="p">,</span>
-            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;adjacent_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="s2">&quot;private_id&quot;</span><span class="p">,</span>
-            <span class="p">(</span><span class="s2">&quot;public&quot;</span><span class="p">,</span> <span class="s2">&quot;connects_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="s2">&quot;from_public_id&quot;</span><span class="p">,</span>
+            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;touched_to&quot;</span><span class="p">,</span> <span class="s2">&quot;private&quot;</span><span class="p">):</span> <span class="s2">&quot;from_private_id&quot;</span><span class="p">,</span>
+            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;faced_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="s2">&quot;private_id&quot;</span><span class="p">,</span>
+            <span class="p">(</span><span class="s2">&quot;public&quot;</span><span class="p">,</span> <span class="s2">&quot;connected_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="s2">&quot;from_public_id&quot;</span><span class="p">,</span>
         <span class="p">}</span>
 
         <span class="n">edge_target_cols</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;connects_to&quot;</span><span class="p">,</span> <span class="s2">&quot;private&quot;</span><span class="p">):</span> <span class="s2">&quot;to_private_id&quot;</span><span class="p">,</span>
-            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;adjacent_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="s2">&quot;public_id&quot;</span><span class="p">,</span>
-            <span class="p">(</span><span class="s2">&quot;public&quot;</span><span class="p">,</span> <span class="s2">&quot;connects_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="s2">&quot;to_public_id&quot;</span><span class="p">,</span>
+            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;touched_to&quot;</span><span class="p">,</span> <span class="s2">&quot;private&quot;</span><span class="p">):</span> <span class="s2">&quot;to_private_id&quot;</span><span class="p">,</span>
+            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;faced_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="s2">&quot;public_id&quot;</span><span class="p">,</span>
+            <span class="p">(</span><span class="s2">&quot;public&quot;</span><span class="p">,</span> <span class="s2">&quot;connected_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="s2">&quot;to_public_id&quot;</span><span class="p">,</span>
         <span class="p">}</span>
 
         <span class="c1"># Create the heterogeneous graph</span>
