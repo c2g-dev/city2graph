@@ -450,9 +450,7 @@
         <span class="c1"># Ensure the barriers are in the same CRS as the input geometry</span>
         <span class="k">if</span> <span class="n">geometry</span><span class="o">.</span><span class="n">crs</span> <span class="o">!=</span> <span class="n">primary_barriers</span><span class="o">.</span><span class="n">crs</span><span class="p">:</span>
             <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;CRS mismatch: geometry and barriers must have the same CRS.&quot;</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="n">msg</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
         <span class="c1"># Create enclosures for enclosed tessellation</span>
         <span class="n">enclosures</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">enclosures</span><span class="p">(</span>
@@ -681,10 +679,17 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_validate_gdf</span><span class="p">(</span><span class="n">nodes</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
                   <span class="n">edges</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate node and edge GeoDataFrames for correct geometry types and matching CRS.&quot;&quot;&quot;</span>
-    <span class="c1"># Validate nodes GeoDataFrame for correct geometry types</span>
-    <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">nodes</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">Point</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
-        <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Nodes GeoDataFrame must have Point geometries&quot;</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    <span class="c1"># Validate nodes GeoDataFrame for correct geometry types (any geometry that has centroid)</span>
+    <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Test if all geometries can provide a non-empty centroid</span>
+            <span class="n">centroids</span> <span class="o">=</span> <span class="n">nodes</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">centroid</span>
+            <span class="k">if</span> <span class="n">centroids</span><span class="o">.</span><span class="n">empty</span> <span class="ow">or</span> <span class="n">centroids</span><span class="o">.</span><span class="n">isna</span><span class="p">()</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Nodes GeoDataFrame contains geometries with empty or invalid centroids&quot;</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>  <span class="c1"># noqa: TRY301</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Nodes GeoDataFrame contains geometries that cannot provide centroid: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
 
     <span class="c1"># Validate edges GeoDataFrame for correct geometry types</span>
     <span class="k">if</span> <span class="n">edges</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">edges</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
@@ -708,6 +713,7 @@
         <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Must provide edges GeoDataFrame&quot;</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
+    <span class="c1"># Validate GeoDataFrames first</span>
     <span class="n">_validate_gdf</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">edges</span><span class="p">)</span>
 
     <span class="c1"># Standardize node IDs</span>
@@ -731,7 +737,8 @@
     <span class="n">graph</span><span class="o">.</span><span class="n">add_nodes_from</span><span class="p">(</span><span class="n">nodes</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
     <span class="n">node_attrs</span> <span class="o">=</span> <span class="n">nodes</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">)</span>
     <span class="n">nx</span><span class="o">.</span><span class="n">set_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">node_attrs</span><span class="p">)</span>
-    <span class="n">pos</span> <span class="o">=</span> <span class="p">{</span><span class="n">idx</span><span class="p">:</span> <span class="p">(</span><span class="n">geom</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">geom</span><span class="o">.</span><span class="n">y</span><span class="p">)</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">nodes</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="c1"># Use centroid of geometry for position</span>
+    <span class="n">pos</span> <span class="o">=</span> <span class="p">{</span><span class="n">idx</span><span class="p">:</span> <span class="p">(</span><span class="n">geom</span><span class="o">.</span><span class="n">centroid</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">geom</span><span class="o">.</span><span class="n">centroid</span><span class="o">.</span><span class="n">y</span><span class="p">)</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">nodes</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
     <span class="n">nx</span><span class="o">.</span><span class="n">set_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
 
 
@@ -743,9 +750,10 @@
 
     <span class="c1"># Determine edge node IDs based on provided nodes or coordinate tuples</span>
     <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">coord_map</span> <span class="o">=</span> <span class="p">{(</span><span class="n">geom</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">geom</span><span class="o">.</span><span class="n">y</span><span class="p">):</span> <span class="n">idx</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">nodes</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-        <span class="n">edges_df</span><span class="p">[</span><span class="s2">&quot;u&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="n">coord_map</span><span class="p">[</span><span class="n">g</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span>
-        <span class="n">edges_df</span><span class="p">[</span><span class="s2">&quot;v&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="n">coord_map</span><span class="p">[</span><span class="n">g</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+        <span class="c1"># Use centroid coordinates for mapping</span>
+        <span class="n">coord_map</span> <span class="o">=</span> <span class="p">{(</span><span class="n">geom</span><span class="o">.</span><span class="n">centroid</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">geom</span><span class="o">.</span><span class="n">centroid</span><span class="o">.</span><span class="n">y</span><span class="p">):</span> <span class="n">idx</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">geom</span> <span class="ow">in</span> <span class="n">nodes</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="n">edges_df</span><span class="p">[</span><span class="s2">&quot;u&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="n">coord_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">g</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+        <span class="n">edges_df</span><span class="p">[</span><span class="s2">&quot;v&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="n">coord_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">g</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">edges_df</span><span class="p">[</span><span class="s2">&quot;u&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="n">g</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
         <span class="n">edges_df</span><span class="p">[</span><span class="s2">&quot;v&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges_df</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="n">g</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
@@ -788,7 +796,7 @@
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    nodes : GeoDataFrame, optional</span>
-<span class="sd">        Point geometries for graph nodes; node attributes preserved.</span>
+<span class="sd">        Point or Polygon geometries for graph nodes; node attributes preserved.</span>
 <span class="sd">    edges : GeoDataFrame</span>
 <span class="sd">        LineString geometries for graph edges; edge attributes preserved.</span>
 <span class="sd">    node_id_col : str, optional</span>
@@ -803,7 +811,10 @@
 <span class="sd">    networkx.Graph</span>
 <span class="sd">        Graph with &#39;crs&#39;, &#39;node_geom_cols&#39;, &#39;edge_geom_cols&#39;, node &#39;pos&#39;, and attributes.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># Prepare and validate dataframes</span>
+    <span class="c1"># Validate GeoDataFrames first</span>
+    <span class="n">_validate_gdf</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">edges</span><span class="p">)</span>
+
+    <span class="c1"># Prepare and standardize dataframes</span>
     <span class="n">nodes</span><span class="p">,</span> <span class="n">edges</span> <span class="o">=</span> <span class="n">_prepare_dataframes</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">edges</span><span class="p">,</span> <span class="n">node_id_col</span><span class="p">,</span> <span class="n">edge_id_col</span><span class="p">)</span>
 
     <span class="c1"># Initialize graph with metadata</span>
@@ -829,9 +840,16 @@
     <span class="n">edges_df</span><span class="p">,</span> <span class="n">edge_cols</span> <span class="o">=</span> <span class="n">_prepare_edge_dataframe</span><span class="p">(</span><span class="n">edges</span><span class="p">,</span> <span class="n">nodes</span><span class="p">,</span> <span class="n">keep_geom</span><span class="p">)</span>
     <span class="n">_add_edges_to_graph</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">edges_df</span><span class="p">,</span> <span class="n">edge_cols</span><span class="p">)</span>
 
-    <span class="c1"># Ensure node positions exist for fallback</span>
+    <span class="c1"># Ensure node positions exist for fallback - use centroid for coordinate tuples</span>
     <span class="k">if</span> <span class="n">nodes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">pos</span> <span class="o">=</span> <span class="p">{</span><span class="n">node</span><span class="p">:</span> <span class="n">node</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">()}</span>
+        <span class="n">pos</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">graph</span><span class="o">.</span><span class="n">nodes</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">node</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="c1"># If node is already a coordinate tuple, use it directly</span>
+                <span class="n">pos</span><span class="p">[</span><span class="n">node</span><span class="p">]</span> <span class="o">=</span> <span class="n">node</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Fallback to node identifier as position</span>
+                <span class="n">pos</span><span class="p">[</span><span class="n">node</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
         <span class="n">nx</span><span class="o">.</span><span class="n">set_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">graph</span></div>
@@ -1322,7 +1340,9 @@
                 <span class="n">last</span> <span class="o">=</span> <span class="n">path</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
                 <span class="k">for</span> <span class="n">nbr</span> <span class="ow">in</span> <span class="n">hetero_g</span><span class="o">.</span><span class="n">neighbors</span><span class="p">(</span><span class="n">last</span><span class="p">):</span>
                     <span class="k">if</span> <span class="n">hetero_g</span><span class="o">.</span><span class="n">nodes</span><span class="p">[</span><span class="n">nbr</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;node_type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="n">level</span><span class="p">:</span>
-                        <span class="n">next_paths</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="n">nbr</span><span class="p">))</span>
+                        <span class="n">new_path</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                        <span class="n">new_path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">nbr</span><span class="p">)</span>
+                        <span class="n">next_paths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">new_path</span><span class="p">))</span>
             <span class="n">paths</span> <span class="o">=</span> <span class="n">next_paths</span>
         <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
             <span class="n">u</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="n">path</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">path</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
