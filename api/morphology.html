@@ -420,28 +420,35 @@ represented as a dual graph of road segments.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>buildings_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing building polygons</p></li>
-<li><p><strong>segments_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing road segments as LineStrings.
+<li><p><strong>buildings_gdf</strong> (<em>gpd.GeoDataFrame</em>) – GeoDataFrame containing building polygons</p></li>
+<li><p><strong>segments_gdf</strong> (<em>gpd.GeoDataFrame</em>) – GeoDataFrame containing road segments as LineStrings.
 Should include a ‘barrier_geometry’ column or the column specified in public_geom_col.</p></li>
-<li><p><strong>center_point</strong> (<em>Union</em><em>[</em><em>Point</em><em>, </em><em>gpd.GeoSeries</em><em>, </em><em>gpd.GeoDataFrame</em><em>]</em><em>, </em><em>optional</em>) – Optional center point for filtering the network by distance.
+<li><p><strong>center_point</strong> (<em>gpd.GeoSeries</em><em> or </em><em>gpd.GeoDataFrame</em><em>, </em><em>optional</em>) – Optional center point for filtering the network by distance.
 If provided, only segments within the specified distance will be included.</p></li>
-<li><p><strong>distance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1000</em>) – Maximum network distance from center_point to include segments, if center_point is provided.
+<li><p><strong>distance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>optional</em>) – Maximum network distance from center_point to include segments, if center_point is provided.
 If None, no distance filtering will be applied even if center_point is provided.</p></li>
-<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default='tess_id'</em>) – Column name that uniquely identifies each tessellation cell (private space).</p></li>
-<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default='id'</em>) – Column name that uniquely identifies each road segment (public space).</p></li>
-<li><p><strong>public_geom_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default='barrier_geometry'</em>) – Column name in segments_gdf containing the processed geometry to use.</p></li>
-<li><p><strong>contiguity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default='queen'</em>) – Type of contiguity for private-to-private connections, either ‘queen’ or ‘rook’.</p></li>
-<li><p><strong>keep_buildings</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=False</em>) – If True, performs a spatial left join between tessellation and buildings to include
+<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default &quot;tess_id&quot;</em>) – Column name that uniquely identifies each tessellation cell (private space).</p></li>
+<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default &quot;id&quot;</em>) – Column name that uniquely identifies each road segment (public space).</p></li>
+<li><p><strong>public_geom_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default &quot;barrier_geometry&quot;</em>) – Column name in segments_gdf containing the processed geometry to use.</p></li>
+<li><p><strong>contiguity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default &quot;queen&quot;</em>) – Type of contiguity for private-to-private connections, either ‘queen’ or ‘rook’.</p></li>
+<li><p><strong>keep_buildings</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default False</em>) – If True, performs a spatial left join between tessellation and buildings to include
 building attributes in the tessellation data. Building index columns are dropped.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Dictionary containing the following elements:
-- ‘nodes’: Dictionary with ‘private’ and ‘public’ GeoDataFrames
-- ‘edges’: Dictionary with edge relationships between node types</p>
+<dd class="field-even"><p><p>A tuple containing:
+- nodes_dict: Dictionary with ‘private’ and ‘public’ keys mapping to GeoDataFrames
+- edges_dict: Dictionary with edge relationship tuples as keys mapping to GeoDataFrames</p>
+<blockquote>
+<div><p>Keys are tuples of (source_type, relationship, target_type):
+- (‘private’, ‘touched_to’, ‘private’): tessellation adjacency connections
+- (‘public’, ‘connected_to’, ‘public’): road segment connections
+- (‘private’, ‘faced_to’, ‘public’): tessellation to road connections</p>
+</div></blockquote>
+</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)">str</a>, gpd.GeoDataFrame], <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)">str</a>], gpd.GeoDataFrame]]</p>
 </dd>
 </dl>
 <p class="rubric">Notes</p>
@@ -463,10 +470,10 @@ and create_private_to_public functions.</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing tessellation polygons</p></li>
-<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name that uniquely identifies each private space
+<li><p><strong>private_gdf</strong> (<em>gpd.GeoDataFrame</em>) – GeoDataFrame containing tessellation polygons</p></li>
+<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name that uniquely identifies each private space
 If None, will use DataFrame index</p></li>
-<li><p><strong>group_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name used to group tessellation polygons
+<li><p><strong>group_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name used to group tessellation polygons
 If None, all polygons are treated as one group</p></li>
 <li><p><strong>contiguity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default &quot;queen&quot;</em>) – Type of contiguity, either ‘queen’ or ‘rook’</p></li>
 </ul>
@@ -475,7 +482,7 @@ If None, all polygons are treated as one group</p></li>
 <dd class="field-even"><p>GeoDataFrame containing LineString connections between adjacent private spaces</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a></p>
+<dd class="field-odd"><p>gpd.GeoDataFrame</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
@@ -493,22 +500,22 @@ If None, all polygons are treated as one group</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing private space polygons</p></li>
-<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing public space linestrings</p></li>
-<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in private_gdf that uniquely identifies each private space
+<li><p><strong>private_gdf</strong> (<em>gpd.GeoDataFrame</em>) – GeoDataFrame containing private space polygons</p></li>
+<li><p><strong>public_gdf</strong> (<em>gpd.GeoDataFrame</em>) – GeoDataFrame containing public space linestrings</p></li>
+<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name in private_gdf that uniquely identifies each private space
 If None, will use DataFrame index</p></li>
-<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in public_gdf that uniquely identifies each public space
+<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name in public_gdf that uniquely identifies each public space
 If None, will use DataFrame index</p></li>
-<li><p><strong>public_geom_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in public_gdf containing alternative geometry to use
+<li><p><strong>public_geom_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name in public_gdf containing alternative geometry to use
 If None, will use the geometry column</p></li>
-<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default 1</em>) – Buffer tolerance for spatial joins</p></li>
+<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default 1.0</em>) – Buffer tolerance for spatial joins</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>GeoDataFrame containing LineString connections between private and public spaces</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a></p>
+<dd class="field-odd"><p>gpd.GeoDataFrame</p>
 </dd>
 </dl>
 </dd></dl>
@@ -520,8 +527,8 @@ If None, will use the geometry column</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing public space linestrings</p></li>
-<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name that uniquely identifies each public space
+<li><p><strong>public_gdf</strong> (<em>gpd.GeoDataFrame</em>) – GeoDataFrame containing public space linestrings</p></li>
+<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name that uniquely identifies each public space
 If None, will use DataFrame index</p></li>
 <li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default 1e-8</em>) – Distance tolerance for detecting endpoint connections</p></li>
 </ul>
@@ -530,7 +537,7 @@ If None, will use DataFrame index</p></li>
 <dd class="field-even"><p>GeoDataFrame containing LineString connections between public spaces</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a></p>
+<dd class="field-odd"><p>gpd.GeoDataFrame</p>
 </dd>
 </dl>
 </dd></dl>

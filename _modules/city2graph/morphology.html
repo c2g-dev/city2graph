@@ -373,7 +373,6 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">libpysal</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">momepy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
@@ -382,6 +381,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">city2graph.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_tessellation</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">city2graph.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">dual_graph</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">city2graph.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">filter_graph_by_distance</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">city2graph.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">nx_to_gdf</span>
 
 <span class="c1"># Set up logger for this module</span>
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -404,13 +404,34 @@
     <span class="n">publics</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">buffer</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate input parameters for spatial operations.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate input parameters for spatial operations.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    privates : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing private space polygons</span>
+<span class="sd">    publics : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing public space linestrings</span>
+<span class="sd">    buffer : float</span>
+<span class="sd">        Buffer distance for spatial operations</span>
+<span class="sd">        </span>
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If inputs are not of correct type</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Check that privates is a GeoDataFrame</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">privates</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">):</span>
         <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;privates must be a GeoDataFrame&quot;</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    
+    <span class="c1"># Check that publics is a GeoDataFrame</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">publics</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">):</span>
         <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;publics must be a GeoDataFrame&quot;</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+    
+    <span class="c1"># Check that buffer is a numeric value</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
         <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;buffer must be a number&quot;</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
@@ -420,7 +441,21 @@
     <span class="n">privates</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">publics</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if DataFrames are empty and warn accordingly.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check if DataFrames are empty and warn accordingly.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    privates : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing private space polygons</span>
+<span class="sd">    publics : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing public space linestrings</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        True if any DataFrame is empty, False otherwise</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">privates</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;privates GeoDataFrame is empty&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">True</span>
@@ -437,7 +472,27 @@
     <span class="n">private_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">public_geom_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate that required columns exist in DataFrames.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate that required columns exist in DataFrames.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    publics : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing public space data</span>
+<span class="sd">    privates : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing private space data</span>
+<span class="sd">    public_id_col : str</span>
+<span class="sd">        Column name for public space identifiers</span>
+<span class="sd">    private_id_col : str or None</span>
+<span class="sd">        Column name for private space identifiers</span>
+<span class="sd">    public_geom_col : str or None</span>
+<span class="sd">        Column name for public space geometry</span>
+<span class="sd">        </span>
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If required columns are missing from DataFrames</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">public_id_col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">publics</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
         <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;public_id_col &#39;</span><span class="si">{</span><span class="n">public_id_col</span><span class="si">}</span><span class="s2">&#39; not found in publics&quot;</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
@@ -453,21 +508,28 @@
     <span class="n">privates</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">publics</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate geometry types in DataFrames.&quot;&quot;&quot;</span>
-    <span class="c1"># Check private space geometries (should be polygons)</span>
-    <span class="n">invalid_private_geoms</span> <span class="o">=</span> <span class="o">~</span><span class="n">privates</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-        <span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="p">(</span><span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">Polygon</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">MultiPolygon</span><span class="p">)),</span>
-    <span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate geometry types in DataFrames.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    privates : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing private space data</span>
+<span class="sd">    publics : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing public space data</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Check private space geometries (should be polygons) using vectorized operations</span>
+    <span class="n">geom_types</span> <span class="o">=</span> <span class="n">privates</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">geom_type</span>
+    <span class="n">invalid_private_geoms</span> <span class="o">=</span> <span class="o">~</span><span class="n">geom_types</span><span class="o">.</span><span class="n">isin</span><span class="p">([</span><span class="s1">&#39;Polygon&#39;</span><span class="p">,</span> <span class="s1">&#39;MultiPolygon&#39;</span><span class="p">])</span>
     <span class="k">if</span> <span class="n">invalid_private_geoms</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
             <span class="s2">&quot;Found </span><span class="si">%d</span><span class="s2"> private geometries that are not Polygons or MultiPolygons&quot;</span><span class="p">,</span>
             <span class="n">invalid_private_geoms</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span>
         <span class="p">)</span>
 
-    <span class="c1"># Check public space geometries (should be linestrings)</span>
-    <span class="n">invalid_public_geoms</span> <span class="o">=</span> <span class="o">~</span><span class="n">publics</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-        <span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="p">(</span><span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">LineString</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">MultiLineString</span><span class="p">)),</span>
-    <span class="p">)</span>
+    <span class="c1"># Check public space geometries (should be linestrings) using vectorized operations</span>
+    <span class="n">geom_types</span> <span class="o">=</span> <span class="n">publics</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">geom_type</span>
+    <span class="n">invalid_public_geoms</span> <span class="o">=</span> <span class="o">~</span><span class="n">geom_types</span><span class="o">.</span><span class="n">isin</span><span class="p">([</span><span class="s1">&#39;LineString&#39;</span><span class="p">,</span> <span class="s1">&#39;MultiLineString&#39;</span><span class="p">])</span>
     <span class="k">if</span> <span class="n">invalid_public_geoms</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
             <span class="s2">&quot;Found </span><span class="si">%d</span><span class="s2"> public geometries that are not LineStrings or MultiLineStrings&quot;</span><span class="p">,</span>
@@ -479,7 +541,21 @@
     <span class="n">target_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">source_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Ensure source GeoDataFrame has same CRS as target, transforming if necessary.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Ensure source GeoDataFrame has same CRS as target, transforming if necessary.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    target_gdf : gpd.GeoDataFrame</span>
+<span class="sd">        Reference GeoDataFrame with target CRS</span>
+<span class="sd">    source_gdf : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame to potentially transform</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    gpd.GeoDataFrame</span>
+<span class="sd">        Source GeoDataFrame transformed to match target CRS if needed</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">source_gdf</span><span class="o">.</span><span class="n">crs</span> <span class="o">!=</span> <span class="n">target_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
             <span class="s2">&quot;CRS mismatch detected. Converting from </span><span class="si">%s</span><span class="s2"> to </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
@@ -499,15 +575,35 @@
     <span class="n">private_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">public_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Prepare ID columns for spatial operations.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Prepare ID columns for spatial operations.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    privates : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing private space data</span>
+<span class="sd">    publics : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing public space data</span>
+<span class="sd">    private_id_col : str or None</span>
+<span class="sd">        Column name for private space identifiers</span>
+<span class="sd">    public_id_col : str or None</span>
+<span class="sd">        Column name for public space identifiers</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, str, str]</span>
+<span class="sd">        Prepared GeoDataFrames and finalized ID column names</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">privates_copy</span> <span class="o">=</span> <span class="n">privates</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
     <span class="n">publics_copy</span> <span class="o">=</span> <span class="n">publics</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
+    <span class="c1"># Handle private ID column - create if None provided</span>
     <span class="k">if</span> <span class="n">private_id_col</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">privates_copy</span> <span class="o">=</span> <span class="n">privates_copy</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="n">private_id_col</span> <span class="o">=</span> <span class="s2">&quot;index&quot;</span>
         <span class="n">privates_copy</span><span class="p">[</span><span class="n">private_id_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">privates_copy</span><span class="o">.</span><span class="n">index</span>
 
+    <span class="c1"># Handle public ID column - create if None provided</span>
     <span class="k">if</span> <span class="n">public_id_col</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">publics_copy</span> <span class="o">=</span> <span class="n">publics_copy</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="n">public_id_col</span> <span class="o">=</span> <span class="s2">&quot;index&quot;</span>
@@ -521,7 +617,23 @@
     <span class="n">public_geom_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">buffer</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Prepare buffered public geometries for spatial operations.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Prepare buffered public geometries for spatial operations.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    publics : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing public space data</span>
+<span class="sd">    public_geom_col : str or None</span>
+<span class="sd">        Column name containing alternative geometry to use</span>
+<span class="sd">    buffer : float</span>
+<span class="sd">        Buffer distance to apply to geometries</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame with buffered geometries</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">publics_copy</span> <span class="o">=</span> <span class="n">publics</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
     <span class="c1"># Use alternative geometry column if specified</span>
@@ -602,7 +714,7 @@
     <span class="c1"># Prepare buffered geometries</span>
     <span class="n">publics_buffered</span> <span class="o">=</span> <span class="n">_prepare_buffered_geometry</span><span class="p">(</span><span class="n">publics_prep</span><span class="p">,</span> <span class="n">public_geom_col</span><span class="p">,</span> <span class="n">buffer</span><span class="p">)</span>
 
-    <span class="c1"># Perform spatial join</span>
+    <span class="c1"># Perform spatial join to find intersecting geometries</span>
     <span class="n">joined</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">sjoin</span><span class="p">(</span>
         <span class="n">publics_buffered</span><span class="p">,</span>
         <span class="n">privates_prep</span><span class="p">,</span>
@@ -610,13 +722,12 @@
         <span class="n">predicate</span><span class="o">=</span><span class="s2">&quot;intersects&quot;</span><span class="p">,</span>
     <span class="p">)</span>
 
-    <span class="c1"># Group by private_id and collect public ids</span>
+    <span class="c1"># Group by private_id and collect public ids using more efficient aggregation</span>
     <span class="n">index_col</span> <span class="o">=</span> <span class="s2">&quot;index_right&quot;</span> <span class="k">if</span> <span class="n">private_id_final</span> <span class="o">==</span> <span class="s2">&quot;index&quot;</span> <span class="k">else</span> <span class="n">private_id_final</span>
-    <span class="k">return</span> <span class="p">(</span>
-        <span class="n">joined</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">index_col</span><span class="p">)[</span><span class="n">public_id_final</span><span class="p">]</span>
-        <span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
-        <span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
-    <span class="p">)</span>
+    
+    <span class="c1"># Use groupby with agg for better performance</span>
+    <span class="n">grouped</span> <span class="o">=</span> <span class="n">joined</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">index_col</span><span class="p">)[</span><span class="n">public_id_final</span><span class="p">]</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">unique</span><span class="p">()))</span>
+    <span class="k">return</span> <span class="n">grouped</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
 
 
 
@@ -625,7 +736,23 @@
     <span class="n">public_dual_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">adjacent_streets</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate inputs for creating connecting lines.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate inputs for creating connecting lines.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    enclosed_tess : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing tessellation polygons</span>
+<span class="sd">    public_dual_gdf : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing public space nodes</span>
+<span class="sd">    adjacent_streets : dict</span>
+<span class="sd">        Dictionary mapping private to public space IDs</span>
+<span class="sd">        </span>
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If inputs are not of correct type</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">enclosed_tess</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">):</span>
         <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;enclosed_tess must be a GeoDataFrame&quot;</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
@@ -642,7 +769,23 @@
     <span class="n">public_dual_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">adjacent_streets</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check for empty inputs and return empty GeoDataFrame if found.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Check for empty inputs and return empty GeoDataFrame if found.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    enclosed_tess : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing tessellation polygons</span>
+<span class="sd">    public_dual_gdf : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing public space nodes</span>
+<span class="sd">    adjacent_streets : dict</span>
+<span class="sd">        Dictionary mapping private to public space IDs</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    gpd.GeoDataFrame or None</span>
+<span class="sd">        Empty GeoDataFrame if inputs are empty, None otherwise</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">empty_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
         <span class="p">{</span><span class="s2">&quot;private_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;public_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="p">[]},</span>
         <span class="n">crs</span><span class="o">=</span><span class="n">enclosed_tess</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
@@ -667,7 +810,25 @@
     <span class="n">private_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">public_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Prepare ID columns for connection creation.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Prepare ID columns for connection creation.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    enclosed_tess : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing tessellation polygons</span>
+<span class="sd">    public_dual_gdf : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing public space nodes</span>
+<span class="sd">    private_id_col : str or None</span>
+<span class="sd">        Column name for private space identifiers</span>
+<span class="sd">    public_id_col : str or None</span>
+<span class="sd">        Column name for public space identifiers</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[gpd.GeoDataFrame, gpd.GeoDataFrame, str, str]</span>
+<span class="sd">        Prepared GeoDataFrames and finalized ID column names</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">enclosed_tess_copy</span> <span class="o">=</span> <span class="n">enclosed_tess</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
     <span class="n">public_dual_copy</span> <span class="o">=</span> <span class="n">public_dual_gdf</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
@@ -746,23 +907,30 @@
         <span class="n">private_id_col</span> <span class="o">=</span> <span class="s2">&quot;index&quot;</span>
         <span class="n">enclosed_tess_prep</span><span class="p">[</span><span class="n">private_id_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">enclosed_tess_prep</span><span class="o">.</span><span class="n">index</span>
 
-    <span class="c1"># Convert the adjacency dictionary to a DataFrame for vectorized operations</span>
-    <span class="n">connections</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">private_id</span><span class="p">,</span> <span class="n">public_ids</span> <span class="ow">in</span> <span class="n">adjacent_streets</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="n">connections</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
-            <span class="p">[{</span><span class="s2">&quot;private_id&quot;</span><span class="p">:</span> <span class="n">private_id</span><span class="p">,</span> <span class="s2">&quot;public_id&quot;</span><span class="p">:</span> <span class="n">pid</span><span class="p">}</span> <span class="k">for</span> <span class="n">pid</span> <span class="ow">in</span> <span class="n">public_ids</span><span class="p">],</span>
-        <span class="p">)</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">connections</span><span class="p">:</span>
+    <span class="c1"># Convert the adjacency dictionary to a DataFrame using vectorized operations</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">adjacent_streets</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
             <span class="p">{</span><span class="s2">&quot;private_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;public_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="p">[]},</span>
             <span class="n">crs</span><span class="o">=</span><span class="n">enclosed_tess</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="c1"># Create DataFrame of connections</span>
-    <span class="n">connections_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">connections</span><span class="p">)</span>
+    <span class="c1"># Create connections using pandas operations</span>
+    <span class="n">connections_list</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="n">private_id</span><span class="p">,</span> <span class="n">public_id</span><span class="p">)</span> 
+        <span class="k">for</span> <span class="n">private_id</span><span class="p">,</span> <span class="n">public_ids</span> <span class="ow">in</span> <span class="n">adjacent_streets</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> 
+        <span class="k">for</span> <span class="n">public_id</span> <span class="ow">in</span> <span class="n">public_ids</span>
+    <span class="p">]</span>
+    
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">connections_list</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+            <span class="p">{</span><span class="s2">&quot;private_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;public_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="p">[]},</span>
+            <span class="n">crs</span><span class="o">=</span><span class="n">enclosed_tess</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
+        <span class="p">)</span>
 
-    <span class="c1"># Compute centroids once</span>
+    <span class="c1"># Create DataFrame of connections more efficiently</span>
+    <span class="n">connections_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">connections_list</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;private_id&quot;</span><span class="p">,</span> <span class="s2">&quot;public_id&quot;</span><span class="p">])</span>
+
+    <span class="c1"># Compute centroids once for efficiency</span>
     <span class="n">centroids</span> <span class="o">=</span> <span class="n">enclosed_tess_prep</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">private_id_col</span><span class="p">)[</span><span class="s2">&quot;geometry&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">centroid</span>
 
     <span class="c1"># Join connections with centroids</span>
@@ -794,13 +962,16 @@
             <span class="n">crs</span><span class="o">=</span><span class="n">enclosed_tess</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="c1"># Create LineStrings vectorized</span>
-    <span class="n">valid_df</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">valid_df</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-        <span class="k">lambda</span> <span class="n">row</span><span class="p">:</span> <span class="n">shapely</span><span class="o">.</span><span class="n">LineString</span><span class="p">(</span>
-            <span class="p">[(</span><span class="n">row</span><span class="o">.</span><span class="n">centroid</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">row</span><span class="o">.</span><span class="n">centroid</span><span class="o">.</span><span class="n">y</span><span class="p">),</span> <span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">public_geom</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">row</span><span class="o">.</span><span class="n">public_geom</span><span class="o">.</span><span class="n">y</span><span class="p">)],</span>
-        <span class="p">),</span>
-        <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="p">)</span>
+    <span class="c1"># Create LineStrings using vectorized operations with NumPy arrays for better performance</span>
+    <span class="n">centroid_coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([(</span><span class="n">p</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">y</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">valid_df</span><span class="p">[</span><span class="s2">&quot;centroid&quot;</span><span class="p">]])</span>
+    <span class="n">public_coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([(</span><span class="n">p</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">y</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">valid_df</span><span class="p">[</span><span class="s2">&quot;public_geom&quot;</span><span class="p">]])</span>
+    
+    <span class="c1"># Create LineStrings more efficiently using list comprehension over arrays</span>
+    <span class="n">valid_df</span> <span class="o">=</span> <span class="n">valid_df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">valid_df</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">shapely</span><span class="o">.</span><span class="n">LineString</span><span class="p">([</span><span class="n">cent_coord</span><span class="p">,</span> <span class="n">pub_coord</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">cent_coord</span><span class="p">,</span> <span class="n">pub_coord</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">centroid_coords</span><span class="p">,</span> <span class="n">public_coords</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="p">]</span>
 
     <span class="c1"># Create final GeoDataFrame</span>
     <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
@@ -867,9 +1038,10 @@
     <span class="c1"># Create positions dictionary</span>
     <span class="n">positions</span> <span class="o">=</span> <span class="p">{</span><span class="n">node</span><span class="p">:</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="k">for</span> <span class="n">node</span><span class="p">,</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">w_nx</span><span class="o">.</span><span class="n">nodes</span><span class="p">(),</span> <span class="n">centroids</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)}</span>
 
-    <span class="c1"># Set node attributes</span>
+    <span class="c1"># Set node attributes including positions for nx_to_gdf compatibility</span>
     <span class="n">nx</span><span class="o">.</span><span class="n">set_node_attributes</span><span class="p">(</span><span class="n">w_nx</span><span class="p">,</span> <span class="p">{</span><span class="n">n</span><span class="p">:</span> <span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">positions</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span> <span class="s2">&quot;x&quot;</span><span class="p">)</span>
     <span class="n">nx</span><span class="o">.</span><span class="n">set_node_attributes</span><span class="p">(</span><span class="n">w_nx</span><span class="p">,</span> <span class="p">{</span><span class="n">n</span><span class="p">:</span> <span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">positions</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span> <span class="s2">&quot;y&quot;</span><span class="p">)</span>
+    <span class="n">nx</span><span class="o">.</span><span class="n">set_node_attributes</span><span class="p">(</span><span class="n">w_nx</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
 
     <span class="c1"># Create edge geometries</span>
     <span class="n">node_data</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">w_nx</span><span class="o">.</span><span class="n">nodes</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
@@ -903,12 +1075,12 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    private_gdf : geopandas.GeoDataFrame</span>
+<span class="sd">    private_gdf : gpd.GeoDataFrame</span>
 <span class="sd">        GeoDataFrame containing tessellation polygons</span>
-<span class="sd">    private_id_col : str, default None</span>
+<span class="sd">    private_id_col : str, optional</span>
 <span class="sd">        Column name that uniquely identifies each private space</span>
 <span class="sd">        If None, will use DataFrame index</span>
-<span class="sd">    group_col : str, default None</span>
+<span class="sd">    group_col : str, optional</span>
 <span class="sd">        Column name used to group tessellation polygons</span>
 <span class="sd">        If None, all polygons are treated as one group</span>
 <span class="sd">    contiguity : str, default &quot;queen&quot;</span>
@@ -916,7 +1088,7 @@
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    geopandas.GeoDataFrame</span>
+<span class="sd">    gpd.GeoDataFrame</span>
 <span class="sd">        GeoDataFrame containing LineString connections between adjacent private spaces</span>
 
 <span class="sd">    Raises</span>
@@ -959,12 +1131,9 @@
         <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;group_col &#39;</span><span class="si">{</span><span class="n">group_col</span><span class="si">}</span><span class="s2">&#39; not found in private_gdf&quot;</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
-    <span class="c1"># Validate geometry types</span>
-    <span class="n">invalid_geoms</span> <span class="o">=</span> <span class="n">private_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-        <span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
-            <span class="n">g</span><span class="p">,</span> <span class="p">(</span><span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">Polygon</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">MultiPolygon</span><span class="p">),</span>
-        <span class="p">),</span>
-    <span class="p">)</span>
+    <span class="c1"># Validate geometry types using vectorized operations</span>
+    <span class="n">geom_types</span> <span class="o">=</span> <span class="n">private_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">geom_type</span>
+    <span class="n">invalid_geoms</span> <span class="o">=</span> <span class="o">~</span><span class="n">geom_types</span><span class="o">.</span><span class="n">isin</span><span class="p">([</span><span class="s1">&#39;Polygon&#39;</span><span class="p">,</span> <span class="s1">&#39;MultiPolygon&#39;</span><span class="p">])</span>
     <span class="k">if</span> <span class="n">invalid_geoms</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
             <span class="s2">&quot;Found </span><span class="si">%d</span><span class="s2"> geometries that are not Polygon or MultiPolygon&quot;</span><span class="p">,</span>
@@ -980,52 +1149,61 @@
     <span class="k">if</span> <span class="n">private_id_col</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">private_gdf</span> <span class="o">=</span> <span class="n">private_gdf</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
-    <span class="c1"># Handle grouping</span>
+    <span class="c1"># Handle grouping and process all groups vectorized</span>
     <span class="k">if</span> <span class="n">group_col</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">tess_groups</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;all&quot;</span><span class="p">:</span> <span class="n">private_gdf</span><span class="o">.</span><span class="n">copy</span><span class="p">()}</span>
+        <span class="n">group_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;all&quot;</span><span class="p">:</span> <span class="n">private_gdf</span><span class="p">}</span>
+        <span class="n">group_series</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">private_gdf</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">tess_groups</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">group</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">private_gdf</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">group_col</span><span class="p">)}</span>  <span class="c1"># noqa: C416</span>
+        <span class="n">group_series</span> <span class="o">=</span> <span class="n">private_gdf</span><span class="p">[</span><span class="n">group_col</span><span class="p">]</span>
+        <span class="c1"># Use explicit method call to avoid any naming conflicts</span>
+        <span class="n">grouped_data</span> <span class="o">=</span> <span class="n">private_gdf</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">group_col</span><span class="p">)</span>
+        <span class="n">group_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">group</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">grouped_data</span><span class="p">}</span>
 
-    <span class="c1"># List to collect edge DataFrames</span>
-    <span class="n">queen_edges_list</span> <span class="o">=</span> <span class="p">[]</span>
-
-    <span class="k">for</span> <span class="n">enc</span><span class="p">,</span> <span class="n">tess_group</span> <span class="ow">in</span> <span class="n">tess_groups</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="c1"># Process all groups and collect results</span>
+    <span class="n">edge_data_list</span> <span class="o">=</span> <span class="p">[]</span>
+    
+    <span class="k">for</span> <span class="n">group_name</span><span class="p">,</span> <span class="n">group_gdf</span> <span class="ow">in</span> <span class="n">group_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="c1"># Prepare contiguity graph for this group</span>
         <span class="n">w_nx</span><span class="p">,</span> <span class="n">pos_to_id_mapping</span> <span class="o">=</span> <span class="n">_prep_contiguity_graph</span><span class="p">(</span>
-            <span class="n">tess_group</span><span class="p">,</span> <span class="n">private_id_col</span><span class="p">,</span> <span class="n">contiguity</span><span class="p">,</span>
+            <span class="n">group_gdf</span><span class="p">,</span> <span class="n">private_id_col</span><span class="p">,</span> <span class="n">contiguity</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">w_nx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">continue</span>
 
         <span class="c1"># Convert to GeoDataFrame</span>
-        <span class="n">_</span><span class="p">,</span> <span class="n">edges</span> <span class="o">=</span> <span class="n">momepy</span><span class="o">.</span><span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">w_nx</span><span class="p">)</span>
-        <span class="n">edges</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">set_crs</span><span class="p">(</span><span class="n">tess_group</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+        <span class="n">w_nx</span><span class="o">.</span><span class="n">graph</span><span class="p">[</span><span class="s2">&quot;crs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_gdf</span><span class="o">.</span><span class="n">crs</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">edges</span> <span class="o">=</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">w_nx</span><span class="p">)</span>
+        <span class="n">edges</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">set_crs</span><span class="p">(</span><span class="n">group_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
 
-        <span class="c1"># Map node indices to IDs vectorized</span>
-        <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;from_private_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;node_start&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">pos_to_id_mapping</span><span class="p">)</span>
-        <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;to_private_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;node_end&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">pos_to_id_mapping</span><span class="p">)</span>
+        <span class="c1"># Process edge columns efficiently</span>
+        <span class="k">if</span> <span class="s2">&quot;node_start&quot;</span> <span class="ow">in</span> <span class="n">edges</span><span class="o">.</span><span class="n">columns</span> <span class="ow">and</span> <span class="s2">&quot;node_end&quot;</span> <span class="ow">in</span> <span class="n">edges</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;from_private_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;node_start&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">pos_to_id_mapping</span><span class="p">)</span>
+            <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;to_private_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;node_end&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">pos_to_id_mapping</span><span class="p">)</span>
+            <span class="n">edges</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;node_start&quot;</span><span class="p">,</span> <span class="s2">&quot;node_end&quot;</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">edges</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">nlevels</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;from_private_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">get_level_values</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">pos_to_id_mapping</span><span class="p">)</span>
+            <span class="n">edges</span><span class="p">[</span><span class="s2">&quot;to_private_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">get_level_values</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">pos_to_id_mapping</span><span class="p">)</span>
+            <span class="n">edges</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Unable to identify source/target columns in edge data&quot;</span><span class="p">)</span>
+            <span class="k">continue</span>
 
-        <span class="c1"># Drop unnecessary columns</span>
-        <span class="n">edges</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;node_start&quot;</span><span class="p">,</span> <span class="s2">&quot;node_end&quot;</span><span class="p">])</span>
-
-        <span class="c1"># Set group column</span>
+        <span class="c1"># Add group information</span>
         <span class="n">group_key</span> <span class="o">=</span> <span class="n">group_col</span> <span class="k">if</span> <span class="n">group_col</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;group&quot;</span>
-        <span class="n">edges</span><span class="p">[</span><span class="n">group_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">enc</span>
+        <span class="n">edges</span><span class="p">[</span><span class="n">group_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">group_name</span>
 
-        <span class="c1"># Select columns</span>
+        <span class="c1"># Select required columns</span>
         <span class="n">edges</span> <span class="o">=</span> <span class="n">edges</span><span class="p">[[</span><span class="s2">&quot;from_private_id&quot;</span><span class="p">,</span> <span class="s2">&quot;to_private_id&quot;</span><span class="p">,</span> <span class="n">group_key</span><span class="p">,</span> <span class="s2">&quot;geometry&quot;</span><span class="p">]]</span>
-        <span class="n">queen_edges_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
+        <span class="n">edge_data_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">edges</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">queen_edges_list</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">queen_edges_list</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">cols</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="s2">&quot;from_private_id&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;to_private_id&quot;</span><span class="p">,</span>
-        <span class="n">group_col</span> <span class="k">if</span> <span class="n">group_col</span> <span class="k">else</span> <span class="s2">&quot;group&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;geometry&quot;</span><span class="p">,</span>
-    <span class="p">]</span>
-    <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">cols</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">private_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span></div>
+    <span class="c1"># Concatenate all results at once</span>
+    <span class="k">if</span> <span class="n">edge_data_list</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">edge_data_list</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+    
+    <span class="c1"># Return empty GeoDataFrame with proper structure</span>
+    <span class="n">cols</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;from_private_id&quot;</span><span class="p">,</span> <span class="s2">&quot;to_private_id&quot;</span><span class="p">,</span> <span class="n">group_col</span> <span class="ow">or</span> <span class="s2">&quot;group&quot;</span><span class="p">,</span> <span class="s2">&quot;geometry&quot;</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">cols</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">private_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">)</span></div>
 
 
 
@@ -1043,31 +1221,31 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    private_gdf : geopandas.GeoDataFrame</span>
+<span class="sd">    private_gdf : gpd.GeoDataFrame</span>
 <span class="sd">        GeoDataFrame containing private space polygons</span>
-<span class="sd">    public_gdf : geopandas.GeoDataFrame</span>
+<span class="sd">    public_gdf : gpd.GeoDataFrame</span>
 <span class="sd">        GeoDataFrame containing public space linestrings</span>
-<span class="sd">    private_id_col : str, default None</span>
+<span class="sd">    private_id_col : str, optional</span>
 <span class="sd">        Column name in private_gdf that uniquely identifies each private space</span>
 <span class="sd">        If None, will use DataFrame index</span>
-<span class="sd">    public_id_col : str, default None</span>
+<span class="sd">    public_id_col : str, optional</span>
 <span class="sd">        Column name in public_gdf that uniquely identifies each public space</span>
 <span class="sd">        If None, will use DataFrame index</span>
-<span class="sd">    public_geom_col : str, default None</span>
+<span class="sd">    public_geom_col : str, optional</span>
 <span class="sd">        Column name in public_gdf containing alternative geometry to use</span>
 <span class="sd">        If None, will use the geometry column</span>
-<span class="sd">    tolerance : float, default 1</span>
+<span class="sd">    tolerance : float, default 1.0</span>
 <span class="sd">        Buffer tolerance for spatial joins</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    geopandas.GeoDataFrame</span>
+<span class="sd">    gpd.GeoDataFrame</span>
 <span class="sd">        GeoDataFrame containing LineString connections between private and public spaces</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># Validate and filter public_gdf geometry types before creating dual graph</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">public_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-        <span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="p">(</span><span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">LineString</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">MultiLineString</span><span class="p">)),</span>
-    <span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+    <span class="n">geom_types</span> <span class="o">=</span> <span class="n">public_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">geom_type</span>
+    <span class="n">invalid_public_geoms</span> <span class="o">=</span> <span class="o">~</span><span class="n">geom_types</span><span class="o">.</span><span class="n">isin</span><span class="p">([</span><span class="s1">&#39;LineString&#39;</span><span class="p">,</span> <span class="s1">&#39;MultiLineString&#39;</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">invalid_public_geoms</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
             <span class="s2">&quot;Some geometries in public_gdf are not LineString or MultiLineString. &quot;</span>
             <span class="s2">&quot;Filtering to valid geometries only.&quot;</span><span class="p">,</span>
@@ -1117,9 +1295,9 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    public_gdf : geopandas.GeoDataFrame</span>
+<span class="sd">    public_gdf : gpd.GeoDataFrame</span>
 <span class="sd">        GeoDataFrame containing public space linestrings</span>
-<span class="sd">    public_id_col : str, default None</span>
+<span class="sd">    public_id_col : str, optional</span>
 <span class="sd">        Column name that uniquely identifies each public space</span>
 <span class="sd">        If None, will use DataFrame index</span>
 <span class="sd">    tolerance : float, default 1e-8</span>
@@ -1127,13 +1305,13 @@
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    geopandas.GeoDataFrame</span>
+<span class="sd">    gpd.GeoDataFrame</span>
 <span class="sd">        GeoDataFrame containing LineString connections between public spaces</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># Validate and filter public_gdf geometry types before creating dual graph</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">public_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
-        <span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="p">(</span><span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">LineString</span><span class="p">,</span> <span class="n">shapely</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">MultiLineString</span><span class="p">)),</span>
-    <span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+    <span class="n">geom_types</span> <span class="o">=</span> <span class="n">public_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">geom_type</span>
+    <span class="n">invalid_public_geoms</span> <span class="o">=</span> <span class="o">~</span><span class="n">geom_types</span><span class="o">.</span><span class="n">isin</span><span class="p">([</span><span class="s1">&#39;LineString&#39;</span><span class="p">,</span> <span class="s1">&#39;MultiLineString&#39;</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">invalid_public_geoms</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
             <span class="s2">&quot;Some geometries in public_gdf are not LineString or MultiLineString. &quot;</span>
             <span class="s2">&quot;Filtering to valid geometries only.&quot;</span><span class="p">,</span>
@@ -1158,51 +1336,63 @@
             <span class="n">crs</span><span class="o">=</span><span class="n">public_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="c1"># Extract point coordinates efficiently</span>
-    <span class="n">point_coords</span> <span class="o">=</span> <span class="n">public_dual_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">y</span><span class="p">))</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
-
-    <span class="c1"># Track processed connections using a set</span>
-    <span class="n">processed_connections</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-
-    <span class="c1"># Prepare records list - preallocate for better performance</span>
-    <span class="n">connections_data</span> <span class="o">=</span> <span class="p">[]</span>
-
-    <span class="c1"># Generate unique connections</span>
-    <span class="k">for</span> <span class="n">from_id</span><span class="p">,</span> <span class="n">connected_ids</span> <span class="ow">in</span> <span class="n">public_to_public_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="k">if</span> <span class="n">from_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">point_coords</span><span class="p">:</span>
-            <span class="k">continue</span>
-
-        <span class="n">from_coords</span> <span class="o">=</span> <span class="n">point_coords</span><span class="p">[</span><span class="n">from_id</span><span class="p">]</span>
-
-        <span class="k">for</span> <span class="n">to_id</span> <span class="ow">in</span> <span class="n">connected_ids</span><span class="p">:</span>
-            <span class="c1"># Create a unique identifier for this connection</span>
-            <span class="n">connection</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">([</span><span class="n">from_id</span><span class="p">,</span> <span class="n">to_id</span><span class="p">]))</span>
-
-            <span class="c1"># Skip if already processed</span>
-            <span class="k">if</span> <span class="n">connection</span> <span class="ow">in</span> <span class="n">processed_connections</span> <span class="ow">or</span> <span class="n">to_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">point_coords</span><span class="p">:</span>
-                <span class="k">continue</span>
-
-            <span class="n">processed_connections</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span>
-            <span class="n">to_coords</span> <span class="o">=</span> <span class="n">point_coords</span><span class="p">[</span><span class="n">to_id</span><span class="p">]</span>
-
-            <span class="c1"># Add connection record</span>
-            <span class="n">connections_data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="p">{</span>
-                    <span class="s2">&quot;from_public_id&quot;</span><span class="p">:</span> <span class="n">from_id</span><span class="p">,</span>
-                    <span class="s2">&quot;to_public_id&quot;</span><span class="p">:</span> <span class="n">to_id</span><span class="p">,</span>
-                    <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="n">shapely</span><span class="o">.</span><span class="n">LineString</span><span class="p">([</span><span class="n">from_coords</span><span class="p">,</span> <span class="n">to_coords</span><span class="p">]),</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
-
-    <span class="c1"># Create GeoDataFrame from connection data</span>
-    <span class="k">if</span> <span class="n">connections_data</span><span class="p">:</span>
+    <span class="c1"># Convert dictionary to DataFrame for vectorized processing</span>
+    <span class="n">connections_list</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="n">from_id</span><span class="p">,</span> <span class="n">to_id</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">from_id</span><span class="p">,</span> <span class="n">connected_ids</span> <span class="ow">in</span> <span class="n">public_to_public_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">to_id</span> <span class="ow">in</span> <span class="n">connected_ids</span>
+    <span class="p">]</span>
+    
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">connections_list</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
-            <span class="n">connections_data</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">public_dual_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
+            <span class="p">{</span><span class="s2">&quot;from_public_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;to_public_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="p">[]},</span>
+            <span class="n">crs</span><span class="o">=</span><span class="n">public_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
         <span class="p">)</span>
-    <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
-        <span class="p">{</span><span class="s2">&quot;from_public_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;to_public_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="p">[]},</span>
-        <span class="n">crs</span><span class="o">=</span><span class="n">public_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
-    <span class="p">)</span></div>
+    
+    <span class="c1"># Create DataFrame and remove duplicates efficiently</span>
+    <span class="n">connections_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">connections_list</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;from_public_id&quot;</span><span class="p">,</span> <span class="s2">&quot;to_public_id&quot;</span><span class="p">])</span>
+    
+    <span class="c1"># Create sorted connection tuples for deduplication using vectorized operations</span>
+    <span class="n">connection_keys</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">connections_df</span><span class="p">[[</span><span class="s2">&quot;from_public_id&quot;</span><span class="p">,</span> <span class="s2">&quot;to_public_id&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">connections_df</span><span class="p">[</span><span class="s2">&quot;connection_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">connection_keys</span><span class="p">]</span>
+    
+    <span class="c1"># Remove duplicates based on sorted connection key</span>
+    <span class="n">connections_df</span> <span class="o">=</span> <span class="n">connections_df</span><span class="o">.</span><span class="n">drop_duplicates</span><span class="p">(</span><span class="n">subset</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;connection_key&quot;</span><span class="p">])</span>
+    
+    <span class="c1"># Get point coordinates for all nodes at once</span>
+    <span class="n">point_coords</span> <span class="o">=</span> <span class="n">public_dual_gdf</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">y</span><span class="p">))</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+    
+    <span class="c1"># Filter connections where both nodes exist in point_coords</span>
+    <span class="n">valid_mask</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">connections_df</span><span class="p">[</span><span class="s2">&quot;from_public_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">point_coords</span><span class="p">)</span> <span class="o">&amp;</span> 
+        <span class="n">connections_df</span><span class="p">[</span><span class="s2">&quot;to_public_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">point_coords</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">valid_connections</span> <span class="o">=</span> <span class="n">connections_df</span><span class="p">[</span><span class="n">valid_mask</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    
+    <span class="k">if</span> <span class="n">valid_connections</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span>
+            <span class="p">{</span><span class="s2">&quot;from_public_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;to_public_id&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="p">[]},</span>
+            <span class="n">crs</span><span class="o">=</span><span class="n">public_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">,</span>
+        <span class="p">)</span>
+    
+    <span class="c1"># Map coordinates vectorized</span>
+    <span class="n">valid_connections</span><span class="p">[</span><span class="s2">&quot;from_coords&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">valid_connections</span><span class="p">[</span><span class="s2">&quot;from_public_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">point_coords</span><span class="p">)</span>
+    <span class="n">valid_connections</span><span class="p">[</span><span class="s2">&quot;to_coords&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">valid_connections</span><span class="p">[</span><span class="s2">&quot;to_public_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">point_coords</span><span class="p">)</span>
+    
+    <span class="c1"># Create LineString geometries using vectorized operations</span>
+    <span class="n">from_coords</span> <span class="o">=</span> <span class="n">valid_connections</span><span class="p">[</span><span class="s2">&quot;from_coords&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">to_coords</span> <span class="o">=</span> <span class="n">valid_connections</span><span class="p">[</span><span class="s2">&quot;to_coords&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    
+    <span class="n">valid_connections</span><span class="p">[</span><span class="s2">&quot;geometry&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">shapely</span><span class="o">.</span><span class="n">LineString</span><span class="p">([</span><span class="n">from_coord</span><span class="p">,</span> <span class="n">to_coord</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">from_coord</span><span class="p">,</span> <span class="n">to_coord</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">from_coords</span><span class="p">,</span> <span class="n">to_coords</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="p">]</span>
+    
+    <span class="c1"># Select final columns</span>
+    <span class="n">result_df</span> <span class="o">=</span> <span class="n">valid_connections</span><span class="p">[[</span><span class="s2">&quot;from_public_id&quot;</span><span class="p">,</span> <span class="s2">&quot;to_public_id&quot;</span><span class="p">,</span> <span class="s2">&quot;geometry&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    
+    <span class="c1"># Create GeoDataFrame from connection data</span>
+    <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">result_df</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">public_dual_gdf</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span></div>
 
 
 
@@ -1214,7 +1404,21 @@
     <span class="n">segments_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">public_geom_col</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Prepare barrier geometry for tessellation creation.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Prepare barrier geometry for tessellation creation.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    segments_gdf : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing road segments</span>
+<span class="sd">    public_geom_col : str</span>
+<span class="sd">        Name of column containing barrier geometry</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[gpd.GeoDataFrame, str]</span>
+<span class="sd">        Prepared barrier GeoDataFrame and finalized geometry column name</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># Check if public_geom_col exists in segments_gdf</span>
     <span class="k">if</span> <span class="n">public_geom_col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
@@ -1242,7 +1446,21 @@
     <span class="n">enclosed_tess</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">segments_subset</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Filter tessellation to only include cells adjacent to segments.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Filter tessellation to only include cells adjacent to segments.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    enclosed_tess : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing tessellation polygons</span>
+<span class="sd">    segments_subset : gpd.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing road segments to check adjacency against</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    gpd.GeoDataFrame</span>
+<span class="sd">        Filtered tessellation containing only cells adjacent to segments</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">enclosed_tess</span><span class="o">.</span><span class="n">empty</span> <span class="ow">or</span> <span class="n">segments_subset</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">enclosed_tess</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
@@ -1272,7 +1490,23 @@
     <span class="n">buildings_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">keep_buildings</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Prepare tessellation data, optionally adding building information.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Prepare tessellation data, optionally adding building information.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    tess_subset : gpd.GeoDataFrame</span>
+<span class="sd">        Filtered tessellation data</span>
+<span class="sd">    buildings_gdf : gpd.GeoDataFrame</span>
+<span class="sd">        Buildings data to potentially join with tessellation</span>
+<span class="sd">    keep_buildings : bool</span>
+<span class="sd">        Whether to add building information to tessellation</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]</span>
+<span class="sd">        Final tessellation for output and tessellation for graph operations</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">keep_buildings</span><span class="p">:</span>
         <span class="n">tess_with_buildings</span> <span class="o">=</span> <span class="n">_add_buildings_to_tessellation</span><span class="p">(</span><span class="n">tess_subset</span><span class="p">,</span> <span class="n">buildings_gdf</span><span class="p">)</span>
         <span class="c1"># Use the original tessellation for graph operations to avoid column conflicts</span>
@@ -1287,14 +1521,14 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">morphological_graph</span><span class="p">(</span>
     <span class="n">buildings_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">segments_gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
-    <span class="n">center_point</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">center_point</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">private_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tess_id&quot;</span><span class="p">,</span>
     <span class="n">public_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span>
     <span class="n">public_geom_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;barrier_geometry&quot;</span><span class="p">,</span>
     <span class="n">contiguity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;queen&quot;</span><span class="p">,</span>
     <span class="n">keep_buildings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create a morphological graph from buildings and road segments.</span>
 
@@ -1312,35 +1546,39 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    buildings_gdf : geopandas.GeoDataFrame</span>
+<span class="sd">    buildings_gdf : gpd.GeoDataFrame</span>
 <span class="sd">        GeoDataFrame containing building polygons</span>
-<span class="sd">    segments_gdf : geopandas.GeoDataFrame</span>
+<span class="sd">    segments_gdf : gpd.GeoDataFrame</span>
 <span class="sd">        GeoDataFrame containing road segments as LineStrings.</span>
 <span class="sd">        Should include a &#39;barrier_geometry&#39; column or the column specified in public_geom_col.</span>
-<span class="sd">    center_point : Union[Point, gpd.GeoSeries, gpd.GeoDataFrame], optional</span>
+<span class="sd">    center_point : gpd.GeoSeries or gpd.GeoDataFrame, optional</span>
 <span class="sd">        Optional center point for filtering the network by distance.</span>
 <span class="sd">        If provided, only segments within the specified distance will be included.</span>
-<span class="sd">    distance : float, default=1000</span>
+<span class="sd">    distance : float, optional</span>
 <span class="sd">        Maximum network distance from center_point to include segments, if center_point is provided.</span>
 <span class="sd">        If None, no distance filtering will be applied even if center_point is provided.</span>
-<span class="sd">    private_id_col : str, default=&#39;tess_id&#39;</span>
+<span class="sd">    private_id_col : str, default &quot;tess_id&quot;</span>
 <span class="sd">        Column name that uniquely identifies each tessellation cell (private space).</span>
-<span class="sd">    public_id_col : str, default=&#39;id&#39;</span>
+<span class="sd">    public_id_col : str, default &quot;id&quot;</span>
 <span class="sd">        Column name that uniquely identifies each road segment (public space).</span>
-<span class="sd">    public_geom_col : str, default=&#39;barrier_geometry&#39;</span>
+<span class="sd">    public_geom_col : str, default &quot;barrier_geometry&quot;</span>
 <span class="sd">        Column name in segments_gdf containing the processed geometry to use.</span>
-<span class="sd">    contiguity : str, default=&#39;queen&#39;</span>
+<span class="sd">    contiguity : str, default &quot;queen&quot;</span>
 <span class="sd">        Type of contiguity for private-to-private connections, either &#39;queen&#39; or &#39;rook&#39;.</span>
-<span class="sd">    keep_buildings : bool, default=False</span>
+<span class="sd">    keep_buildings : bool, default False</span>
 <span class="sd">        If True, performs a spatial left join between tessellation and buildings to include</span>
 <span class="sd">        building attributes in the tessellation data. Building index columns are dropped.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    dict</span>
-<span class="sd">        Dictionary containing the following elements:</span>
-<span class="sd">        - &#39;nodes&#39;: Dictionary with &#39;private&#39; and &#39;public&#39; GeoDataFrames</span>
-<span class="sd">        - &#39;edges&#39;: Dictionary with edge relationships between node types</span>
+<span class="sd">    tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]</span>
+<span class="sd">        A tuple containing:</span>
+<span class="sd">        - nodes_dict: Dictionary with &#39;private&#39; and &#39;public&#39; keys mapping to GeoDataFrames</span>
+<span class="sd">        - edges_dict: Dictionary with edge relationship tuples as keys mapping to GeoDataFrames</span>
+<span class="sd">          Keys are tuples of (source_type, relationship, target_type):</span>
+<span class="sd">          - (&#39;private&#39;, &#39;touched_to&#39;, &#39;private&#39;): tessellation adjacency connections</span>
+<span class="sd">          - (&#39;public&#39;, &#39;connected_to&#39;, &#39;public&#39;): road segment connections</span>
+<span class="sd">          - (&#39;private&#39;, &#39;faced_to&#39;, &#39;public&#39;): tessellation to road connections</span>
 
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
@@ -1400,18 +1638,55 @@
         <span class="n">public_geom_col</span><span class="o">=</span><span class="n">public_geom_col</span><span class="p">,</span>
     <span class="p">)</span>
 
-    <span class="c1"># Return structure compatible with pyg_to_gdf expectations</span>
-    <span class="k">return</span> <span class="p">{</span>
-        <span class="s2">&quot;nodes&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;private&quot;</span><span class="p">:</span> <span class="n">tess_final</span><span class="p">,</span>
-            <span class="s2">&quot;public&quot;</span><span class="p">:</span> <span class="n">segments_subset</span><span class="p">,</span>
-        <span class="p">},</span>
-        <span class="s2">&quot;edges&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;touched_to&quot;</span><span class="p">,</span> <span class="s2">&quot;private&quot;</span><span class="p">):</span> <span class="n">private_to_private</span><span class="p">,</span>
-            <span class="p">(</span><span class="s2">&quot;public&quot;</span><span class="p">,</span> <span class="s2">&quot;connected_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="n">public_to_public</span><span class="p">,</span>
-            <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;faced_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="n">private_to_public</span><span class="p">,</span>
-        <span class="p">},</span>
-    <span class="p">}</span></div>
+    <span class="c1"># Set indices for nodes</span>
+    <span class="n">tess_final_indexed</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">tess_final</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">private_id_col</span><span class="p">)</span> 
+        <span class="k">if</span> <span class="n">private_id_col</span> <span class="ow">in</span> <span class="n">tess_final</span><span class="o">.</span><span class="n">columns</span> 
+        <span class="k">else</span> <span class="n">tess_final</span>
+    <span class="p">)</span>
+    <span class="n">segments_subset_indexed</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">segments_subset</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">public_id_col</span><span class="p">)</span> 
+        <span class="k">if</span> <span class="n">public_id_col</span> <span class="ow">in</span> <span class="n">segments_subset</span><span class="o">.</span><span class="n">columns</span> 
+        <span class="k">else</span> <span class="n">segments_subset</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Set indices for edges based on connected node pairs using MultiIndex</span>
+    <span class="n">private_to_private_indexed</span> <span class="o">=</span> <span class="n">private_to_private</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">private_to_private</span><span class="o">.</span><span class="n">empty</span> <span class="ow">and</span> 
+        <span class="s2">&quot;from_private_id&quot;</span> <span class="ow">in</span> <span class="n">private_to_private</span><span class="o">.</span><span class="n">columns</span> <span class="ow">and</span> 
+        <span class="s2">&quot;to_private_id&quot;</span> <span class="ow">in</span> <span class="n">private_to_private</span><span class="o">.</span><span class="n">columns</span><span class="p">):</span>
+        <span class="n">private_to_private_indexed</span> <span class="o">=</span> <span class="n">private_to_private_indexed</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span>
+            <span class="p">[</span><span class="s2">&quot;from_private_id&quot;</span><span class="p">,</span> <span class="s2">&quot;to_private_id&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
+
+    <span class="n">public_to_public_indexed</span> <span class="o">=</span> <span class="n">public_to_public</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">public_to_public</span><span class="o">.</span><span class="n">empty</span> <span class="ow">and</span> 
+        <span class="s2">&quot;from_public_id&quot;</span> <span class="ow">in</span> <span class="n">public_to_public</span><span class="o">.</span><span class="n">columns</span> <span class="ow">and</span> 
+        <span class="s2">&quot;to_public_id&quot;</span> <span class="ow">in</span> <span class="n">public_to_public</span><span class="o">.</span><span class="n">columns</span><span class="p">):</span>
+        <span class="n">public_to_public_indexed</span> <span class="o">=</span> <span class="n">public_to_public_indexed</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span>
+            <span class="p">[</span><span class="s2">&quot;from_public_id&quot;</span><span class="p">,</span> <span class="s2">&quot;to_public_id&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
+
+    <span class="n">private_to_public_indexed</span> <span class="o">=</span> <span class="n">private_to_public</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">private_to_public</span><span class="o">.</span><span class="n">empty</span> <span class="ow">and</span> 
+        <span class="s2">&quot;private_id&quot;</span> <span class="ow">in</span> <span class="n">private_to_public</span><span class="o">.</span><span class="n">columns</span> <span class="ow">and</span> 
+        <span class="s2">&quot;public_id&quot;</span> <span class="ow">in</span> <span class="n">private_to_public</span><span class="o">.</span><span class="n">columns</span><span class="p">):</span>
+        <span class="n">private_to_public_indexed</span> <span class="o">=</span> <span class="n">private_to_public_indexed</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span>
+            <span class="p">[</span><span class="s2">&quot;private_id&quot;</span><span class="p">,</span> <span class="s2">&quot;public_id&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
+
+    <span class="n">nodes_dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;private&quot;</span><span class="p">:</span> <span class="n">tess_final_indexed</span><span class="p">,</span>
+        <span class="s2">&quot;public&quot;</span><span class="p">:</span> <span class="n">segments_subset_indexed</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="n">edges_dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;touched_to&quot;</span><span class="p">,</span> <span class="s2">&quot;private&quot;</span><span class="p">):</span> <span class="n">private_to_private_indexed</span><span class="p">,</span>
+        <span class="p">(</span><span class="s2">&quot;public&quot;</span><span class="p">,</span> <span class="s2">&quot;connected_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="n">public_to_public_indexed</span><span class="p">,</span>
+        <span class="p">(</span><span class="s2">&quot;private&quot;</span><span class="p">,</span> <span class="s2">&quot;faced_to&quot;</span><span class="p">,</span> <span class="s2">&quot;public&quot;</span><span class="p">):</span> <span class="n">private_to_public_indexed</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">nodes_dict</span><span class="p">,</span> <span class="n">edges_dict</span></div>
 
 
 

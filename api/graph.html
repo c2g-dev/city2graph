@@ -11,10 +11,10 @@
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://city2graph.net/api/graph.html" />
 <meta property="og:site_name" content="city2graph" />
-<meta property="og:description" content="Module for creating heterogeneous graph representations of urban environments. Converts geodataframes containing spatial data into PyTorch Geometric HeteroData objects." />
+<meta property="og:description" content="Module for creating heterogeneous graph representations of urban environments. This module provides comprehensive functionality for converting spatial data (GeoDataFrames) into PyTorch Geometric gr..." />
 <meta property="og:image" content="https://city2graph.net/_static/social_preview.png" />
 <meta property="og:image:alt" content="city2graph" />
-<meta name="description" content="Module for creating heterogeneous graph representations of urban environments. Converts geodataframes containing spatial data into PyTorch Geometric HeteroData objects." />
+<meta name="description" content="Module for creating heterogeneous graph representations of urban environments. This module provides comprehensive functionality for converting spatial data (GeoDataFrames) into PyTorch Geometric gr..." />
 
     <title>Graph &#8212; city2graph</title>
   
@@ -399,143 +399,102 @@
   <section id="module-city2graph.graph">
 <span id="graph"></span><h1>Graph<a class="headerlink" href="#module-city2graph.graph" title="Link to this heading">#</a></h1>
 <p>Module for creating heterogeneous graph representations of urban environments.</p>
-<p>Converts geodataframes containing spatial data into PyTorch Geometric HeteroData objects.</p>
-<dl class="py function">
-<dt class="sig sig-object py" id="city2graph.graph.from_morphological_graph">
-<span class="sig-prename descclassname"><span class="pre">city2graph.graph.</span></span><span class="sig-name descname"><span class="pre">from_morphological_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">network_output</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'tess_id'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'id'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_node_feature_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_node_feature_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/graph.html#from_morphological_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.graph.from_morphological_graph" title="Link to this definition">#</a></dt>
-<dd><p>Create a graph representation from the output of morphological_graph.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>network_output</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>) – Output dictionary from morphological_graph containing:
-- ‘tessellation’: GeoDataFrame of tessellation cells (private spaces)
-- ‘segments’: GeoDataFrame of road segments (public spaces)
-- ‘private_to_private’: GeoDataFrame of connections between tessellation cells
-- ‘public_to_public’: GeoDataFrame of connections between road segments
-- ‘private_to_public’: GeoDataFrame of connections between tessellation cells and road segments</p></li>
-<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default='tess_id'</em>) – Column name in tessellation GeoDataFrame that uniquely identifies each private space.</p></li>
-<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default='id'</em>) – Column name in segments GeoDataFrame that uniquely identifies each public space.</p></li>
-<li><p><strong>private_node_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, </em><em>default None</em>) – Attributes in tessellation GeoDataFrame to use as node features.</p></li>
-<li><p><strong>public_node_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, </em><em>default None</em>) – Attributes in segments GeoDataFrame to use as node features.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Device to use for tensors. Must be ‘cuda’ or ‘cpu’ if provided.
-If None, will use CUDA if available, otherwise CPU.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Graph representation. HeteroData is returned if both node types exist,
-otherwise a homogeneous Data object.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.HeteroData.html#torch_geometric.data.HeteroData" title="(in pytorch_geometric v2.7.0)">torch_geometric.data.HeteroData</a> or <a class="reference external" href="https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.Data.html#torch_geometric.data.Data" title="(in pytorch_geometric v2.7.0)">torch_geometric.data.Data</a></p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch and PyTorch Geometric are not installed</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If required data is missing from the network_output dictionary</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
+<p>This module provides comprehensive functionality for converting spatial data (GeoDataFrames)
+into PyTorch Geometric graph objects, supporting both homogeneous and heterogeneous graphs.
+It handles the complex mapping between geographical coordinates, node/edge features,
+and the tensor representations required by graph neural networks.</p>
+<p>Key Features:
+- Automatic detection of graph structure (homogeneous vs heterogeneous)
+- Intelligent column detection for source/target relationships
+- Robust type handling and ID mapping
+- Preservation of spatial geometry and coordinate reference systems
+- Bidirectional conversion between GeoDataFrames and PyTorch Geometric objects
+- NetworkX integration for graph analysis workflows</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.graph.gdf_to_pyg">
-<span class="sig-prename descclassname"><span class="pre">city2graph.graph.</span></span><span class="sig-name descname"><span class="pre">gdf_to_pyg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nodes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edges</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_id_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_feature_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_label_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_source_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_target_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/graph.html#gdf_to_pyg"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.graph.gdf_to_pyg" title="Link to this definition">#</a></dt>
-<dd><p>Convert GeoDataFrames to PyTorch Geometric graph objects with automatic type detection.</p>
+<span class="sig-prename descclassname"><span class="pre">city2graph.graph.</span></span><span class="sig-name descname"><span class="pre">gdf_to_pyg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nodes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edges</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_id_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_feature_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_label_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_source_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_target_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/graph.html#gdf_to_pyg"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.graph.gdf_to_pyg" title="Link to this definition">#</a></dt>
+<dd><p>Convert GeoDataFrames (nodes/edges) to a PyTorch Geometric object.</p>
+<p>This function serves as the main entry point for converting spatial data into
+PyTorch Geometric graph objects. It automatically detects whether to create
+homogeneous or heterogeneous graphs based on input structure and provides
+intelligent column detection for edge relationships.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>nodes</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em> or </em><em>GeoDataFrame</em>) – Dictionary of GeoDataFrames for each node type, or a single GeoDataFrame.</p></li>
-<li><p><strong>edges</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>GeoDataFrame</em><em>, or </em><em>None</em>) – Dictionary of GeoDataFrames for each edge type, single GeoDataFrame, or None.</p></li>
-<li><p><strong>node_id_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, or </em><em>None</em>) – Node ID column specification.</p></li>
-<li><p><strong>node_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, or </em><em>None</em>) – Node feature columns specification.</p></li>
-<li><p><strong>node_label_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, or </em><em>None</em>) – Node label columns specification.</p></li>
-<li><p><strong>edge_source_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, or </em><em>None</em>) – Edge source column specification.</p></li>
-<li><p><strong>edge_target_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, or </em><em>None</em>) – Edge target column specification.</p></li>
-<li><p><strong>edge_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>, or </em><em>None</em>) – Edge feature columns specification.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Device for tensor creation.</p></li>
+<li><p><strong>nodes</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>gpd.GeoDataFrame</em><em>] or </em><em>gpd.GeoDataFrame</em>) – Node data. For homogeneous graphs, provide a single GeoDataFrame.
+For heterogeneous graphs, provide a dictionary mapping node type names
+to their respective GeoDataFrames.</p></li>
+<li><p><strong>edges</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>, </em><em>gpd.GeoDataFrame</em><em>] or </em><em>gpd.GeoDataFrame</em><em>, </em><em>optional</em>) – Edge data. For homogeneous graphs, provide a single GeoDataFrame.
+For heterogeneous graphs, provide a dictionary mapping edge type tuples
+(source_type, relation_type, target_type) to their GeoDataFrames.</p></li>
+<li><p><strong>node_id_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>] or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name(s) to use as node identifiers. For heterogeneous graphs,
+provide a dictionary mapping node types to their ID columns.
+If None, uses the GeoDataFrame index.</p></li>
+<li><p><strong>node_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>] or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>, </em><em>optional</em>) – Column names to use as node features. For heterogeneous graphs,
+provide a dictionary mapping node types to their feature columns.</p></li>
+<li><p><strong>node_label_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>] or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>, </em><em>optional</em>) – Column names to use as node labels for supervised learning tasks.
+For heterogeneous graphs, provide a dictionary mapping node types
+to their label columns.</p></li>
+<li><p><strong>edge_source_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name containing source node IDs (homogeneous graphs only).
+If None, attempts automatic detection.</p></li>
+<li><p><strong>edge_target_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name containing target node IDs (homogeneous graphs only).
+If None, attempts automatic detection.</p></li>
+<li><p><strong>edge_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>] or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>, </em><em>optional</em>) – Column names to use as edge features. For heterogeneous graphs,
+provide a dictionary mapping relation types to their feature columns.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em>, </em><em>optional</em>) – Target device for tensor placement (‘cpu’, ‘cuda’, or torch.device).
+If None, automatically selects CUDA if available, otherwise CPU.</p></li>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – Data type for float tensors (e.g., torch.float32, torch.float16).
+If None, uses torch.float32 (default PyTorch float type).</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>PyTorch Geometric graph object.</p>
+<dd class="field-even"><p>PyTorch Geometric Data object for homogeneous graphs or HeteroData
+object for heterogeneous graphs. The returned object contains:
+- Node features (x), positions (pos), and labels (y) if available
+- Edge connectivity (edge_index) and features (edge_attr) if available
+- Metadata for reconstruction including ID mappings and column names</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Data or HeteroData</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch and PyTorch Geometric are not installed</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="city2graph.graph.heterogeneous_graph">
-<span class="sig-prename descclassname"><span class="pre">city2graph.graph.</span></span><span class="sig-name descname"><span class="pre">heterogeneous_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nodes_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edges_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_id_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_feature_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_label_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_source_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_target_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/graph.html#heterogeneous_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.graph.heterogeneous_graph" title="Link to this definition">#</a></dt>
-<dd><p>Create a heterogeneous graph HeteroData object from node and edge dictionaries.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>nodes_dict</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em> or </em><em>GeoDataFrame</em>) – Dictionary of GeoDataFrames for each node type, or a single GeoDataFrame
-with a ‘type’ column to automatically split by node type.</p></li>
-<li><p><strong>edges_dict</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em> or </em><em>GeoDataFrame</em>) – Dictionary of GeoDataFrames for each edge type, with keys as (source_type, relation, target_type),
-or a single GeoDataFrame with an ‘edge_type’ column.</p></li>
-<li><p><strong>node_id_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Dictionary mapping node types to their ID column.</p></li>
-<li><p><strong>node_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Dictionary mapping node types to lists of feature columns.</p></li>
-<li><p><strong>node_label_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Dictionary mapping node types to lists of label columns.</p></li>
-<li><p><strong>edge_source_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Dictionary mapping edge types to source column names.</p></li>
-<li><p><strong>edge_target_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Dictionary mapping edge types to target column names.</p></li>
-<li><p><strong>edge_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Dictionary mapping edge types to lists of edge attribute columns.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Device for tensor creation.</p></li>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch Geometric is not installed</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If input GeoDataFrames are invalid or incompatible</p></li>
 </ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A PyTorch Geometric HeteroData graph object.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.HeteroData.html#torch_geometric.data.HeteroData" title="(in pytorch_geometric v2.7.0)">torch_geometric.data.HeteroData</a></p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch and PyTorch Geometric are not installed</p>
-</dd>
 </dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="city2graph.graph.homogeneous_graph">
-<span class="sig-prename descclassname"><span class="pre">city2graph.graph.</span></span><span class="sig-name descname"><span class="pre">homogeneous_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nodes_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edges_gdf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_feature_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_label_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_source_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_target_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/graph.html#homogeneous_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.graph.homogeneous_graph" title="Link to this definition">#</a></dt>
-<dd><p>Create a homogeneous graph Data object from nodes and edges GeoDataFrames.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>nodes_gdf</strong> (<em>GeoDataFrame</em>) – GeoDataFrame containing node data.</p></li>
-<li><p><strong>edges_gdf</strong> (<em>GeoDataFrame</em><em>, </em><em>optional</em>) – GeoDataFrame containing edge data.</p></li>
-<li><p><strong>node_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name that uniquely identifies each node.</p></li>
-<li><p><strong>node_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – List of columns to use as node features.</p></li>
-<li><p><strong>node_label_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – List of columns to use as node labels.</p></li>
-<li><p><strong>edge_source_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name for source node IDs in the edge GeoDataFrame.</p></li>
-<li><p><strong>edge_target_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name for target node IDs in the edge GeoDataFrame.</p></li>
-<li><p><strong>edge_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – List of columns to use as edge features.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Device for tensor creation.</p></li>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Homogeneous graph from single GeoDataFrames</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nodes_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="s2">&quot;nodes.geojson&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">edges_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="s2">&quot;edges.geojson&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">gdf_to_pyg</span><span class="p">(</span><span class="n">nodes_gdf</span><span class="p">,</span> <span class="n">edges_gdf</span><span class="p">,</span>
+<span class="gp">... </span>                  <span class="n">node_feature_cols</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;population&#39;</span><span class="p">,</span> <span class="s1">&#39;area&#39;</span><span class="p">])</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Heterogeneous graph from dictionaries</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">nodes_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;building&#39;</span><span class="p">:</span> <span class="n">buildings_gdf</span><span class="p">,</span> <span class="s1">&#39;road&#39;</span><span class="p">:</span> <span class="n">roads_gdf</span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">edges_dict</span> <span class="o">=</span> <span class="p">{(</span><span class="s1">&#39;building&#39;</span><span class="p">,</span> <span class="s1">&#39;connects&#39;</span><span class="p">,</span> <span class="s1">&#39;road&#39;</span><span class="p">):</span> <span class="n">connections_gdf</span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">gdf_to_pyg</span><span class="p">(</span><span class="n">nodes_dict</span><span class="p">,</span> <span class="n">edges_dict</span><span class="p">)</span>
+</pre></div>
+</div>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>Preserves original coordinate reference systems (CRS)</p></li>
+<li><p>Maintains index structure for bidirectional conversion</p></li>
+<li><p>Automatically detects source/target columns using common naming patterns</p></li>
+<li><p>Handles both Point and non-Point geometries (using centroids)</p></li>
+<li><p>Creates empty tensors for missing features/edges</p></li>
 </ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A PyTorch Geometric Data graph object.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.Data.html#torch_geometric.data.Data" title="(in pytorch_geometric v2.7.0)">torch_geometric.data.Data</a></p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch and PyTorch Geometric are not installed</p>
-</dd>
-</dl>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.graph.is_torch_available">
 <span class="sig-prename descclassname"><span class="pre">city2graph.graph.</span></span><span class="sig-name descname"><span class="pre">is_torch_available</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/graph.html#is_torch_available"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.graph.is_torch_available" title="Link to this definition">#</a></dt>
-<dd><p>Check if PyTorch and PyTorch Geometric are available.</p>
+<dd><p>Check if PyTorch Geometric is available.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>True if PyTorch and PyTorch Geometric are available, False otherwise.</p>
+<dd class="field-odd"><p>True if PyTorch Geometric can be imported, False otherwise</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)">bool</a></p>
@@ -545,75 +504,123 @@ or a single GeoDataFrame with an ‘edge_type’ column.</p></li>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.graph.nx_to_pyg">
-<span class="sig-prename descclassname"><span class="pre">city2graph.graph.</span></span><span class="sig-name descname"><span class="pre">nx_to_pyg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">graph</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_feature_attrs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_label_attrs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_attrs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/graph.html#nx_to_pyg"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.graph.nx_to_pyg" title="Link to this definition">#</a></dt>
-<dd><p>Convert NetworkX graph to PyTorch Geometric graph with automatic type detection.</p>
+<span class="sig-prename descclassname"><span class="pre">city2graph.graph.</span></span><span class="sig-name descname"><span class="pre">nx_to_pyg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">graph</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_feature_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_label_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_feature_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/graph.html#nx_to_pyg"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.graph.nx_to_pyg" title="Link to this definition">#</a></dt>
+<dd><p>Convert NetworkX graph to PyTorch Geometric Data object.</p>
+<p>Converts a NetworkX graph to a PyTorch Geometric Data object by first
+converting to GeoDataFrames then using the main conversion pipeline.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>graph</strong> (<a class="reference external" href="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph" title="(in NetworkX v3.5)"><em>networkx.Graph</em></a>) – NetworkX graph to convert.</p></li>
-<li><p><strong>node_feature_attrs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – List of node attributes to use as features.</p></li>
-<li><p><strong>node_label_attrs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – List of node attributes to use as labels.</p></li>
-<li><p><strong>edge_feature_attrs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – List of edge attributes to use as features.</p></li>
-<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Device for tensor creation.</p></li>
+<li><p><strong>graph</strong> (<em>nx.Graph</em>) – NetworkX graph to convert</p></li>
+<li><p><strong>node_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>, </em><em>optional</em>) – List of node attribute names to use as features</p></li>
+<li><p><strong>node_label_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>, </em><em>optional</em>) – List of node attribute names to use as labels</p></li>
+<li><p><strong>edge_feature_cols</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>, </em><em>optional</em>) – List of edge attribute names to use as features</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.7)"><em>torch.device</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Target device for tensor placement</p></li>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.7)"><em>torch.dtype</em></a><em>, </em><em>optional</em>) – Data type for float tensors (e.g., torch.float32, torch.float16).
+If None, uses torch.float32 (default PyTorch float type).</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>PyTorch Geometric graph object.</p>
+<dd class="field-even"><p>PyTorch Geometric Data object</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Data or HeteroData</p>
+<dd class="field-odd"><p>Data</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch and PyTorch Geometric are not installed</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If the graph is empty</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch Geometric is not installed</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If the NetworkX graph is invalid or empty</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>Uses intermediate GeoDataFrame conversion for consistency</p></li>
+<li><p>Preserves all graph attributes and metadata</p></li>
+<li><p>Handles spatial coordinates if present in node attributes</p></li>
+</ul>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.graph.pyg_to_gdf">
-<span class="sig-prename descclassname"><span class="pre">city2graph.graph.</span></span><span class="sig-name descname"><span class="pre">pyg_to_gdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/graph.html#pyg_to_gdf"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.graph.pyg_to_gdf" title="Link to this definition">#</a></dt>
-<dd><p>Convert PyTorch Geometric Data or HeteroData to GeoDataFrames and DataFrames.</p>
+<span class="sig-prename descclassname"><span class="pre">city2graph.graph.</span></span><span class="sig-name descname"><span class="pre">pyg_to_gdf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">node_types</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">edge_types</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/graph.html#pyg_to_gdf"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.graph.pyg_to_gdf" title="Link to this definition">#</a></dt>
+<dd><p>Convert PyTorch Geometric data to GeoDataFrames.</p>
+<p>Reconstructs the original GeoDataFrame structure from PyTorch Geometric
+Data or HeteroData objects. This function provides bidirectional conversion
+capability, preserving spatial information, feature data, and metadata.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>data</strong> (<em>Data</em><em> or </em><em>HeteroData</em>) – PyTorch Geometric graph object to convert.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>Data</em><em> or </em><em>HeteroData</em>) – PyTorch Geometric data object to convert back to GeoDataFrames</p></li>
+<li><p><strong>node_types</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>, </em><em>optional</em>) – For heterogeneous graphs, specify which node types to reconstruct.
+If None, reconstructs all available node types.</p></li>
+<li><p><strong>edge_types</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>]</em><em>]</em><em>, </em><em>optional</em>) – For heterogeneous graphs, specify which edge types to reconstruct.
+Edge types are specified as (source_type, relation_type, target_type) tuples.
+If None, reconstructs all available edge types.</p></li>
+</ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>For HeteroData: Returns a dictionary with keys ‘nodes’ and ‘edges’,
-where ‘nodes’ contains GeoDataFrames and ‘edges’ contains DataFrames.
-For Data: Returns a tuple of (nodes_gdf, edges_df).</p>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeoDataFrame</span></code></a>], <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>], <a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeoDataFrame</span></code></a>]] | <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">tuple</span></code></a>[<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeoDataFrame</span></code></a>, <a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeoDataFrame</span></code></a> | <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>]</span></p>
 </dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a> or <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)">tuple</a></p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch and PyTorch Geometric are not installed</p>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul>
+<li><p><em>For HeteroData</em> –</p>
+<dl class="simple">
+<dt>tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]</dt><dd><p>First element: dictionary mapping node type names to node GeoDataFrames
+Second element: dictionary mapping edge type tuples to edge GeoDataFrames</p>
 </dd>
 </dl>
+</li>
+<li><p><em>For Data</em> –</p>
+<dl class="simple">
+<dt>tuple[gpd.GeoDataFrame, gpd.GeoDataFrame | None]</dt><dd><p>First element: nodes GeoDataFrame
+Second element: edges GeoDataFrame (None if no edges)</p>
+</dd>
+</dl>
+</li>
+</ul>
+</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>Preserves original index structure and names when available</p></li>
+<li><p>Reconstructs geometry from stored position tensors</p></li>
+<li><p>Maintains coordinate reference system (CRS) information</p></li>
+<li><p>Converts feature tensors back to named DataFrame columns</p></li>
+<li><p>Handles both homogeneous and heterogeneous graph structures</p></li>
+</ul>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.graph.pyg_to_nx">
 <span class="sig-prename descclassname"><span class="pre">city2graph.graph.</span></span><span class="sig-name descname"><span class="pre">pyg_to_nx</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/graph.html#pyg_to_nx"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.graph.pyg_to_nx" title="Link to this definition">#</a></dt>
-<dd><p>Convert PyTorch Geometric Data or HeteroData to NetworkX graph.</p>
+<dd><p>Convert a PyTorch Geometric object to a NetworkX graph.</p>
+<p>Converts PyTorch Geometric Data or HeteroData objects to NetworkX graphs,
+preserving node and edge features as graph attributes. This enables
+compatibility with the extensive NetworkX ecosystem for graph analysis.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>data</strong> (<em>Data</em><em> or </em><em>HeteroData</em>) – PyTorch Geometric graph object to convert.</p>
+<dd class="field-odd"><p><strong>data</strong> (<em>Data</em><em> or </em><em>HeteroData</em>) – PyTorch Geometric data object to convert</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>NetworkX graph representation. For HeteroData, returns a MultiDiGraph
-with node and edge type information. For homogeneous Data, returns
-a standard Graph.</p>
+<dd class="field-even"><p>NetworkX graph with node and edge attributes from the PyG object.
+For heterogeneous graphs, node and edge types are stored as attributes.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>nx.Graph</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch and PyTorch Geometric are not installed</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If PyTorch Geometric is not installed</p>
 </dd>
 </dl>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>Node features, positions, and labels are stored as node attributes</p></li>
+<li><p>Edge features are stored as edge attributes</p></li>
+<li><p>For heterogeneous graphs, type information is preserved</p></li>
+<li><p>Geometry information is converted from tensor positions</p></li>
+</ul>
 </dd></dl>
 
 </section>
@@ -665,10 +672,7 @@ a standard Graph.</p>
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.graph.from_morphological_graph"><code class="docutils literal notranslate"><span class="pre">from_morphological_graph()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.graph.gdf_to_pyg"><code class="docutils literal notranslate"><span class="pre">gdf_to_pyg()</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.graph.heterogeneous_graph"><code class="docutils literal notranslate"><span class="pre">heterogeneous_graph()</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.graph.homogeneous_graph"><code class="docutils literal notranslate"><span class="pre">homogeneous_graph()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.graph.is_torch_available"><code class="docutils literal notranslate"><span class="pre">is_torch_available()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.graph.nx_to_pyg"><code class="docutils literal notranslate"><span class="pre">nx_to_pyg()</span></code></a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#city2graph.graph.pyg_to_gdf"><code class="docutils literal notranslate"><span class="pre">pyg_to_gdf()</span></code></a></li>
