@@ -382,6 +382,7 @@
 
 <span class="c1"># Define the public API for this module</span>
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;create_isochrone&quot;</span><span class="p">,</span>
     <span class="s2">&quot;create_tessellation&quot;</span><span class="p">,</span>
     <span class="s2">&quot;dual_graph&quot;</span><span class="p">,</span>
     <span class="s2">&quot;filter_graph_by_distance&quot;</span><span class="p">,</span>
@@ -869,6 +870,48 @@
         <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">filtered_gdf</span></div>
+
+
+
+<div class="viewcode-block" id="create_isochrone">
+<a class="viewcode-back" href="../../api/utils.html#city2graph.utils.create_isochrone">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_isochrone</span><span class="p">(</span>
+    <span class="n">graph</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">,</span>
+    <span class="n">center_point</span><span class="p">:</span> <span class="n">Point</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+    <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">edge_attr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;length&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generate isochrone polygon(s) as convex hull of reachable areas within distance.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    graph : Union[gpd.GeoDataFrame, nx.Graph]</span>
+<span class="sd">        Input graph edges or NetworkX graph.</span>
+<span class="sd">    center_point : Union[Point, GeoSeries, GeoDataFrame]</span>
+<span class="sd">        Center point(s) for distance calculation.</span>
+<span class="sd">    distance : float</span>
+<span class="sd">        Maximum shortest-path distance from center.</span>
+<span class="sd">    edge_attr : str, default=&quot;length&quot;</span>
+<span class="sd">        Edge weight attribute for path length.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    geopandas.GeoDataFrame</span>
+<span class="sd">        GeoDataFrame containing a single isochrone Polygon or MultiPolygon.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Filter graph by distance</span>
+    <span class="n">reachable</span> <span class="o">=</span> <span class="n">filter_graph_by_distance</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">center_point</span><span class="p">,</span> <span class="n">distance</span><span class="p">,</span> <span class="n">edge_attr</span><span class="p">)</span>
+    <span class="c1"># Convert to GeoDataFrame if NetworkX graph returned</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reachable</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">Graph</span><span class="p">):</span>
+        <span class="n">reachable</span> <span class="o">=</span> <span class="n">nx_to_gdf</span><span class="p">(</span><span class="n">reachable</span><span class="p">,</span> <span class="n">nodes</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1"># Empty result</span>
+    <span class="k">if</span> <span class="n">reachable</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="p">[],</span> <span class="n">crs</span><span class="o">=</span><span class="nb">getattr</span><span class="p">(</span><span class="n">reachable</span><span class="p">,</span> <span class="s2">&quot;crs&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+    <span class="c1"># Create convex hull of reachable area</span>
+    <span class="n">union_geom</span> <span class="o">=</span> <span class="n">reachable</span><span class="o">.</span><span class="n">unary_union</span>
+    <span class="n">hull</span> <span class="o">=</span> <span class="n">union_geom</span><span class="o">.</span><span class="n">convex_hull</span>
+    <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="p">[</span><span class="n">hull</span><span class="p">],</span> <span class="n">crs</span><span class="o">=</span><span class="n">reachable</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span></div>
 
 
 
