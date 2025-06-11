@@ -11,8 +11,10 @@
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://city2graph.net/api/morphology.html" />
 <meta property="og:site_name" content="city2graph" />
+<meta property="og:description" content="Module for creating morphological graphs from urban data." />
 <meta property="og:image" content="https://city2graph.net/_static/social_preview.png" />
 <meta property="og:image:alt" content="city2graph" />
+<meta name="description" content="Module for creating morphological graphs from urban data." />
 
     <title>Morphology &#8212; city2graph</title>
   
@@ -396,86 +398,167 @@
                   
   <section id="module-city2graph.morphology">
 <span id="morphology"></span><h1>Morphology<a class="headerlink" href="#module-city2graph.morphology" title="Link to this heading">#</a></h1>
+<p>Module for creating morphological graphs from urban data.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.morphology.morphological_graph">
 <span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">morphological_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buildings_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segments_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_point</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'barrier_geometry'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contiguity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'queen'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_buildings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#morphological_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.morphological_graph" title="Link to this definition">#</a></dt>
-<dd><p>Create a morphological graph and return node/edge dictionaries.</p>
+<dd><p>Create a morphological graph from buildings and street segments.</p>
+<p>This function creates a comprehensive morphological graph that captures relationships
+between private spaces (building tessellations) and public spaces (street segments).
+The graph includes three types of relationships: private-to-private adjacency,
+public-to-public connectivity, and private-to-public interfaces.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeoDataFrame</span></code></a>], <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>], <a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeoDataFrame</span></code></a>]]</span></p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>buildings_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing building polygons. Should contain Polygon or MultiPolygon geometries.</p></li>
+<li><p><strong>segments_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing street segments. Should contain LineString geometries.</p></li>
+<li><p><strong>center_point</strong> (<em>Union</em><em>[</em><em>gpd.GeoSeries</em><em>, </em><em>gpd.GeoDataFrame</em><em>]</em><em>, </em><em>optional</em>) – Center point(s) for spatial filtering. If provided with distance parameter,
+only segments within the specified distance will be included.</p></li>
+<li><p><strong>distance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>optional</em>) – Maximum distance from center_point for spatial filtering. Only used if center_point is provided.</p></li>
+<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name to use for private space identifiers. If None, uses “tess_id”.
+If the column doesn’t exist, it will be created using row indices.</p></li>
+<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name to use for public space identifiers. If None, uses “id”.
+If the column doesn’t exist, it will be created using row indices.</p></li>
+<li><p><strong>public_geom_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name containing alternative geometry for public spaces. If specified and exists,
+this geometry will be used instead of the main geometry column for tessellation barriers.
+Default is “barrier_geometry”.</p></li>
+<li><p><strong>contiguity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default=&quot;queen&quot;</em>) – Type of spatial contiguity for private-to-private connections.
+Must be either “queen” or “rook”.</p></li>
+<li><p><strong>keep_buildings</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=False</em>) – If True, preserves building information in the tessellation output.</p></li>
+</ul>
 </dd>
-<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A tuple containing:
+- nodes: Dictionary with keys “private” and “public” containing node GeoDataFrames
+- edges: Dictionary with relationship type keys containing edge GeoDataFrames</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)">str</a>, gpd.GeoDataFrame], <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)">str</a>], gpd.GeoDataFrame]]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>buildings_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>GeoDataFrame</em></a>)</p></li>
-<li><p><strong>segments_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>GeoDataFrame</em></a>)</p></li>
-<li><p><strong>center_point</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoSeries.html#geopandas.GeoSeries" title="(in GeoPandas v1.1.0)"><em>GeoSeries</em></a><em> | </em><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>GeoDataFrame</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>distance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>public_geom_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>contiguity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
-<li><p><strong>keep_buildings</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If buildings_gdf or segments_gdf are not GeoDataFrames.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If contiguity parameter is not “queen” or “rook”.</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Notes</p>
+<p>The function creates tessellations from buildings and optionally uses street segments
+as barriers. It then establishes three types of relationships:</p>
+<ol class="arabic simple">
+<li><p>Private-to-private: Spatial adjacency between tessellation polygons</p></li>
+<li><p>Public-to-public: Topological connectivity between street segments</p></li>
+<li><p>Private-to-public: Spatial interfaces between tessellations and streets</p></li>
+</ol>
+<p>The output follows a heterogeneous graph structure suitable for network analysis
+of urban morphology.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.morphology.private_to_private_graph">
 <span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">private_to_private_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">private_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contiguity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'queen'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#private_to_private_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.private_to_private_graph" title="Link to this definition">#</a></dt>
-<dd><p>Return edges between contiguous private polygons.</p>
+<dd><p>Create edges between contiguous private polygons based on spatial adjacency.</p>
+<p>This function identifies spatial adjacency relationships between private polygons
+(e.g., tessellation cells) using either Queen or Rook contiguity criteria.
+Optionally groups connections within specified groups (e.g., enclosures).</p>
 <dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeoDataFrame</span></code></a></span></p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing private space polygons. Should contain Polygon geometries.</p></li>
+<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name to use for private space identifiers. If None, uses “tess_id”.
+If the column doesn’t exist, it will be created using row indices.</p></li>
+<li><p><strong>group_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name for grouping connections. Only polygons within the same group
+will be connected. If None, all polygons are considered as one group.</p></li>
+<li><p><strong>contiguity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default=&quot;queen&quot;</em>) – Type of spatial contiguity to use. Must be either “queen” or “rook”.
+Queen contiguity includes vertex neighbors, Rook includes only edge neighbors.</p></li>
+</ul>
 </dd>
-<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>GeoDataFrame containing edge geometries between adjacent polygons.
+Columns include from_private_id, to_private_id, group column, and geometry.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>GeoDataFrame</em></a>)</p></li>
-<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>group_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>contiguity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If private_gdf is not a GeoDataFrame.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If contiguity is not “queen” or “rook”, or if group_col doesn’t exist.</p></li>
 </ul>
 </dd>
 </dl>
+<p class="rubric">Notes</p>
+<p>The function uses libpysal’s spatial weights to determine adjacency relationships.
+Edge geometries are created as LineStrings connecting polygon centroids.
+Self-connections and duplicate edges are automatically filtered out.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.morphology.private_to_public_graph">
 <span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">private_to_public_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">private_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#private_to_public_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.private_to_public_graph" title="Link to this definition">#</a></dt>
-<dd><p>Connect private polygons to nearby public geometries.</p>
+<dd><p>Create edges between private polygons and nearby public geometries.</p>
+<p>This function identifies spatial relationships between private spaces (tessellations)
+and public spaces (street segments) by finding intersections between buffered public
+geometries and private polygons.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeoDataFrame</span></code></a></span></p>
-</dd>
-<dt class="field-even">Parameters<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>GeoDataFrame</em></a>)</p></li>
-<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>GeoDataFrame</em></a>)</p></li>
-<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>public_geom_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>private_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing private space polygons.</p></li>
+<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing public space geometries (typically LineStrings).</p></li>
+<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name for private space identifiers. If None, uses “tess_id”.</p></li>
+<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name for public space identifiers. If None, uses “id”.</p></li>
+<li><p><strong>public_geom_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name for alternative public geometry. If specified and exists,
+this geometry will be used instead of the main geometry column.</p></li>
+<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1.0</em>) – Buffer distance for public geometries to detect proximity to private spaces.</p></li>
 </ul>
 </dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>GeoDataFrame containing edge geometries between private and public spaces.
+Columns include private_id, public_id, and geometry.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If private_gdf or public_gdf are not GeoDataFrames.</p>
+</dd>
 </dl>
+<p class="rubric">Notes</p>
+<p>Edge geometries are created as LineStrings connecting the centroids of
+private polygons and public geometries. The function uses spatial joins
+to identify overlapping areas within the specified tolerance.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.morphology.public_to_public_graph">
 <span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">public_to_public_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">public_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#public_to_public_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.public_to_public_graph" title="Link to this definition">#</a></dt>
-<dd><p>Create edges between connected public segments.</p>
+<dd><p>Create edges between connected public segments based on topological connectivity.</p>
+<p>This function identifies topological connections between public space geometries
+(typically street segments) using the dual graph approach to find segments
+that share endpoints or connection points.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">GeoDataFrame</span></code></a></span></p>
-</dd>
-<dt class="field-even">Parameters<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>GeoDataFrame</em></a>)</p></li>
-<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
-<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>public_gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing public space geometries (typically LineStrings).</p></li>
+<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name for public space identifiers. If None, uses “id”.</p></li>
+<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1e-8</em>) – Distance tolerance for detecting endpoint connections between segments.</p></li>
 </ul>
 </dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>GeoDataFrame containing edge geometries between connected public segments.
+Columns include from_public_id, to_public_id, and geometry.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If public_gdf is not a GeoDataFrame.</p>
+</dd>
 </dl>
+<p class="rubric">Notes</p>
+<p>The function uses the dual graph approach where each LineString becomes a node,
+and edges represent topological connections between segments. Edge geometries
+are created as LineStrings connecting the centroids of connected segments.</p>
 </dd></dl>
 
 </section>
