@@ -370,16 +370,22 @@
 <span></span><span class="sd">&quot;&quot;&quot;Module for creating morphological graphs from urban data.&quot;&quot;&quot;</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">libpysal</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span><span class="p">,</span> <span class="n">Point</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_tessellation</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">dual_graph</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">filter_graph_by_distance</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">gdf_to_nx</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_create_nodes_gdf</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_extract_node_positions</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_get_nearest_node</span>
 
 <span class="c1"># Define the public API for this module</span>
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
@@ -406,6 +412,7 @@
     <span class="n">distance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">private_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">public_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">tessellation_distance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span>
     <span class="n">public_geom_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">&quot;barrier_geometry&quot;</span><span class="p">,</span>
     <span class="n">contiguity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;queen&quot;</span><span class="p">,</span>
     <span class="n">keep_buildings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -428,13 +435,25 @@
 <span class="sd">        Center point(s) for spatial filtering. If provided with distance parameter,</span>
 <span class="sd">        only segments within the specified distance will be included.</span>
 <span class="sd">    distance : float, optional</span>
-<span class="sd">        Maximum distance from center_point for spatial filtering. Only used if center_point is provided.</span>
+<span class="sd">        Maximum distance from ``center_point`` for spatial filtering. When</span>
+<span class="sd">        specified, street segments beyond this shortest-path distance are</span>
+<span class="sd">        removed and tessellation cells are kept only if their own distance via</span>
+<span class="sd">        these segments does not exceed this value.</span>
 <span class="sd">    private_id_col : str, optional</span>
 <span class="sd">        Column name to use for private space identifiers. If None, uses &quot;tess_id&quot;.</span>
 <span class="sd">        If the column doesn&#39;t exist, it will be created using row indices.</span>
 <span class="sd">    public_id_col : str, optional</span>
 <span class="sd">        Column name to use for public space identifiers. If None, uses &quot;id&quot;.</span>
 <span class="sd">        If the column doesn&#39;t exist, it will be created using row indices.</span>
+<span class="sd">    tessellation_distance : float, default=math.inf</span>
+<span class="sd">        Maximum allowed distance between tessellation cells and street segments.</span>
+<span class="sd">        Distances are evaluated within each ``enclosure_index`` group</span>
+<span class="sd">        if that column exists, otherwise globally. The distance is measured</span>
+<span class="sd">        between tessellation centroids and the nearest street segment.</span>
+<span class="sd">        The default of ``math.inf`` retains all cells. When ``center_point`` and</span>
+<span class="sd">        ``distance`` are provided, tessellation cells are additionally filtered</span>
+<span class="sd">        by their shortest-path distance from ``center_point`` via public</span>
+<span class="sd">        segments so that only cells within ``distance`` are kept.</span>
 <span class="sd">    public_geom_col : str, optional</span>
 <span class="sd">        Column name containing alternative geometry for public spaces. If specified and exists,</span>
 <span class="sd">        this geometry will be used instead of the main geometry column for tessellation barriers.</span>
@@ -497,7 +516,19 @@
     <span class="n">segs</span><span class="p">,</span> <span class="n">public_id_col</span> <span class="o">=</span> <span class="n">_ensure_id_column</span><span class="p">(</span><span class="n">segs</span><span class="p">,</span> <span class="n">public_id_col</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">)</span>
 
     <span class="c1"># Filter tessellation to only include areas adjacent to segments</span>
-    <span class="n">tessellation</span> <span class="o">=</span> <span class="n">_filter_adjacent_tessellation</span><span class="p">(</span><span class="n">tessellation</span><span class="p">,</span> <span class="n">segs</span><span class="p">)</span>
+    <span class="n">tessellation</span> <span class="o">=</span> <span class="n">_filter_adjacent_tessellation</span><span class="p">(</span>
+        <span class="n">tessellation</span><span class="p">,</span>
+        <span class="n">segs</span><span class="p">,</span>
+        <span class="n">max_distance</span><span class="o">=</span><span class="n">tessellation_distance</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">center_point</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">distance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">tessellation</span> <span class="o">=</span> <span class="n">_filter_tessellation_by_network_distance</span><span class="p">(</span>
+            <span class="n">tessellation</span><span class="p">,</span>
+            <span class="n">segs</span><span class="p">,</span>
+            <span class="n">center_point</span><span class="p">,</span>
+            <span class="n">distance</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="c1"># Optionally preserve building information</span>
     <span class="k">if</span> <span class="n">keep_buildings</span><span class="p">:</span>
@@ -1003,6 +1034,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_filter_adjacent_tessellation</span><span class="p">(</span>
     <span class="n">tess</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
     <span class="n">segments</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+    <span class="n">max_distance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Filter tessellation to only include cells adjacent to segments.</span>
@@ -1013,6 +1045,11 @@
 <span class="sd">        Tessellation GeoDataFrame</span>
 <span class="sd">    segments : geopandas.GeoDataFrame</span>
 <span class="sd">        Street segments GeoDataFrame</span>
+<span class="sd">    max_distance : float, optional</span>
+<span class="sd">        Maximum Euclidean distance between tessellation centroids and the</span>
+<span class="sd">        nearest segment. If ``tess`` contains an ``enclosure_index`` column,</span>
+<span class="sd">        distances are measured using only segments intersecting each enclosure.</span>
+<span class="sd">        Defaults to ``math.inf`` which retains all cells.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -1022,8 +1059,83 @@
     <span class="k">if</span> <span class="n">tess</span><span class="o">.</span><span class="n">empty</span> <span class="ow">or</span> <span class="n">segments</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
-    <span class="n">joined</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">sjoin</span><span class="p">(</span><span class="n">tess</span><span class="p">,</span> <span class="n">segments</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span><span class="p">,</span> <span class="n">predicate</span><span class="o">=</span><span class="s2">&quot;intersects&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">joined</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">unique</span><span class="p">()]</span>
+    <span class="k">if</span> <span class="n">math</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">max_distance</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">max_distance</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">joined</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">sjoin</span><span class="p">(</span><span class="n">tess</span><span class="p">,</span> <span class="n">segments</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span><span class="p">,</span> <span class="n">predicate</span><span class="o">=</span><span class="s2">&quot;intersects&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">joined</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">unique</span><span class="p">()]</span>
+
+    <span class="n">encl_col</span> <span class="o">=</span> <span class="s2">&quot;enclosure_index&quot;</span> <span class="k">if</span> <span class="s2">&quot;enclosure_index&quot;</span> <span class="ow">in</span> <span class="n">tess</span><span class="o">.</span><span class="n">columns</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="k">if</span> <span class="n">encl_col</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">segment_union</span> <span class="o">=</span> <span class="n">segments</span><span class="o">.</span><span class="n">unary_union</span>
+        <span class="n">centroids</span> <span class="o">=</span> <span class="n">tess</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">centroid</span>
+        <span class="n">distances</span> <span class="o">=</span> <span class="n">centroids</span><span class="o">.</span><span class="n">distance</span><span class="p">(</span><span class="n">segment_union</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">distances</span> <span class="o">&lt;=</span> <span class="n">max_distance</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="n">filtered_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">encl_id</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">tess</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">encl_col</span><span class="p">):</span>
+        <span class="n">enclosure_geom</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">unary_union</span>
+        <span class="n">segs</span> <span class="o">=</span> <span class="n">segments</span><span class="p">[</span><span class="n">segments</span><span class="o">.</span><span class="n">intersects</span><span class="p">(</span><span class="n">enclosure_geom</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="n">segs</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">segment_union</span> <span class="o">=</span> <span class="n">segs</span><span class="o">.</span><span class="n">unary_union</span>
+        <span class="n">centroids</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">centroid</span>
+        <span class="n">distances</span> <span class="o">=</span> <span class="n">centroids</span><span class="o">.</span><span class="n">distance</span><span class="p">(</span><span class="n">segment_union</span><span class="p">)</span>
+        <span class="n">filtered</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">distances</span> <span class="o">&lt;=</span> <span class="n">max_distance</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">filtered</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+            <span class="n">filtered_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">filtered</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">filtered_parts</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">tess</span><span class="o">.</span><span class="n">columns</span><span class="p">,</span> <span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;geometry&quot;</span><span class="p">,</span> <span class="n">crs</span><span class="o">=</span><span class="n">tess</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">filtered_parts</span><span class="p">),</span> <span class="n">crs</span><span class="o">=</span><span class="n">tess</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_filter_tessellation_by_network_distance</span><span class="p">(</span>
+    <span class="n">tess</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+    <span class="n">segments</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">,</span>
+    <span class="n">center_point</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span> <span class="o">|</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="n">Point</span><span class="p">,</span>
+    <span class="n">max_distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Filter tessellation by network distance from a center point.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">tess</span><span class="o">.</span><span class="n">empty</span> <span class="ow">or</span> <span class="n">segments</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="n">graph</span> <span class="o">=</span> <span class="n">gdf_to_nx</span><span class="p">(</span><span class="n">edges</span><span class="o">=</span><span class="n">segments</span><span class="p">)</span>
+    <span class="n">pos_dict</span> <span class="o">=</span> <span class="n">_extract_node_positions</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">pos_dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="n">nodes</span> <span class="o">=</span> <span class="n">_create_nodes_gdf</span><span class="p">(</span><span class="n">pos_dict</span><span class="p">,</span> <span class="s2">&quot;node_id&quot;</span><span class="p">,</span> <span class="n">tess</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">):</span>
+        <span class="n">center_geom</span> <span class="o">=</span> <span class="n">center_point</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">):</span>
+        <span class="n">center_geom</span> <span class="o">=</span> <span class="n">center_point</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">center_geom</span> <span class="o">=</span> <span class="n">center_point</span>
+
+    <span class="n">center_node</span> <span class="o">=</span> <span class="n">_get_nearest_node</span><span class="p">(</span><span class="n">center_geom</span><span class="p">,</span> <span class="n">nodes</span><span class="p">,</span> <span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;node_id&quot;</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">distances</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">single_source_dijkstra_path_length</span><span class="p">(</span>
+            <span class="n">graph</span><span class="p">,</span> <span class="n">center_node</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="s2">&quot;length&quot;</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="n">nx</span><span class="o">.</span><span class="n">NetworkXNoPath</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">NodeNotFound</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="n">centroids</span> <span class="o">=</span> <span class="n">tess</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">centroid</span>
+    <span class="n">centroid_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">({</span><span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="n">centroids</span><span class="p">},</span> <span class="n">crs</span><span class="o">=</span><span class="n">tess</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+    <span class="n">nearest</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">sjoin_nearest</span><span class="p">(</span>
+        <span class="n">centroid_gdf</span><span class="p">,</span> <span class="n">nodes</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="n">distance_col</span><span class="o">=</span><span class="s2">&quot;_dist&quot;</span>
+    <span class="p">)</span>
+
+    <span class="n">total_dist</span> <span class="o">=</span> <span class="n">nearest</span><span class="p">[</span><span class="s2">&quot;node_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span> <span class="o">+</span> <span class="n">nearest</span><span class="p">[</span><span class="s2">&quot;_dist&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+
+    <span class="n">keep</span> <span class="o">=</span> <span class="n">total_dist</span> <span class="o">&lt;=</span> <span class="n">max_distance</span>
+    <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_add_building_info</span><span class="p">(</span>
