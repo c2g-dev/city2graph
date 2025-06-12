@@ -454,8 +454,11 @@ Must be either “queen” or “rook”.</p></li>
 </dd>
 </dl>
 <p class="rubric">Notes</p>
-<p>The function creates tessellations from buildings and optionally uses street segments
-as barriers. It then establishes three types of relationships:</p>
+<p>The function first filters the street network by <code class="docutils literal notranslate"><span class="pre">distance</span></code> and by a
+buffered distance (<code class="docutils literal notranslate"><span class="pre">distance</span></code> + <code class="docutils literal notranslate"><span class="pre">tessellation_distance</span></code>).  The buffered
+network is used to create enclosures and tessellations, ensuring that costly
+tessellation operations are run only on the necessary subset of the network.
+It then establishes three types of relationships:</p>
 <ol class="arabic simple">
 <li><p>Private-to-private: Spatial adjacency between tessellation polygons</p></li>
 <li><p>Public-to-public: Topological connectivity between street segments</p></li>

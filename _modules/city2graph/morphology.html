@@ -374,18 +374,16 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">geopandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">gpd</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">libpysal</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">networkx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nx</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span><span class="p">,</span> <span class="n">Point</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">LineString</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">shapely.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Point</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_tessellation</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">dual_graph</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">filter_graph_by_distance</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">gdf_to_nx</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_create_nodes_gdf</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_extract_node_positions</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">_get_nearest_node</span>
 
 <span class="c1"># Define the public API for this module</span>
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
@@ -480,8 +478,11 @@
 
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
-<span class="sd">    The function creates tessellations from buildings and optionally uses street segments</span>
-<span class="sd">    as barriers. It then establishes three types of relationships:</span>
+<span class="sd">    The function first filters the street network by ``distance`` and by a</span>
+<span class="sd">    buffered distance (``distance`` + ``tessellation_distance``).  The buffered</span>
+<span class="sd">    network is used to create enclosures and tessellations, ensuring that costly</span>
+<span class="sd">    tessellation operations are run only on the necessary subset of the network.</span>
+<span class="sd">    It then establishes three types of relationships:</span>
 
 <span class="sd">    1. Private-to-private: Spatial adjacency between tessellation polygons</span>
 <span class="sd">    2. Public-to-public: Topological connectivity between street segments</span>
@@ -500,22 +501,38 @@
     <span class="n">private_id_col</span> <span class="o">=</span> <span class="n">private_id_col</span> <span class="ow">or</span> <span class="s2">&quot;tess_id&quot;</span>
     <span class="n">public_id_col</span> <span class="o">=</span> <span class="n">public_id_col</span> <span class="ow">or</span> <span class="s2">&quot;id&quot;</span>
 
-    <span class="c1"># Prepare barriers and create tessellation</span>
-    <span class="n">barriers</span> <span class="o">=</span> <span class="n">_prepare_barriers</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">,</span> <span class="n">public_geom_col</span><span class="p">)</span>
+    <span class="c1"># Ensure ID column on original segments before filtering</span>
+    <span class="n">segments_gdf</span><span class="p">,</span> <span class="n">public_id_col</span> <span class="o">=</span> <span class="n">_ensure_id_column</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">,</span> <span class="n">public_id_col</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Filter segments by network distance for the final graph</span>
+    <span class="k">if</span> <span class="n">center_point</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">distance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="n">segs</span> <span class="o">=</span> <span class="n">filter_graph_by_distance</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">,</span> <span class="n">center_point</span><span class="p">,</span> <span class="n">distance</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">segs</span> <span class="o">=</span> <span class="n">segments_gdf</span>
+
+    <span class="c1"># Create a buffered version of the graph for tessellation creation</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">center_point</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="ow">and</span> <span class="n">distance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="ow">and</span> <span class="ow">not</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">empty</span>
+        <span class="ow">and</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">tessellation_distance</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="n">buffer_dist</span> <span class="o">=</span> <span class="n">distance</span> <span class="o">+</span> <span class="n">tessellation_distance</span>
+        <span class="n">segs_buffer</span> <span class="o">=</span> <span class="n">filter_graph_by_distance</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">,</span> <span class="n">center_point</span><span class="p">,</span> <span class="n">buffer_dist</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">center_point</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">distance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="n">segs_buffer</span> <span class="o">=</span> <span class="n">filter_graph_by_distance</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">,</span> <span class="n">center_point</span><span class="p">,</span> <span class="n">distance</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">segs_buffer</span> <span class="o">=</span> <span class="n">segments_gdf</span>
+
+    <span class="c1"># Prepare barriers from the buffered segments and create tessellation</span>
+    <span class="n">barriers</span> <span class="o">=</span> <span class="n">_prepare_barriers</span><span class="p">(</span><span class="n">segs_buffer</span><span class="p">,</span> <span class="n">public_geom_col</span><span class="p">)</span>
     <span class="n">tessellation</span> <span class="o">=</span> <span class="n">create_tessellation</span><span class="p">(</span>
         <span class="n">buildings_gdf</span><span class="p">,</span>
         <span class="n">primary_barriers</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">barriers</span><span class="o">.</span><span class="n">empty</span> <span class="k">else</span> <span class="n">barriers</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">tessellation</span><span class="p">,</span> <span class="n">private_id_col</span> <span class="o">=</span> <span class="n">_ensure_id_column</span><span class="p">(</span><span class="n">tessellation</span><span class="p">,</span> <span class="n">private_id_col</span><span class="p">,</span> <span class="s2">&quot;tess_id&quot;</span><span class="p">)</span>
 
-    <span class="c1"># Apply spatial filtering if requested</span>
-    <span class="k">if</span> <span class="n">center_point</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">distance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">segments_gdf</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
-        <span class="n">segs</span> <span class="o">=</span> <span class="n">filter_graph_by_distance</span><span class="p">(</span><span class="n">segments_gdf</span><span class="p">,</span> <span class="n">center_point</span><span class="p">,</span> <span class="n">distance</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">segs</span> <span class="o">=</span> <span class="n">segments_gdf</span>
-    <span class="n">segs</span><span class="p">,</span> <span class="n">public_id_col</span> <span class="o">=</span> <span class="n">_ensure_id_column</span><span class="p">(</span><span class="n">segs</span><span class="p">,</span> <span class="n">public_id_col</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">)</span>
-
-    <span class="c1"># Filter tessellation to only include areas adjacent to segments</span>
+    <span class="c1"># Filter tessellation to only include areas adjacent to the buffered segments</span>
     <span class="n">tessellation</span> <span class="o">=</span> <span class="n">_filter_adjacent_tessellation</span><span class="p">(</span>
         <span class="n">tessellation</span><span class="p">,</span>
         <span class="n">segs</span><span class="p">,</span>
@@ -1075,7 +1092,7 @@
         <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">distances</span> <span class="o">&lt;=</span> <span class="n">max_distance</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
     <span class="n">filtered_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">encl_id</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">tess</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">encl_col</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">tess</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">encl_col</span><span class="p">):</span>
         <span class="n">enclosure_geom</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">unary_union</span>
         <span class="n">segs</span> <span class="o">=</span> <span class="n">segments</span><span class="p">[</span><span class="n">segments</span><span class="o">.</span><span class="n">intersects</span><span class="p">(</span><span class="n">enclosure_geom</span><span class="p">)]</span>
         <span class="k">if</span> <span class="n">segs</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
@@ -1100,42 +1117,52 @@
     <span class="n">max_distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Filter tessellation by network distance from a center point.&quot;&quot;&quot;</span>
+    <span class="c1"># handle empty inputs</span>
     <span class="k">if</span> <span class="n">tess</span><span class="o">.</span><span class="n">empty</span> <span class="ow">or</span> <span class="n">segments</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
+    <span class="c1"># build merged graph: segment network</span>
     <span class="n">graph</span> <span class="o">=</span> <span class="n">gdf_to_nx</span><span class="p">(</span><span class="n">edges</span><span class="o">=</span><span class="n">segments</span><span class="p">)</span>
-    <span class="n">pos_dict</span> <span class="o">=</span> <span class="n">_extract_node_positions</span><span class="p">(</span><span class="n">graph</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">pos_dict</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">pos</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">get_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
 
-    <span class="n">nodes</span> <span class="o">=</span> <span class="n">_create_nodes_gdf</span><span class="p">(</span><span class="n">pos_dict</span><span class="p">,</span> <span class="s2">&quot;node_id&quot;</span><span class="p">,</span> <span class="n">tess</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
+    <span class="c1"># add tessellation centroids as nodes and connect to segment network</span>
+    <span class="n">centroids</span> <span class="o">=</span> <span class="n">tess</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">centroid</span>
+    <span class="n">centroid_node_ids</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">pt</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">centroids</span><span class="p">):</span>
+        <span class="n">nid</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;centroid_</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">centroid_node_ids</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">nid</span>
+        <span class="n">graph</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="n">nid</span><span class="p">,</span> <span class="n">pos</span><span class="o">=</span><span class="p">(</span><span class="n">pt</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">pt</span><span class="o">.</span><span class="n">y</span><span class="p">))</span>
+        <span class="c1"># connect to nearest segment node</span>
+        <span class="n">nearest_seg</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">pos</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">it</span><span class="p">:</span> <span class="p">(</span><span class="n">it</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="n">pt</span><span class="o">.</span><span class="n">x</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="o">+</span><span class="p">(</span><span class="n">it</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="n">pt</span><span class="o">.</span><span class="n">y</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="n">pt</span><span class="o">.</span><span class="n">distance</span><span class="p">(</span><span class="n">Point</span><span class="p">(</span><span class="o">*</span><span class="n">pos</span><span class="p">[</span><span class="n">nearest_seg</span><span class="p">]))</span>
+        <span class="n">graph</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">nid</span><span class="p">,</span> <span class="n">nearest_seg</span><span class="p">,</span> <span class="n">length</span><span class="o">=</span><span class="n">d</span><span class="p">)</span>
 
+    <span class="c1"># connect centroids among themselves by Euclidean distance</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">ni</span> <span class="ow">in</span> <span class="n">centroid_node_ids</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">nj</span> <span class="ow">in</span> <span class="n">centroid_node_ids</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">j</span><span class="p">:</span>
+                <span class="n">pi</span><span class="p">,</span> <span class="n">pj</span> <span class="o">=</span> <span class="n">centroids</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">centroids</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
+                <span class="n">d2</span> <span class="o">=</span> <span class="n">pi</span><span class="o">.</span><span class="n">distance</span><span class="p">(</span><span class="n">pj</span><span class="p">)</span>
+                <span class="n">graph</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="n">ni</span><span class="p">,</span> <span class="n">nj</span><span class="p">,</span> <span class="n">length</span><span class="o">=</span><span class="n">d2</span><span class="p">)</span>
+
+    <span class="c1"># determine center node on merged graph</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">):</span>
-        <span class="n">center_geom</span> <span class="o">=</span> <span class="n">center_point</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">cg</span> <span class="o">=</span> <span class="n">center_point</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">center_point</span><span class="p">,</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoSeries</span><span class="p">):</span>
-        <span class="n">center_geom</span> <span class="o">=</span> <span class="n">center_point</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">cg</span> <span class="o">=</span> <span class="n">center_point</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">center_geom</span> <span class="o">=</span> <span class="n">center_point</span>
-
-    <span class="n">center_node</span> <span class="o">=</span> <span class="n">_get_nearest_node</span><span class="p">(</span><span class="n">center_geom</span><span class="p">,</span> <span class="n">nodes</span><span class="p">,</span> <span class="n">node_id</span><span class="o">=</span><span class="s2">&quot;node_id&quot;</span><span class="p">)</span>
+        <span class="n">cg</span> <span class="o">=</span> <span class="n">center_point</span>
+    <span class="n">all_pos</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">get_node_attributes</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">)</span>
+    <span class="n">center_node</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">all_pos</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">it</span><span class="p">:</span> <span class="p">(</span><span class="n">it</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="n">cg</span><span class="o">.</span><span class="n">x</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="o">+</span><span class="p">(</span><span class="n">it</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="n">cg</span><span class="o">.</span><span class="n">y</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
 
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">distances</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">single_source_dijkstra_path_length</span><span class="p">(</span>
-            <span class="n">graph</span><span class="p">,</span> <span class="n">center_node</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="s2">&quot;length&quot;</span>
-        <span class="p">)</span>
+        <span class="n">lengths</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">single_source_dijkstra_path_length</span><span class="p">(</span><span class="n">graph</span><span class="p">,</span> <span class="n">center_node</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="s2">&quot;length&quot;</span><span class="p">)</span>
     <span class="k">except</span> <span class="p">(</span><span class="n">nx</span><span class="o">.</span><span class="n">NetworkXNoPath</span><span class="p">,</span> <span class="n">nx</span><span class="o">.</span><span class="n">NodeNotFound</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
-    <span class="n">centroids</span> <span class="o">=</span> <span class="n">tess</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">centroid</span>
-    <span class="n">centroid_gdf</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span><span class="p">({</span><span class="s2">&quot;geometry&quot;</span><span class="p">:</span> <span class="n">centroids</span><span class="p">},</span> <span class="n">crs</span><span class="o">=</span><span class="n">tess</span><span class="o">.</span><span class="n">crs</span><span class="p">)</span>
-    <span class="n">nearest</span> <span class="o">=</span> <span class="n">gpd</span><span class="o">.</span><span class="n">sjoin_nearest</span><span class="p">(</span>
-        <span class="n">centroid_gdf</span><span class="p">,</span> <span class="n">nodes</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="n">distance_col</span><span class="o">=</span><span class="s2">&quot;_dist&quot;</span>
-    <span class="p">)</span>
-
-    <span class="n">total_dist</span> <span class="o">=</span> <span class="n">nearest</span><span class="p">[</span><span class="s2">&quot;node_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span> <span class="o">+</span> <span class="n">nearest</span><span class="p">[</span><span class="s2">&quot;_dist&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
-
-    <span class="n">keep</span> <span class="o">=</span> <span class="n">total_dist</span> <span class="o">&lt;=</span> <span class="n">max_distance</span>
-    <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="c1"># filter tess by network distance via centroid nodes</span>
+    <span class="n">keep_idxs</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">nid</span> <span class="ow">in</span> <span class="n">centroid_node_ids</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">lengths</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">nid</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">max_distance</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">tess</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">keep_idxs</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_add_building_info</span><span class="p">(</span>
