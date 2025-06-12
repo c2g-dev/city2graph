@@ -401,7 +401,7 @@
 <p>Module for creating morphological graphs from urban data.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.morphology.morphological_graph">
-<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">morphological_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buildings_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segments_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_point</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tessellation_distance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'barrier_geometry'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contiguity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'queen'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_buildings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#morphological_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.morphological_graph" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">city2graph.morphology.</span></span><span class="sig-name descname"><span class="pre">morphological_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">buildings_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segments_gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">center_point</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">clipping_buffer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_geom_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'barrier_geometry'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contiguity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'queen'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_buildings</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">private_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">public_id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/morphology.html#morphological_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.morphology.morphological_graph" title="Link to this definition">#</a></dt>
 <dd><p>Create a morphological graph from buildings and street segments.</p>
 <p>This function creates a comprehensive morphological graph that captures relationships
 between private spaces (building tessellations) and public spaces (street segments).
@@ -418,24 +418,31 @@ only segments within the specified distance will be included.</p></li>
 specified, street segments beyond this shortest-path distance are
 removed and tessellation cells are kept only if their own distance via
 these segments does not exceed this value.</p></li>
-<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name to use for private space identifiers. If None, uses “tess_id”.
-If the column doesn’t exist, it will be created using row indices.</p></li>
-<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name to use for public space identifiers. If None, uses “id”.
-If the column doesn’t exist, it will be created using row indices.</p></li>
-<li><p><strong>tessellation_distance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=math.inf</em>) – Maximum allowed distance between tessellation cells and street segments.
-Distances are evaluated within each <code class="docutils literal notranslate"><span class="pre">enclosure_index</span></code> group
-if that column exists, otherwise globally. The distance is measured
-between tessellation centroids and the nearest street segment.
-The default of <code class="docutils literal notranslate"><span class="pre">math.inf</span></code> retains all cells. When <code class="docutils literal notranslate"><span class="pre">center_point</span></code> and
-<code class="docutils literal notranslate"><span class="pre">distance</span></code> are provided, tessellation cells are additionally filtered
-by their shortest-path distance from <code class="docutils literal notranslate"><span class="pre">center_point</span></code> via public
-segments so that only cells within <code class="docutils literal notranslate"><span class="pre">distance</span></code> are kept.</p></li>
+<li><p><strong>clipping_buffer</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=math.inf</em>) – Additional buffer distance (non-negative) to be added to <cite>distance</cite> when
+<cite>distance</cite> and <cite>center_point</cite> are specified.
+This sum (<cite>distance + clipping_buffer</cite>) is used as the radius for filtering
+<cite>segs_buffer</cite> (segments used for tessellation context).
+If <cite>clipping_buffer</cite> is <cite>math.inf</cite> (and <cite>distance</cite> is set), <cite>segs_buffer</cite> is
+filtered by <cite>distance</cite> alone.
+The <cite>max_distance</cite> for <cite>_filter_adjacent_tessellation</cite> becomes
+<cite>distance + clipping_buffer</cite> (this evaluates to <cite>math.inf</cite> if <cite>clipping_buffer</cite>
+is <cite>math.inf</cite> or if <cite>distance</cite> is not set).
+If <cite>distance</cite> is not provided, <cite>clipping_buffer</cite> is effectively ignored for
+<cite>segs_buffer</cite> filtering, and <cite>max_distance</cite> for <cite>_filter_adjacent_tessellation</cite>
+defaults to <cite>math.inf</cite>.
+Must be non-negative. Defaults to <cite>math.inf</cite>.</p></li>
 <li><p><strong>public_geom_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name containing alternative geometry for public spaces. If specified and exists,
 this geometry will be used instead of the main geometry column for tessellation barriers.
 Default is “barrier_geometry”.</p></li>
 <li><p><strong>contiguity</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default=&quot;queen&quot;</em>) – Type of spatial contiguity for private-to-private connections.
 Must be either “queen” or “rook”.</p></li>
 <li><p><strong>keep_buildings</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=False</em>) – If True, preserves building information in the tessellation output.</p></li>
+<li><p><strong>private_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name for private space (tessellation) identifiers.
+If None, defaults to “private_id” (which will be created if it doesn’t exist).
+If a column name is provided, it must exist in the tessellation GeoDataFrame.</p></li>
+<li><p><strong>public_id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Column name for public space (segment) identifiers.
+If None, defaults to “public_id” (which will be created if it doesn’t exist).
+If a column name is provided, it must exist in the segments GeoDataFrame.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -449,21 +456,21 @@ Must be either “queen” or “rook”.</p></li>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If buildings_gdf or segments_gdf are not GeoDataFrames.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If contiguity parameter is not “queen” or “rook”.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If contiguity parameter is not “queen” or “rook”.
+    If clipping_buffer is negative.</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Notes</p>
-<p>The function first filters the street network by <code class="docutils literal notranslate"><span class="pre">distance</span></code> and by a
-buffered distance (<code class="docutils literal notranslate"><span class="pre">distance</span></code> + <code class="docutils literal notranslate"><span class="pre">tessellation_distance</span></code>).  The buffered
-network is used to create enclosures and tessellations, ensuring that costly
-tessellation operations are run only on the necessary subset of the network.
-It then establishes three types of relationships:</p>
-<ol class="arabic simple">
-<li><p>Private-to-private: Spatial adjacency between tessellation polygons</p></li>
-<li><p>Public-to-public: Topological connectivity between street segments</p></li>
-<li><p>Private-to-public: Spatial interfaces between tessellations and streets</p></li>
-</ol>
+<p>The function first filters the street network by <cite>distance</cite> (resulting in <cite>segs</cite>).
+A <cite>segs_buffer</cite> GeoDataFrame is also created for tessellation context, potentially
+filtered by <cite>distance + clipping_buffer</cite> or <cite>distance</cite> if <cite>center_point</cite> and
+<cite>distance</cite> are provided. This <cite>segs_buffer</cite> is used to create enclosures and
+tessellations.
+It then establishes three types of relationships:
+1. Private-to-private: Adjacency between tessellation cells (handled by private_to_private_graph)
+2. Public-to-public: Topological connectivity between street segments
+3. Private-to-public: Spatial interfaces between tessellations and streets</p>
 <p>The output follows a heterogeneous graph structure suitable for network analysis
 of urban morphology.</p>
 </dd></dl>
@@ -497,7 +504,7 @@ Columns include from_private_id, to_private_id, group column, and geometry.</p>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If private_gdf is not a GeoDataFrame.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If contiguity is not “queen” or “rook”, or if group_col doesn’t exist.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If contiguity not in {“queen”, “rook”}, or if group_col doesn’t exist.</p></li>
 </ul>
 </dd>
 </dl>
