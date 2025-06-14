@@ -459,27 +459,38 @@ These can include parameters specific to the tessellation method used.</p></li>
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.utils.dual_graph">
 <span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">dual_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#dual_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.dual_graph" title="Link to this definition">#</a></dt>
-<dd><p>Convert a GeoDataFrame to a NetworkX graph and then back to a GeoDataFrame.</p>
-<p>Also detects connections where endpoints of one linestring are on another linestring.</p>
+<dd><p>Convert a GeoDataFrame of LineStrings to a graph representation with nodes and edges.</p>
+<p>Nodes in the output represent the original LineStrings, with Point geometry at their centroids.
+Edges represent connectivity between these original LineStrings, derived from both
+momepy’s dual graph approach (adjacencies) and endpoint proximity.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing LineString geometries to convert</p></li>
-<li><p><strong>id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name that uniquely identifies each feature
-If None, will use DataFrame index</p></li>
-<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default 1e-8</em>) – Distance tolerance for detecting endpoint connections</p></li>
+<li><p><strong>gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing LineString geometries to convert.</p></li>
+<li><p><strong>id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in <cite>gdf</cite> that uniquely identifies each feature.
+If None, the index of <cite>gdf</cite> is used. These identifiers will be used
+for the index of the output node GeoDataFrame and in the MultiIndex
+of the output edge GeoDataFrame.</p></li>
+<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default 1e-8</em>) – Distance tolerance for detecting endpoint connections for additional edges.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>(GeoDataFrame of nodes, dict of connections)</p>
+<dd class="field-even"><p><ul class="simple">
+<li><p>nodes_gdf: GeoDataFrame of nodes, indexed by identifiers derived from
+<cite>gdf.index</cite> or <cite>gdf[id_col]</cite>. Geometry is Point (centroid of original lines).</p></li>
+<li><p>edges_gdf: GeoDataFrame of edges, with a MultiIndex <cite>(source_id, target_id)</cite>
+using the same identifiers. Geometry is LineString connecting centroids of
+connected original lines.</p></li>
+</ul>
+</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)">tuple</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)">tuple</a>[<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a>, <a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a>]</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If input is not a GeoDataFrame or if tolerance is not a number</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If GeoDataFrame is empty or contains invalid geometries</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If input is not a GeoDataFrame or if tolerance is not a number.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If GeoDataFrame is empty or contains invalid geometries, or if <cite>id_col</cite> is invalid.</p></li>
 </ul>
 </dd>
 </dl>
