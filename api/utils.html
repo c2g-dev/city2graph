@@ -458,40 +458,49 @@ These can include parameters specific to the tessellation method used.</p></li>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="city2graph.utils.dual_graph">
-<span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">dual_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-08</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#dual_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.dual_graph" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">city2graph.utils.</span></span><span class="sig-name descname"><span class="pre">dual_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_original_geom</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/city2graph/utils.html#dual_graph"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#city2graph.utils.dual_graph" title="Link to this definition">#</a></dt>
 <dd><p>Convert a GeoDataFrame of LineStrings to a graph representation with nodes and edges.</p>
-<p>Nodes in the output represent the original LineStrings, with Point geometry at their centroids.
-Edges represent connectivity between these original LineStrings, derived from both
-momepy’s dual graph approach (adjacencies) and endpoint proximity.</p>
+<p>Based on momepy’s dual graph approach. Nodes represent original LineStrings (with Point
+geometry at centroids), and edges represent connectivity from momepy.</p>
+<p>The process is:
+1. Keep the original index of <cite>gdf</cite> in a dedicated column.
+2. Create a dual graph (NetworkX graph) using momepy.gdf_to_nx.
+3. Convert the NetworkX graph back to GeoDataFrames (nodes_gdf, edges_gdf)</p>
+<blockquote>
+<div><p>using city2graph.nx_to_gdf.</p>
+</div></blockquote>
+<ol class="arabic simple" start="4">
+<li><p>Establish a mapping from temporary momepy-generated node IDs to the original IDs.</p></li>
+<li><p>Set the index of the final nodes_gdf to be the original IDs.</p></li>
+<li><p>Convert the MultiIndex of the final edges_gdf to use original IDs.</p></li>
+<li><p>If <cite>keep_original_geom</cite> is True, add the original geometry of <cite>gdf</cite> to <cite>nodes_gdf</cite>
+as a new column named “original_geometry”.</p></li>
+</ol>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing LineString geometries to convert.</p></li>
-<li><p><strong>id_col</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>default None</em>) – Column name in <cite>gdf</cite> that uniquely identifies each feature.
-If None, the index of <cite>gdf</cite> is used. These identifiers will be used
-for the index of the output node GeoDataFrame and in the MultiIndex
-of the output edge GeoDataFrame.</p></li>
-<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default 1e-8</em>) – Distance tolerance for detecting endpoint connections for additional edges.</p></li>
+<li><p><strong>gdf</strong> (<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)"><em>geopandas.GeoDataFrame</em></a>) – GeoDataFrame containing LineString geometries. Must have a CRS.</p></li>
+<li><p><strong>keep_original_geom</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=False</em>) – If True, the original geometry of <cite>gdf</cite> is preserved in the output <cite>nodes_gdf</cite>
+as a GeoSeries column named “original_geometry”.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><ul class="simple">
-<li><p>nodes_gdf: GeoDataFrame of nodes, indexed by identifiers derived from
-<cite>gdf.index</cite> or <cite>gdf[id_col]</cite>. Geometry is Point (centroid of original lines).</p></li>
-<li><p>edges_gdf: GeoDataFrame of edges, with a MultiIndex <cite>(source_id, target_id)</cite>
-using the same identifiers. Geometry is LineString connecting centroids of
-connected original lines.</p></li>
+<li><dl class="simple">
+<dt>nodes_gdf: Nodes with original identifiers as index and Point geometry.</dt><dd><p>Other attributes from the input <cite>gdf</cite> are preserved.</p>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>edges_gdf: Edges with MultiIndex of original identifiers and LineString geometry</dt><dd><p>representing connections from momepy’s dual graph.</p>
+</dd>
+</dl>
+</li>
 </ul>
 </p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.13)">tuple</a>[<a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a>, <a class="reference external" href="https://geopandas.org/en/stable/docs/reference/api/geopandas.GeoDataFrame.html#geopandas.GeoDataFrame" title="(in GeoPandas v1.1.0)">geopandas.GeoDataFrame</a>]</p>
-</dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If input is not a GeoDataFrame or if tolerance is not a number.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If GeoDataFrame is empty or contains invalid geometries, or if <cite>id_col</cite> is invalid.</p></li>
-</ul>
 </dd>
 </dl>
 </dd></dl>
