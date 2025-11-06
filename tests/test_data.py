@@ -2,11 +2,16 @@
 
 import importlib.util
 import subprocess
+from pathlib import Path
+from typing import Optional
 from unittest.mock import Mock
 from unittest.mock import patch
 
 import geopandas as gpd
+import pandas as pd
 import pytest
+import requests
+from requests.adapters import HTTPAdapter
 from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
@@ -23,6 +28,17 @@ VALID_OVERTURE_TYPES = data_module.VALID_OVERTURE_TYPES
 WGS84_CRS = data_module.WGS84_CRS
 load_overture_data = data_module.load_overture_data
 process_overture_segments = data_module.process_overture_segments
+_requests_session = data_module._requests_session
+load_transportation_networks_data = data_module.load_transportation_networks_data
+_get_available_transportation_networks = data_module._get_available_transportation_networks
+_get_transportation_networks_data = data_module._get_transportation_networks_data
+_strip_metadata = data_module._strip_metadata
+_parse_tntp_from_lines = data_module._parse_tntp_from_lines
+_parse_network_file = data_module._parse_network_file
+_parse_flow_file = data_module._parse_flow_file
+_parse_trips_file = data_module._parse_trips_file
+_parse_nodes_file = data_module._parse_nodes_file
+TransportationNetworkData = data_module.TransportationNetworkData
 
 
 # Tests for constants and basic functionality
@@ -808,3 +824,345 @@ def test_process_overture_segments_with_short_linestring() -> None:
 
     # Should process without errors
     assert len(result) == len(segments_gdf)
+
+
+def test_requests_session_default_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Session should include retry adapter and custom user agent."""
+    session = _requests_session()
+    try:
+        assert session.headers["User-Agent"] == "tntp-loader/1.0"
+        assert "Authorization" not in session.headers
+        adapter = session.adapters["https://"]
+        assert isinstance(adapter, HTTPAdapter)
+        assert adapter.max_retries.total == 5
+    finally:
+        session.close()
+
+def test_load_transportation_networks_data_happy_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify helper wiring and return conversion for transportation networks loader."""
+    mock_session = Mock()
+    network_df = pd.DataFrame({"capacity": [100]})
+    with (
+        patch.object(data_module, "_requests_session", return_value=mock_session) as mock_session_factory,
+        patch.object(data_module, "_get_available_transportation_networks", return_value=["TestNet"]) as mock_available,
+        patch.object(data_module, "_get_transportation_networks_data") as mock_get_data,
+    ):
+        mock_get_data.return_value = TransportationNetworkData(
+            network=network_df,
+            trips=None,
+            nodes=None,
+            flow=None,
+        )
+
+        result = load_transportation_networks_data(
+            "TestNet",
+            load_trips=False,
+            load_nodes=False,
+            load_flow=False,
+        )
+
+        mock_session_factory.assert_called_once()
+        mock_available.assert_called_once_with(mock_session)
+        mock_get_data.assert_called_once_with(
+            session=mock_session,
+            network_name="TestNet",
+            output_dir=None,
+            save_to_file=False,
+            load_network=True,
+            load_trips=False,
+            load_nodes=False,
+            load_flow=False,
+            download_if_missing=True,
+            best_effort=True,
+        )
+
+    assert set(result.keys()) == {"network", "trips", "nodes", "flow"}
+    pd.testing.assert_frame_equal(result["network"], network_df)
+    assert result["trips"] is None
+
+
+def test_load_transportation_networks_data_unknown_network() -> None:
+    """Unknown network names should raise early."""
+    mock_session = Mock()
+    with (
+        patch.object(data_module, "_requests_session", return_value=mock_session),
+        patch.object(data_module, "_get_available_transportation_networks", return_value=["OtherNet"]),
+    ):
+        with pytest.raises(ValueError, match="Network 'MissingNet' not found"):
+            load_transportation_networks_data("MissingNet")
+
+
+def test_load_transportation_networks_data_requires_output_dir() -> None:
+    """Saving to disk without output directory is invalid."""
+    mock_session = Mock()
+    with (
+        patch.object(data_module, "_requests_session", return_value=mock_session),
+        patch.object(data_module, "_get_available_transportation_networks", return_value=["TestNet"]),
+    ):
+        with pytest.raises(ValueError, match="output_dir must be specified"):
+            load_transportation_networks_data("TestNet", save_to_file=True, output_dir=None)
+
+
+class _FakeResponse:
+    """Minimal response object for session.get mocks."""
+
+    def __init__(
+        self,
+        *,
+        status_code: int = 200,
+        json_data: Optional[list[dict[str, str]]] = None,
+        text: str = "",
+        ok: Optional[bool] = None,
+    ) -> None:
+        self.status_code = status_code
+        self._json = json_data or []
+        self.text = text
+        self.ok = ok if ok is not None else status_code < 400
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"status {self.status_code}")
+
+    def json(self) -> list[dict[str, str]]:
+        return self._json
+
+
+def test_get_available_transportation_networks_filters_valid_dirs() -> None:
+    """Only directories with *_net.tntp files should be returned."""
+    session = Mock()
+    base_api = "https://api.github.com/repos/bstabler/TransportationNetworks/contents"
+
+    def _get(url: str, timeout: int) -> _FakeResponse:
+        if url == base_api:
+            return _FakeResponse(
+                json_data=[
+                    {"name": "NetA", "type": "dir"},
+                    {"name": "_ignore", "type": "dir"},
+                    {"name": "README.md", "type": "file"},
+                    {"name": "NetB", "type": "dir"},
+                ]
+            )
+        if "NetA_net.tntp" in url:
+            return _FakeResponse(status_code=200)
+        if "NetB_net.tntp" in url:
+            return _FakeResponse(status_code=404)
+        if url == f"{base_api}/NetB":
+            return _FakeResponse(
+                json_data=[{"name": "alt_net.tntp", "type": "file"}],
+                ok=True,
+            )
+        raise AssertionError(f"Unexpected URL {url}")
+
+    session.get.side_effect = _get
+
+    result = _get_available_transportation_networks(session)
+    assert result == ["NetA", "NetB"]
+
+
+def test_get_transportation_networks_data_prefers_local_files(
+    tmp_path: Path,
+) -> None:
+    """Existing local files should be used without hitting the network."""
+    session = Mock()
+    sample_path = tmp_path / "TestNet_net.tntp"
+    sample_path.write_text("1 2 3", encoding="utf-8")
+    df = pd.DataFrame({"value": [1]})
+    with patch.object(data_module, "_parse_tntp_from_lines", return_value=df) as mock_parser:
+        data = _get_transportation_networks_data(
+            session=session,
+            network_name="TestNet",
+            output_dir=tmp_path,
+            save_to_file=False,
+            load_network=True,
+            load_trips=False,
+            load_nodes=False,
+            load_flow=False,
+            download_if_missing=True,
+            best_effort=True,
+        )
+
+    session.get.assert_not_called()
+    mock_parser.assert_called_once()
+    assert isinstance(data.network, pd.DataFrame)
+    assert data.trips is None
+
+
+@patch("city2graph.data._parse_tntp_from_lines")
+def test_get_transportation_networks_data_handles_404(
+    mock_parser: Mock,
+) -> None:
+    """404 remote responses should yield None without parsing."""
+    session = Mock()
+    response = _FakeResponse(status_code=404)
+    session.get.return_value = response
+
+    data = _get_transportation_networks_data(
+        session=session,
+        network_name="MissingNet",
+        output_dir=None,
+        save_to_file=False,
+        load_network=True,
+        load_trips=False,
+        load_nodes=False,
+        load_flow=False,
+        download_if_missing=True,
+        best_effort=True,
+    )
+
+    mock_parser.assert_not_called()
+    assert data.network is None
+
+
+def test_strip_metadata_removes_preamble_and_comments() -> None:
+    """Metadata markers and comment lines are removed."""
+    lines = [
+        "this is metadata",
+        "<END OF METADATA>",
+        "1, 2, 3 ~ inline comment",
+        "   ",
+        "~ full comment",
+        "4;5;6",
+    ]
+    cleaned = _strip_metadata(lines)
+    assert cleaned == ["1, 2, 3", "4;5;6"]
+
+
+def test_parse_tntp_from_lines_network() -> None:
+    """Network parser should coerce numeric columns and add defaults."""
+    lines = [
+        "header",
+        "<END OF METADATA>",
+        "~ comment",
+        "1,2,1000,1.5,12,0.15,60,30,0,3",
+    ]
+
+    df = _parse_tntp_from_lines(lines, "network")
+
+    assert {"init_node", "term_node", "capacity", "length", "link_type"}.issubset(df.columns)
+    assert df.at[0, "init_node"] == 1
+    assert df.at[0, "capacity"] == pytest.approx(1000)
+    assert df.at[0, "link_type"] == 3
+
+
+def test_parse_tntp_from_lines_trips_aggregates_duplicates() -> None:
+    """Trip matrices should aggregate duplicate OD pairs."""
+    lines = [
+        "<END OF METADATA>",
+        "Origin 1",
+        "2 : 10.0  3 : 5",
+        "2 : 2",
+        "Origin 2",
+        "1 : 7",
+    ]
+
+    df = _parse_tntp_from_lines(lines, "trips")
+    df = df.sort_values(["origin", "destination"]).reset_index(drop=True)
+    expected = pd.DataFrame(
+        {
+            "origin": [1, 1, 2],
+            "destination": [2, 3, 1],
+            "demand": [12.0, 5.0, 7.0],
+        }
+    )
+    pd.testing.assert_frame_equal(df, expected)
+
+
+def test_parse_tntp_from_lines_flow_table() -> None:
+    """Flow parser should capture volume and cost columns."""
+    lines = [
+        "<END OF METADATA>",
+        "From To Volume Cost",
+        "1 2 10 1.5",
+        "3 4 5.5 2.25",
+    ]
+
+    df = _parse_tntp_from_lines(lines, "flow")
+    expected = pd.DataFrame(
+        {
+            "origin": [1, 3],
+            "destination": [2, 4],
+            "volume": [10.0, 5.5],
+            "cost": [1.5, 2.25],
+        }
+    )
+    pd.testing.assert_frame_equal(df, expected)
+
+
+def test_parse_tntp_from_lines_nodes_casts_types() -> None:
+    """Node parser should coerce coordinates to numeric types."""
+    lines = [
+        "<END OF METADATA>",
+        "node,x,y",
+        "1,10.5,20.1",
+        "2  30.2  40.3",
+    ]
+
+    df = _parse_tntp_from_lines(lines, "nodes")
+    assert df.at[0, "node"] == 1
+    assert df.at[1, "x"] == pytest.approx(30.2)
+
+
+def test_parse_tntp_from_lines_unknown_type() -> None:
+    """Unsupported data types should raise ValueError."""
+    with pytest.raises(ValueError):
+        _parse_tntp_from_lines(["<END OF METADATA>", "foo"], "unknown")
+
+
+def test_parse_network_file_skips_headers() -> None:
+    """Header rows and non-numeric prefixes should be ignored."""
+    lines = [
+        "Init,Term,Capacity",
+        "1, 2 , 1000 ; 1.5",
+        "3 4 2000 2.0 10",
+    ]
+    df = _parse_network_file(lines)
+    assert len(df) == 2
+    assert set(df.columns) >= {"init_node", "term_node"}
+    assert df.at[0, "term_node"] == 2
+
+
+def test_parse_flow_file_skips_headers() -> None:
+    """Flow parser should ignore header rows and coerce numeric values."""
+    lines = [
+        "From To Volume Cost",
+        "1 2 10 1.5",
+        "3 4 5.5 2.25",
+    ]
+    df = _parse_flow_file(lines)
+    assert len(df) == 2
+    assert set(df.columns) == {"origin", "destination", "volume", "cost"}
+    assert df.at[1, "volume"] == pytest.approx(5.5)
+
+
+def test_parse_trips_file_parses_pairs() -> None:
+    """Matrix files should yield origin-destination-demand rows."""
+    lines = [
+        "Origin 1",
+        "2 : 10.0  3 : 5",
+        "Origin 2",
+        "1 : 7",
+    ]
+    df = _parse_trips_file(lines)
+    assert len(df) == 3
+    assert {"origin", "destination", "demand"} == set(df.columns)
+
+
+def test_parse_trips_file_requires_origin() -> None:
+    """Matrix parser should complain when no origin section is present."""
+    with pytest.raises(ValueError):
+        _parse_trips_file(["2 : 1.0"])
+
+
+def test_parse_nodes_file_skips_invalid_rows() -> None:
+    """Nodes parser should ignore malformed lines."""
+    lines = [
+        "header",
+        "1, 10, 20",
+        "two, 30, 40",
+        "3  50  60",
+    ]
+    df = _parse_nodes_file(lines)
+    assert len(df) == 2
+    assert df.at[1, "node"] == 3

@@ -1,21 +1,113 @@
+# Project data artifacts
 *.geojson
 !tests/data/*.geojson
 *.psd
-.ipynb_checkpoints
+
+# Cached or auto-generated files
 .DS_Store
+.ipynb_checkpoints
 **/__pycache__/
 .pytest_cache/
-.vscode/
-dev/
+.ruff_cache/
+.cache/
+htmlcov/
+cover/
+.coverage
+.coverage*
+coverage.xml
+nosetests.xml
 
+# Notebooks
 notebooks/**
 !notebooks/city2graph_demo.ipynb
-
 docs/source/examples/**
 !docs/source/examples/**/*.ipynb
 
-conda/conda-bld/
-docs/build/
+# Build and packaging outputs
+.Python
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-.coverage
-.coverage*
+# Python bytecode / compiled extensions
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.env
+.envrc
+.venv
+venv/
+env.bak/
+venv.bak/
+.pdm-python
+.pdm-build/
+.pixi
+
+# Dependency managers (lockfiles optional)
+#uv.lock
+#Pipfile.lock
+#poetry.lock
+#poetry.toml
+#pdm.lock
+#pdm.toml
+#pixi.lock
+
+# Tooling
+.pypirc
+.pybuilder/
+target/
+.tox/
+.nox/
+.hypothesis/
+.pyre/
+.pytype/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+cython_debug/
+
+# Logs and installer leftovers
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Misc project files
+local_settings.py
+*.log
+db.sqlite3
+db.sqlite3-journal
+instance/
+.webassets-cache
+.scrapy
+.spyderproject
+.spyproject
+.ropeproject
+__pypackages__/
+
+# Editors & IDEs
+.vscode/
+.idea/
+.abstra/
+.cursorignore
+.cursorindexingignore
+
+# Application-specific
+dev/
+docs/_build/
+docs/build/
+conda/conda-bld/
