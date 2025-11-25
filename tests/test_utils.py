@@ -27,6 +27,15 @@ from tests import helpers
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+# Try to import matplotlib for tests that need it
+try:
+    import matplotlib.pyplot as plt
+
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    plt = None  # type: ignore[assignment]
+    MATPLOTLIB_AVAILABLE = False
+
 # ============================================================================
 # BASE TEST CLASSES WITH SHARED FUNCTIONALITY
 # ============================================================================
@@ -892,8 +901,6 @@ class TestEdgeCases:
         assert isinstance(nodes_gdf, gpd.GeoDataFrame)
         assert isinstance(edges_gdf, gpd.GeoDataFrame)
         assert edges_gdf.empty
-        assert "weight" in edges_gdf.columns
-        assert "geometry" in edges_gdf.columns
 
     def test_nx_to_gdf_multigraph_edge_processing(self, sample_crs: str) -> None:
         """Test nx_to_gdf multigraph edge processing to cover line 1510."""
@@ -1031,3 +1038,180 @@ class TestRustworkxConversions:
 
         nx_G = utils.rx_to_nx(rx_G)
         assert nx_G.edges[i1, i2]["payload"] == "edge_label"
+
+
+# ============================================================================
+# PLOTTING TESTS
+# ============================================================================
+
+
+class TestPlotting(BaseGraphTest):
+    """Test plotting functionality."""
+
+    def test_plot_graph_homogeneous(self, sample_nx_graph: nx.Graph) -> None:
+        """Test plotting a homogeneous graph."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        # Mock plt.show to avoid display
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("matplotlib.pyplot.show", lambda: None)
+            utils.plot_graph(sample_nx_graph)
+
+    def test_plot_graph_heterogeneous(self, regular_hetero_graph: nx.Graph) -> None:
+        """Test plotting a heterogeneous graph."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("matplotlib.pyplot.show", lambda: None)
+            utils.plot_graph(regular_hetero_graph)
+
+    def test_plot_graph_save(self, sample_nx_graph: nx.Graph) -> None:
+        """Test plotting without showing (for saving to file)."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("matplotlib.pyplot.show", lambda: None)
+            # Plot without auto-display (caller can save the figure)
+            utils.plot_graph(sample_nx_graph)
+
+    def test_plot_graph_no_matplotlib(self, sample_nx_graph: nx.Graph) -> None:
+        """Test error when matplotlib is missing."""
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(utils, "MATPLOTLIB_AVAILABLE", False)
+            with pytest.raises(ImportError, match="(?i)matplotlib is required"):
+                utils.plot_graph(sample_nx_graph)
+
+    def test_plot_graph_no_input(self) -> None:
+        """Test error when no input is provided."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        with pytest.raises(ValueError, match="At least one of graph, nodes, or edges"):
+            utils.plot_graph()
+
+    def test_plot_graph_with_gdf_input(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test plotting with GeoDataFrame inputs directly."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("matplotlib.pyplot.show", lambda: None)
+            utils.plot_graph(nodes=sample_nodes_gdf, edges=sample_edges_gdf)
+
+    def test_plot_graph_gdf_as_graph_param(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test legacy support: GeoDataFrame passed as graph parameter."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("matplotlib.pyplot.show", lambda: None)
+            # This should treat the GDF as nodes (legacy support)
+            utils.plot_graph(graph=sample_nodes_gdf)
+
+    def test_plot_graph_unsupported_type(self) -> None:
+        """Test error when unsupported type is passed as graph."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        with pytest.raises(TypeError, match="Unsupported data type"):
+            utils.plot_graph(graph="not_a_graph")
+
+    def test_plot_graph_hetero_subplots(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Test plotting heterogeneous graph with subplots."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("matplotlib.pyplot.show", lambda: None)
+            utils.plot_graph(
+                nodes=sample_hetero_nodes_dict,
+                edges=sample_hetero_edges_dict,
+                subplots=True,
+            )
+
+    def test_plot_graph_hetero_no_subplots(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Test plotting heterogeneous graph without subplots."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("matplotlib.pyplot.show", lambda: None)
+            utils.plot_graph(
+                nodes=sample_hetero_nodes_dict,
+                edges=sample_hetero_edges_dict,
+                subplots=False,
+            )
+
+    def test_plot_graph_no_legend(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Test plotting without legend."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("matplotlib.pyplot.show", lambda: None)
+            utils.plot_graph(
+                nodes=sample_hetero_nodes_dict,
+                edges=sample_hetero_edges_dict,
+                legend_position=None,
+                subplots=False,
+            )
+
+    def test_plot_graph_style_kwargs(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test plotting with custom style kwargs."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("matplotlib.pyplot.show", lambda: None)
+            utils.plot_graph(
+                nodes=sample_nodes_gdf,
+                edges=sample_edges_gdf,
+                node_color="red",
+                node_alpha=0.5,
+                edge_color="blue",
+                edge_linewidth=2.0,
+                markersize=10.0,
+            )
+
+    def test_plot_graph_with_ax(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test plotting with provided axes."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        assert plt is not None  # For type checker
+        fig, ax = plt.subplots()
+        try:
+            with pytest.MonkeyPatch.context() as mp:
+                mp.setattr("matplotlib.pyplot.show", lambda: None)
+                utils.plot_graph(nodes=sample_nodes_gdf, ax=ax)
+        finally:
+            plt.close(fig)

@@ -27,3 +27,5 @@ Utils
 .. autofunction:: nx_to_rx
 
 .. autofunction:: rx_to_nx
+
+.. autofunction:: plot_graph

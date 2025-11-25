@@ -2900,18 +2900,22 @@ def _create_edge_gdf_from_data(
     geopandas.GeoDataFrame
         GeoDataFrame containing the new edges.
     """
-    df = pd.DataFrame(new_edges_data)
+    edges_df = pd.DataFrame(new_edges_data)
 
-    u_geoms = endpoint_gdf.loc[df["u"]].geometry.to_numpy()
-    v_geoms = endpoint_gdf.loc[df["v"]].geometry.to_numpy()
+    u_geoms = endpoint_gdf.loc[edges_df["u"]].geometry.to_numpy()
+    v_geoms = endpoint_gdf.loc[edges_df["v"]].geometry.to_numpy()
 
     geometries = [
         LineString([u.centroid, v.centroid]) for u, v in zip(u_geoms, v_geoms, strict=False)
     ]
 
-    new_gdf = gpd.GeoDataFrame(df[[weight, "edge_type"]], geometry=geometries, crs=endpoint_gdf.crs)
+    new_gdf = gpd.GeoDataFrame(
+        edges_df[[weight, "edge_type"]],
+        geometry=geometries,
+        crs=endpoint_gdf.crs,
+    )
 
-    new_gdf.index = pd.MultiIndex.from_frame(df[["u", "v"]])
+    new_gdf.index = pd.MultiIndex.from_frame(edges_df[["u", "v"]])
     new_gdf.index.names = ["u", "v"]
 
     return new_gdf
