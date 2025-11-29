@@ -139,7 +139,7 @@ docs = [
     "sphinx-plotly-directive",
     "sphinx-sitemap",
     "toml",
-    "pandoc",
+    "pypandoc-binary",
     "overturemaps"
 ]
 dev = [

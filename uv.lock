@@ -490,8 +490,8 @@ docs = [
     { name = "nbsphinx" },
     { name = "numpydoc" },
     { name = "overturemaps" },
-    { name = "pandoc" },
     { name = "pydata-sphinx-theme" },
+    { name = "pypandoc-binary" },
     { name = "sphinx" },
     { name = "sphinx-autodoc-typehints" },
     { name = "sphinx-plotly-directive" },
@@ -558,8 +558,8 @@ docs = [
     { name = "nbsphinx" },
     { name = "numpydoc" },
     { name = "overturemaps" },
-    { name = "pandoc" },
     { name = "pydata-sphinx-theme" },
+    { name = "pypandoc-binary" },
     { name = "sphinx" },
     { name = "sphinx-autodoc-typehints" },
     { name = "sphinx-plotly-directive" },
@@ -3112,16 +3112,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pandoc"
-version = "2.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "plumbum" },
-    { name = "ply" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/10/9a/e3186e760c57ee5f1c27ea5cea577a0ff9abfca51eefcb4d9a4cd39aff2e/pandoc-2.4.tar.gz", hash = "sha256:ecd1f8cbb7f4180c6b5db4a17a7c1a74df519995f5f186ef81ce72a9cbd0dd9a", size = 34635, upload-time = "2024-08-07T14:33:58.016Z" }
-
-[[package]]
 name = "pandocfilters"
 version = "1.5.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3251,27 +3241,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
-]
-
-[[package]]
-name = "plumbum"
-version = "1.9.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pywin32", marker = "(platform_python_implementation != 'PyPy' and sys_platform == 'win32') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu124') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu126') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu128') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu130') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu126') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu128') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu130') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu128') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu130') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu130') or (platform_python_implementation == 'PyPy' and extra == 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu124') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu126') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu128') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu130') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu126') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu128') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu130') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu128') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu130') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu130') or (sys_platform != 'win32' and extra == 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130')" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f0/5d/49ba324ad4ae5b1a4caefafbce7a1648540129344481f2ed4ef6bb68d451/plumbum-1.9.0.tar.gz", hash = "sha256:e640062b72642c3873bd5bdc3effed75ba4d3c70ef6b6a7b907357a84d909219", size = 319083, upload-time = "2024-10-05T05:59:27.059Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/4f/9d/d03542c93bb3d448406731b80f39c3d5601282f778328c22c77d270f4ed4/plumbum-1.9.0-py3-none-any.whl", hash = "sha256:9fd0d3b0e8d86e4b581af36edf3f3bbe9d1ae15b45b8caab28de1bcb27aaa7f5", size = 127970, upload-time = "2024-10-05T05:59:25.102Z" },
-]
-
-[[package]]
-name = "ply"
-version = "3.11"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e5/69/882ee5c9d017149285cab114ebeab373308ef0f874fcdac9beb90e0ac4da/ply-3.11.tar.gz", hash = "sha256:00c7c1aaa88358b9c765b6d3000c6eec0ba42abca5351b095321aef446081da3", size = 159130, upload-time = "2018-02-15T19:01:31.097Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a3/58/35da89ee790598a0700ea49b2a66594140f44dec458c07e8e3d4979137fc/ply-3.11-py2.py3-none-any.whl", hash = "sha256:096f9b8350b65ebd2fd1346b12452efe5b9607f7482813ffca50c22722a807ce", size = 49567, upload-time = "2018-02-15T19:01:27.172Z" },
 ]
 
 [[package]]
@@ -3519,6 +3488,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/42/dd/c968c49a2e9b7c219eac0cc504241c21ef789f1f1b34d33780508cea9764/pyogrio-0.11.1-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:76150a3cd787c31628191c7abc6f8c796660125852fb65ae15dd7be1e9196816", size = 26433178, upload-time = "2025-08-02T20:18:58.274Z" },
     { url = "https://files.pythonhosted.org/packages/89/a9/79eca15094f7806a3adcf0bb976ab4346b0fb1bd87956c1933df44546c14/pyogrio-0.11.1-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:e929452f6988c0365dd32ff2485d9488160a709fee28743abbbc18d663169ed0", size = 27616835, upload-time = "2025-08-02T20:19:01.112Z" },
     { url = "https://files.pythonhosted.org/packages/2b/f3/7722bc81e9eee39b528c1cbc6289a26d2d3b1b187491ed8493457d6a3a0e/pyogrio-0.11.1-cp313-cp313-win_amd64.whl", hash = "sha256:d6d56862b89a05fccd7211171c88806b6ec9b5effb79bf807cce0a57c1f2a606", size = 19219088, upload-time = "2025-08-02T20:19:03.732Z" },
+]
+
+[[package]]
+name = "pypandoc-binary"
+version = "1.16.2"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2c/e0/dcccafc2d8b343408abe1e4f84fa5f854eb29f2b59323a6d9fb95db333d1/pypandoc_binary-1.16.2-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:dc71533dcce1cb112994e44f95a21c042c02e4fd4b4815442d8cbf7fe0159a88", size = 25526445, upload-time = "2025-11-13T16:30:09.786Z" },
+    { url = "https://files.pythonhosted.org/packages/49/8f/5f8e7d7febad6972b826537fdb4d78db2dbed8f40f141f58cf1bd95cca7e/pypandoc_binary-1.16.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:a240d645963266be5d68c2b5a0fb9703dfa5bb5e6a8367e36060e2584236b457", size = 25526446, upload-time = "2025-11-13T16:30:12.627Z" },
+    { url = "https://files.pythonhosted.org/packages/31/ae/904a96cd84ef568fa7a8a6a2a783265dda1542fd6ee489ef6fbaf32dfc04/pypandoc_binary-1.16.2-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1d9d4e14bbf973578ba635d18730131f76d11cf6926e4be977b39fad0bf330a8", size = 36942728, upload-time = "2025-11-13T16:30:15.302Z" },
+    { url = "https://files.pythonhosted.org/packages/55/97/4c7e2543013ed6b8c1c7d7344ae5e3f0fa8df67c6712b90a7d2dc87669c0/pypandoc_binary-1.16.2-py3-none-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f6108d0661298f97def07695527b73f8499e7c425c8386ae0de2e8bf95d5799c", size = 34049538, upload-time = "2025-11-13T16:30:18.467Z" },
+    { url = "https://files.pythonhosted.org/packages/63/72/7ddda95c6ea454296c450191860ecb6f833534d605288fa120bfbfa97c1f/pypandoc_binary-1.16.2-py3-none-musllinux_1_1_aarch64.whl", hash = "sha256:a7e03052c7e526188e970aa782245e10be815a292c74b14d350d81c19fdeeafb", size = 36942720, upload-time = "2025-11-13T16:30:21.116Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/fd/0dadb4c5ed01a98bfef1a3d63386686a43e19cf779181f5aea3e31bba800/pypandoc_binary-1.16.2-py3-none-musllinux_1_1_x86_64.whl", hash = "sha256:49a2bea5a79b20eca546b67d466f41d97cecf10e2efb366a7bef7cc3d4edef15", size = 34049518, upload-time = "2025-11-13T16:30:24.461Z" },
+    { url = "https://files.pythonhosted.org/packages/73/a5/8065640aa3acefafe784ed9dc8338ea4516d40c60e151d727369f609eaa1/pypandoc_binary-1.16.2-py3-none-win_amd64.whl", hash = "sha256:9005c32c9d62152cbdd00e5e38579e17c0e708789ef554852367e24fb0cc6cf3", size = 40229130, upload-time = "2025-11-13T16:30:27.624Z" },
 ]
 
 [[package]]
