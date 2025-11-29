@@ -2260,9 +2260,9 @@ def nx_to_gdf(
     edges : bool, default True
         If True, a GeoDataFrame for edges will be created and returned.
     set_missing_pos_from : tuple[str, ...] | None, default ("x", "y")
-            If provided (or None implies ("x", "y")) set missing node 'pos' from
-            the given attribute name(s). With two names use them as x/y; with one
-            name expect a 2-length coordinate.
+        If provided (or None implies ("x", "y")) set missing node 'pos' from
+        the given attribute name(s). With two names use them as x/y; with one
+        name expect a 2-length coordinate.
 
     Returns
     -------
@@ -2499,9 +2499,10 @@ def create_isochrone(
         'travel_time'). If None, the function will use the default edge attribute.
     cut_edge_types : list[tuple[str, str, str]] | None, default None
         List of edge types to remove from the graph before processing (e.g.,
-        [("highway", "motorway", "motorway")]).
+        [("bus_stop", "is_next_to", "bus_stop")]).
     method : str, default "concave_hull_knn"
         The method to generate the isochrone polygon. Options are:
+
         - "concave_hull_knn": Creates a concave hull (k-NN) around reachable nodes.
         - "concave_hull_alpha": Creates a concave hull (alpha shape) around reachable nodes.
         - "convex_hull": Creates a convex hull around reachable nodes.
@@ -2509,28 +2510,25 @@ def create_isochrone(
     **kwargs : Any
         Additional parameters for specific isochrone generation methods:
 
-        Method: "concave_hull_knn"
-        ~~~~~~~~~~~~~~~~~~~~~~~~~~
-        k : int, default 100
-            The number of nearest neighbors to consider.
+        For method="concave_hull_knn":
+            k : int, default 100
+                The number of nearest neighbors to consider.
 
-        Method: "concave_hull_alpha"
-        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        hull_ratio : float, default 0.3
-            The ratio for concave hull generation (0.0 to 1.0). Higher values mean tighter fit.
-        allow_holes : bool, default False
-            Whether to allow holes in the concave hull.
+        For method="concave_hull_alpha":
+            hull_ratio : float, default 0.3
+                The ratio for concave hull generation (0.0 to 1.0). Higher values mean tighter fit.
+            allow_holes : bool, default False
+                Whether to allow holes in the concave hull.
 
-        Method: "buffer"
-        ~~~~~~~~~~~~~~~~
-        buffer_distance : float, default 100
-            The distance to buffer reachable geometries.
-        cap_style : int, default 1
-            The cap style for buffering. 1=Round, 2=Flat, 3=Square.
-        join_style : int, default 1
-            The join style for buffering. 1=Round, 2=Mitre, 3=Bevel.
-        resolution : int, default 16
-            The resolution of the buffer (number of segments per quarter circle).
+        For method="buffer":
+            buffer_distance : float, default 100
+                The distance to buffer reachable geometries.
+            cap_style : int, default 1
+                The cap style for buffering. 1=Round, 2=Flat, 3=Square.
+            join_style : int, default 1
+                The join style for buffering. 1=Round, 2=Mitre, 3=Bevel.
+            resolution : int, default 16
+                The resolution of the buffer (number of segments per quarter circle).
 
     Returns
     -------
@@ -3677,10 +3675,9 @@ def validate_gdf(
 
     Returns
     -------
-    tuple[geopandas.GeoDataFrame | dict[str, geopandas.GeoDataFrame] | None,
-          geopandas.GeoDataFrame | dict[tuple[str, str, str], geopandas.GeoDataFrame] | None,
-          bool]
+    tuple
         A tuple containing:
+
         - validated nodes_gdf (same type as input)
         - validated edges_gdf (same type as input)
         - is_hetero: boolean indicating if this is a heterogeneous graph

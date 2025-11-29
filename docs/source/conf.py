@@ -14,6 +14,13 @@ import sys
 
 sys.path.insert(0, os.path.abspath("../.."))
 
+import pypandoc
+
+# Configure nbsphinx to use the pandoc binary from pypandoc
+nbsphinx_pandoc_path = pypandoc.get_pandoc_path()
+# Also add to PATH as fallback
+os.environ["PATH"] = os.path.dirname(nbsphinx_pandoc_path) + os.pathsep + os.environ["PATH"]
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 

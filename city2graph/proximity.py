@@ -1434,8 +1434,8 @@ def bridge_nodes(
               Distance metric ("euclidean", "manhattan", "network")
             - network_gdf : geopandas.GeoDataFrame, optional
               Network for "network" distance calculations
-                        - network_weight : str, optional
-                            Edge attribute used as shortest-path weight when ``distance_metric='network'``
+            - network_weight : str, optional
+                Edge attribute used as shortest-path weight when ``distance_metric='network'``
 
         For `proximity_method="fixed_radius"`:
             - radius : float, required
@@ -1444,8 +1444,8 @@ def bridge_nodes(
               Distance metric ("euclidean", "manhattan", "network")
             - network_gdf : geopandas.GeoDataFrame, optional
               Network for "network" distance calculations
-                        - network_weight : str, optional
-                            Edge attribute used as shortest-path weight when ``distance_metric='network'``
+            - network_weight : str, optional
+                Edge attribute used as shortest-path weight when ``distance_metric='network'``
 
     Returns
     -------
