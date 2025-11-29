@@ -1706,16 +1706,13 @@ def pyg_to_gdf(
 
     Returns
     -------
-    tuple
-        **For HeteroData input:** Returns a tuple containing:
-            - First element: dict[str, geopandas.GeoDataFrame] mapping node type names to
-              GeoDataFrames
-            - Second element: dict[tuple[str, str, str], geopandas.GeoDataFrame] mapping
-              edge types to GeoDataFrames
-
+    tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]
         **For Data input:** Returns a tuple containing:
-            - First element: geopandas.GeoDataFrame containing nodes
-            - Second element: geopandas.GeoDataFrame containing edges (or None if no edges)
+            - First element: GeoDataFrame containing nodes
+            - Second element: GeoDataFrame containing edges (or None if no edges)
+        **For HeteroData input:** Returns a tuple containing:
+            - First element: dict mapping node type names to GeoDataFrames
+            - Second element: dict mapping edge types to GeoDataFrames
 
     See Also
     --------
@@ -1774,7 +1771,7 @@ def pyg_to_nx(data: Data | HeteroData, keep_geom: bool = True) -> nx.Graph:
     Returns
     -------
     networkx.Graph
-        NetworkX graph with node and edge attributes from the PyG object.
+        The converted NetworkX graph with node and edge attributes.
         For heterogeneous graphs, node and edge types are stored as attributes.
 
     Raises
@@ -3059,14 +3056,15 @@ def add_metapaths(
 
     Returns
     -------
-    tuple[dict[str, GeoDataFrame], dict[tuple[str, str, str], GeoDataFrame]] | networkx.Graph | networkx.MultiGraph
-        Updated heterogeneous dictionaries or a NetworkX graph with metapath
-        edges appended.
+    tuple[dict[str, geopandas.GeoDataFrame], dict[tuple[str, str, str], geopandas.GeoDataFrame]] | networkx.Graph | networkx.MultiGraph
+        The graph with metapath-derived edges.
+        If as_nx is False (default), returns a tuple of node and edge GeoDataFrames.
+        If as_nx is True, returns a NetworkX graph (Graph or MultiGraph).
 
     Notes
     -----
     Legacy scaffolding for path-tracing geometries has been removed because it
-    was never executed. The ``trace_path`` argument is preserved for API
+    was never executed. The trace_path argument is preserved for API
     compatibility but remains a no-op while straight-line geometries are
     generated for all metapath edges.
     """

@@ -120,9 +120,17 @@ def morphological_graph(
     Returns
     -------
     tuple[dict[str, geopandas.GeoDataFrame], dict[tuple[str, str, str], geopandas.GeoDataFrame]] | networkx.Graph
-        A tuple containing:
-        - nodes: Dictionary with keys "private" and "public" containing node GeoDataFrames
-        - edges: Dictionary with relationship type keys containing edge GeoDataFrames
+        If as_nx is False (default), returns a tuple (nodes, edges) where:
+
+        - nodes: Dictionary containing node GeoDataFrames with keys:
+            - "private": Tessellation cells (private spaces)
+            - "public": Street segments (public spaces)
+
+        - edges: Dictionary containing edge GeoDataFrames with keys:
+            - ("private", "touched_to", "private"): Adjacency between tessellation cells
+            - ("public", "connected_to", "public"): Connectivity between street segments
+            - ("private", "faced_to", "public"): Interface between tessellation cells and street segments
+
         If as_nx is True, returns a NetworkX graph.
 
     Raises
@@ -253,11 +261,13 @@ def private_to_private_graph(
 
     Returns
     -------
-    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] | networkx.Graph
-        A tuple containing:
-        - Nodes of the private graph (the input private_gdf).
-        - Edges of the private graph (adjacency connections).
-        If as_nx is True, returns a NetworkX graph.
+    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] or networkx.Graph
+        If as_nx is False (default), returns a tuple (nodes, edges) where:
+
+        - nodes is a geopandas.GeoDataFrame containing the private nodes.
+        - edges is a geopandas.GeoDataFrame containing the adjacency connections.
+
+        If as_nx is True, returns a networkx.Graph representing the private adjacency.
 
     Raises
     ------
@@ -396,11 +406,13 @@ def private_to_public_graph(
 
     Returns
     -------
-    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] | networkx.Graph
-        A tuple containing:
-        - Nodes of the private and public graphs (the input private_gdf and public_gdf).
-        - Edges of the private-public graph (connections between private polygons and public geometries).
-        If as_nx is True, returns a NetworkX graph.
+    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] or networkx.Graph
+        If as_nx is False (default), returns a tuple (nodes, edges) where:
+
+        - nodes is a geopandas.GeoDataFrame containing the combined private and public nodes.
+        - edges is a geopandas.GeoDataFrame containing the edges between private and public geometries.
+
+        If as_nx is True, returns a networkx.Graph representing the private-to-public connections.
 
     Raises
     ------
@@ -523,11 +535,13 @@ def public_to_public_graph(
 
     Returns
     -------
-    tuple[geopandas.GeoDataFrame, gpd.GeoDataFrame] | networkx.Graph
-        A tuple containing:
-        - Nodes of the public graph (the input public_gdf).
-        - Edges of the public graph (connectivity).
-        If as_nx is True, returns a NetworkX graph.
+    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] or networkx.Graph
+        If as_nx is False (default), returns a tuple (nodes, edges) where:
+
+        - nodes is a geopandas.GeoDataFrame containing the public nodes.
+        - edges is a geopandas.GeoDataFrame containing the topological connections.
+
+        If as_nx is True, returns a networkx.Graph representing the public connectivity.
 
     Raises
     ------

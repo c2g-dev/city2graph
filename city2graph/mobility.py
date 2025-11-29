@@ -120,17 +120,15 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
 
     Returns
     -------
-    tuple of (geopandas.GeoDataFrame, geopandas.GeoDataFrame)
-        The nodes and edges GeoDataFrames. The nodes GeoDataFrame index is
-        aligned with the zone identifier (``zone_id_col`` when provided, else
-        the original ``zones_gdf.index``). The edges GeoDataFrame uses a
-        pandas MultiIndex on (source_id, target_id) and does not carry
-        separate 'source'/'target' columns, to comply with gdf_to_nx/gdf_to_pyg.
-    networkx.DiGraph
-        When ``as_nx=True``, a directed graph with node and edge attributes.
-    networkx.Graph
-        When ``as_nx=True`` and ``directed=False``, an undirected graph with
-        node and edge attributes.
+    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] or networkx.Graph or networkx.DiGraph
+        The graph representation in the requested format:
+
+        *   When ``as_nx=False`` (default): Returns a tuple ``(nodes, edges)`` of
+            GeoDataFrames. The nodes GeoDataFrame index is aligned with the zone
+            identifier. The edges GeoDataFrame uses a pandas MultiIndex on
+            (source_id, target_id).
+        *   When ``as_nx=True``: Returns a NetworkX graph. A ``networkx.DiGraph``
+            is returned if ``directed=True``, otherwise a ``networkx.Graph``.
     """
     # --- Validation (Task 2) ------------------------------------------------
     _validate_zones_gdf(zones_gdf, zone_id_col)

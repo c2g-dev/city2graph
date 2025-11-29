@@ -166,10 +166,26 @@ class NxConverter(BaseGraphConverter):
 
         Returns
         -------
-        tuple
-            A tuple containing the reconstructed GeoDataFrames. For homogeneous graphs,
-            it's `(nodes_gdf, edges_gdf)`. For heterogeneous graphs, it's
-            `(nodes_dict, edges_dict)`.
+        geopandas.GeoDataFrame or tuple
+            The reconstructed GeoDataFrames. The return type depends on the graph structure
+            (homogeneous vs heterogeneous) and the requested components (`nodes`, `edges`).
+
+            **Homogeneous Graphs:**
+
+            *   If ``nodes=True`` and ``edges=True``: Returns ``(nodes_gdf, edges_gdf)``
+                where both are :class:`geopandas.GeoDataFrame`.
+            *   If only ``nodes=True``: Returns ``nodes_gdf`` (:class:`geopandas.GeoDataFrame`).
+            *   If only ``edges=True``: Returns ``edges_gdf`` (:class:`geopandas.GeoDataFrame`).
+
+            **Heterogeneous Graphs:**
+
+            *   Returns ``(nodes_dict, edges_dict)`` where:
+
+                *   ``nodes_dict`` is ``dict[str, geopandas.GeoDataFrame]`` mapping node types to GeoDataFrames.
+                *   ``edges_dict`` is ``dict[tuple[str, str, str], geopandas.GeoDataFrame]`` mapping edge types to GeoDataFrames.
+
+            Note: For heterogeneous graphs, the return value is always a tuple of dictionaries,
+            even if only one component is requested (the other will be an empty dict).
 
         See Also
         --------
@@ -2267,13 +2283,25 @@ def nx_to_gdf(
     Returns
     -------
     geopandas.GeoDataFrame or tuple
-        The returned type depends on the graph type and input parameters:
-        - Homogeneous graph:
-            - `(nodes_gdf, edges_gdf)` if `nodes` and `edges` are True.
-            - `nodes_gdf` if only `nodes` is True.
-            - `edges_gdf` if only `edges` is True.
-        - Heterogeneous graph:
-            - `(nodes_dict, edges_dict)` where dicts map types to GeoDataFrames.
+        The reconstructed GeoDataFrames. The return type depends on the graph structure
+        (homogeneous vs heterogeneous) and the requested components (`nodes`, `edges`).
+
+        **Homogeneous Graphs:**
+
+        *   If nodes=True and edges=True: Returns (nodes_gdf, edges_gdf)
+            where both are geopandas.GeoDataFrame.
+        *   If only nodes=True: Returns nodes_gdf (geopandas.GeoDataFrame).
+        *   If only edges=True: Returns edges_gdf (geopandas.GeoDataFrame).
+
+        **Heterogeneous Graphs:**
+
+        *   Returns (nodes_dict, edges_dict) where:
+
+            *   nodes_dict is dict[str, geopandas.GeoDataFrame] mapping node types to GeoDataFrames.
+            *   edges_dict is dict[tuple[str, str, str], geopandas.GeoDataFrame] mapping edge types to GeoDataFrames.
+
+        Note: For heterogeneous graphs, the return value is always a tuple of dictionaries,
+        even if only one component is requested (the other will be an empty dict).
 
     Raises
     ------
@@ -3795,6 +3823,11 @@ def validate_nx(graph: nx.Graph | nx.MultiGraph) -> None:
     graph : networkx.Graph or networkx.MultiGraph
         The NetworkX graph to validate.
 
+    Returns
+    -------
+    None
+        This function does not return a value.
+
     Raises
     ------
     TypeError
@@ -3836,9 +3869,7 @@ def nx_to_rx(graph: nx.Graph | nx.MultiGraph) -> rx.PyGraph | rx.PyDiGraph:
 
     This function converts a NetworkX graph object into a rustworkx graph object,
     preserving node, edge, and graph attributes. It handles both directed and
-    undirected graphs, as well as multigraphs. The original NetworkX node IDs
-    are stored in the node payload under the key ``__nx_node_id__`` to ensure
-    reversibility.
+    undirected graphs, as well as multigraphs.
 
     Parameters
     ----------
@@ -3906,9 +3937,7 @@ def rx_to_nx(graph: rx.PyGraph | rx.PyDiGraph) -> nx.Graph | nx.MultiGraph:
     Convert a rustworkx graph to a NetworkX graph.
 
     This function converts a rustworkx graph object into a NetworkX graph object,
-    restoring node, edge, and graph attributes. It attempts to restore original
-    NetworkX node IDs if they were preserved during a previous conversion using
-    ``nx_to_rx`` (via the ``__nx_node_id__`` key).
+    restoring node, edge, and graph attributes.
 
     Parameters
     ----------
@@ -4090,6 +4119,11 @@ def plot_graph(  # noqa: PLR0913
         - **pd.Series**: Direct values for each geometry
 
         Other common options: etc.
+
+    Returns
+    -------
+    None
+        This function does not return a value.
 
     Raises
     ------

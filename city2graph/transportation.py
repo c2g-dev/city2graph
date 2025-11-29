@@ -476,7 +476,7 @@ def load_gtfs(path: str | Path) -> dict[str, pd.DataFrame | gpd.GeoDataFrame]:
 
     Returns
     -------
-    dict[str, pd.DataFrame | gpd.GeoDataFrame]
+    dict[str, pandas.DataFrame or geopandas.GeoDataFrame]
         Keys are the original GTFS file names (without extension) and values
         are pandas or GeoPandas DataFrames ready for analysis.
 
