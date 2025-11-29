@@ -1683,9 +1683,9 @@ def dual_graph(
     graph: tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph,
     edge_id_col: str | None = None,
     keep_original_geom: bool = False,
-    as_nx: bool = False,
     source_col: str | None = None,
     target_col: str | None = None,
+    as_nx: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph:
     """
     Convert a primal graph represented by nodes and edges GeoDataFrames to its dual graph.
@@ -1704,14 +1704,14 @@ def dual_graph(
     keep_original_geom : bool, default False
         If True, preserve the original geometry of the edges in a new column named
         'original_geometry' in the dual nodes GeoDataFrame.
-    as_nx : bool, default False
-        If True, return the dual graph as a NetworkX graph instead of GeoDataFrames.
     source_col : str, optional
         Name of the column or index level representing the source node ID in the edges GeoDataFrame.
         If provided, it overrides automatic detection.
     target_col : str, optional
         Name of the column or index level representing the target node ID in the edges GeoDataFrame.
         If provided, it overrides automatic detection.
+    as_nx : bool, default False
+        If True, return the dual graph as a NetworkX graph instead of GeoDataFrames.
 
     Returns
     -------

@@ -1383,10 +1383,10 @@ def bridge_nodes(
     nodes_dict: dict[str, gpd.GeoDataFrame],
     proximity_method: str = "knn",
     *,
-    multigraph: bool = False,
-    as_nx: bool = False,
     source_node_types: Iterable[str] | None = None,
     target_node_types: Iterable[str] | None = None,
+    multigraph: bool = False,
+    as_nx: bool = False,
     **kwargs: float | str | bool,
 ) -> tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]] | nx.Graph:
     r"""
@@ -1412,18 +1412,18 @@ def bridge_nodes(
         The method to use for generating proximity edges between layers. Options are:
         - "knn": k-nearest neighbors method
         - "fixed_radius": fixed-radius method
-    multigraph : bool, default False
-        If True, the resulting NetworkX graph will be a MultiGraph, allowing
-        multiple edges between the same pair of nodes from different proximity relationships.
-    as_nx : bool, default False
-        If True, returns a NetworkX graph object containing all nodes and
-        inter-layer edges. Otherwise, returns dictionaries of GeoDataFrames.
     source_node_types : Iterable[str], optional
         Node types from ``nodes_dict`` that should act as sources. When None, all
         node types are considered sources.
     target_node_types : Iterable[str], optional
         Node types from ``nodes_dict`` that should act as targets. When None, all
         node types are considered targets.
+    multigraph : bool, default False
+        If True, the resulting NetworkX graph will be a MultiGraph, allowing
+        multiple edges between the same pair of nodes from different proximity relationships.
+    as_nx : bool, default False
+        If True, returns a NetworkX graph object containing all nodes and
+        inter-layer edges. Otherwise, returns dictionaries of GeoDataFrames.
     **kwargs : Any
         Additional keyword arguments passed to the underlying proximity method:
 
