@@ -2065,8 +2065,8 @@ def validate_pyg(data: Data | HeteroData) -> GraphMetadata:
 
     Examples
     --------
-    >>> data = create_homogeneous_graph(nodes_gdf)
-    >>> metadata = _validate_pyg_data(data)
+    >>> data = gdf_to_pyg(nodes_gdf, edges_gdf)
+    >>> metadata = validate_pyg(data)
     """
     # Check PyTorch availability first
     if not TORCH_AVAILABLE:
@@ -2147,8 +2147,8 @@ def _validate_hetero_structure(data: HeteroData, metadata: GraphMetadata) -> Non
 
     Examples
     --------
-    >>> data = create_heterogeneous_graph(nodes_dict)
-    >>> metadata = data._metadata
+    >>> data = gdf_to_pyg(nodes_dict, edges_dict)
+    >>> metadata = data.graph_metadata
     >>> _validate_hetero_structure(data, metadata)
     """
     # Check that node types in metadata match actual node types in data
@@ -2224,8 +2224,8 @@ def _validate_homo_structure(data: Data, metadata: GraphMetadata) -> None:
 
     Examples
     --------
-    >>> data = create_homogeneous_graph(nodes_gdf)
-    >>> metadata = data._metadata
+    >>> data = gdf_to_pyg(nodes_gdf, edges_gdf)
+    >>> metadata = data.graph_metadata
     >>> _validate_homo_structure(data, metadata)
     """
     # Validate that metadata has the expected structure for homogeneous graphs
@@ -2355,8 +2355,8 @@ def add_metapaths_by_weight(
     edge_types: list[tuple[str, str, str]] | None = None,
     endpoint_type: str | None = None,
     directed: bool = False,
-    as_nx: bool = False,
     multigraph: bool = False,
+    as_nx: bool = False,
 ) -> (
     nx.Graph
     | nx.MultiGraph
@@ -2393,10 +2393,10 @@ def add_metapaths_by_weight(
         is not a tuple.
     directed : bool, default False
         If True, creates a directed graph for traversal.
-    as_nx : bool, default False
-        If True, returns a NetworkX graph.
     multigraph : bool, default False
         If True, returns a MultiGraph (only relevant if as_nx=True).
+    as_nx : bool, default False
+        If True, returns a NetworkX graph.
 
     Returns
     -------
@@ -3012,8 +3012,8 @@ def add_metapaths(
     edge_attr_agg: str | object | None = "sum",
     directed: bool = False,
     trace_path: bool = False,
-    as_nx: bool = False,
     multigraph: bool = False,
+    as_nx: bool = False,
     **_: object,
 ) -> (
     nx.Graph
@@ -3050,10 +3050,10 @@ def add_metapaths(
     trace_path : bool, optional
         When ``True``, attempt to create traced geometries. Currently ignored but
         retained for API compatibility.
-    as_nx : bool, optional
-        Return the result as a NetworkX graph when ``True``.
     multigraph : bool, optional
         When returning NetworkX data, build a ``networkx.MultiGraph`` if ``True``.
+    as_nx : bool, optional
+        Return the result as a NetworkX graph when ``True``.
     **_ : object
         Ignored placeholder for future keyword extensions.
 
