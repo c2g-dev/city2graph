@@ -3856,10 +3856,6 @@ def nx_to_rx(graph: nx.Graph | nx.MultiGraph) -> rx.PyGraph | rx.PyDiGraph:
 
     Examples
     --------
-    >>> import networkx as nx
-    >>> G = nx.Graph()
-    >>> G.add_node("a", color="red")
-    >>> G.add_edge("a", "b", weight=2)
     >>> rx_G = nx_to_rx(G)
     """
     is_directed = graph.is_directed()
