@@ -25,10 +25,16 @@ from typing import Literal
 import geopandas as gpd
 import momepy
 import networkx as nx
+import numpy as np
 import pandas as pd
 import rustworkx as rx
+import shapely
+from scipy.spatial import cKDTree
 from shapely.geometry import LineString
+from shapely.geometry import MultiPoint
+from shapely.geometry import MultiPolygon
 from shapely.geometry import Point
+from shapely.geometry import Polygon
 
 try:
     import matplotlib.pyplot as plt
@@ -1222,7 +1228,7 @@ class NxConverter(BaseGraphConverter):
         """
         if graph.number_of_edges() == 0:
             # Create empty GeoDataFrame with expected columns
-            return gpd.GeoDataFrame({"weight": [], "geometry": []}, crs=metadata.crs)
+            return gpd.GeoDataFrame({"geometry": []}, crs=metadata.crs)
 
         records, original_indices = self._create_edge_records(graph)
         index_names = _resolve_index_names(typing.cast("Any", metadata.edge_index_names))
@@ -1310,9 +1316,8 @@ class NxConverter(BaseGraphConverter):
                     **{
                         k: v
                         for k, v in attrs.items()
-                        if k not in ["_original_edge_index", "weight", "full_edge_type"]
+                        if k not in ["_original_edge_index", "full_edge_type"]
                     },
-                    "weight": attrs.get("weight"),
                     "geometry": geom,
                 },
             )
@@ -2335,17 +2340,17 @@ def nx_to_gdf(
 
 def filter_graph_by_distance(
     graph: gpd.GeoDataFrame | nx.Graph | nx.MultiGraph,
-    center_point: Point | gpd.GeoSeries,
-    distance: float,
-    edge_attr: str = "length",
-    node_id_col: str | None = None,
+    center_point: Point | gpd.GeoSeries | gpd.GeoDataFrame,
+    threshold: float,
+    edge_attr: str | None = "length",
+    node_id_col: str | None = None,  # noqa: ARG001
 ) -> gpd.GeoDataFrame | nx.Graph | nx.MultiGraph:
     """
-    Filter a graph to include only elements within a specified distance from a center point.
+    Filter a graph to include only elements within a specified threshold from a center point.
 
     This function calculates the shortest path from a center point to all nodes
     in the graph and returns a subgraph containing only the nodes (and their
-    induced edges) that are within the given distance. The input can be a
+    induced edges) that are within the given threshold. The input can be a
     NetworkX graph or an edges GeoDataFrame.
 
     Parameters
@@ -2353,11 +2358,11 @@ def filter_graph_by_distance(
     graph : geopandas.GeoDataFrame or networkx.Graph or networkx.MultiGraph
         The graph to filter. If a GeoDataFrame, it represents the edges of the
         graph and will be converted to a NetworkX graph internally.
-    center_point : Point or geopandas.GeoSeries
+    center_point : Point or geopandas.GeoSeries or geopandas.GeoDataFrame
         The origin point(s) for the distance calculation. If multiple points
         are provided, the filter will include nodes reachable from any of them.
-    distance : float
-        The maximum shortest-path distance for a node to be included in the
+    threshold : float
+        The maximum shortest-path distance (or cost) for a node to be included in the
         filtered graph.
     edge_attr : str, default "length"
         The name of the edge attribute to use as weight for shortest path
@@ -2390,7 +2395,7 @@ def filter_graph_by_distance(
     >>> G.add_edge(1, 2, length=10)
     >>> # Filter the graph
     >>> center = Point(1, 0)
-    >>> filtered_graph = filter_graph_by_distance(G, center, distance=12)
+    >>> filtered_graph = filter_graph_by_distance(G, center, threshold=12)
     >>> print(list(filtered_graph.nodes))
     >>> [0, 1]
     """
@@ -2413,16 +2418,19 @@ def filter_graph_by_distance(
             return graph_type()
         return gpd.GeoDataFrame(geometry=[], crs=original_crs)
 
-    # Create nodes GeoDataFrame for distance calculations
-    node_id_name = node_id_col or "node_id"
-    node_ids, coordinates = zip(*pos_dict.items(), strict=False)
-    nodes_gdf = gpd.GeoDataFrame(
-        {node_id_name: node_ids, "geometry": [Point(c) for c in coordinates]},
-        crs=original_crs,
-    )
+    # Prepare KDTree for fast nearest neighbor search
+    node_ids = list(pos_dict.keys())
+    coordinates = list(pos_dict.values())
+    tree = cKDTree(coordinates)
 
     # Normalize center points
-    center_points = center_point if isinstance(center_point, gpd.GeoSeries) else [center_point]
+    if isinstance(center_point, gpd.GeoDataFrame):
+        center_points = center_point.geometry
+    elif isinstance(center_point, gpd.GeoSeries):
+        center_points = center_point
+    else:
+        center_points = [center_point]
+
     center_points_list = (
         center_points.tolist() if hasattr(center_points, "tolist") else list(center_points)
     )
@@ -2430,16 +2438,16 @@ def filter_graph_by_distance(
     # Compute reachable nodes
     all_reachable = set()
     for point in center_points_list:
-        # Find nearest node
-        nearest_idx = nodes_gdf.distance(point).idxmin()
-        source_node = nodes_gdf.loc[nearest_idx, node_id_name]
+        # Find nearest node using KDTree
+        _, idx = tree.query((point.x, point.y))
+        source_node = node_ids[idx]
 
         # Dijkstra
         lengths = nx.single_source_dijkstra_path_length(
             nx_graph,
             source_node,
-            cutoff=distance,
-            weight=edge_attr,
+            cutoff=threshold,
+            weight=edge_attr or "length",
         )
         all_reachable.update(lengths.keys())
 
@@ -2455,74 +2463,930 @@ def filter_graph_by_distance(
 
 
 def create_isochrone(
-    graph: gpd.GeoDataFrame | nx.Graph | nx.MultiGraph,
-    center_point: Point | gpd.GeoSeries | gpd.GeoDataFrame,
-    distance: float,
-    edge_attr: str = "length",
+    graph: nx.Graph | nx.MultiGraph | None = None,
+    nodes: gpd.GeoDataFrame | dict[str, gpd.GeoDataFrame] | None = None,
+    edges: gpd.GeoDataFrame | dict[tuple[str, str, str], gpd.GeoDataFrame] | None = None,
+    center_point: Point | gpd.GeoSeries | gpd.GeoDataFrame | None = None,
+    threshold: float | None = None,
+    edge_attr: str | None = None,
+    cut_edge_types: list[tuple[str, str, str]] | None = None,
+    method: str = "concave_hull_knn",
+    **kwargs: Any,  # noqa: ANN401
 ) -> gpd.GeoDataFrame:
     """
     Generate an isochrone polygon from a graph.
 
     An isochrone represents the area reachable from a center point within a
-    given travel distance or time. This function computes the set of reachable
-    edges and nodes in a network and generates a polygon (the convex hull)
-    that encloses this reachable area.
+    given travel threshold (distance or time). This function computes the set of reachable
+    edges and nodes in a network and generates a polygon that encloses this
+    reachable area.
 
     Parameters
     ----------
-    graph : geopandas.GeoDataFrame or networkx.Graph or networkx.MultiGraph
-        The network graph. If a GeoDataFrame, it represents the edges of the
-        graph.
+    graph : networkx.Graph or networkx.MultiGraph, optional
+        The network graph.
+    nodes : geopandas.GeoDataFrame or dict, optional
+        Nodes of the graph.
+    edges : geopandas.GeoDataFrame or dict, optional
+        Edges of the graph.
     center_point : Point or geopandas.GeoSeries or geopandas.GeoDataFrame
         The origin point(s) for the isochrone calculation.
-    distance : float
+    threshold : float
         The maximum travel distance (or time) that defines the boundary of the
         isochrone.
-    edge_attr : str, default "length"
-        The edge attribute to use as the cost of travel (e.g., 'length',
-        'travel_time').
+    edge_attr : str, default "travel_time"
+        The edge attribute to use for distance calculation (e.g., 'length',
+        'travel_time'). If None, the function will use the default edge attribute.
+    cut_edge_types : list[tuple[str, str, str]] | None, default None
+        List of edge types to remove from the graph before processing (e.g.,
+        [("highway", "motorway", "motorway")]).
+    method : str, default "concave_hull_knn"
+        The method to generate the isochrone polygon. Options are:
+        - "concave_hull_knn": Creates a concave hull (k-NN) around reachable nodes.
+        - "concave_hull_alpha": Creates a concave hull (alpha shape) around reachable nodes.
+        - "convex_hull": Creates a convex hull around reachable nodes.
+        - "buffer": Creates a buffer around reachable edges/nodes.
+    **kwargs : Any
+        Additional parameters for specific isochrone generation methods:
+
+        Method: "concave_hull_knn"
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~
+        k : int, default 100
+            The number of nearest neighbors to consider.
+
+        Method: "concave_hull_alpha"
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        hull_ratio : float, default 0.3
+            The ratio for concave hull generation (0.0 to 1.0). Higher values mean tighter fit.
+        allow_holes : bool, default False
+            Whether to allow holes in the concave hull.
+
+        Method: "buffer"
+        ~~~~~~~~~~~~~~~~
+        buffer_distance : float, default 100
+            The distance to buffer reachable geometries.
+        cap_style : int, default 1
+            The cap style for buffering. 1=Round, 2=Flat, 3=Square.
+        join_style : int, default 1
+            The join style for buffering. 1=Round, 2=Mitre, 3=Bevel.
+        resolution : int, default 16
+            The resolution of the buffer (number of segments per quarter circle).
 
     Returns
     -------
     geopandas.GeoDataFrame
-        A GeoDataFrame containing a single Polygon geometry that represents the
-        isochrone.
+        A GeoDataFrame containing a single Polygon or MultiPolygon geometry that
+        represents the isochrone.
 
-    See Also
-    --------
-    filter_graph_by_distance : Filter a graph by distance from a center point.
-
-    Examples
-    --------
-    >>> import networkx as nx
-    >>> from shapely.geometry import Point
-    >>> # Create a graph
-    >>> G = nx.Graph(crs="EPSG:32633")
-    >>> G.add_node(0, pos=(0, 0))
-    >>> G.add_node(1, pos=(10, 0))
-    >>> G.add_node(2, pos=(0, 10))
-    >>> G.add_edge(0, 1, length=10)
-    >>> G.add_edge(0, 2, length=10)
-    >>> # Create an isochrone
-    >>> center = Point(0, 0)
-    >>> isochrone = create_isochrone(G, center, distance=12)
-    >>> print(isochrone.geometry.iloc[0].wkt)
-    POLYGON ((0 0, 10 0, 0 10, 0 0))
+    Raises
+    ------
+    ValueError
+        If required inputs are missing or invalid.
     """
-    reachable = filter_graph_by_distance(graph, center_point, distance, edge_attr)
+    valid_methods = {"concave_hull_knn", "concave_hull_alpha", "convex_hull", "buffer"}
+    if method not in valid_methods:
+        msg = f"Unknown method: {method}. Must be one of {valid_methods}."
+        raise ValueError(msg)
 
-    # Convert to GeoDataFrame if NetworkX
-    if isinstance(reachable, (nx.Graph, nx.MultiGraph)):
-        converter = NxConverter()
-        reachable = converter.nx_to_gdf(reachable, nodes=False, edges=True)
+    if center_point is None or threshold is None:
+        msg = "center_point and threshold must be provided."
+        raise ValueError(msg)
 
-    if reachable.empty:
-        return gpd.GeoDataFrame(geometry=[], crs=getattr(reachable, "crs", None))
+    # Prepare the graph
+    nx_graph = _prepare_isochrone_graph(graph, nodes, edges, edge_attr)
 
-    # Create convex hull
-    union_geom = reachable.union_all()
-    hull = union_geom.convex_hull
-    return gpd.GeoDataFrame(geometry=[hull], crs=reachable.crs)
+    # Compute Reachable Subgraph
+    reachable = filter_graph_by_distance(nx_graph, center_point, threshold, edge_attr)
+
+    # Filter Edge Types if requested
+    if cut_edge_types and isinstance(reachable, (nx.Graph, nx.MultiGraph)):
+        reachable = _filter_edges_by_type(reachable, cut_edge_types)
+
+    # Get CRS
+    crs = nx_graph.graph.get("crs")
+
+    # Generate polygons
+    polygons = _generate_component_polygons(reachable, method, crs, **kwargs)
+
+    if not polygons:
+        return gpd.GeoDataFrame(geometry=[], crs=crs)
+
+    # Union all component polygons
+    final_geom = gpd.GeoSeries(polygons, crs=crs).union_all()
+
+    # Ensure the final geometry is a Polygon or MultiPolygon
+    if not isinstance(final_geom, (Polygon, MultiPolygon)):
+        final_geom = final_geom.buffer(0)
+
+    return gpd.GeoDataFrame(geometry=[final_geom], crs=crs)
+
+
+def _prepare_isochrone_graph(
+    graph: nx.Graph | nx.MultiGraph | None,
+    nodes: gpd.GeoDataFrame | dict[str, gpd.GeoDataFrame] | None,
+    edges: gpd.GeoDataFrame | dict[tuple[str, str, str], gpd.GeoDataFrame] | None,
+    edge_attr: str | None,
+) -> nx.Graph | nx.MultiGraph:
+    """
+    Prepare the graph for isochrone generation.
+
+    Validates inputs and converts GeoDataFrames to a NetworkX graph if necessary.
+    Also handles edge attribute injection for dict inputs.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph or None
+        Existing graph object.
+    nodes : geopandas.GeoDataFrame or dict or None
+        Node data.
+    edges : geopandas.GeoDataFrame or dict or None
+        Edge data.
+    edge_attr : str or None
+        Edge attribute to use for distance.
+
+    Returns
+    -------
+    networkx.Graph or networkx.MultiGraph
+        The prepared graph.
+    """
+    if graph is not None:
+        return graph
+
+    if nodes is None and edges is None:
+        msg = "Either 'graph' or 'nodes' and 'edges' must be provided."
+        raise ValueError(msg)
+
+    # If edges is a dict, ensure length attribute exists
+    if isinstance(edges, dict) and edge_attr:
+        edges = {
+            k: (
+                gdf.assign(**{edge_attr: gdf.geometry.length})
+                if edge_attr not in gdf.columns and "geometry" in gdf.columns
+                else gdf
+            )
+            for k, gdf in edges.items()
+        }
+    elif (
+        isinstance(edges, gpd.GeoDataFrame)
+        and edge_attr
+        and edge_attr not in edges.columns
+        and "geometry" in edges.columns
+    ):
+        edges = edges.assign(**{edge_attr: edges.geometry.length})
+
+    converter = NxConverter()
+    return converter.gdf_to_nx(nodes=nodes, edges=edges)
+
+
+def _filter_edges_by_type(
+    graph: nx.Graph | nx.MultiGraph,
+    cut_edge_types: list[tuple[str, str, str]],
+) -> nx.Graph | nx.MultiGraph:
+    """
+    Remove edges of specified types from the graph.
+
+    Iterates through the graph edges and removes those that match any of the
+    specified types in `cut_edge_types`.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+        The input graph.
+    cut_edge_types : list[tuple[str, str, str]]
+        List of edge types to remove.
+
+    Returns
+    -------
+    networkx.Graph or networkx.MultiGraph
+        The graph with specified edges removed.
+    """
+    graph = graph.copy()
+    edges_to_remove = [
+        (u, v)
+        for u, v, d in graph.edges(data=True)
+        if (d.get("full_edge_type") or d.get("edge_type")) in cut_edge_types
+    ]
+    if edges_to_remove:
+        graph.remove_edges_from(edges_to_remove)
+    return graph
+
+
+def _generate_component_polygons(
+    reachable: nx.Graph | nx.MultiGraph | gpd.GeoDataFrame,
+    method: str,
+    crs: Any,  # noqa: ANN401
+    **kwargs: Any,  # noqa: ANN401
+) -> list[Polygon | MultiPolygon]:
+    """
+    Generate polygons for each connected component of the reachable graph.
+
+    Splits the graph into connected components and generates a polygon for each
+    component using the specified method.
+
+    Parameters
+    ----------
+    reachable : networkx.Graph or networkx.MultiGraph or geopandas.GeoDataFrame
+        The reachable subgraph or edge GeoDataFrame.
+    method : str
+        The generation method.
+    crs : Any
+        The Coordinate Reference System.
+    **kwargs : Any
+        Additional arguments for the method.
+
+    Returns
+    -------
+    list[Polygon | MultiPolygon]
+        A list of generated Polygon or MultiPolygon geometries.
+    """
+    components = _get_graph_components(reachable)
+
+    polygons = []
+    for comp in components:
+        poly = _process_component(comp, method, crs, **kwargs)
+        if poly is not None:
+            polygons.append(poly)
+
+    return polygons
+
+
+def _get_graph_components(
+    reachable: nx.Graph | nx.MultiGraph,
+) -> list[nx.Graph | nx.MultiGraph]:
+    """
+    Determine connected components of the reachable graph.
+
+    If the input is a GeoDataFrame, it is treated as a single component.
+    Otherwise, it computes weakly or strongly connected components depending on
+    graph directionality.
+
+    Parameters
+    ----------
+    reachable : networkx.Graph or networkx.MultiGraph or geopandas.GeoDataFrame
+        The reachable subgraph or edge GeoDataFrame.
+
+    Returns
+    -------
+    list
+        A list of connected components (subgraphs).
+    """
+    if len(reachable) == 0:
+        return []
+
+    # Check if graph is already connected
+    if _is_graph_connected(reachable):
+        return [reachable]
+
+    # Split into connected components
+    component_fn = (
+        nx.weakly_connected_components if reachable.is_directed() else nx.connected_components
+    )
+    return [reachable.subgraph(c).copy() for c in component_fn(reachable)]
+
+
+def _is_graph_connected(graph: nx.Graph | nx.MultiGraph) -> bool:
+    """
+    Check if graph is connected (weakly for directed, strongly for undirected).
+
+    This utility function abstracts the difference between directed and undirected
+    graphs when checking for connectivity.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+        The input graph.
+
+    Returns
+    -------
+    bool
+        True if connected, False otherwise.
+    """
+    return bool(nx.is_weakly_connected(graph) if graph.is_directed() else nx.is_connected(graph))
+
+
+def _process_component(
+    component: nx.Graph | nx.MultiGraph,
+    method: str,
+    crs: Any,  # noqa: ANN401
+    **kwargs: Any,  # noqa: ANN401
+) -> Polygon | MultiPolygon | None:
+    """
+    Process a single component to generate its polygon.
+
+    Extracts geometries from the component and generates a polygon using the
+    specified method. Returns None if the result is invalid or empty.
+
+    Parameters
+    ----------
+    component : networkx.Graph or networkx.MultiGraph
+        The connected component to process.
+    method : str
+        The generation method.
+    crs : Any
+        The Coordinate Reference System.
+    **kwargs : Any
+        Additional arguments for the method.
+
+    Returns
+    -------
+    Polygon or MultiPolygon or None
+        The generated Polygon or MultiPolygon geometry, or None if failed or empty.
+    """
+    geoms = _extract_isochrone_geometries(component, method)
+    if not geoms:
+        return None
+
+    gs = gpd.GeoSeries(geoms, crs=crs)
+    # Filter invalid geometries
+    gs = gs[~gs.is_empty & gs.is_valid]
+
+    if gs.empty:
+        return None
+
+    poly = _generate_polygon(gs, method, **kwargs)
+
+    if poly is None or poly.is_empty:
+        return None
+
+    # Ensure Polygon/MultiPolygon output
+    if isinstance(poly, (Polygon, MultiPolygon)):
+        return poly
+
+    # Handle degenerate cases (Point/LineString) by buffering
+    # Use a small default buffer distance if not provided
+    buffer_dist = kwargs.get("degenerate_buffer_distance", 1.0)
+    # Ensure positive buffer distance
+    buffer_dist = max(buffer_dist, 1e-6) if buffer_dist is not None else 1.0
+
+    buffered = poly.buffer(buffer_dist)
+    return buffered if not buffered.is_empty and buffered.is_valid else None
+
+
+def _generate_polygon(
+    gs: gpd.GeoSeries,
+    method: str,
+    **kwargs: Any,  # noqa: ANN401
+) -> Polygon | MultiPolygon | LineString | Point | None:
+    """
+    Generate polygon using the specified method.
+
+    This function acts as a dispatcher, calling the appropriate geometry generation
+    function based on the provided method name. Note that this function may return
+    non-polygon geometries (LineString, Point) for degenerate cases, which are
+    then converted to polygons by the caller.
+
+    Parameters
+    ----------
+    gs : geopandas.GeoSeries
+        Input geometries.
+    method : str
+        The generation method name.
+    **kwargs : Any
+        Additional arguments for the method.
+
+    Returns
+    -------
+    Polygon or MultiPolygon or LineString or Point or None
+        The generated geometry (may be non-polygon for degenerate cases).
+    """
+    # Dispatch to method-specific handler
+    handlers = {
+        "concave_hull_knn": _generate_concave_hull_knn,
+        "concave_hull_alpha": _generate_concave_hull_alpha,
+        "convex_hull": _generate_convex_hull,
+        "buffer": _generate_buffer,
+    }
+
+    handler = handlers[method]
+    return handler(gs, **kwargs)
+
+
+def _generate_concave_hull_knn(
+    gs: gpd.GeoSeries,
+    **kwargs: Any,  # noqa: ANN401
+) -> Polygon | LineString | Point | None:
+    """
+    Generate concave hull using k-NN method.
+
+    Extracts points from the input geometries and computes the concave hull using
+    the k-nearest neighbors algorithm. May return LineString or Point for degenerate
+    cases (< 3 points), which are converted to polygons by the caller.
+
+    Parameters
+    ----------
+    gs : geopandas.GeoSeries
+        Input geometries.
+    **kwargs : Any
+        Additional arguments including 'k'.
+
+    Returns
+    -------
+    Polygon or LineString or Point or None
+        The concave hull geometry, or None if empty.
+    """
+    k = kwargs.get("k", 100)
+    points = _extract_points_from_geometries(gs)
+    return _concave_hull_knn(points, k=k) if points else None
+
+
+def _generate_concave_hull_alpha(
+    gs: gpd.GeoSeries,
+    **kwargs: Any,  # noqa: ANN401
+) -> Polygon | MultiPolygon | None:
+    """
+    Generate concave hull using alpha shape method.
+
+    Extracts points and computes the alpha shape (concave hull) using Shapely's
+    implementation.
+
+    Parameters
+    ----------
+    gs : geopandas.GeoSeries
+        Input geometries.
+    **kwargs : Any
+        Additional arguments including 'hull_ratio', 'allow_holes'.
+
+    Returns
+    -------
+    Polygon or MultiPolygon or None
+        The concave hull geometry, or None if empty.
+    """
+    hull_ratio = kwargs.get("hull_ratio", 0.3)
+    allow_holes = kwargs.get("allow_holes", False)
+    points = _extract_points_from_geometries(gs)
+    return (
+        _concave_hull_alpha(points, ratio=hull_ratio, allow_holes=allow_holes) if points else None
+    )
+
+
+def _generate_convex_hull(
+    gs: gpd.GeoSeries,
+    **kwargs: Any,  # noqa: ANN401, ARG001
+) -> Polygon | LineString | Point:
+    """
+    Generate convex hull.
+
+    Computes the convex hull of the union of all input geometries. May return
+    LineString or Point for degenerate cases, which are converted to polygons
+    by the caller.
+
+    Parameters
+    ----------
+    gs : geopandas.GeoSeries
+        Input geometries.
+    **kwargs : Any
+        Additional arguments (unused).
+
+    Returns
+    -------
+    Polygon or LineString or Point
+        The convex hull geometry.
+    """
+    return gs.union_all().convex_hull
+
+
+def _generate_buffer(
+    gs: gpd.GeoSeries,
+    **kwargs: Any,  # noqa: ANN401
+) -> Polygon | MultiPolygon | None:
+    """
+    Generate buffer around geometries.
+
+    Creates a buffer around the input geometries with the specified distance and
+    style parameters.
+
+    Parameters
+    ----------
+    gs : geopandas.GeoSeries
+        Input geometries.
+    **kwargs : Any
+        Additional arguments including 'buffer_distance', 'cap_style', 'join_style', 'resolution'.
+
+    Returns
+    -------
+    Polygon or MultiPolygon or None
+        The buffered geometry, or None if empty.
+    """
+    buffer_distance = kwargs.get("buffer_distance", 100)
+
+    # Early return if no buffering requested
+    if buffer_distance is None:
+        return gs.union_all()
+
+    cap_style = kwargs.get("cap_style", 1)
+    join_style = kwargs.get("join_style", 1)
+    resolution = kwargs.get("resolution", 16)
+
+    buffered = gs.buffer(
+        buffer_distance, cap_style=cap_style, join_style=join_style, resolution=resolution
+    )
+    buffered = buffered[~buffered.is_empty & buffered.is_valid]
+    return buffered.union_all() if not buffered.empty else None
+
+
+def _extract_isochrone_geometries(
+    reachable: nx.Graph | nx.MultiGraph,
+    method: str,
+) -> list[Any]:
+    """
+    Extract geometries from reachable subgraph for isochrone construction.
+
+    Retrieves node positions and optionally edge geometries from the graph or
+    GeoDataFrame, depending on the generation method.
+
+    Parameters
+    ----------
+    reachable : networkx.Graph or networkx.MultiGraph or geopandas.GeoDataFrame
+        The reachable subgraph or edge GeoDataFrame.
+    method : str
+        The isochrone generation method.
+
+    Returns
+    -------
+    list
+        A list of geometries (Points or LineStrings).
+    """
+    # Always extract node positions
+    geoms = _extract_node_geometries(reachable)
+
+    # Extract edge geometries only if needed
+    if method in {"buffer", "concave_hull_alpha"}:
+        geoms.extend(_extract_edge_geometries(reachable))
+
+    return geoms
+
+
+def _extract_node_geometries(graph: nx.Graph | nx.MultiGraph) -> list[Point]:
+    """
+    Extract node positions as Point geometries.
+
+    Iterates through graph nodes and creates Point objects from their 'pos' attribute.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+        The input graph.
+
+    Returns
+    -------
+    list[Point]
+        List of Point geometries for nodes.
+    """
+    pos_dict = nx.get_node_attributes(graph, "pos")
+    return [Point(p) for p in pos_dict.values()] if pos_dict else []
+
+
+def _extract_edge_geometries(graph: nx.Graph | nx.MultiGraph) -> list[Any]:
+    """
+    Extract edge geometries from graph.
+
+    Iterates through graph edges and retrieves their 'geometry' attribute.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+        The input graph.
+
+    Returns
+    -------
+    list
+        A list of edge geometries.
+    """
+    return [data["geometry"] for _, _, data in graph.edges(data=True) if "geometry" in data]
+
+
+def _concave_hull_knn(points: list[Point] | np.ndarray, k: int) -> Polygon | LineString | Point:
+    """
+    Compute the concave hull of a set of points using the k-nearest neighbors approach.
+
+    This function implements the k-nearest neighbors algorithm to generate a concave hull
+    from a set of points. It constructs the hull by iteratively finding the next point
+    that forms the largest right-turn angle, ensuring a tight fit around the point cloud.
+    Based on the algorithm by Moreira and Santos (2007).
+
+    Parameters
+    ----------
+    points : list[Point] or np.ndarray
+        The input points.
+    k : int
+        The number of nearest neighbors to consider.
+
+    Returns
+    -------
+    Polygon or LineString or Point
+        The concave hull geometry.
+    """
+    # Handle degenerate cases
+    if len(points) < 3:
+        return points[0] if len(points) == 1 else LineString(points)
+
+    # Prepare coordinates
+    coords = np.array([(p.x, p.y) for p in points]) if isinstance(points, list) else points
+    coords = np.unique(coords, axis=0)
+    n_points = len(coords)
+
+    if n_points < 3:
+        return LineString(coords) if n_points == 2 else Point(coords[0])
+
+    # Build KDTree and find starting point (lowest Y, then lowest X)
+    tree = cKDTree(coords)
+    start_idx = np.lexsort((coords[:, 0], coords[:, 1]))[0]
+
+    # Initialize hull
+    hull_indices = [start_idx]
+    current_idx = start_idx
+    prev_vec = np.array([1.0, 0.0])  # Initial direction: East
+    visited = {start_idx}
+
+    # Loop until we close the polygon or fail
+    while True:
+        next_idx = _find_next_hull_point(
+            tree, coords, current_idx, k, prev_vec, hull_indices, start_idx, visited, n_points
+        )
+
+        if next_idx is None:
+            # Fallback to convex hull if we get stuck
+            return MultiPoint(points).convex_hull
+
+        if next_idx == start_idx:
+            return Polygon(coords[hull_indices])
+
+        hull_indices.append(next_idx)
+        visited.add(next_idx)
+        current_idx = next_idx
+        prev_vec = coords[next_idx] - coords[hull_indices[-2]]
+
+
+def _find_next_hull_point(
+    tree: cKDTree,
+    coords: np.ndarray,
+    current_idx: int,
+    k: int,
+    prev_vec: np.ndarray,
+    hull_indices: list[int],
+    start_idx: int,
+    visited: set[int],
+    n_points: int,
+) -> int | None:
+    """
+    Find the next point in the concave hull.
+
+    This helper function queries the KDTree for nearest neighbors and iterates through
+    candidates to find the best next point that satisfies the concave hull criteria.
+    It handles increasing k if no valid candidate is found initially.
+
+    Parameters
+    ----------
+    tree : scipy.spatial.cKDTree
+        The KDTree for nearest neighbor search.
+    coords : np.ndarray
+        Array of all point coordinates.
+    current_idx : int
+        Index of the current point in the hull.
+    k : int
+        The number of nearest neighbors to consider.
+    prev_vec : np.ndarray
+        Vector of the previous edge in the hull.
+    hull_indices : list[int]
+        List of indices currently in the hull.
+    start_idx : int
+        Index of the starting point of the hull.
+    visited : set[int]
+        Set of visited point indices.
+    n_points : int
+        Total number of points.
+
+    Returns
+    -------
+    int or None
+        The index of the next point, or None if no valid point found.
+    """
+    current_k = k
+    while current_k <= n_points:
+        # Query k nearest neighbors
+        query_k = min(current_k + 1, n_points)
+        _, indices = tree.query(coords[current_idx], k=query_k)
+
+        if not isinstance(indices, (list, np.ndarray)):
+            indices = [indices]
+
+        # Filter candidates
+        candidates = [
+            idx
+            for idx in indices
+            if idx != current_idx
+            and (idx not in visited or (idx == start_idx and len(hull_indices) >= 3))
+        ]
+
+        if candidates:
+            best_idx = _find_best_candidate(
+                coords, current_idx, candidates, prev_vec, hull_indices, start_idx
+            )
+            if best_idx is not None:
+                return best_idx
+
+        # Increase k if no valid candidate found
+        current_k = min(current_k + 5, n_points)
+        if current_k == n_points:  # Avoid infinite loop
+            break
+
+    return None
+
+
+def _find_best_candidate(
+    coords: np.ndarray,
+    current_idx: int,
+    candidates: list[int],
+    prev_vec: np.ndarray,
+    hull_indices: list[int],
+    start_idx: int,
+) -> int | None:
+    """
+    Find the best candidate point with the largest right-turn angle.
+
+    This function evaluates a list of candidate points by calculating the angle
+    deviation from the previous vector. It prioritizes points that form the sharpest
+    right turn (largest inner angle) to ensure the hull wraps tightly around the shape.
+
+    Parameters
+    ----------
+    coords : np.ndarray
+        Array of all point coordinates.
+    current_idx : int
+        Index of the current point in the hull.
+    candidates : list[int]
+        List of indices of candidate points.
+    prev_vec : np.ndarray
+        Vector of the previous edge in the hull.
+    hull_indices : list[int]
+        List of indices currently in the hull.
+    start_idx : int
+        Index of the starting point of the hull.
+
+    Returns
+    -------
+    int or None
+        The index of the best candidate, or None if no valid candidate found.
+    """
+    current_pos = coords[current_idx]
+    candidate_pos = coords[candidates]
+
+    # Calculate vectors and normalize
+    vecs = (candidate_pos - current_pos).astype(float)
+    norms = np.linalg.norm(vecs, axis=1)
+
+    # Filter zero-length vectors
+    valid_mask = norms > 0
+    if not np.any(valid_mask):
+        return None
+
+    vecs = vecs[valid_mask]
+    candidates_array = np.array(candidates)[valid_mask]
+    vecs /= norms[valid_mask][:, np.newaxis]
+
+    # Calculate angles relative to previous vector
+    prev_angle = np.arctan2(prev_vec[1], prev_vec[0])
+    angles = np.arctan2(vecs[:, 1], vecs[:, 0])
+
+    # Calculate angle difference (preference for right turns / largest inner angle)
+    # We want the point that is "most right" relative to our current direction
+    diffs = (angles - prev_angle + np.pi) % (2 * np.pi) - np.pi
+    sorted_indices = np.argsort(diffs)
+
+    # Check validity of candidates in order
+    for idx in sorted_indices:
+        candidate_idx = int(candidates_array[idx])
+        new_edge = LineString([coords[current_idx], coords[candidate_idx]])
+
+        if _is_valid_edge(new_edge, coords, hull_indices, start_idx, candidate_idx):
+            return candidate_idx
+
+    return None
+
+
+def _is_valid_edge(
+    new_edge: LineString,
+    coords: np.ndarray,
+    hull_indices: list[int],
+    start_idx: int,
+    candidate_idx: int,
+) -> bool:
+    """
+    Check if the new edge intersects with any existing hull edges.
+
+    This validation ensures that adding the proposed edge does not create a self-intersecting
+    polygon. It checks for intersections with all non-adjacent edges in the current hull.
+
+    Parameters
+    ----------
+    new_edge : shapely.geometry.LineString
+        The potential new edge to add to the hull.
+    coords : np.ndarray
+        Array of all point coordinates.
+    hull_indices : list[int]
+        List of indices currently in the hull.
+    start_idx : int
+        Index of the starting point of the hull.
+    candidate_idx : int
+        Index of the candidate point for the new edge.
+
+    Returns
+    -------
+    bool
+        True if the edge is valid (no self-intersection), False otherwise.
+    """
+    if len(hull_indices) < 3:
+        return True
+
+    # Check against existing edges (excluding the immediate predecessor)
+    # We only need to check segments that could possibly intersect
+    # Optimization: check bounding box first? (Shapely does this internally)
+
+    # Create a MultiLineString of existing edges to check against in one go?
+    # Or just iterate. Iterating is fine for now.
+
+    # We skip the last added edge (predecessor) because we share a vertex with it.
+    for i in range(len(hull_indices) - 2):
+        p1 = coords[hull_indices[i]]
+        p2 = coords[hull_indices[i + 1]]
+        existing_edge = LineString([p1, p2])
+
+        if new_edge.intersects(existing_edge):
+            intersection = new_edge.intersection(existing_edge)
+
+            # Allow touching at start point when closing the loop
+            if (
+                candidate_idx == start_idx
+                and i == 0
+                and (isinstance(intersection, Point) or intersection.is_empty)
+            ):
+                continue
+
+            # If intersection is just a point and it's not the shared vertex (which we skipped)
+            # it might be a problem if it's not an endpoint.
+            # But intersects() returns true for shared endpoints.
+            # We skipped the immediate predecessor, so we shouldn't share endpoints with checked edges
+            # UNLESS we are closing the loop (checked above).
+
+            if not intersection.is_empty:
+                # If it's a proper intersection (not just touching), reject
+                # Or if it touches at a place that isn't allowed
+                return False
+
+    return True
+
+
+def _extract_points_from_geometries(geoms: gpd.GeoSeries | list[Any]) -> list[Point]:
+    """
+    Extract all points from a list of geometries.
+
+    This function uses shapely.get_coordinates for efficient extraction.
+
+    Parameters
+    ----------
+    geoms : geopandas.GeoSeries or list
+        Input geometries (Point, LineString, MultiPoint, Polygon, etc.).
+
+    Returns
+    -------
+    list[Point]
+        A list of shapely Points extracted from the inputs.
+    """
+    # Use shapely.get_coordinates for efficient extraction (requires shapely >= 2.0)
+    # Since we use shapely.concave_hull elsewhere, we assume shapely >= 2.0
+    coords = shapely.get_coordinates(geoms)
+    return [Point(c) for c in coords]
+
+
+def _concave_hull_alpha(
+    points: list[Point], ratio: float, allow_holes: bool
+) -> Polygon | MultiPolygon:
+    """
+    Compute the alpha shape (concave hull) of a set of points.
+
+    This function uses shapely.concave_hull to generate the geometry.
+
+    Parameters
+    ----------
+    points : list[Point]
+        The input points.
+    ratio : float
+        The ratio for the concave hull (0.0 to 1.0).
+    allow_holes : bool
+        Whether to allow holes in the hull.
+
+    Returns
+    -------
+    Polygon or MultiPolygon
+        The computed alpha shape.
+    """
+    unique_coords = {(p.x, p.y) for p in points}
+    if len(unique_coords) >= 3:
+        unique_points = MultiPoint([Point(c) for c in unique_coords])
+        return shapely.concave_hull(unique_points, ratio=ratio, allow_holes=allow_holes)
+
+    # Fallback to convex hull for degenerate cases
+    return MultiPoint(points).convex_hull
 
 
 def create_tessellation(

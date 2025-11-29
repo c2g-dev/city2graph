@@ -12,11 +12,13 @@ from unittest import mock
 
 import geopandas as gpd
 import networkx as nx
+import numpy as np
 import pandas as pd
 import pytest
 import rustworkx as rx
 from shapely.geometry import LineString
 from shapely.geometry import Point
+from shapely.geometry import Polygon
 
 from city2graph import utils
 from city2graph.base import GeoDataProcessor
@@ -142,6 +144,45 @@ class TestTessellation(BaseGraphTest):
         result = utils.create_tessellation(empty_gdf, primary_barriers=barriers)
         self.assert_valid_gdf(result, expected_empty=True)
         helpers.assert_has_columns(result, ["enclosure_index"])
+
+    def test_empty_tessellation_with_tess_id(self, sample_crs: str) -> None:
+        """Test _create_empty_tessellation with tess_id column (line 2422)."""
+        result = utils._create_empty_tessellation(sample_crs, include_tess_id=True)
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.empty
+        assert "tess_id" in result.columns
+        assert "enclosure_index" in result.columns
+
+    def test_tessellation_momepy_error_handling(self, sample_crs: str) -> None:
+        """Test tessellation error handling for momepy ValueError (lines 2393-2399)."""
+        # Create geometry that might cause momepy to fail with "No objects to concatenate"
+        # Use a configuration that could trigger internal momepy ValueError
+
+        # Create valid input geometry
+        geometry = gpd.GeoDataFrame(
+            geometry=[Point(0, 0), Point(1, 1)],
+            crs=sample_crs,
+        )
+        barriers = gpd.GeoDataFrame(
+            geometry=[LineString([(0, 0), (1, 1)])],
+            crs=sample_crs,
+        )
+
+        # Mock momepy.enclosed_tessellation to raise ValueError with "No objects to concatenate"
+        # Since utils imports momepy, we patch city2graph.utils.momepy.enclosed_tessellation
+        with mock.patch("city2graph.utils.momepy.enclosed_tessellation") as mock_tess:
+            mock_tess.side_effect = ValueError("No objects to concatenate")
+
+            # Should handle the error and return empty tessellation
+            result = utils.create_tessellation(
+                geometry,
+                primary_barriers=barriers,
+                shrink=0.4,
+            )
+
+            assert isinstance(result, gpd.GeoDataFrame)
+            assert result.empty
+            assert result.crs == sample_crs
 
 
 # ============================================================================
@@ -345,6 +386,40 @@ class TestGraphStructures(BaseGraphTest):
         edge_keys = edges_gdf.index.get_level_values("edge_key")
         assert list(edge_keys) == [0, 1]
 
+    def test_dual_graph_empty_result_with_edge_id_col(
+        self, sample_nodes_gdf: gpd.GeoDataFrame, sample_crs: str
+    ) -> None:
+        """Test dual_graph with empty result and edge_id_col specified (line 1527)."""
+        # Create edges that won't form any dual edges
+        single_edge = gpd.GeoDataFrame(
+            {"edge_id": ["e1"]},
+            geometry=[LineString([(0, 0), (1, 1)])],
+            crs=sample_crs,
+        )
+        single_edge.index = pd.MultiIndex.from_arrays([[0], [1]], names=["u", "v"])
+
+        dual_nodes, dual_edges = utils.dual_graph(
+            (sample_nodes_gdf, single_edge), edge_id_col="edge_id"
+        )
+
+        # Should have nodes but no edges (single edge has no dual connections)
+        assert not dual_nodes.empty
+        assert dual_edges.empty
+        assert dual_edges.index.names == ["from_edge_id", "to_edge_id"]
+
+    def test_dual_graph_as_nx(
+        self, sample_nodes_gdf: gpd.GeoDataFrame, sample_edges_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """Test dual_graph with as_nx=True."""
+        result = utils.dual_graph((sample_nodes_gdf, sample_edges_gdf), as_nx=True)
+        assert isinstance(result, nx.Graph)
+        assert len(result) > 0
+
+    def test_canonical_edge_pair_self_loop(self) -> None:
+        """Test _canonical_edge_pair with self-loop (line 1370)."""
+        assert utils._canonical_edge_pair(1, 1) == (1, 1)
+        assert utils._canonical_edge_pair("a", "a") == ("a", "a")
+
 
 # ============================================================================
 # GRAPH ANALYSIS TESTS
@@ -377,53 +452,718 @@ class TestGraphAnalysis(BaseGraphTest):
         center_source = request.getfixturevalue(center_fixture)
         center_point = helpers.get_center_point(center_source)
 
-        filtered = utils.filter_graph_by_distance(graph, center_point, distance=distance)
+        reachable = utils.filter_graph_by_distance(
+            graph,
+            center_point=center_point,
+            threshold=distance,
+            edge_attr="length",
+        )
 
         if as_nx:
-            assert isinstance(filtered, nx.Graph)
-            assert (filtered.number_of_edges() == 0) == expect_empty
+            assert isinstance(reachable, nx.Graph)
+            assert (reachable.number_of_edges() == 0) == expect_empty
         else:
-            self.assert_valid_gdf(filtered, expect_empty)
+            self.assert_valid_gdf(reachable, expect_empty)
 
-    def test_graph_distance_filtering_without_pos(self, sample_crs: str) -> None:
-        """Graphs lacking position data should return empty filtered results."""
-        graph = nx.Graph()
-        graph.add_node(1, feature=1)
-        graph.add_node(2, feature=2)
-        graph.add_edge(1, 2)
-        graph.graph = {"crs": sample_crs, "is_hetero": False}
+    def test_create_isochrone_basic(self, sample_nx_graph: nx.Graph) -> None:
+        """Test basic isochrone creation."""
+        center = Point(0, 0)
+        distance = 2.0
 
-        filtered = utils.filter_graph_by_distance(graph, Point(0, 0), 100.0)
-        assert isinstance(filtered, nx.Graph)
-        assert filtered.number_of_nodes() == 0
+        isochrone = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=center,
+            threshold=distance,
+            edge_attr="edge_feature1",  # Use custom attribute
+            method="convex_hull",
+        )
 
-    @pytest.mark.parametrize(
-        ("graph_fixture", "center_fixture", "distance", "expect_empty"),
-        [
-            ("sample_segments_gdf", "mg_center_point", 100.0, False),
-            ("sample_segments_gdf", "mg_center_point", 0.01, True),
-            ("sample_nx_graph", "sample_nodes_gdf", 1.0, False),
-        ],
-    )
-    def test_isochrone_generation(
+        assert isinstance(isochrone, gpd.GeoDataFrame)
+        assert len(isochrone) == 1
+        assert isochrone.geometry.iloc[0].geom_type == "Polygon"
+        # All nodes should be reachable with distance 2.0 (max dist is 1.7)
+        # So hull should cover all points.
+
+    def test_create_isochrone_buffer(self, sample_nx_graph: nx.Graph) -> None:
+        """Test isochrone creation with buffer method."""
+        center = Point(0, 0)
+        distance = 1.0
+
+        isochrone = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=center,
+            threshold=distance,
+            edge_attr="edge_feature1",
+            method="buffer",
+            buffer_distance=0.1,
+        )
+
+        assert isinstance(isochrone, gpd.GeoDataFrame)
+        assert len(isochrone) == 1
+        assert isochrone.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
+
+    def test_isochrone_with_cut_edge_types(
         self,
-        graph_fixture: str,
-        center_fixture: str,
-        distance: float,
-        expect_empty: bool,
-        request: pytest.FixtureRequest,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
     ) -> None:
-        """Test isochrone polygon generation from graphs."""
-        graph = request.getfixturevalue(graph_fixture)
-        center_source = request.getfixturevalue(center_fixture)
-        center_point = helpers.get_center_point(center_source)
+        """Test isochrone generation with edge type cutting."""
+        graph = gdf_to_nx(nodes=sample_hetero_nodes_dict, edges=sample_hetero_edges_dict)
+        center = Point(0, 0)
+        distance = 100.0
 
-        isochrone = utils.create_isochrone(graph, center_point, distance=distance)
+        # Generate without cutting
+        iso_full = utils.create_isochrone(
+            graph,
+            center_point=center,
+            threshold=distance,
+            method="buffer",
+            buffer_distance=1.0,
+        )
 
-        self.assert_valid_gdf(isochrone, expect_empty)
-        if not expect_empty:
-            assert len(isochrone) == 1
-            assert isochrone.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
+        # Generate with cutting
+        # Assuming 'building', 'connects_to', 'road' is the edge type in sample
+        cut_type = ("building", "connects_to", "road")
+        iso_cut = utils.create_isochrone(
+            graph,
+            center_point=center,
+            threshold=distance,
+            method="buffer",
+            buffer_distance=1.0,
+            cut_edge_types=[cut_type],
+        )
+
+        # The cut isochrone should be smaller or empty if all edges are cut
+        # In the sample, we only have one edge type. If we cut it, we have no edges.
+        # But nodes are still there?
+        # create_isochrone with method="buffer" uses edges.
+        # If all edges are removed, it returns empty or just nodes?
+        # _extract_isochrone_geometries adds nodes AND edges for buffer?
+        # Let's check _extract_isochrone_geometries implementation.
+        # It adds node positions first, THEN edges if method="buffer".
+        # So if edges are removed, it will buffer the nodes.
+
+        # Full isochrone: nodes + edges buffered.
+        # Cut isochrone: nodes buffered (edges removed).
+        # So area should be smaller.
+
+        assert not iso_full.empty
+        assert not iso_cut.empty
+        assert iso_cut.geometry.iloc[0].area < iso_full.geometry.iloc[0].area
+
+    def test_isochrone_disconnected_components(self, sample_crs: str) -> None:
+        """Test that cutting edges results in multiple polygons if graph becomes disconnected."""
+        # Create two clusters connected by a single edge
+        # Cluster 1
+        c1_nodes = [Point(0, 0), Point(1, 0), Point(0, 1)]
+        c1_ids = [1, 2, 3]
+
+        # Cluster 2 (far away)
+        c2_nodes = [Point(100, 100), Point(101, 100), Point(100, 101)]
+        c2_ids = [11, 12, 13]
+
+        nodes_gdf = gpd.GeoDataFrame(
+            {"geometry": c1_nodes + c2_nodes},
+            index=pd.Index(c1_ids + c2_ids, name="node_id"),
+            crs=sample_crs,
+        )
+
+        # Edges
+        edges_data = {
+            "u": [1, 1, 11, 11, 3],
+            "v": [2, 3, 12, 13, 11],  # 3->11 is the long connector
+            "length": [1, 1, 1, 1, 10],
+            "edge_type": [
+                ("street", "street", "street"),
+                ("street", "street", "street"),
+                ("street", "street", "street"),
+                ("street", "street", "street"),
+                ("transit", "transit", "transit"),
+            ],
+            "geometry": [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(0, 0), (0, 1)]),
+                LineString([(100, 100), (101, 100)]),
+                LineString([(100, 100), (100, 101)]),
+                LineString([(0, 1), (100, 100)]),
+            ],
+        }
+        edges_gdf = gpd.GeoDataFrame(edges_data, crs=sample_crs).set_index(["u", "v"])
+
+        graph = gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf)
+
+        # Generate isochrone with cutting "transit"
+        # Distance 20 is enough to reach cluster 2
+        iso = utils.create_isochrone(
+            graph,
+            center_point=Point(0, 0),
+            threshold=20,
+            edge_attr="length",
+            method="convex_hull",
+            cut_edge_types=[("transit", "transit", "transit")],
+        )
+
+        # Should be MultiPolygon (or at least disjoint)
+        geom = iso.geometry.iloc[0]
+        assert geom.geom_type == "MultiPolygon"
+        # Area should be small (approx 2 small triangles), not covering the gap
+        assert geom.area < 100.0
+
+    def test_isochrone_center_gdf(self, sample_nx_graph: nx.Graph) -> None:
+        """Test isochrone creation with GeoDataFrame as center_point."""
+        # Create a GeoDataFrame for center point
+        center_gdf = gpd.GeoDataFrame(
+            {"geometry": [Point(0, 0)]},
+            index=[999],  # Mismatched index to ensure robustness
+            crs=sample_nx_graph.graph["crs"],
+        )
+
+        isochrone = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=center_gdf,
+            threshold=2.0,
+            edge_attr="edge_feature1",
+            method="convex_hull",
+        )
+
+        assert isinstance(isochrone, gpd.GeoDataFrame)
+        assert len(isochrone) == 1
+        assert not isochrone.empty
+
+    def test_create_isochrone_alpha_shape(self, sample_nx_graph: nx.Graph) -> None:
+        """Test isochrone creation with alpha_shape method."""
+        center = Point(0, 0)
+        distance = 2.0
+
+        isochrone = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=center,
+            threshold=distance,
+            edge_attr="edge_feature1",
+            method="concave_hull_alpha",
+            hull_ratio=0.5,
+        )
+
+        assert isinstance(isochrone, gpd.GeoDataFrame)
+        assert len(isochrone) == 1
+        assert isochrone.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
+
+    def test_create_isochrone_default_method(self, sample_nx_graph: nx.Graph) -> None:
+        """Test isochrone creation with default method (concave_hull_knn)."""
+        center = Point(0, 0)
+        distance = 2.0
+
+        isochrone = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=center,
+            threshold=distance,
+            edge_attr="edge_feature1",
+        )
+
+        assert isinstance(isochrone, gpd.GeoDataFrame)
+        assert len(isochrone) == 1
+        # concave_hull_knn produces Polygon
+        assert isochrone.geometry.iloc[0].geom_type == "Polygon"
+
+    def test_create_isochrone_concave_hull_knn_params(self, sample_nx_graph: nx.Graph) -> None:
+        """Test concave_hull_knn with different k values."""
+        center = Point(0, 0)
+        distance = 2.0
+
+        # k=1 (should work, might fallback or minimal hull)
+        iso_k1 = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=center,
+            threshold=distance,
+            method="concave_hull_knn",
+            k=1,
+        )
+        assert not iso_k1.empty
+
+        # k larger than n_points (should fallback to convex hull)
+        iso_k_large = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=center,
+            threshold=distance,
+            method="concave_hull_knn",
+            k=1000,
+        )
+        assert not iso_k_large.empty
+        assert iso_k_large.geometry.iloc[0].geom_type == "Polygon"
+
+    def test_create_isochrone_concave_hull_alpha_params(self, sample_nx_graph: nx.Graph) -> None:
+        """Test concave_hull_alpha with different parameters."""
+        center = Point(0, 0)
+        distance = 2.0
+
+        # High ratio (tighter fit)
+        iso_tight = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=center,
+            threshold=distance,
+            method="concave_hull_alpha",
+            hull_ratio=0.9,
+        )
+        assert not iso_tight.empty
+
+        # Allow holes
+        iso_holes = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=center,
+            threshold=distance,
+            method="concave_hull_alpha",
+            allow_holes=True,
+        )
+        assert not iso_holes.empty
+
+    def test_create_isochrone_degenerate_cases(self, sample_crs: str) -> None:
+        """Test isochrone generation with degenerate graphs (1 or 2 nodes)."""
+        # 1 node
+        g1 = nx.Graph()
+        g1.add_node(1, pos=(0, 0), geometry=Point(0, 0))
+        g1.graph = {"crs": sample_crs}
+
+        iso1 = utils.create_isochrone(
+            g1, center_point=Point(0, 0), threshold=10, method="concave_hull_knn"
+        )
+        assert not iso1.empty
+        # Output is always Polygon or MultiPolygon (buffered from Point)
+        assert iso1.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
+
+        # 2 nodes
+        g2 = nx.Graph()
+        g2.add_node(1, pos=(0, 0), geometry=Point(0, 0))
+        g2.add_node(2, pos=(1, 1), geometry=Point(1, 1))
+        g2.add_edge(1, 2, length=1.414)
+        g2.graph = {"crs": sample_crs}
+
+        iso2 = utils.create_isochrone(
+            g2, center_point=Point(0, 0), threshold=10, method="concave_hull_knn"
+        )
+        assert not iso2.empty
+        # Output is always Polygon or MultiPolygon (convex hull of LineString)
+        assert iso2.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
+
+    def test_create_isochrone_input_validation(self, sample_nx_graph: nx.Graph) -> None:
+        """Test input validation for create_isochrone."""
+        with pytest.raises(ValueError, match="Unknown method"):
+            utils.create_isochrone(
+                sample_nx_graph, center_point=Point(0, 0), threshold=10, method="invalid_method"
+            )
+
+        with pytest.raises(ValueError, match="center_point and threshold must be provided"):
+            utils.create_isochrone(sample_nx_graph, center_point=None, threshold=10)
+
+        with pytest.raises(
+            ValueError, match="Either 'graph' or 'nodes' and 'edges' must be provided"
+        ):
+            utils.create_isochrone(
+                graph=None, nodes=None, edges=None, center_point=Point(0, 0), threshold=10
+            )
+
+    def test_create_isochrone_multi_center(self, sample_nx_graph: nx.Graph) -> None:
+        """Test isochrone with multiple center points."""
+        centers = gpd.GeoSeries([Point(0, 0), Point(1, 1)], crs=sample_nx_graph.graph["crs"])
+
+        iso = utils.create_isochrone(
+            sample_nx_graph, center_point=centers, threshold=2.0, method="convex_hull"
+        )
+        assert not iso.empty
+
+    def test_create_isochrone_buffer_none(self, sample_nx_graph: nx.Graph) -> None:
+        """Test buffer method with buffer_distance=None (should return Polygon/MultiPolygon)."""
+        center = Point(0, 0)
+        iso = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=center,
+            threshold=2.0,
+            method="buffer",
+            buffer_distance=None,
+        )
+        assert not iso.empty
+        # Output is always Polygon or MultiPolygon
+        assert iso.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
+
+    def test_create_isochrone_from_gdf_inputs(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test create_isochrone with nodes/edges input (returns GDF reachable)."""
+        center = Point(0, 0)
+        iso = utils.create_isochrone(
+            nodes=sample_nodes_gdf,
+            edges=sample_edges_gdf,
+            center_point=center,
+            threshold=2.0,
+            method="convex_hull",
+        )
+        assert not iso.empty
+        assert iso.geometry.iloc[0].geom_type == "Polygon"
+
+    def test_filter_graph_no_pos(self, sample_crs: str) -> None:
+        """Test filter_graph_by_distance with graph missing 'pos' attribute."""
+        G = nx.Graph()
+        G.add_node(1)  # No pos
+        G.graph = {"crs": sample_crs}
+
+        # Should return empty graph or handle gracefully
+        reachable = utils.filter_graph_by_distance(G, center_point=Point(0, 0), threshold=10)
+        assert isinstance(reachable, nx.Graph)
+        assert len(reachable) == 0
+
+    def test_create_isochrone_far_snap(self, sample_nx_graph: nx.Graph) -> None:
+        """Test isochrone with far away center (should snap to nearest)."""
+        center = Point(1000, 1000)  # Far away
+        iso = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=center,
+            threshold=1.0,
+            method="concave_hull_knn",
+        )
+        # Current implementation snaps to nearest node regardless of distance
+        assert not iso.empty
+        # Should be a geometry (Point, LineString, or Polygon depending on neighbors)
+        assert iso.geometry.iloc[0].geom_type in ["Point", "LineString", "Polygon"]
+
+    def test_create_isochrone_disconnected_graph_parts(self, sample_crs: str) -> None:
+        """Test isochrone on a graph with completely disconnected components."""
+        # Create two disconnected components
+        G = nx.Graph()
+        G.graph["crs"] = sample_crs
+
+        # Component 1
+        G.add_node(1, pos=(0, 0))
+        G.add_node(2, pos=(1, 0))
+        G.add_edge(1, 2, length=1)
+
+        # Component 2
+        G.add_node(3, pos=(10, 10))
+        G.add_node(4, pos=(11, 10))
+        G.add_edge(3, 4, length=1)
+
+        # Isochrone from Component 1 should not include Component 2
+        iso = utils.create_isochrone(
+            G, center_point=Point(0, 0), threshold=2.0, edge_attr="length", method="convex_hull"
+        )
+
+        assert len(iso) == 1
+        poly = iso.geometry.iloc[0]
+        assert poly.intersects(Point(0, 0))
+        assert not poly.intersects(Point(10, 10))
+
+    def test_create_isochrone_all_methods(self, sample_nx_graph: nx.Graph) -> None:
+        """Ensure all methods run without error on a standard graph."""
+        center = Point(0, 0)
+        methods = ["concave_hull_knn", "concave_hull_alpha", "convex_hull", "buffer"]
+
+        for method in methods:
+            iso = utils.create_isochrone(
+                sample_nx_graph, center_point=center, threshold=2.0, method=method
+            )
+            assert not iso.empty
+            assert isinstance(iso, gpd.GeoDataFrame)
+
+    def test_prepare_isochrone_graph_edge_attr_injection(
+        self, sample_nodes_gdf: gpd.GeoDataFrame, sample_edges_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """Test that edge attribute is injected if missing when using GDF inputs."""
+        # Remove length column if exists
+        if "length" in sample_edges_gdf.columns:
+            sample_edges_gdf = sample_edges_gdf.drop(columns=["length"])
+
+        iso = utils.create_isochrone(
+            nodes=sample_nodes_gdf,
+            edges=sample_edges_gdf,
+            center_point=Point(0, 0),
+            threshold=10.0,
+            edge_attr="length",  # Should be calculated from geometry
+            method="convex_hull",
+        )
+        assert not iso.empty
+
+    def test_concave_hull_knn_degenerate_triangle(self) -> None:
+        """Test concave hull with exactly 3 points (triangle)."""
+        points = [Point(0, 0), Point(1, 0), Point(0, 1)]
+        poly = utils._concave_hull_knn(points, k=3)
+        assert isinstance(poly, Polygon)
+        assert poly.area == 0.5
+
+    def test_concave_hull_knn_collinear(self) -> None:
+        """Test concave hull with collinear points."""
+        points = [Point(0, 0), Point(1, 1), Point(2, 2)]
+        # Should return LineString or fallback to convex hull (which is LineString for collinear)
+        geom = utils._concave_hull_knn(points, k=3)
+        assert isinstance(geom, LineString)
+
+    def test_prepare_isochrone_graph_dict_edges_missing_attr(self, sample_crs: str) -> None:
+        """Test _prepare_isochrone_graph with dict edges missing the edge attribute."""
+        nodes = {
+            "node_type": gpd.GeoDataFrame(
+                {"geometry": [Point(0, 0), Point(1, 1)]},
+                index=[1, 2],
+                crs=sample_crs,
+            )
+        }
+        # Edges dict without 'length' attribute, but with geometry
+        edges = {
+            ("node_type", "rel", "node_type"): gpd.GeoDataFrame(
+                {
+                    "u": [1],
+                    "v": [2],
+                    "geometry": [LineString([(0, 0), (1, 1)])],
+                },
+                crs=sample_crs,
+            ).set_index(["u", "v"])
+        }
+
+        # Should calculate length automatically
+        graph = utils._prepare_isochrone_graph(
+            graph=None, nodes=nodes, edges=edges, edge_attr="length"
+        )
+        assert isinstance(graph, (nx.Graph, nx.MultiGraph))
+
+        # Check that at least one edge has length > 0
+        found_length = False
+        for _, _, data in graph.edges(data=True):
+            if "length" in data and data["length"] > 0:
+                found_length = True
+                break
+        assert found_length, "Edge length was not calculated"
+
+    def test_find_best_candidate_no_valid(self) -> None:
+        """Test _find_best_candidate when no valid candidate exists."""
+        # Scenario: 3 points, but the only candidate would cause self-intersection
+        # We can test the helper directly to hit the "return None" branch
+        coords = np.array([(0, 0), (1, 0), (0, 1)])
+        current_idx = 0
+        candidates = [1, 2]
+        prev_vec = np.array([1, 0])
+        hull_indices = [0]
+        start_idx = 0
+
+        # This should find a candidate
+        best = utils._find_best_candidate(
+            coords, current_idx, candidates, prev_vec, hull_indices, start_idx
+        )
+        assert best is not None
+
+        # Now force failure by making candidates invalid (e.g. zero length vector)
+        # coords[1] same as coords[0]
+        coords_degenerate = np.array([(0, 0), (0, 0)])
+        best_degenerate = utils._find_best_candidate(
+            coords_degenerate, 0, [1], prev_vec, hull_indices, start_idx
+        )
+        assert best_degenerate is None
+
+    def test_is_valid_edge_intersection(self) -> None:
+        """Test _is_valid_edge detects intersections."""
+        # Construct a hull that is about to self-intersect
+        coords = np.array([(0, 0), (10, 0), (10, 10), (0, 10), (5, 5)])
+        # Hull: (0,0) -> (10,0) -> (10,10) -> (0,10)
+        hull_indices = [0, 1, 2, 3]
+        start_idx = 0
+
+        # Edge from (0,10) to (5,5) is valid (inside)
+        new_edge_valid = LineString([(0, 10), (5, 5)])
+        assert utils._is_valid_edge(new_edge_valid, coords, hull_indices, start_idx, 4)
+
+        # Edge from (0,10) to (5, -5) crosses (0,0)-(10,0)
+        new_edge_invalid = LineString([(0, 10), (5, -5)])
+        assert not utils._is_valid_edge(
+            new_edge_invalid, coords, hull_indices, start_idx, -1
+        )  # -1 as dummy candidate
+
+    def test_create_isochrone_empty_result(self) -> None:
+        """Test create_isochrone returning empty result."""
+        # Threshold 0.0 should result in no reachable nodes/edges if center is not on a node?
+        # Or if graph is empty.
+        empty_graph = nx.Graph()
+        empty_graph.graph["crs"] = "EPSG:4326"
+
+        iso = utils.create_isochrone(empty_graph, center_point=Point(0, 0), threshold=10.0)
+        assert iso.empty
+        assert "geometry" in iso.columns
+
+    def test_filter_edges_by_type_coverage(self, sample_crs: str) -> None:
+        """Test _filter_edges_by_type with actual removal."""
+        G = nx.Graph()
+        G.graph["crs"] = sample_crs
+        G.add_edge(1, 2, full_edge_type=("a", "b", "c"), length=1)
+        G.add_node(1, pos=(0, 0))
+        G.add_node(2, pos=(1, 1))
+
+        iso = utils.create_isochrone(
+            G,
+            center_point=Point(0, 0),
+            threshold=10,
+            cut_edge_types=[("a", "b", "c")],
+            method="convex_hull",
+        )
+        # Edge removed, nodes remain.
+        # Output is always Polygon or MultiPolygon (buffered from remaining geometries)
+        assert not iso.empty
+        assert iso.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
+
+    def test_prepare_isochrone_graph_errors(self) -> None:
+        """Test error conditions in _prepare_isochrone_graph."""
+        with pytest.raises(
+            ValueError, match="Either 'graph' or 'nodes' and 'edges' must be provided"
+        ):
+            utils._prepare_isochrone_graph(None, None, None, None)
+
+    def test_process_component_empty(self, sample_crs: str) -> None:
+        """Test _process_component with empty/invalid inputs."""
+        # Empty component
+        G = nx.Graph()
+        assert utils._process_component(G, "convex_hull", sample_crs) is None
+
+    def test_generate_buffer_options(self, sample_nx_graph: nx.Graph) -> None:
+        """Test buffer method with non-default options."""
+        iso = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=Point(0, 0),
+            threshold=1.0,
+            method="buffer",
+            buffer_distance=10.0,
+            cap_style=2,
+            join_style=2,
+            resolution=4,
+        )
+        assert not iso.empty
+        assert iso.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
+
+    def test_process_component_empty_geoms(self, sample_nx_graph: nx.Graph) -> None:
+        """Test _process_component when geometries become empty/invalid."""
+        with mock.patch("city2graph.utils._extract_isochrone_geometries") as mock_extract:
+            mock_extract.return_value = [Point()]  # Empty point
+
+            iso = utils.create_isochrone(
+                sample_nx_graph,
+                center_point=Point(0, 0),
+                threshold=100,
+                edge_attr="edge_feature1",
+            )
+            assert iso.empty
+            assert len(iso) == 0
+
+    def test_concave_hull_knn_k_zero(self, sample_nx_graph: nx.Graph) -> None:
+        """Test concave_hull_knn with k=0 to trigger scalar index handling."""
+        # This hits line 3160: indices = [indices]
+        iso = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=Point(0, 0),
+            threshold=100,
+            method="concave_hull_knn",
+            k=0,
+            edge_attr="edge_feature1",
+        )
+        assert not iso.empty
+
+    def test_concave_hull_knn_fallback(self, sample_nx_graph: nx.Graph) -> None:
+        """Test concave_hull_knn fallback to convex hull."""
+        # We can mock _find_next_hull_point to always return None
+        with mock.patch("city2graph.utils._find_next_hull_point") as mock_find:
+            mock_find.return_value = None
+
+            iso = utils.create_isochrone(
+                sample_nx_graph,
+                center_point=Point(0, 0),
+                threshold=100,
+                method="concave_hull_knn",
+                k=3,
+                edge_attr="edge_feature1",
+            )
+            assert not iso.empty
+            # Should be convex hull
+            assert iso.geometry.iloc[0].equals(iso.geometry.iloc[0].convex_hull)
+
+    def test_buffer_negative_distance(self, sample_nx_graph: nx.Graph) -> None:
+        """Test buffer method with negative distance (results in empty polygon)."""
+        iso = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=Point(0, 0),
+            threshold=100,
+            method="buffer",
+            buffer_distance=-100.0,  # Should collapse points
+            edge_attr="edge_feature1",
+        )
+        assert iso.empty
+        assert len(iso) == 0
+
+    def test_isochrone_no_edge_attr(self, sample_nx_graph: nx.Graph) -> None:
+        """Test create_isochrone with edge_attr=None."""
+        # Should rely on existing weights or default if not used by method
+        iso = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=Point(0, 0),
+            threshold=10.0,
+            edge_attr=None,
+            method="convex_hull",
+        )
+        assert not iso.empty
+
+    def test_isochrone_generate_polygon_returns_none(self, sample_nx_graph: nx.Graph) -> None:
+        """Test _process_component when _generate_polygon returns None."""
+        with mock.patch("city2graph.utils._generate_polygon") as mock_gen:
+            mock_gen.return_value = None
+            iso = utils.create_isochrone(
+                sample_nx_graph,
+                center_point=Point(0, 0),
+                threshold=10.0,
+            )
+            assert iso.empty
+
+    def test_isochrone_degenerate_buffer_param(self, sample_crs: str) -> None:
+        """Test degenerate_buffer_distance parameter."""
+        # Create a graph that results in a degenerate geometry (Point)
+        G = nx.Graph()
+        G.graph["crs"] = sample_crs
+        G.add_node(1, pos=(0, 0))
+
+        # Default buffer is 1.0. Let's set it to 0.5.
+        iso = utils.create_isochrone(
+            G,
+            center_point=Point(0, 0),
+            threshold=10.0,
+            method="convex_hull",  # Single point convex hull is Point
+            degenerate_buffer_distance=0.5,
+        )
+        assert not iso.empty
+        poly = iso.geometry.iloc[0]
+        # Area of circle with radius 0.5 is pi * 0.25 ~= 0.785
+        assert 0.7 < poly.area < 0.8
+
+    def test_isochrone_directed_graph(self, sample_crs: str) -> None:
+        """Test create_isochrone with a directed graph."""
+        G = nx.DiGraph()
+        G.graph["crs"] = sample_crs
+        G.add_node(1, pos=(0, 0))
+        G.add_node(2, pos=(1, 0))
+        G.add_edge(1, 2, length=1.0)  # 1 -> 2
+
+        # From 1, can reach 2.
+        iso = utils.create_isochrone(
+            G,
+            center_point=Point(0, 0),
+            threshold=2.0,
+            edge_attr="length",
+            method="convex_hull",
+        )
+        assert not iso.empty
+        # Should cover both points
+
+        # From 2, cannot reach 1.
+        iso2 = utils.create_isochrone(
+            G,
+            center_point=Point(1, 0),
+            threshold=2.0,
+            edge_attr="length",
+            method="convex_hull",
+        )
+        # Should only contain node 2 (Point) -> buffered to Polygon
+        assert not iso2.empty
+        assert iso2.geometry.iloc[0].area < 4.0  # Small buffer around point
 
 
 # ============================================================================
@@ -678,6 +1418,110 @@ class TestNxConversions(BaseConversionTest):
         assert isinstance(edges_dict[("building", "connects", "road")], gpd.GeoDataFrame)
         assert edges_dict[("building", "connects", "road")].empty
 
+    def test_empty_nodes_in_conversion(self, sample_crs: str) -> None:
+        """Test conversion with completely empty nodes (line 995)."""
+        # Create edges but with no nodes that will result in empty node records
+        edges_gdf = gpd.GeoDataFrame(
+            geometry=[LineString([(0, 0), (1, 1)])],
+            crs=sample_crs,
+        )
+
+        # Create a graph and then remove all node attributes to trigger empty records
+        converter = NxConverter()
+        graph = converter.gdf_to_nx(edges=edges_gdf)
+
+        # Manually clear node data to simulate empty records scenario
+        for node in graph.nodes():
+            # Keep only pos to trigger the empty records path
+            graph.nodes[node].clear()
+            graph.nodes[node]["pos"] = (0, 0)
+
+        # Convert back - this should handle empty node records
+        nodes_gdf, edges_gdf_out = converter.nx_to_gdf(graph)
+        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
+
+    def test_build_edge_index_empty(self) -> None:
+        """Test _build_edge_index with empty original_indices (line 1225)."""
+        converter = NxConverter()
+        result = converter._build_edge_index([], None)
+        assert isinstance(result, pd.Index)
+        assert len(result) == 0
+
+    def test_build_node_index_empty(self) -> None:
+        """Test _build_node_index with empty original_indices (line 1243)."""
+        converter = NxConverter()
+        result = converter._build_node_index([], None)
+        assert isinstance(result, pd.Index)
+        assert len(result) == 0
+
+    def test_empty_graph_node_reconstruction(self, sample_crs: str) -> None:
+        """Test nx_to_gdf with graph that has nodes without attributes (line 996)."""
+        # Create a minimal graph with nodes that have no custom attributes
+        # This will result in empty records when reconstructing
+        G = nx.Graph()
+        G.add_node(0, pos=(0, 0))
+        G.add_node(1, pos=(1, 1))
+        G.graph = {"crs": sample_crs, "is_hetero": False, "node_index_names": None}
+
+        # Convert to GDF - should handle empty records gracefully
+        nodes_gdf, edges_gdf = utils.nx_to_gdf(G)
+        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
+        assert len(nodes_gdf) == 2
+        assert "geometry" in nodes_gdf.columns
+
+    def test_edge_iteration_fallback(self, sample_crs: str) -> None:
+        """Test edge iteration handles unexpected edge format (line 1200)."""
+        # Create a graph and manually add malformed edge to test the fallback
+        converter = NxConverter()
+        graph = nx.Graph()
+        graph.add_node(0, pos=(0, 0))
+        graph.add_node(1, pos=(1, 1))
+        graph.add_edge(0, 1, geometry=LineString([(0, 0), (1, 1)]))
+        graph.graph = {"crs": sample_crs, "is_hetero": False, "edge_index_names": None}
+
+        # The actual iteration path that could hit line 1200 is very defensive
+        # It's hard to trigger without modifying internal NetworkX behavior
+        # Convert to GDF to exercise the edge reconstruction path
+        _, edges_gdf = converter.nx_to_gdf(graph)
+        assert isinstance(edges_gdf, gpd.GeoDataFrame)
+
+    def test_gdf_to_nx_edges_none(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:
+        """Test gdf_to_nx raises ValueError when edges is None."""
+        converter = NxConverter()
+        with pytest.raises(ValueError, match="Edges GeoDataFrame cannot be None"):
+            converter.gdf_to_nx(nodes=sample_nodes_gdf, edges=None)
+
+    def test_nx_to_gdf_multiindex_nodes(self, sample_crs: str) -> None:
+        """Test nx_to_gdf with MultiIndex nodes."""
+        G = nx.Graph()
+        # Add nodes with tuple indices
+        G.add_node((0, "a"), pos=(0, 0), _original_index=(0, "a"))
+        G.add_node((1, "b"), pos=(1, 1), _original_index=(1, "b"))
+        G.graph = {"crs": sample_crs, "is_hetero": False, "node_index_names": ["id", "type"]}
+
+        nodes_gdf, _ = utils.nx_to_gdf(G)
+        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
+        assert isinstance(nodes_gdf.index, pd.MultiIndex)
+        assert nodes_gdf.index.names == ["id", "type"]
+        assert len(nodes_gdf) == 2
+
+    def test_coerce_name_sequence_string(self) -> None:
+        """Test _coerce_name_sequence with string input."""
+        assert utils._coerce_name_sequence("index_name") == ["index_name"]
+        assert utils._coerce_name_sequence(["a", "b"]) == ["a", "b"]
+        assert utils._coerce_name_sequence(None) is None
+
+    def test_nx_to_gdf_empty_graph_no_nodes(self, sample_crs: str) -> None:
+        """Test nx_to_gdf with a completely empty graph (no nodes)."""
+        G = nx.Graph()
+        G.graph = {"crs": sample_crs, "is_hetero": False}
+        nodes_gdf, edges_gdf = utils.nx_to_gdf(G)
+        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
+        assert isinstance(edges_gdf, gpd.GeoDataFrame)
+        assert nodes_gdf.empty
+        assert edges_gdf.empty
+        assert "geometry" in nodes_gdf.columns
+
 
 # ============================================================================
 # VALIDATION TESTS
@@ -870,6 +1714,23 @@ class TestValidation:
         delattr(incomplete_graph, "graph")
         with pytest.raises(ValueError, match="Graph is missing 'graph' attribute dictionary"):
             utils.validate_nx(incomplete_graph)
+
+    def test_validate_nx_pos_from_xy(self, sample_crs: str) -> None:
+        """Test validate_nx creates pos from x and y attributes (line 2016)."""
+        # Create a graph with x, y but no pos
+        G = nx.Graph()
+        G.add_node(1, x=10.0, y=20.0)
+        G.add_node(2, x=30.0, y=40.0)
+        G.add_edge(1, 2, geometry=LineString([(10, 20), (30, 40)]))
+        G.graph = {"crs": sample_crs, "is_hetero": False}
+
+        # This should set pos from x and y
+        utils.validate_nx(G)
+
+        assert "pos" in G.nodes[1]
+        assert "pos" in G.nodes[2]
+        assert G.nodes[1]["pos"] == (10.0, 20.0)
+        assert G.nodes[2]["pos"] == (30.0, 40.0)
 
 
 # ============================================================================
@@ -1237,6 +2098,100 @@ class TestPlotting(BaseGraphTest):
         finally:
             plt.close(fig)
 
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    def test_plot_empty_gdf(self, empty_gdf: gpd.GeoDataFrame) -> None:
+        """Test _plot_gdf with empty GeoDataFrame (line 3246)."""
+        # This should not raise and should return early
+        fig, ax = plt.subplots()
+        utils._plot_gdf(empty_gdf, ax)
+        plt.close(fig)
+
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    def test_plot_with_series_color(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test plot_graph with pd.Series for color parameter (lines 3085, 3263)."""
+        # Create a Series for node colors with numeric indices (0-based from conversion)
+        # When nodes are converted to NetworkX, they get new integer indices
+        num_nodes = len(sample_nodes_gdf)
+        node_colors = pd.Series(["red"] * num_nodes, index=range(num_nodes))
+
+        utils.plot_graph(
+            graph=None,
+            nodes=sample_nodes_gdf,
+            edges=sample_edges_gdf,
+            node_color=node_colors,
+            show=False,
+        )
+        plt.close("all")
+
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    def test_plot_with_column_name(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test plot_graph with column name string for color (line 3087)."""
+        # Add a numeric column for coloring
+        nodes_with_attr = sample_nodes_gdf.copy()
+        nodes_with_attr["value"] = range(len(nodes_with_attr))
+
+        utils.plot_graph(
+            graph=None,
+            nodes=nodes_with_attr,
+            edges=sample_edges_gdf,
+            node_color="value",
+            show=False,
+        )
+        plt.close("all")
+
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    def test_plot_hetero_subplots_empty_edges(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Test _plot_hetero_subplots with no edge items (line 3406)."""
+        # Create edges dict with only empty GeoDataFrames
+        empty_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame] = {
+            ("building", "connects", "road"): gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
+        }
+
+        # This should return early without creating a plot
+        fig, ax = plt.subplots()
+        utils._plot_hetero_subplots(
+            sample_hetero_nodes_dict,
+            empty_edges_dict,
+            figsize=(10, 10),
+            bgcolor="white",
+        )
+        plt.close(fig)
+
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    def test_plot_graph_subplots_less_than_grid(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Test plot_graph with subplots where number of plots < grid size."""
+        # Create a situation where we have 1 edge type but grid is 2 cols
+        # This triggers the "hide unused axes" logic
+
+        # Filter to just one edge type
+        single_edge_type = next(iter(sample_hetero_edges_dict.keys()))
+        single_edge_dict = {single_edge_type: sample_hetero_edges_dict[single_edge_type]}
+
+        fig, ax = plt.subplots()
+        utils.plot_graph(
+            nodes=sample_hetero_nodes_dict,
+            edges=single_edge_dict,
+            subplots=True,
+            ncols=2,  # Force 2 columns for 1 item
+            show=False,
+        )
+        plt.close("all")
+
 
 # ============================================================================
 # INTERNAL UTILS TESTS
@@ -1334,13 +2289,6 @@ class TestIdentifySourceTargetCols:
         assert result is not None
         assert (result == [10, 20, 30]).all()
 
-
-# ============================================================================
-# COMPREHENSIVE COVERAGE TESTS
-# ============================================================================
-
-
-class TestComprehensiveCoverage:
     """Additional tests to achieve comprehensive code coverage."""
 
     def test_empty_nodes_in_conversion(self, sample_crs: str) -> None:

@@ -872,7 +872,7 @@ def travel_summary_graph(
     -------
     tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] or networkx.Graph
         • **Nodes** - every stop with a valid geometry.
-        • **Edges** - columns = ``from_stop_id, to_stop_id, mean_travel_time,
+        • **Edges** - columns = ``from_stop_id, to_stop_id, travel_time_sec,
           frequency, geometry``.
 
     See Also
@@ -888,12 +888,12 @@ def travel_summary_graph(
     ...     start_time="07:00:00",
     ...     end_time="10:00:00",
     ... )
-    >>> print(edges.head(3)[['travel_time', 'frequency']])
-                       travel_time  frequency
+    >>> print(edges.head(3)[['travel_time_sec', 'frequency']])
+                       travel_time_sec  frequency
     from_stop_id to_stop_id
-    7045490      7045491        120.0        42
-    7045491      7045492        180.0        42
-    7045492      7045493        240.0        42
+    7045490      7045491            120.0        42
+    7045491      7045492            180.0        42
+    7045492      7045493            240.0        42
 
     You can directly obtain a NetworkX object too:
 
@@ -962,9 +962,7 @@ def travel_summary_graph(
         .reset_index()
     )
 
-    agg_calcs["mean_travel_time"] = (
-        agg_calcs["weighted_time_sum"] / agg_calcs["total_service_count"]
-    )
+    agg_calcs["travel_time_sec"] = agg_calcs["weighted_time_sum"] / agg_calcs["total_service_count"]
     agg_calcs["frequency"] = agg_calcs["total_service_count"]
 
     # Create GeoDataFrames for nodes and edges
@@ -977,7 +975,7 @@ def travel_summary_graph(
         {
             "from_stop_id": agg_calcs["stop_id"],
             "to_stop_id": agg_calcs["next_stop_id"],
-            "mean_travel_time": agg_calcs["mean_travel_time"],
+            "travel_time_sec": agg_calcs["travel_time_sec"],
             "frequency": agg_calcs["frequency"],
         },
         geometry=edges_geom,
