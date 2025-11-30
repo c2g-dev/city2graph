@@ -2290,7 +2290,7 @@ def _validate_homo_structure(data: Data, metadata: GraphMetadata) -> None:
 
 
 def _validate_and_resolve_parameters(
-    new_edge_type: tuple[str, str, str] | str | None,
+    new_relation_name: str | None,
     endpoint_type: str | None,
     min_threshold: float,
     threshold: float,
@@ -2303,8 +2303,8 @@ def _validate_and_resolve_parameters(
 
     Parameters
     ----------
-    new_edge_type : tuple[str, str, str] | str | None
-        Target edge type tuple (src, rel, dst) or just the relation name.
+    new_relation_name : str | None
+        Target edge relation name.
     endpoint_type : str | None
         The node type to connect.
     min_threshold : float
@@ -2321,15 +2321,11 @@ def _validate_and_resolve_parameters(
     relation_name = None
     target_edge_type_tuple = None
 
-    if isinstance(new_edge_type, tuple):
-        target_edge_type_tuple = new_edge_type
-        if resolved_endpoint_type is None:
-            resolved_endpoint_type = new_edge_type[0]
-    elif isinstance(new_edge_type, str):
-        relation_name = new_edge_type
+    if new_relation_name is not None:
+        relation_name = new_relation_name
 
     if resolved_endpoint_type is None:
-        logger.warning("endpoint_type not provided and could not be inferred.")
+        logger.warning("endpoint_type not provided.")
         return None
 
     if target_edge_type_tuple is None:
@@ -2339,15 +2335,18 @@ def _validate_and_resolve_parameters(
     return resolved_endpoint_type, target_edge_type_tuple
 
 
-def add_metapaths_by_weight(
+def add_metapaths_by_weight(  # noqa: PLR0913
     graph: (
         tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]
         | nx.Graph
         | nx.MultiGraph
-    ),
-    weight: str,
-    threshold: float,
-    new_edge_type: tuple[str, str, str] | str | None = None,
+        | None
+    ) = None,
+    nodes: dict[str, gpd.GeoDataFrame] | None = None,
+    edges: dict[tuple[str, str, str], gpd.GeoDataFrame] | None = None,
+    weight: str | None = None,
+    threshold: float | None = None,
+    new_relation_name: str | None = None,
     min_threshold: float = 0.0,
     edge_types: list[tuple[str, str, str]] | None = None,
     endpoint_type: str | None = None,
@@ -2372,22 +2371,24 @@ def add_metapaths_by_weight(
 
     Parameters
     ----------
-    graph : tuple or networkx.Graph or networkx.MultiGraph
+    graph : tuple or networkx.Graph or networkx.MultiGraph, optional
         Input graph. Can be a tuple of (nodes_dict, edges_dict) or a NetworkX graph.
+    nodes : dict[str, geopandas.GeoDataFrame], optional
+        Dictionary of node GeoDataFrames.
+    edges : dict[tuple[str, str, str], geopandas.GeoDataFrame], optional
+        Dictionary of edge GeoDataFrames.
     weight : str
         The edge attribute to use as weight (e.g., 'travel_time').
     threshold : float
         The maximum cost threshold for connection.
-    new_edge_type : tuple[str, str, str] | str, optional
-        Target edge type tuple (src, rel, dst) or just the relation name.
-        If a tuple is provided, `endpoint_type` can be inferred.
+    new_relation_name : str, optional
+        Name of the new edge relation.
     min_threshold : float, default 0.0
         The minimum cost threshold for connection.
     edge_types : list[tuple[str, str, str]], optional
         List of edge types to consider for traversal. If None, all edges are used.
     endpoint_type : str, optional
-        The node type to connect (e.g., 'building'). Required if `new_edge_type`
-        is not a tuple.
+        The node type to connect (e.g., 'building').
     directed : bool, default False
         If True, creates a directed graph for traversal.
     multigraph : bool, default False
@@ -2400,9 +2401,25 @@ def add_metapaths_by_weight(
     nx.Graph or nx.MultiGraph or tuple
         The graph with added metapaths. Format depends on `as_nx` parameter.
     """
+    if weight is None:
+        msg = "weight must be provided"
+        raise ValueError(msg)
+    if threshold is None:
+        msg = "threshold must be provided"
+        raise ValueError(msg)
+
+    # Normalize input to graph tuple or nx graph
+    if nodes is not None:
+        if graph is not None:
+            msg = "Cannot provide both 'graph' and 'nodes'/'edges'."
+            raise ValueError(msg)
+        graph = (nodes, edges or {})
+    elif graph is None:
+        msg = "Either 'graph' or 'nodes' (and optionally 'edges') must be provided."
+        raise ValueError(msg)
     # Validate and resolve parameters
     params = _validate_and_resolve_parameters(
-        new_edge_type, endpoint_type, min_threshold, threshold
+        new_relation_name, endpoint_type, min_threshold, threshold
     )
     if params is None:
         return _return_original_graph(graph)
@@ -3003,8 +3020,12 @@ def add_metapaths(
         tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]
         | nx.Graph
         | nx.MultiGraph
-    ),
-    metapaths: list[list[tuple[str, str, str]]],
+        | None
+    ) = None,
+    nodes: dict[str, gpd.GeoDataFrame] | None = None,
+    edges: dict[tuple[str, str, str], gpd.GeoDataFrame] | None = None,
+    sequence: list[tuple[str, str, str]] | None = None,
+    new_relation_name: str | None = None,
     edge_attr: str | list[str] | None = None,
     edge_attr_agg: str | object | None = "sum",
     directed: bool = False,
@@ -3028,13 +3049,20 @@ def add_metapaths(
 
     Parameters
     ----------
-    graph : tuple[dict[str, GeoDataFrame], dict[tuple[str, str, str], GeoDataFrame]] | networkx.Graph | networkx.MultiGraph
+    graph : tuple or networkx.Graph or networkx.MultiGraph, optional
         Heterogeneous graph input expressed as typed GeoDataFrame dictionaries or
         a city2graph-compatible NetworkX graph.
-    metapaths : list[list[tuple[str, str, str]]]
+    nodes : dict[str, geopandas.GeoDataFrame], optional
+        Dictionary of node GeoDataFrames.
+    edges : dict[tuple[str, str, str], geopandas.GeoDataFrame], optional
+        Dictionary of edge GeoDataFrames.
+    sequence : list[tuple[str, str, str]]
         Sequence of metapath specifications; every edge type is a
-        ``(src_type, relation, dst_type)`` tuple and each path must contain at
+        ``(src_type, relation, dst_type)`` tuple and the path must contain at
         least two steps.
+    new_relation_name : str, optional
+        Target edge relation name for the new metapath edges.
+        If None (default), edges are named ``metapath_0``.
     edge_attr : str | list[str] | None, optional
         Numeric edge attributes to aggregate along metapaths. When ``None``, only
         path weights are produced.
@@ -3071,9 +3099,13 @@ def add_metapaths(
     if trace_path:
         logger.debug("trace_path option is not implemented; ignoring request.")
 
-    nodes_dict, edges_dict = _ensure_hetero_dict(graph)
+    if sequence is None:
+        msg = "sequence must be provided"
+        raise ValueError(msg)
 
-    if not metapaths or not edges_dict:
+    nodes_dict, edges_dict = _ensure_hetero_dict(graph, nodes, edges)
+
+    if not sequence or not edges_dict:
         return _finalize_metapath_result(
             nodes_dict,
             edges_dict,
@@ -3089,18 +3121,18 @@ def add_metapaths(
     updated_edges = dict(edges_dict)
     metapath_metadata: dict[tuple[str, str, str], dict[str, object]] = {}
 
-    for mp_index, metapath in enumerate(metapaths):
-        edge_key, result_gdf, metadata_entry = _materialize_metapath(
-            mp_index=mp_index,
-            metapath=metapath,
-            nodes=nodes_dict,
-            edges=edges_dict,
-            directed=directed,
-            edge_attrs=edge_attrs,
-            aggregation=aggregation,
-        )
-        updated_edges[edge_key] = result_gdf
-        metapath_metadata[edge_key] = metadata_entry
+    edge_key, result_gdf, metadata_entry = _materialize_metapath(
+        mp_index=0,
+        metapath=sequence,
+        nodes=nodes_dict,
+        edges=edges_dict,
+        directed=directed,
+        edge_attrs=edge_attrs,
+        aggregation=aggregation,
+        new_relation_name=new_relation_name,
+    )
+    updated_edges[edge_key] = result_gdf
+    metapath_metadata[edge_key] = metadata_entry
 
     return _finalize_metapath_result(
         nodes_dict,
@@ -3120,7 +3152,10 @@ def _ensure_hetero_dict(
         ]
         | nx.Graph
         | nx.MultiGraph
-    ),
+        | None
+    ) = None,
+    nodes: dict[str, gpd.GeoDataFrame] | None = None,
+    edges: dict[tuple[str, str, str], gpd.GeoDataFrame] | None = None,
 ) -> tuple[
     dict[str, gpd.GeoDataFrame],
     dict[tuple[str, str, str], gpd.GeoDataFrame],
@@ -3132,16 +3167,28 @@ def _ensure_hetero_dict(
 
     Parameters
     ----------
-    graph : tuple[dict[str, geopandas.GeoDataFrame], dict[tuple[str, str, str], geopandas.GeoDataFrame]] \
-            | networkx.Graph \
-            | networkx.MultiGraph
-        Heterogeneous graph representation accepted by ``add_metapaths``.
+    graph : tuple or networkx.Graph or networkx.MultiGraph, optional
+        Heterogeneous graph representation.
+    nodes : dict[str, geopandas.GeoDataFrame], optional
+        Dictionary of node GeoDataFrames.
+    edges : dict[tuple[str, str, str], geopandas.GeoDataFrame], optional
+        Dictionary of edge GeoDataFrames.
 
     Returns
     -------
     tuple[dict[str, geopandas.GeoDataFrame], dict[tuple[str, str, str], geopandas.GeoDataFrame]]
         Normalised node and edge dictionaries.
     """
+    if graph is None and nodes is None:
+        msg = "Either 'graph' or 'nodes' (and optionally 'edges') must be provided."
+        raise ValueError(msg)
+
+    if nodes is not None:
+        if graph is not None:
+            msg = "Cannot provide both 'graph' and 'nodes'/'edges'."
+            raise ValueError(msg)
+        return nodes, edges or {}
+
     if isinstance(graph, tuple):
         if len(graph) != 2:
             msg = "Graph tuple must contain (nodes_dict, edges_dict)"
@@ -3448,6 +3495,7 @@ def _materialize_metapath(
     directed: bool,
     edge_attrs: list[str] | None,
     aggregation: _EdgeAttrAggregation,
+    new_relation_name: str | None = None,
 ) -> tuple[tuple[str, str, str], gpd.GeoDataFrame, dict[str, object]]:
     """
     Materialise a single metapath into an aggregated GeoDataFrame.
@@ -3470,6 +3518,8 @@ def _materialize_metapath(
         List of edge attributes to aggregate.
     aggregation : _EdgeAttrAggregation
         Aggregation strategy.
+    new_relation_name : str, optional
+        Target edge relation name.
 
     Returns
     -------
@@ -3482,7 +3532,11 @@ def _materialize_metapath(
 
     start_type = metapath[0][0]
     end_type = metapath[-1][-1]
-    edge_key = (start_type, f"metapath_{mp_index}", end_type)
+
+    if new_relation_name is not None:
+        edge_key = (start_type, new_relation_name, end_type)
+    else:
+        edge_key = (start_type, f"metapath_{mp_index}", end_type)
     metadata = {
         "metapath_spec": tuple(metapath),
         "edge_attr": None if edge_attrs is None else tuple(edge_attrs),

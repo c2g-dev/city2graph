@@ -4045,6 +4045,7 @@ def plot_graph(  # noqa: PLR0913
     edge_color: str | float | pd.Series | dict[tuple[str, str, str], Any] | None = None,
     edge_linewidth: float | pd.Series | dict[tuple[str, str, str], Any] | None = None,
     edge_alpha: float | pd.Series | dict[tuple[str, str, str], Any] | None = None,
+    edge_zorder: int | pd.Series | dict[tuple[str, str, str], Any] | None = None,
     **kwargs: Any,  # noqa: ANN401
 ) -> None:
     """
@@ -4108,6 +4109,9 @@ def plot_graph(  # noqa: PLR0913
     edge_alpha : float, pd.Series, or dict, optional
         Transparency for edges (0.0-1.0). Can be a scalar, column name, Series,
         or a dictionary mapping edge types to transparency values.
+    edge_zorder : int, pd.Series, or dict, optional
+        Drawing order for edges. Can be a scalar, column name, Series, or a
+        dictionary mapping edge types to zorder values.
     **kwargs : Any
         Additional keyword arguments passed to the GeoPandas plotting functions.
 
@@ -4176,6 +4180,7 @@ def plot_graph(  # noqa: PLR0913
         "edge_color": edge_color,
         "edge_linewidth": edge_linewidth,
         "edge_alpha": edge_alpha,
+        "edge_zorder": edge_zorder,
         "legend_position": legend_position,
         "labelcolor": labelcolor,
         **kwargs,
@@ -4424,7 +4429,7 @@ def _resolve_style_kwargs(
             ),
             "linewidth": _or_default(_get_param("edge_linewidth"), PLOT_DEFAULTS["edge_linewidth"]),
             "alpha": _or_default(_get_param("edge_alpha"), PLOT_DEFAULTS["edge_alpha"]),
-            "zorder": PLOT_DEFAULTS["edge_zorder"],
+            "zorder": _or_default(_get_param("edge_zorder"), PLOT_DEFAULTS["edge_zorder"]),
         }
 
     return {
@@ -4468,7 +4473,6 @@ def _plot_gdf(
         "markersize": PLOT_DEFAULTS["markersize"],
         "zorder": PLOT_DEFAULTS["node_zorder"],
         "edgecolor": PLOT_DEFAULTS["edge_color"],
-        "label": None,
     }
 
     for param_name, default_val in param_defaults.items():
@@ -4478,6 +4482,10 @@ def _plot_gdf(
                 plot_kwargs["column"] = val
             else:
                 plot_kwargs[param_name] = val
+
+    # Handle label separately to avoid it being resolved as a column name
+    if "label" in kwargs:
+        plot_kwargs["label"] = kwargs["label"]
 
     gdf.plot(**plot_kwargs)
 
