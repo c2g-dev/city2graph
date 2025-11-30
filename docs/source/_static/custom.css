@@ -1,192 +1,290 @@
-/* Custom CSS for city2graph documentation */
+/* ============================================================
+   City2Graph Documentation - Custom Styles
+   A modern, polished design system for beautiful documentation
+   ============================================================ */
 
-/* Typography improvements */
+/* ============================================================
+   CSS Variables & Design Tokens
+   ============================================================ */
 :root {
-    --main-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-    --code-font: monospace;
-    --city-primary: #0066cc; /* Changed to a more vibrant blue from #3498db */
+    /* Simplified Font Stack */
+    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "SF Mono", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", monospace;
+    --font-display: var(--font-sans);
+
+    /* Preserved User Colors */
+    --city-primary: #0066cc;
     --city-secondary: #2ecc71;
     --city-tertiary: #9b59b6;
     --city-accent: #e74c3c;
     --city-light: #ecf0f1;
     --city-dark: #2c3e50;
+
+    /* Derived Colors (Approximated/Preserved) */
+    --city-primary-rgb: 0, 102, 204;
+    --city-primary-light: #3399ff;
+    --city-primary-dark: #004d99;
+
+    /* Semantic Colors */
+    --city-success: #22c55e;
+    --city-warning: #f59e0b;
+    --city-error: #ef4444;
+    --city-info: #3b82f6;
+
+    /* Neutral Colors */
+    --city-dark-soft: #334155;
+    --city-light-soft: #f1f5f9;
+    --city-border: rgba(0, 0, 0, 0.08);
+
+    /* Spacing Scale */
+    --space-xs: 0.25rem;
+    --space-sm: 0.5rem;
+    --space-md: 1rem;
+    --space-lg: 1.5rem;
+    --space-xl: 2rem;
+    --space-2xl: 3rem;
+    --space-3xl: 4rem;
+
+    /* Border Radius */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-2xl: 24px;
+    --radius-full: 9999px;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    --shadow-glow: 0 0 20px rgba(var(--city-primary-rgb), 0.15);
+
+    /* Transitions */
+    --transition-fast: 150ms ease;
+    --transition-base: 200ms ease;
+    --transition-slow: 300ms ease;
+    --transition-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    /* Override PyData Sphinx Theme Code Backgrounds */
+    /* Override PyData Sphinx Theme Code Backgrounds */
+    --pst-color-code-background: rgba(var(--city-primary-rgb), 0.03) !important;
+    --pst-color-surface: rgba(var(--city-primary-rgb), 0.03) !important;
 }
 
+/* Global Typography Improvements */
 body {
-    font-family: var(--main-font);
-    text-rendering: optimizeLegibility;
+    line-height: 1.7;
+    letter-spacing: 0.01em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    letter-spacing: normal;
-    line-height: 1.5;
-    font-size: 1em;
 }
 
-h1, h2, h3, h4, h5, h6 {
-    font-family: var(--main-font);
-    font-weight: 600;
-    margin-top: 1.5em;
-    margin-bottom: 0.75em;
-    color: var(--city-dark);
-    letter-spacing: normal;
+/* Dark Mode Variables */
+/* Dark Mode Variables */
+html[data-theme="dark"] {
+    /* Adjusted Primary for Dark Mode (Lighter/Brighter) */
+    --city-primary: #60a5fa; /* Soft Blue */
+    --city-primary-rgb: 96, 165, 250;
+    --city-primary-light: #93c5fd;
+    --city-primary-dark: #3b82f6;
+
+    --city-dark: #e2e8f0; /* Soft Text */
+    --city-dark-soft: #94a3b8;
+    --city-light: #081d35; /* Zenn Background */
+    --city-light-soft: #0d223a; /* Zenn Inner Background */
+    --city-border: #2e445c; /* Zenn Border */
+
+    /* Semantic Colors for Dark Mode */
+    --city-success: #4ade80;
+    --city-warning: #fbbf24;
+    --city-error: #f87171;
+    --city-info: #60a5fa;
+
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+
+    /* Override PyData Sphinx Theme Variables for Dark Mode */
+    --pst-color-code-background: var(--city-light) !important;
+    --pst-color-surface: var(--city-light) !important;
 }
 
-h1 {
-    font-size: 2.5em;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-    padding-bottom: 0.3em;
-    position: relative;
+/* Ensure structural elements match the background in dark mode */
+html[data-theme="dark"] .bd-header,
+html[data-theme="dark"] .bd-sidebar,
+html[data-theme="dark"] .bd-sidebar-secondary,
+html[data-theme="dark"] .bd-footer,
+html[data-theme="dark"] .pst-header-nav {
+    background-color: var(--city-light) !important;
 }
 
-h2 {
-    font-size: 1.8em;
+/* ... (rest of the file) ... */
+
+/* Dark mode admonitions - Semantic Tinted Backgrounds */
+html[data-theme="dark"] div.admonition {
+    background: var(--city-light-soft);
+    border: 1px solid var(--city-border);
 }
 
-h3 {
-    font-size: 1.4em;
+html[data-theme="dark"] div.admonition.note {
+    background: linear-gradient(135deg, rgba(96, 165, 250, 0.1), rgba(96, 165, 250, 0.05));
+    border-left-color: var(--city-info);
+}
+html[data-theme="dark"] div.admonition.note .admonition-title {
+    background: rgba(96, 165, 250, 0.15);
+    color: #93c5fd;
 }
 
-p, ul, ol {
-    line-height: 1.7;
-    margin-bottom: 1.2em;
-    hyphens: auto;
+html[data-theme="dark"] div.admonition.warning {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(251, 191, 36, 0.05));
+    border-left-color: var(--city-warning);
+}
+html[data-theme="dark"] div.admonition.warning .admonition-title {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fcd34d;
 }
 
-a {
-    color: var(--city-primary);
-    text-decoration: none;
-    transition: all 0.2s ease;
-    border-bottom: 1px solid transparent;
-    font-weight: 500; /* Added to make links more prominent */
+html[data-theme="dark"] div.admonition.tip,
+html[data-theme="dark"] div.admonition.hint {
+    background: linear-gradient(135deg, rgba(74, 222, 128, 0.1), rgba(74, 222, 128, 0.05));
+    border-left-color: var(--city-success);
+}
+html[data-theme="dark"] div.admonition.tip .admonition-title,
+html[data-theme="dark"] div.admonition.hint .admonition-title {
+    background: rgba(74, 222, 128, 0.15);
+    color: #86efac;
 }
 
-a:hover {
-    color: #0077ee; /* Brighter blue on hover */
-    border-bottom-color: currentColor;
-    text-decoration: none;
+html[data-theme="dark"] div.admonition.important {
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(167, 139, 250, 0.05));
+    border-left-color: #a78bfa;
+}
+html[data-theme="dark"] div.admonition.important .admonition-title {
+    background: rgba(167, 139, 250, 0.15);
+    color: #c4b5fd;
 }
 
-/* Code block styling - light grey background for light theme, dark grey for dark theme */
+html[data-theme="dark"] div.admonition.danger,
+html[data-theme="dark"] div.admonition.error {
+    background: linear-gradient(135deg, rgba(248, 113, 113, 0.1), rgba(248, 113, 113, 0.05));
+    border-left-color: var(--city-error);
+}
+html[data-theme="dark"] div.admonition.danger .admonition-title,
+html[data-theme="dark"] div.admonition.error .admonition-title {
+    background: rgba(248, 113, 113, 0.15);
+    color: #fca5a5;
+}
 
-/* Light theme code blocks with light grey background */
-pre {
-    background-color: #f5f5f5;
+/* ============================================================
+   Cards & Containers
+   ============================================================ */
+.card, .topic, .contents {
+    background: #ffffff;
     border: none;
-    border-radius: 0;
-    color: #333333;
-    font-family: var(--code-font);
-    font-size: 13px;
-    line-height: 1.5;
-    margin: 1.5em 0;
-    overflow-x: auto;
-    padding: 12px 14px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    margin: var(--space-lg) 0;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-base);
 }
 
-/* Light theme: darker code, lighter comments (higher contrast with comments) */
-.highlight .n { color: #222222; } /* Name - very dark grey */
-.highlight .p { color: #222222; } /* Punctuation - very dark grey */
-.highlight .o { color: #222222; } /* Operator - very dark grey */
-.highlight .c1, .highlight .c, .highlight .cm, .highlight .cp, .highlight .cs {
-    color: #999999;
+.card:hover, .topic:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+    border-color: rgba(var(--city-primary-rgb), 0.2);
+}
+
+/* ============================================================
+   Images & Figures
+   ============================================================ */
+figure, .figure {
+    margin: var(--space-xl) 0;
+    text-align: center;
+}
+
+figure img, .figure img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    transition: all var(--transition-base);
+}
+
+
+
+figcaption, .caption {
+    margin-top: var(--space-md);
+    font-size: 0.9rem;
+    color: var(--city-dark-soft);
     font-style: italic;
-} /* Comments in light grey */
-.highlight .s1, .highlight .s2 { color: #888888; } /* Strings in light grey */
-.highlight .mi, .highlight .mf { color: #666666; } /* Numbers in medium grey */
-.highlight .k, .highlight .kc, .highlight .kd, .highlight .kn {
-    color: #333333;
-    font-weight: bold;
-} /* Keywords in dark grey */
-.highlight .nb { color: #555555; } /* Built-in in medium-dark grey */
-.highlight .bp { color: #555555; } /* Self in medium-dark grey */
-
-/* Inline code styling */
-code {
-    font-family: var(--code-font);
-    background-color: rgba(0, 0, 0, 0.05);
-    border-radius: 3px;
-    font-size: 90%;
-    padding: 2px 4px;
-    color: #e83e8c;
 }
 
-/* Dark theme code blocks - remove border and border-radius */
-html[data-theme="dark"] pre {
-    background-color: #252525;
-    border: none;
-    border-radius: 0;
-    color: #e6e6e6;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+/* Video styling */
+video {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    max-width: 100%;
 }
 
-/* Dark theme: lighter code, darker comments (opposite of light theme) */
-html[data-theme="dark"] .highlight .n { color: #dddddd; } /* Name - very light grey */
-html[data-theme="dark"] .highlight .p { color: #dddddd; } /* Punctuation - very light grey */
-html[data-theme="dark"] .highlight .o { color: #dddddd; } /* Operator - very light grey */
-html[data-theme="dark"] .highlight .c1,
-html[data-theme="dark"] .highlight .c,
-html[data-theme="dark"] .highlight .cm,
-html[data-theme="dark"] .highlight .cp,
-html[data-theme="dark"] .highlight .cs {
-    color: #666666;
-    font-style: italic;
-} /* Comments in darker grey */
-html[data-theme="dark"] .highlight .s1,
-html[data-theme="dark"] .highlight .s2 {
-    color: #777777;
-} /* Strings in medium-dark grey */
-
-/* Add line number styling */
-.highlight .linenos {
-    color: #999;
-    margin-right: 0.5em;
-    user-select: none;
+/* ============================================================
+   Badges & Labels (GitHub badges)
+   ============================================================ */
+.reference.external img {
+    display: inline-block;
+    vertical-align: middle;
+    margin: 0 2px;
+    border-radius: var(--radius-sm);
+    transition: transform var(--transition-fast);
 }
 
-/* Add a copy button style like PyTorch's */
-.copybutton {
-    cursor: pointer;
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    width: 24px;
-    height: 24px;
-    background-color: transparent;
-    border: none;
-    color: #999;
-    border-radius: 3px;
-    font-size: 16px;
-    opacity: 0;
-    transition: opacity 0.2s ease-in-out, background-color 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+
+
+/* ============================================================
+   Light/Dark Mode Toggle
+   ============================================================ */
+/* Remove underline animation for buttons and special links */
+.btn a::after,
+.reference.internal::after,
+.toctree-wrapper a::after,
+.nav-link::after,
+.navbar-brand-logo::after,
+.headerlink::after,
+.toc-entry a::after,
+.bd-sidebar a::after,
+.genindextable a::after,
+.modindextable a::after,
+.sig-param a::after,
+.field-list a::after,
+.field-list a.reference.external::after,
+.field-list a.reference.internal::after,
+dl.py a::after,
+.toctree-l1 a::after,
+.toctree-l2 a::after,
+.toctree-l3 a::after,
+.bd-links a::after {
+    display: none !important;
+    content: none !important;
 }
 
-.highlight:hover .copybutton {
-    opacity: 1;
+/* Ensure no native underlines or borders on these specific links */
+.genindextable a,
+.modindextable a,
+.sig-param a,
+.field-list a,
+.field-list a.reference.external,
+.field-list a.reference.internal,
+dl.py a,
+.toctree-l1 a,
+.toctree-l2 a,
+.toctree-l3 a,
+.bd-links a {
+    text-decoration: none !important;
+    border-bottom: none !important;
+    box-shadow: none !important;
 }
 
-.copybutton:hover {
-    background-color: rgba(0, 0, 0, 0.1);
-    color: #666;
-}
-
-html[data-theme="dark"] .copybutton {
-    color: #ccc;
-}
-
-html[data-theme="dark"] .copybutton:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: #fff;
-}
-
-/* Style the code block container to position copy button correctly */
-div.highlight {
-    position: relative;
-}
-
-/* Light/dark mode logo display */
 .only-light {
     display: block;
 }
@@ -203,368 +301,372 @@ html[data-theme="dark"] .only-dark {
     display: block;
 }
 
-html[data-theme="dark"] {
-    --city-dark: #f1f2f6;
-    --city-light: #2c3e50;
-    --city-code-bg: #282c34;
-    --city-code-border: #3d4352;
-}
-
-html[data-theme="dark"] h1,
-html[data-theme="dark"] h2,
-html[data-theme="dark"] h3,
-html[data-theme="dark"] h4,
-html[data-theme="dark"] h5,
-html[data-theme="dark"] h6 {
-    color: var(--city-dark);
+/* Dark mode specific overrides */
+html[data-theme="dark"] body {
+    background: #081d35;
+    color: #e2e8f0;
 }
 
 html[data-theme="dark"] h1 {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    color: #e2e8f0;
 }
 
-html[data-theme="dark"] code {
-    background-color: rgba(255, 255, 255, 0.06);
-    color: #fd79a8;
+html[data-theme="dark"] pre {
+    background: #0b1929 !important;
+    border-color: #1e3a5f;
 }
 
-/* Enhanced warning and note styling */
-div.admonition {
-    background-color: rgba(255, 255, 255, 0.7);
-    border-radius: 12px;
-    padding: 20px 25px;
-    margin: 30px 0;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .topic,
+html[data-theme="dark"] .contents {
+    background: var(--city-light-soft);
+    border-color: var(--city-border);
+}
+
+html[data-theme="dark"] footer,
+html[data-theme="dark"] .bd-footer {
+    background: var(--city-light-soft);
+    border-top-color: var(--city-border);
+}
+
+/* ============================================================
+   API Documentation Styling
+   ============================================================ */
+dl.py.class,
+dl.py.function,
+dl.py.method,
+dl.py.attribute,
+dl.py.property {
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    margin: var(--space-lg) 0;
     position: relative;
-    overflow: hidden;
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    transition: all 0.3s ease;
 }
 
-div.admonition:hover {
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-    transform: translateY(-2px);
+
+
+dt.sig {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    padding: var(--space-sm) 0;
+    color: var(--city-dark);
 }
 
-/* Warning styling */
-div.admonition.warning {
-    border-left: 5px solid #f39c12;
-    background: linear-gradient(to right, rgba(243, 156, 18, 0.08), rgba(243, 156, 18, 0.01));
-}
-
-div.admonition.warning::before {
-    content: "⚠️";
-    font-size: 1.8em;
-    position: absolute;
-    right: 20px;
-    top: 50%;
-    transform: translateY(-50%);
-    opacity: 0.5;
-}
-
-div.admonition.warning p {
-    margin-bottom: 0;
-    color: #7d5a1c;
-    position: relative;
-    z-index: 2;
-}
-
-div.admonition.warning strong {
-    color: #e67e22;
-    font-weight: 600;
-    border-bottom: 2px dotted rgba(230, 126, 34, 0.3);
-    padding-bottom: 2px;
-}
-
-/* Note styling - in blue */
-div.admonition.note {
-    border-left: 5px solid var(--city-primary);
-    background: linear-gradient(to right, rgba(0, 102, 204, 0.08), rgba(0, 102, 204, 0.01));
-}
-
-div.admonition.note::before {
-    content: "💡";
-    font-size: 1.8em;
-    position: absolute;
-    right: 20px;
-    top: 50%;
-    transform: translateY(-50%);
-    opacity: 0.5;
-}
-
-div.admonition.note p {
-    margin-bottom: 0;
-    color: #2c6c96;
-    position: relative;
-    z-index: 2;
-}
-
-div.admonition.note strong {
+dt.sig .sig-name {
     color: var(--city-primary);
+    font-weight: 700;
+}
+
+dt.sig .sig-param,
+dt.sig .default_value {
+    color: var(--city-dark-soft);
+}
+
+dd {
+    margin-left: var(--space-lg);
+    margin-top: var(--space-md);
+}
+
+/* Parameter lists */
+.field-list {
+    margin: var(--space-md) 0;
+}
+
+.field-list dt {
     font-weight: 600;
-    border-bottom: 2px dotted rgba(52, 152, 219, 0.3);
-    padding-bottom: 2px;
-}
-
-/* Override default admonition styling to apply our custom styles */
-.admonition {
-    border: none !important;
-    box-shadow: none !important;
-    background-color: transparent !important;
-}
-
-.admonition-title {
-    display: none !important;
-}
-
-.admonition > .admonition-title + div {
-    padding: 0 !important;
-}
-
-/* Dark mode styling */
-html[data-theme="dark"] div.admonition {
-    background-color: rgba(20, 30, 40, 0.7);
-    border-color: rgba(255, 255, 255, 0.05);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-}
-
-html[data-theme="dark"] div.admonition.warning {
-    background: linear-gradient(to right, rgba(243, 156, 18, 0.12), rgba(243, 156, 18, 0.01));
-}
-
-html[data-theme="dark"] div.admonition.warning p {
-    color: #ffc107;
-}
-
-html[data-theme="dark"] div.admonition.warning strong {
-    color: #f39c12;
-    border-bottom-color: rgba(243, 156, 18, 0.4);
-}
-
-html[data-theme="dark"] div.admonition.note {
-    background: linear-gradient(to right, rgba(52, 152, 219, 0.12), rgba(52, 152, 219, 0.01));
-}
-
-html[data-theme="dark"] div.admonition.note p {
-    color: #3498db;
-}
-
-html[data-theme="dark"] div.admonition.note strong {
-    color: #74b9ff;
-    border-bottom-color: rgba(116, 185, 255, 0.4);
-}
-
-html[data-theme="dark"] .admonition.note .admonition-title {
-    color: #4da6ff; /* Brighter blue for dark mode */
-}
-
-/* Table improvements */
-table.docutils {
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    border-collapse: separate;
-    border-spacing: 0;
-    margin: 25px 0;
-    width: 100%;
-    border: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-table.docutils th {
-    background: linear-gradient(120deg, var(--city-primary), var(--city-primary) 60%, #005cb8);
-    color: white;
-    padding: 12px 18px;
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 0.85em;
-    letter-spacing: 0.05em;
-}
-
-table.docutils td {
-    padding: 12px 18px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-    transition: background-color 0.15s ease;
-}
-
-table.docutils tr:last-child td {
-    border-bottom: none;
-}
-
-table.docutils tr:nth-child(even) {
-    background-color: rgba(0, 0, 0, 0.015);
-}
-
-table.docutils tr:hover td {
-    background-color: rgba(52, 152, 219, 0.03);
-}
-
-html[data-theme="dark"] table.docutils {
-    border-color: rgba(255, 255, 255, 0.05);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-}
-
-html[data-theme="dark"] table.docutils th {
-    background: linear-gradient(120deg, #2980b9, #3498db);
-}
-
-html[data-theme="dark"] table.docutils td {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-html[data-theme="dark"] table.docutils tr:nth-child(even) {
-    background-color: rgba(255, 255, 255, 0.02);
-}
-
-html[data-theme="dark"] table.docutils tr:hover td {
-    background-color: rgba(52, 152, 219, 0.05);
-}
-
-/* Admonitions styling */
-.admonition {
-    border-radius: 8px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
-    margin: 25px 0;
-    padding: 0;
-    overflow: hidden;
-    position: relative;
-    border: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.admonition::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 4px;
-    height: 100%;
-}
-
-.admonition.note::before {
-    background-color: var(--city-primary);
-}
-
-.admonition.warning::before {
-    background-color: #e67e22;
-}
-
-.admonition.important::before {
-    background-color: var(--city-tertiary);
-}
-
-.admonition.tip::before {
-    background-color: var(--city-secondary);
-}
-
-.admonition-title {
-    padding: 14px 20px;
-    margin: 0;
-    font-weight: 600;
-    font-size: 1.1em;
-    position: relative;
-    padding-left: 20px;
-    background-color: rgba(0, 0, 0, 0.02);
-    display: flex;
-    align-items: center;
-}
-
-.admonition-title::before {
-    margin-right: 10px;
-    opacity: 0.8;
-}
-
-.admonition.note .admonition-title::before {
-    content: "💡";
-}
-
-.admonition.warning .admonition-title::before {
-    content: "⚠️";
-}
-
-.admonition.important .admonition-title::before {
-    content: "❗";
-}
-
-.admonition.tip .admonition-title::before {
-    content: "💪";
-}
-
-.admonition-title + div {
-    padding: 15px 20px;
-}
-
-.admonition.note .admonition-title {
     color: var(--city-primary);
+    margin-top: var(--space-sm);
 }
 
-.admonition.warning .admonition-title {
-    color: #e67e22;
+.field-list dd {
+    margin-left: var(--space-lg);
 }
 
-.admonition.important .admonition-title {
-    color: var(--city-tertiary);
-}
-
-.admonition.tip .admonition-title {
-    color: var(--city-secondary);
-}
-
-html[data-theme="dark"] .admonition {
-    border-color: rgba(255, 255, 255, 0.05);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-}
-
-html[data-theme="dark"] .admonition-title {
-    background-color: rgba(255, 255, 255, 0.03);
-}
-
-/* Navigation improvements */
-.wy-nav-side {
-    background-color: var(--city-dark);
-}
-
-.wy-menu-vertical a {
-    padding: 12px 18px;
-    transition: all 0.2s ease;
+/* ============================================================
+   Navigation & Sidebar
+   ============================================================ */
+.bd-sidebar .nav-link {
+    padding: var(--space-sm) var(--space-md);
+    margin: 2px 0;
+    border-radius: var(--radius-md);
+    color: var(--city-dark-soft);
+    font-weight: 500;
+    transition: all var(--transition-fast);
     border-left: 3px solid transparent;
 }
 
-.wy-menu-vertical a:hover {
-    background-color: rgba(52, 152, 219, 0.08);
+.bd-sidebar .nav-link:hover {
+    background: rgba(var(--city-primary-rgb), 0.08);
+    color: var(--city-primary);
     border-left-color: var(--city-primary);
 }
 
-/* Improve paragraph spacing in documentation */
+.bd-sidebar .nav-link.active {
+    background: rgba(var(--city-primary-rgb), 0.12);
+    color: var(--city-primary);
+    font-weight: 600;
+    border-left-color: var(--city-primary);
+}
+
+/* TOC styling */
+.toc-entry {
+    transition: all var(--transition-fast);
+}
+
+.toc-h2, .toc-h3 {
+    padding-left: var(--space-md);
+    border-left: 2px solid var(--city-border);
+}
+
+.toc-entry:hover {
+    border-left-color: var(--city-primary);
+}
+
+/* ============================================================
+   Footer Styling
+   ============================================================ */
+footer, .bd-footer {
+    background: #ffffff;
+    border-top: 1px solid var(--city-border);
+    padding: var(--space-xl) 0;
+    margin-top: var(--space-3xl);
+}
+
+footer a {
+    color: var(--city-dark-soft);
+}
+
+footer a:hover {
+    color: var(--city-primary);
+}
+
+/* ============================================================
+   Section Improvements
+   ============================================================ */
+.section {
+    animation: fadeIn 0.4s ease-out;
+}
+
 .section p {
     margin-bottom: 1em;
-    text-align: justify;
 }
 
-/* Improve readability of text */
-.section {
-    max-width: 60em;
-    margin: 0 auto;
+/* ============================================================
+   Animations & Micro-interactions
+   ============================================================ */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
-/* Responsive improvements */
-@media (max-width: 768px) {
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* Smooth scroll */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Selection color */
+::selection {
+    background: rgba(var(--city-primary-rgb), 0.2);
+    color: var(--city-dark);
+}
+
+/* ============================================================
+   Code & Notebook Styling
+   ============================================================ */
+code, pre, .highlight, .nbinput, .nboutput {
+    font-family: var(--font-mono) !important;
+    font-feature-settings: "calt" 1; /* Enable ligatures if available */
+}
+
+/* Notebook specific adjustments */
+div.nbinput.container div.input_area,
+div.nboutput.container div.output_area {
+    border: 1px solid var(--city-border);
+    border-radius: var(--radius-md);
+}
+
+/* Make code smaller and more concise */
+div.highlight pre {
+    font-size: 0.8rem !important;
+    line-height: 1.45 !important;
+    padding: var(--space-md);
+}
+
+/* In dark mode, ensure notebook cells blend in */
+html[data-theme="dark"] div.nbinput.container div.input_area,
+html[data-theme="dark"] div.nboutput.container div.output_area {
+    border-color: var(--city-border);
+    background: #0b1929; /* Darker, richer background */
+}
+
+/* ============================================================
+   Syntax Highlighting Overrides
+   ============================================================ */
+/* Tone down strong yellow strings/values in dark mode */
+html[data-theme="dark"] .highlight .s,
+html[data-theme="dark"] .highlight .s1,
+html[data-theme="dark"] .highlight .s2,
+html[data-theme="dark"] .highlight .sa,
+html[data-theme="dark"] .highlight .sb,
+html[data-theme="dark"] .highlight .sc,
+html[data-theme="dark"] .highlight .dl,
+html[data-theme="dark"] .highlight .sd,
+html[data-theme="dark"] .highlight .se,
+html[data-theme="dark"] .highlight .sh,
+html[data-theme="dark"] .highlight .si,
+html[data-theme="dark"] .highlight .sx,
+html[data-theme="dark"] .highlight .sr,
+html[data-theme="dark"] .highlight .ss {
+    color: #ceb188 !important; /* Muted, sandy yellow */
+}
+
+/* Soften numbers */
+html[data-theme="dark"] .highlight .m,
+html[data-theme="dark"] .highlight .mb,
+html[data-theme="dark"] .highlight .mf,
+html[data-theme="dark"] .highlight .mh,
+html[data-theme="dark"] .highlight .mi,
+html[data-theme="dark"] .highlight .il,
+html[data-theme="dark"] .highlight .mo {
+    color: #b5cea8 !important; /* Soft green for numbers */
+}
+
+/* Soften operators/punctuation */
+html[data-theme="dark"] .highlight .o,
+html[data-theme="dark"] .highlight .p {
+    color: #89ddff !important; /* Soft cyan */
+}
+
+/* Improve code block container in dark mode */
+html[data-theme="dark"] div.highlight pre {
+    background-color: #0b1929 !important; /* Darker, richer background */
+    border: 1px solid #1e3a5f;
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================================
+   Responsive Design
+   ============================================================ */
+@media (max-width: 1200px) {
     h1 {
-        font-size: 2em;
+        font-size: 2.25rem;
     }
 
     h2 {
-        font-size: 1.5em;
+        font-size: 1.75rem;
+    }
+}
+
+@media (max-width: 768px) {
+    :root {
+        --space-lg: 1rem;
+        --space-xl: 1.5rem;
+        --space-2xl: 2rem;
+    }
+
+    h1 {
+        font-size: 1.875rem;
+    }
+
+    h2 {
+        font-size: 1.5rem;
     }
 
     h3 {
-        font-size: 1.2em;
+        font-size: 1.25rem;
     }
 
-    table.docutils th, table.docutils td {
-        padding: 8px 12px;
+    pre {
+        padding: var(--space-md);
+        padding-top: calc(var(--space-md) + 20px);
+        font-size: 0.85rem;
+        border-radius: var(--radius-md);
     }
 
-    dl.class, dl.function, dl.method, dl.attribute {
-        padding: 15px;
+    table.docutils th,
+    table.docutils td {
+        padding: var(--space-sm) var(--space-md);
     }
+
+    dl.py.class,
+    dl.py.function,
+    dl.py.method {
+        padding: var(--space-md);
+    }
+}
+
+/* ============================================================
+   Print Styles
+   ============================================================ */
+@media print {
+    body {
+        background: white;
+        color: black;
+    }
+
+    pre {
+        background: #f5f5f5 !important;
+        color: black !important;
+        box-shadow: none !important;
+        border: 1px solid #ddd !important;
+    }
+
+    a {
+        color: inherit !important;
+    }
+
+    a::after {
+        display: none !important;
+    }
+}
+
+/* ============================================================
+   Utility Classes
+   ============================================================ */
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+
+.mt-0 { margin-top: 0; }
+.mt-1 { margin-top: var(--space-sm); }
+.mt-2 { margin-top: var(--space-md); }
+.mt-3 { margin-top: var(--space-lg); }
+.mt-4 { margin-top: var(--space-xl); }
+
+/* Gradient text utility */
+.gradient-text {
+    background: linear-gradient(135deg, var(--city-primary), var(--city-accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Glassmorphism effect */
+.glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+html[data-theme="dark"] .glass {
+    background: rgba(8, 29, 53, 0.7);
+    border-color: rgba(255, 255, 255, 0.1);
 }
