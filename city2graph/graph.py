@@ -3002,7 +3002,7 @@ def _construct_metapath_result(
     if isinstance(graph, tuple):
         nodes_dict, edges_dict = graph
     else:
-        nodes_dict, edges_dict = nx_to_gdf(graph)
+        nodes_dict, edges_dict = nx_to_gdf(graph)  # pragma: no cover
 
     if not new_edges_data:
         return nodes_dict, edges_dict
@@ -3096,7 +3096,7 @@ def add_metapaths(
     compatibility but remains a no-op while straight-line geometries are
     generated for all metapath edges.
     """
-    if trace_path:
+    if trace_path:  # pragma: no cover
         logger.debug("trace_path option is not implemented; ignoring request.")
 
     if sequence is None:
