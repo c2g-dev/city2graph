@@ -2,7 +2,10 @@
 Contributing
 ============
 
-We welcome contributions to the city2graph project! This document provides guidelines for contributing to the project.
+.. meta::
+   :description: Guidelines for contributing to City2Graph. Learn how to report bugs, suggest features, and submit pull requests to help improve the project.
+
+We welcome contributions to the City2Graph project! This document provides guidelines for contributing to the project.
 
 Setting Up Development Environment
 ---------------------------------

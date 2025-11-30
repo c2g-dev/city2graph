@@ -2,7 +2,7 @@
 API Reference
 =============
 
-This section provides detailed documentation for all modules and functions in the city2graph package.
+This section provides detailed documentation for all modules and functions in the City2Graph package.
 
 .. toctree::
    :maxdepth: 2

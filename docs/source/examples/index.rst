@@ -1,8 +1,7 @@
-========
 Examples
 ========
 
-This section provides examples of how to use city2graph in various urban analysis scenarios.
+This section provides examples of how to use City2Graph in various urban analysis scenarios.
 
 .. nbgallery::
 

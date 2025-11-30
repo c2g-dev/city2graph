@@ -2,13 +2,16 @@
 Installation
 ============
 
+.. meta::
+   :description: Step-by-step guide to installing City2Graph via pip or conda, including instructions for PyTorch Geometric and CUDA support for GPU acceleration.
+
 Using pip
 ----------
 
 Standard Installation
 ~~~~~~~~~~~~~~~~~~~~~
 
-The simplest way to install city2graph is via pip:
+The simplest way to install City2Graph is via pip:
 
 .. code-block:: bash
 
@@ -30,7 +33,7 @@ This will install PyTorch and PyTorch Geometric with CPU support.
 With PyTorch + CUDA (GPU)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For GPU acceleration, you can install city2graph with a specific CUDA version extra. For example, for CUDA 13.0:
+For GPU acceleration, you can install City2Graph with a specific CUDA version extra. For example, for CUDA 13.0:
 
 .. code-block:: bash
 
@@ -44,7 +47,7 @@ Using conda-forge
 Basic Installation
 ~~~~~~~~~~~~~~~~~~
 
-You can also install city2graph using conda from conda-forge:
+You can also install City2Graph using conda from conda-forge:
 
 .. code-block:: bash
 
@@ -55,7 +58,7 @@ This installs the core functionality without PyTorch and PyTorch Geometric.
 With PyTorch (CPU)
 ~~~~~~~~~~~~~~~~~~
 
-To use PyTorch and PyTorch Geometric with city2graph installed from conda-forge, you need to manually add these libraries to your environment:
+To use PyTorch and PyTorch Geometric with City2Graph installed from conda-forge, you need to manually add these libraries to your environment:
 
 .. code-block:: bash
 
@@ -87,7 +90,7 @@ You can browse available CUDA-enabled builds on the `conda-forge PyTorch files p
 Requirements
 -----------
 
-city2graph requires the following packages:
+City2Graph requires the following packages:
 
 * networkx
 * shapely

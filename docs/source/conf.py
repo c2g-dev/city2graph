@@ -25,7 +25,7 @@ os.environ["PATH"] = os.path.dirname(nbsphinx_pandoc_path) + os.pathsep + os.env
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "city2graph"
-copyright = "2025, Yuta Sato & city2graph developers"
+copyright = "2025, Yuta Sato & City2Graph developers"
 author = "Yuta Sato"
 release = "0.1.7"
 version = "0.1.7"
@@ -69,7 +69,7 @@ html_baseurl = "https://city2graph.net/"
 html_extra_path = ["robots.txt"]
 # Default meta description for pages
 html_meta = {
-    "application-name": "city2graph",
+    "application-name": "City2Graph",
     "description": "A Python library for converting geospatial datasets into graph representations, providing an integrated interface for `GeoPandas <https://geopandas.org/>`_, `NetworkX <https://networkx.org/>`_, and `Pytorch Geometric <https://pytorch-geometric.readthedocs.io/en/latest/>`_ across multiple domains (e.g. streets, transportations, OD matrices, POI proximities, etc.). It enables researchers and practitioners to seamlessly develop advanced GeoAI and geographic data science applications. For more information, please reach out to the document (https://city2graph.net).",
     "author": "Yuta Sato",
 }
@@ -144,7 +144,7 @@ html_theme_options = {
     "logo": {
         "image_light": "_static/city2graph_logo_wide.png",
         "image_dark": "_static/city2graph_logo_wide_dark.png",
-        "alt_text": "city2graph - GeoAI with Graph Neural Network (GNN) in Python",
+        "alt_text": "City2Graph - GeoAI with Graph Neural Network (GNN) in Python",
     },
 
     # Footer configuration
@@ -152,7 +152,7 @@ html_theme_options = {
     "footer_end": ["sphinx-version", "theme-version"],
 
     # Search configuration
-    "search_bar_text": "Search city2graph documentation...",
+    "search_bar_text": "Search City2Graph documentation...",
 
     # Social media and SEO
     "open_graph_image": "_static/city2graph_logo_wide.png",

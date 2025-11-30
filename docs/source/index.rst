@@ -1,25 +1,22 @@
 .. city2graph documentation master file
 
-city2graph
+City2Graph
 ==========
 .. figure:: _static/social_preview_city2graph.png
    :width: 1000px
-   :alt: city2graph logo
+   :alt: City2Graph logo
    :align: center
-   :class: only-light
 
-.. figure:: _static/social_preview.png
-   :width: 1000px
-   :alt: city2graph logo
-   :align: center
-   :class: only-dark
-
-**city2graph** is a Python library for converting geospatial datasets into graphs for GNN with integrated interface of `GeoPandas <https://geopandas.org/>`_, `NetworkX <https://networkx.org/>`_, and `Pytorch Geometric <https://pytorch-geometric.readthedocs.io/en/latest/>`_ across multiple domains (e.g. streets, transportations, OD matrices, POI proximities, etc.). It enables researchers and practitioners to seamlessly develop advanced GeoAI and geographic data science applications.
+**City2Graph** is a Python library for converting geospatial datasets into graphs for GNN with integrated interface of `GeoPandas <https://geopandas.org/>`_, `NetworkX <https://networkx.org/>`_, and `Pytorch Geometric <https://pytorch-geometric.readthedocs.io/en/latest/>`_ across multiple domains (e.g. streets, transportations, OD matrices, POI proximities, etc.). It enables researchers and practitioners to seamlessly develop advanced GeoAI and geographic data science applications.
 
 .. figure:: _static/scope.png
    :width: 1000px
-   :alt: Overview scope of city2graph
+   :alt: Overview scope of City2Graph
    :align: center
+
+.. meta::
+   :description: City2Graph is a Python library for converting geospatial datasets into graphs for Graph Neural Networks (GNN) and spatial analysis.
+   :keywords: GeoAI, Graph Neural Networks, GNN, PyTorch Geometric, Geospatial Analysis, Urban Analytics, Spatial Data Science, Urban Mobility, Transportation Networks, Geospatial Foundation Models, Digital Twin, Urban Informatics, Geographic Data Science, Graph Representation Learning, Urban Planning, Urban Morphology, Accessibility Analysis
 
 Features
 --------
@@ -30,11 +27,7 @@ Features
 - Construct graphs from mobility datasets (e.g. bike-sharing, migration, and pedestrian flows)
 - Convert geospatial data (GeoPandas / NetworkX) into tensors (PyTorch Geometric's Data and HeteroData) for graph representation learning, such as Graph Neural Networks (GNNs)
 
-
-Keywords
---------
-
-GeoAI, Graph Neural Networks, GNNs, PyTorch Geometric, Geospatial Analysis, Urban Analytics, Spatial Data Science, Urban Mobility, Transportation Networks, Geospatial Foundation Models, Digital Twin, Urban Informatics, Geographic Data Science, Graph Representation Learning, Urban Planning and Design, Urban Morphology.
+**City2Graph** empowers researchers and practitioners in GeoAI, Urban Analytics, and Spatial Data Science to build advanced applications. It bridges the gap between traditional GIS and modern Graph Neural Networks (GNNs), facilitating research in Urban Mobility, Transportation Networks, and Digital Twins. By supporting standard libraries like PyTorch Geometric, it enables seamless integration into deep learning workflows for Graph Representation Learning.
 
 .. |Stars| image:: https://img.shields.io/github/stars/c2g-dev/city2graph
    :target: https://github.com/c2g-dev/city2graph
@@ -77,7 +70,7 @@ GeoAI, Graph Neural Networks, GNNs, PyTorch Geometric, Geospatial Analysis, Urba
 Quickstart
 ----------
 
-Install city2graph using pip (recommended):
+Install City2Graph using pip (recommended):
 
 .. code-block:: bash
 
@@ -319,12 +312,12 @@ Examples
 Citation
 --------
 
-If you use city2graph in your research, please cite it as follows:
+If you use City2Graph in your research, please cite it as follows:
 
 .. code-block:: bibtex
 
    @software{sato2025city2graph,
-     title = {city2graph: Transform geospatial relations into graphs for spatial network analysis and Graph Neural Networks},
+     title = {City2Graph: Transform geospatial relations into graphs for spatial network analysis and Graph Neural Networks},
      author = {Sato, Yuta},
      year = {2025},
      url = {https://github.com/c2g-dev/city2graph},

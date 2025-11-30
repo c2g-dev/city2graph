@@ -1,8 +1,8 @@
-# city2graph: GeoAI with Graph Neural Networks (GNNs) and Spatial Network Analysis
+# City2Graph: GeoAI with Graph Neural Networks (GNNs) and Spatial Network Analysis
 
-[![city2graph](http://city2graph.net/_static/social_preview_city2graph.png)](http://city2graph.net/_static/social_preview_city2graph.png)
+[![City2Graph](http://city2graph.net/_static/social_preview_city2graph.png)](http://city2graph.net/_static/social_preview_city2graph.png)
 
-**city2graph** is a Python library for converting geospatial datasets into graph representations, providing an integrated interface for [GeoPandas](https://geopandas.org/), [NetworkX](https://networkx.org/), and [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/) across multiple domains (e.g. streets, transportations, OD matrices, POI proximities, etc.). It enables researchers and practitioners to seamlessly develop advanced GeoAI and geographic data science applications. For more information, please visit the [documentation](https://city2graph.net).
+**City2Graph** is a Python library for converting geospatial datasets into graph representations, providing an integrated interface for [GeoPandas](https://geopandas.org/), [NetworkX](https://networkx.org/), and [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/) across multiple domains (e.g. streets, transportations, OD matrices, POI proximities, etc.). It enables researchers and practitioners to seamlessly develop advanced GeoAI and geographic data science applications. For more information, please visit the [documentation](https://city2graph.net).
 
 [![PyPI version](https://badge.fury.io/py/city2graph.svg)](https://badge.fury.io/py/city2graph/) [![conda-forge Version](https://anaconda.org/conda-forge/city2graph/badges/version.svg)](https://anaconda.org/conda-forge/city2graph/) [![PyPI Downloads](https://static.pepy.tech/badge/city2graph)](https://pepy.tech/projects/city2graph) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15858845.svg)](https://doi.org/10.5281/zenodo.15858845) [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/c2g-dev/city2graph/blob/main/LICENSE)
 [![Platform](https://anaconda.org/conda-forge/city2graph/badges/platforms.svg
@@ -25,7 +25,7 @@
 
 #### Basic Installation
 
-The simplest way to install city2graph is via pip:
+The simplest way to install City2Graph is via pip:
 
 ```bash
 pip install city2graph
@@ -45,7 +45,7 @@ This will install PyTorch and PyTorch Geometric with CPU support, suitable for d
 
 #### With PyTorch + CUDA (GPU)
 
-For GPU acceleration, you can install city2graph with a specific CUDA version extra. For example, for CUDA 13.0:
+For GPU acceleration, you can install City2Graph with a specific CUDA version extra. For example, for CUDA 13.0:
 
 ```bash
 pip install "city2graph[cu130]"
@@ -57,7 +57,7 @@ Supported CUDA versions are `cu118`, `cu124`, `cu126`, `cu128`, and `cu130`.
 
 #### Basic Installation
 
-You can also install city2graph using conda from conda-forge:
+You can also install City2Graph using conda from conda-forge:
 
 ```bash
 conda install -c conda-forge city2graph
@@ -67,7 +67,7 @@ This installs the core functionality without PyTorch and PyTorch Geometric.
 
 #### With PyTorch (CPU)
 
-To use PyTorch and PyTorch Geometric with city2graph installed from conda-forge, you need to manually add these libraries to your environment:
+To use PyTorch and PyTorch Geometric with City2Graph installed from conda-forge, you need to manually add these libraries to your environment:
 
 ```bash
 # Install city2graph
@@ -96,7 +96,7 @@ You can browse available CUDA-enabled builds on the [conda-forge PyTorch files p
 
 ## For Development
 
-If you want to contribute to city2graph, you can set up a development environment using `uv`.
+If you want to contribute to City2Graph, you can set up a development environment using `uv`.
 
 ```bash
 # Install uv if you haven't already done it
@@ -167,11 +167,11 @@ You can customize the services in the `docker-compose.yml` file according to you
 
 ## Citation
 
-If you use city2graph in your research, please cite it as follows:
+If you use City2Graph in your research, please cite it as follows:
 
 ```bibtex
 @software{sato2025city2graph,
-  title = {city2graph: Transform geospatial relations into graphs for spatial network analysis and Graph Neural Networks},
+  title = {City2Graph: Transform geospatial relations into graphs for spatial network analysis and Graph Neural Networks},
   author = {Sato, Yuta},
   year = {2025},
   url = {https://github.com/c2g-dev/city2graph},
@@ -185,7 +185,7 @@ Alternatively, you can find the citation information in the [CITATION.cff](CITAT
 
 ## Contributing
 
-We welcome contributions to the city2graph project! To contribute:
+We welcome contributions to the City2Graph project! To contribute:
 
 1. **Fork and clone the repository:**
    ```bash
