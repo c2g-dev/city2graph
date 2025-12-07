@@ -78,7 +78,28 @@ def load_overture_data(
         or a Polygon geometry.
     types : list[str], optional
         List of Overture data types to download. If None, downloads all available types.
-        Valid types include: 'address', 'building', 'segment', 'connector', etc.
+
+        Available types:
+
+        | Type | Description |
+        |------|-------------|
+        | ``address`` | Represents a physical place through a series of attributes (street number, etc). |
+        | ``bathymetry`` | Derived vectorized bathymetric data products from ETOPO1 and GLOBathy. |
+        | ``building`` | The most basic form of a building feature; geometry is the outer footprint. |
+        | ``building_part`` | A single part of a building (e.g. 3D part); associated with a parent building. |
+        | ``connector`` | Point feature connecting segments in the transportation network. |
+        | ``division`` | Represents an official/non-official organization of people (country, city, etc). |
+        | ``division_area`` | Captures the shape of the land/maritime area belonging to a division. |
+        | ``division_boundary`` | Represents a shared border between two division features. |
+        | ``infrastructure`` | Features such as communication towers, lines, piers, and bridges. |
+        | ``land`` | Physical representations of land surfaces derived from OSM Coastlines. |
+        | ``land_cover`` | Derived from ESA WorldCover high-resolution optical Earth observation data. |
+        | ``land_use`` | Classifications of the human use of a section of land (from OSM landuse). |
+        | ``place`` | Points of interest: schools, businesses, hospitals, landmarks, etc. |
+        | ``segment`` | LineString feature representing paths for travel (road, rail, water). |
+        | ``water`` | Physical representations of inland and ocean marine surfaces. |
+
+        For more information, see the [Overture Maps documentation](https://docs.overturemaps.org/schema/).
     output_dir : str, default "."
         Directory where GeoJSON files will be saved.
     prefix : str, default ""
