@@ -769,12 +769,18 @@ class PyGConverter(BaseGraphConverter):
         valid_targets = target_ids[valid_edges_mask]
 
         # Map original node IDs to integer indices
-        from_indices: np.ndarray[tuple[int, ...], np.dtype[np.int64]] = valid_sources.map(
-            source_mapping,
-        ).to_numpy(dtype=int)
-        to_indices: np.ndarray[tuple[int, ...], np.dtype[np.int64]] = valid_targets.map(
-            target_mapping,
-        ).to_numpy(dtype=int)
+        from_indices: np.ndarray[tuple[int, ...], np.dtype[np.int64]] = cast(
+            "np.ndarray[tuple[int, ...], np.dtype[np.int64]]",
+            valid_sources.map(
+                source_mapping,
+            ).to_numpy(dtype=int),
+        )
+        to_indices: np.ndarray[tuple[int, ...], np.dtype[np.int64]] = cast(
+            "np.ndarray[tuple[int, ...], np.dtype[np.int64]]",
+            valid_targets.map(
+                target_mapping,
+            ).to_numpy(dtype=int),
+        )
 
         combined_array = np.column_stack([from_indices, to_indices]).astype(int)
         result: list[list[int]] = combined_array.tolist()
