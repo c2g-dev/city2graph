@@ -4023,6 +4023,7 @@ PLOT_DEFAULTS = {
     "edge_linewidth": 0.5,
     "edge_alpha": 0.3,
     "edge_zorder": 1,
+    "title_color": "white",
 }
 
 
@@ -4037,6 +4038,7 @@ def plot_graph(  # noqa: PLR0913
     ncols: int | None = None,
     legend_position: str | None = "upper left",
     labelcolor: str = "white",
+    title_color: str | None = None,
     node_color: str | float | pd.Series | dict[str, Any] | None = None,
     node_alpha: float | pd.Series | dict[str, Any] | None = None,
     node_zorder: int | pd.Series | dict[str, Any] | None = None,
@@ -4075,7 +4077,7 @@ def plot_graph(  # noqa: PLR0913
         Figure size as (width, height) in inches.
     subplots : bool, default True
         If True and the graph is heterogeneous, plot each node/edge type in a
-        separate subplot. Ignores 'ax' if True.
+        separate subplot. Uses 'ax' as array of subplots if provided.
     ncols : int, optional
         Number of columns (subplots per row) when plotting heterogeneous graphs
         with subplots=True. If None, defaults to min(3, number_of_edge_types).
@@ -4085,6 +4087,9 @@ def plot_graph(  # noqa: PLR0913
         If None, no legend is displayed.
     labelcolor : str, default "white"
         Color of the legend text labels.
+    title_color : str, optional
+        Color for subplot titles when ``subplots=True``. Falls back to a white
+        title on black backgrounds if not provided.
     node_color : str, float, pd.Series, or dict, optional
         Color for nodes. Can be a scalar, column name, Series, or a dictionary
         mapping node types to colors for heterogeneous graphs.
@@ -4183,6 +4188,7 @@ def plot_graph(  # noqa: PLR0913
         "edge_zorder": edge_zorder,
         "legend_position": legend_position,
         "labelcolor": labelcolor,
+        "title_color": title_color,
         **kwargs,
     }
 
@@ -4190,12 +4196,18 @@ def plot_graph(  # noqa: PLR0913
     is_hetero = isinstance(nodes, dict) or isinstance(edges, dict)
 
     if subplots and is_hetero:
-        _plot_hetero_subplots(nodes, edges, figsize, bgcolor, ncols=ncols, **style_kwargs)
+        _plot_hetero_subplots(nodes, edges, figsize, bgcolor, ax=ax, ncols=ncols, **style_kwargs)
         return
 
     # Setup figure and axes
     if ax is None:
         ax = _setup_plot_axes(figsize, bgcolor)
+    else:
+        # Apply bgcolor to provided axes
+        ax.set_facecolor(bgcolor)
+        ax.set_axis_off()
+        if hasattr(ax, "figure") and ax.figure is not None:
+            ax.figure.patch.set_facecolor(bgcolor)
 
     # GeoDataFrame-based plotting
     is_hetero = isinstance(nodes, dict) or isinstance(edges, dict)
@@ -4586,6 +4598,7 @@ def _plot_hetero_subplots(
     edges: dict[tuple[str, str, str], gpd.GeoDataFrame] | None,
     figsize: tuple[float, float],
     bgcolor: str,
+    ax: Any | None = None,  # noqa: ANN401
     ncols: int | None = None,
     **kwargs: Any,  # noqa: ANN401
 ) -> None:
@@ -4604,6 +4617,8 @@ def _plot_hetero_subplots(
         Figure size (width, height) in inches.
     bgcolor : str
         Background color for figure and axes.
+    ax : Any, optional
+        Existing axes to plot on. Can be a single axis or an array of axes.
     ncols : int, optional
         Number of columns in the subplot grid. If None, defaults to
         min(3, number_of_edge_types).
@@ -4616,26 +4631,45 @@ def _plot_hetero_subplots(
     if n_items == 0:
         return
 
-    # Calculate grid layout
-    cols = ncols if ncols is not None else min(3, n_items)
-    cols = max(1, min(cols, n_items))  # Ensure cols is between 1 and n_items
-    rows = math.ceil(n_items / cols)
+    if ax is None:
+        # Calculate grid layout
+        cols = ncols if ncols is not None else min(3, n_items)
+        cols = max(1, min(cols, n_items))  # Ensure cols is between 1 and n_items
+        rows = math.ceil(n_items / cols)
 
-    fig, axes = plt.subplots(rows, cols, figsize=figsize)
-    fig.patch.set_facecolor(bgcolor)
+        fig, axes = plt.subplots(rows, cols, figsize=figsize)
+        fig.patch.set_facecolor(bgcolor)
 
-    # Ensure axes is iterable
-    axes_flat = [axes] if n_items == 1 else axes.flatten()
+        # Ensure axes is iterable
+        axes_flat = [axes] if n_items == 1 else axes.flatten()
+    else:
+        # Use provided axes
+        if hasattr(ax, "flatten"):
+            axes_flat = ax.flatten()
+        elif isinstance(ax, (list, tuple)):
+            axes_flat = list(ax)
+        else:
+            axes_flat = [ax]
+
+        # Apply bgcolor to provided axes' figure if available
+        if (
+            len(axes_flat) > 0
+            and hasattr(axes_flat[0], "figure")
+            and axes_flat[0].figure is not None
+        ):
+            axes_flat[0].figure.patch.set_facecolor(bgcolor)
 
     # Calculate total bounds for fixed extent
     xlim, ylim = _calculate_total_bounds(nodes, edges)
 
     # Plot each edge type
-    for _, (ax, (edge_key, edge_gdf)) in enumerate(zip(axes_flat, edge_items, strict=False)):
-        ax.set_facecolor(bgcolor)
-        ax.set_axis_off()
-        ax.set_xlim(xlim)
-        ax.set_ylim(ylim)
+    for _, (subplot_ax, (edge_key, edge_gdf)) in enumerate(
+        zip(axes_flat, edge_items, strict=False)
+    ):
+        subplot_ax.set_facecolor(bgcolor)
+        subplot_ax.set_axis_off()
+        subplot_ax.set_xlim(xlim)
+        subplot_ax.set_ylim(ylim)
 
         # Get colors for this subplot
         colors = {
@@ -4644,7 +4678,7 @@ def _plot_hetero_subplots(
             "dst": None,
         }
 
-        _plot_hetero_subplot_item(ax, edge_key, edge_gdf, nodes, colors, **kwargs)
+        _plot_hetero_subplot_item(subplot_ax, edge_key, edge_gdf, nodes, colors, **kwargs)
 
     # Hide unused axes
     for j in range(len(edge_items), len(axes_flat)):
@@ -4752,7 +4786,12 @@ def _plot_hetero_subplot_item(
         _plot_gdf(nodes[dst_type], ax, label=dst_type, **style_kwargs_dst)
 
     # Set title
-    ax.set_title(f"{edge_key}", color="white", fontsize=10)
+    title_color = kwargs.get("title_color")
+    ax.set_title(
+        f"{edge_key}",
+        color=title_color if title_color is not None else PLOT_DEFAULTS["title_color"],
+        fontsize=10,
+    )
 
 
 def _plot_homo_graph(

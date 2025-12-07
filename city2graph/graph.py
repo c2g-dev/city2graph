@@ -1660,6 +1660,9 @@ def gdf_to_pyg(
     >>> data = gdf_to_pyg(nodes_dict, edges_dict,
     ...                   node_label_cols={'building': ['type'], 'road': ['category']})
     """
+    if not TORCH_AVAILABLE:
+        raise ImportError(TORCH_ERROR_MSG)
+
     converter = PyGConverter(
         node_feature_cols=node_feature_cols,
         node_label_cols=node_label_cols,
@@ -2008,6 +2011,9 @@ def _get_device(device: str | torch.device | None) -> torch.device:
     >>> device = _normalize_device("cuda")
     >>> device = _normalize_device(None)  # Auto-selects best available
     """
+    if not TORCH_AVAILABLE or torch is None:
+        raise ImportError(TORCH_ERROR_MSG)
+
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
 

@@ -2025,6 +2025,57 @@ class TestPlotting(BaseGraphTest):
                 subplots=True,
             )
 
+    def test_plot_graph_hetero_subplots_title_color_override(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Titles should be visible when a custom color is provided."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        edge_count = max(1, len(sample_hetero_edges_dict))
+        fig, axes = plt.subplots(1, edge_count)
+        axes_flat = axes.flatten() if hasattr(axes, "flatten") else [axes]
+
+        try:
+            utils.plot_graph(
+                nodes=sample_hetero_nodes_dict,
+                edges=sample_hetero_edges_dict,
+                subplots=True,
+                ax=axes,
+                bgcolor="white",
+                title_color="black",
+            )
+
+            assert axes_flat[0].get_title() != ""
+            assert axes_flat[0].title.get_color() == "black"
+        finally:
+            plt.close(fig)
+
+    def test_plot_graph_with_ax_bgcolor(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test that bgcolor is applied when ax is provided."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        assert plt is not None
+        fig, ax = plt.subplots()
+        try:
+            utils.plot_graph(
+                nodes=sample_nodes_gdf,
+                edges=sample_edges_gdf,
+                ax=ax,
+                bgcolor="#123456",
+            )
+            # Check that the axes background color was set
+            assert ax.get_facecolor()[:3] == tuple(int(c, 16) / 255 for c in ["12", "34", "56"])
+        finally:
+            plt.close(fig)
+
     def test_plot_graph_hetero_no_subplots(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
