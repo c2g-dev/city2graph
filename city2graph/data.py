@@ -497,17 +497,25 @@ def _extract_connector_positions(segment: pd.Series, valid_connector_ids: set[st
 
     Examples
     --------
-    >>> segment = pd.Series({'connectors': '[{"id": "c1", "at": 0.5}]'})
+    >>> segment = pd.Series({'connectors': '[{"connector_id": "c1", "at": 0.5}]'})
     >>> valid_ids = {'c1'}
     >>> positions = _extract_connector_positions(segment, valid_ids)
     [0.0, 0.5, 1.0]
     """
-    connectors_str = segment.get("connectors", "")
-    if not connectors_str:
+    connectors_val = segment.get("connectors", "")
+    if not connectors_val:
         return [0.0, 1.0]
 
     # Parse connector data safely
-    connectors_data = json.loads(connectors_str.replace("'", '"').replace("None", "null"))
+    if isinstance(connectors_val, list):
+        connectors_data = connectors_val
+    else:
+        try:
+            connectors_data = json.loads(
+                str(connectors_val).replace("'", '"').replace("None", "null")
+            )
+        except (json.JSONDecodeError, AttributeError):
+            connectors_data = []
 
     # Ensure connectors_data is a list
     if not isinstance(connectors_data, list):
@@ -727,7 +735,10 @@ def _parse_level_rules(level_rules_str: str) -> list[tuple[float, float]] | str:
         return []
 
     try:
-        rules_data = json.loads(level_rules_str.replace("'", '"').replace("None", "null"))
+        if isinstance(level_rules_str, list):
+            rules_data = level_rules_str
+        else:
+            rules_data = json.loads(str(level_rules_str).replace("'", '"').replace("None", "null"))
     except (json.JSONDecodeError, AttributeError):
         return []
 
