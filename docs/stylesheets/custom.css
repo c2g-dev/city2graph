@@ -1,0 +1,1159 @@
+/* ==========================================================================
+   City2Graph Documentation Theme
+   A modern, Apple-inspired glassmorphism theme for MkDocs Material
+   ========================================================================== */
+
+/* ==========================================================================
+   1. FONTS & IMPORTS
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+
+/* ==========================================================================
+   2. CSS VARIABLES - Light Mode (Default)
+   ========================================================================== */
+:root,
+[data-md-color-scheme="city2graph-light"] {
+  color-scheme: light;
+
+  /* Brand Colors */
+  --md-primary-fg-color: #2563eb;
+  --md-primary-fg-color--light: #3b82f6;
+  --md-primary-fg-color--dark: #1d4ed8;
+  --md-accent-fg-color: #8b5cf6;
+  --md-primary-fg-color--rgb: 37, 99, 235;
+  --md-accent-fg-color--rgb: 139, 92, 246;
+
+  /* Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.60);
+  --glass-border: rgba(255, 255, 255, 0.4);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
+  --glass-blur: 30px;
+  --glass-saturate: 180%;
+  --header-bg: linear-gradient(to bottom, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.3));
+  --header-border: rgba(255, 255, 255, 0.3);
+
+  /* Typography */
+  --md-text-font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --md-heading-font-family: "Outfit", sans-serif;
+  --md-code-font-family: "Fira Code", monospace;
+
+  /* Colors */
+  --doc-bg-color: #ffffff;
+  --doc-text-color: #1d1d1f;
+  --doc-heading-color: #1d1d1f;
+  --doc-muted-color: #86868b;
+  --link-color: var(--md-primary-fg-color);
+  --link-hover-color: var(--md-primary-fg-color--dark);
+
+  /* Layout */
+  --doc-max-width: 68rem;
+  --doc-content-padding: 2.5rem;
+
+  /* Components */
+  --card-radius: 18px;
+  --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --image-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.12), 0 6px 12px -4px rgba(0, 0, 0, 0.08);
+
+  /* Code Blocks */
+  --code-bg: #f5f5f7;
+  --code-border: rgba(0, 0, 0, 0.05);
+  --code-text: #1d1d1f;
+  --inline-code-bg: rgba(var(--md-primary-fg-color--rgb), 0.1);
+}
+
+/* ==========================================================================
+   3. CSS VARIABLES - Dark Mode
+   ========================================================================== */
+[data-md-color-scheme="city2graph-dark"] {
+  color-scheme: dark;
+
+  /* Brand Colors - Lighter for dark mode */
+  --md-primary-fg-color: #60a5fa;
+  --md-primary-fg-color--light: #93c5fd;
+  --md-primary-fg-color--dark: #3b82f6;
+  --md-accent-fg-color: #a78bfa;
+  --md-primary-fg-color--rgb: 96, 165, 250;
+  --md-accent-fg-color--rgb: 167, 139, 250;
+
+  /* Glassmorphism - Dark */
+  --glass-bg: rgba(20, 20, 20, 0.60);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+  --header-bg: linear-gradient(to bottom, rgba(20, 20, 20, 0.5), rgba(20, 20, 20, 0.3));
+  --header-border: rgba(255, 255, 255, 0.05);
+
+  /* Colors - Dark */
+  --doc-bg-color: #000000;
+  --doc-text-color: #f5f5f7;
+  --doc-heading-color: #ffffff;
+  --doc-muted-color: #a1a1a6;
+  --link-color: #93c5fd;
+  --link-hover-color: #bfdbfe;
+
+  /* Components - Dark */
+  --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --image-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.5), 0 6px 12px -4px rgba(0, 0, 0, 0.3);
+
+  /* Code Blocks - Dark */
+  --code-bg: #1c1c1e;
+  --code-border: rgba(255, 255, 255, 0.1);
+  --code-text: #d4d4d4;
+  --inline-code-bg: rgba(255, 255, 255, 0.1);
+
+  /* Syntax Highlighting - Dark Mode (Dracula-inspired) */
+  --md-code-hl-color: #f8f8f2;
+  --md-code-hl-number-color: #bd93f9;
+  --md-code-hl-special-color: #ff79c6;
+  --md-code-hl-function-color: #8be9fd;
+  --md-code-hl-constant-color: #bd93f9;
+  --md-code-hl-keyword-color: #ff79c6;
+  --md-code-hl-string-color: #f1fa8c;
+  --md-code-hl-name-color: #f8f8f2;
+  --md-code-hl-operator-color: #ff79c6;
+  --md-code-hl-punctuation-color: #f8f8f2;
+  --md-code-hl-comment-color: #6272a4;
+  --md-code-hl-generic-color: #f8f8f2;
+  --md-code-hl-variable-color: #f8f8f2;
+}
+
+/* ==========================================================================
+   4. GLOBAL STYLES
+   ========================================================================== */
+.md-grid {
+  max-width: var(--doc-max-width);
+}
+
+body {
+  background-color: var(--doc-bg-color);
+  background-image: none;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--doc-text-color);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ==========================================================================
+   5. TYPOGRAPHY
+   ========================================================================== */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--md-heading-font-family);
+  color: var(--doc-heading-color);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-top: 2em;
+  margin-bottom: 0.8em;
+}
+
+h1 {
+  font-size: 3.5rem;
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  background: linear-gradient(135deg, var(--md-primary-fg-color--dark) 0%, var(--md-primary-fg-color) 50%, var(--md-accent-fg-color) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 1em;
+  line-height: 1.1;
+}
+
+h2 {
+  font-size: 2.5rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  background: linear-gradient(120deg, var(--doc-heading-color) 0%, var(--md-primary-fg-color) 80%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  border-bottom: none;
+  margin-top: 2.5em;
+  line-height: 1.2;
+}
+
+/* ==========================================================================
+   6. HEADER & NAVIGATION
+   ========================================================================== */
+
+/* --- Header --- */
+.md-header {
+  background: var(--header-bg);
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  border-bottom: 1px solid var(--header-border);
+  box-shadow: var(--glass-shadow);
+  color: var(--doc-text-color);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* --- Logo --- */
+.md-header__button.md-logo img,
+.md-nav__title .md-logo img {
+  height: 3rem;
+  width: auto;
+  min-width: 100px;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-header__button.md-logo img,
+[data-md-color-scheme="city2graph-dark"] .md-nav__title .md-logo img {
+  content: url("../assets/logos/city2graph_logo_wide_dark.png");
+}
+
+/* --- Header Tabs --- */
+.md-tabs {
+  background-color: transparent;
+  color: var(--doc-text-color);
+  border-bottom: none;
+}
+
+.md-tabs__list {
+  margin: 0;
+  padding: 0;
+}
+
+.md-tabs__item {
+  padding: 0 0.2rem;
+}
+
+.md-tabs__link {
+  color: var(--doc-text-color);
+  opacity: 0.7;
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  border-radius: 999px;
+  padding: 0.4rem 1rem;
+  margin-top: 0.2rem;
+  font-weight: 500;
+  border: none !important;
+}
+
+.md-tabs__link:hover {
+  opacity: 1;
+  color: var(--md-primary-fg-color);
+  background-color: transparent;
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 8px 20px rgba(var(--md-primary-fg-color--rgb), 0.2);
+}
+
+.md-tabs__link--active {
+  opacity: 1;
+  color: var(--md-primary-fg-color);
+  background-color: rgba(var(--md-primary-fg-color--rgb), 0.12);
+  font-weight: 600;
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-tabs__link:hover {
+  background-color: transparent;
+  color: var(--md-primary-fg-color--light);
+  box-shadow: none !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-tabs__link--active {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: var(--md-primary-fg-color--light);
+}
+
+/* --- Search Bar --- */
+.md-search__form {
+  background-color: transparent !important;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.md-search__input {
+  background-color: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(0, 0, 0, 0.15) !important;
+  border-radius: 14px;
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.05);
+  color: var(--doc-text-color) !important;
+}
+
+.md-search__input::placeholder {
+  color: var(--doc-muted-color) !important;
+}
+
+.md-search__icon {
+  color: var(--doc-muted-color) !important;
+}
+
+.md-search__icon:hover {
+  color: var(--doc-text-color) !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-search__form {
+  background-color: transparent !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-search__input {
+  background-color: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* --- Source/Repo Button --- */
+.md-header__source {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+}
+
+.md-source,
+.md-source__repository,
+.md-source__facts {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+[data-md-color-scheme="city2graph-light"] .md-source,
+[data-md-color-scheme="city2graph-light"] .md-source__repository,
+[data-md-color-scheme="city2graph-light"] .md-source__facts {
+  color: #000000 !important;
+}
+
+[data-md-color-scheme="city2graph-light"] .md-source {
+  background-color: transparent !important;
+  border: none !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-source,
+[data-md-color-scheme="city2graph-dark"] .md-source__repository,
+[data-md-color-scheme="city2graph-dark"] .md-source__facts {
+  color: #ffffff !important;
+}
+
+/* ==========================================================================
+   7. SIDEBAR & NAVIGATION
+   ========================================================================== */
+
+/* --- Sidebar Container (Dark Mode) --- */
+[data-md-color-scheme="city2graph-dark"] .md-sidebar,
+[data-md-color-scheme="city2graph-dark"] .md-sidebar__scrollwrap,
+[data-md-color-scheme="city2graph-dark"] .md-sidebar__inner,
+[data-md-color-scheme="city2graph-dark"] .md-nav,
+[data-md-color-scheme="city2graph-dark"] .md-nav__list {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* --- Navigation Links (Dark Mode) --- */
+[data-md-color-scheme="city2graph-dark"] .md-nav__link {
+  color: var(--doc-text-color) !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-nav__link:hover,
+[data-md-color-scheme="city2graph-dark"] .md-nav__link--active,
+[data-md-color-scheme="city2graph-dark"] .md-nav__link[aria-current="page"] {
+  color: var(--link-color) !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-nav__link--active {
+  font-weight: 600;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* --- Navigation Icons & Version Selector --- */
+[data-md-color-scheme="city2graph-dark"] .md-nav__icon,
+[data-md-color-scheme="city2graph-dark"] .md-nav__button,
+[data-md-color-scheme="city2graph-dark"] .md-version,
+[data-md-color-scheme="city2graph-dark"] .md-version__current {
+  color: var(--doc-text-color) !important;
+}
+
+/* ==========================================================================
+   8. MOBILE NAVIGATION
+   ========================================================================== */
+
+/* --- Mobile Drawer Header --- */
+.md-nav__title {
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  border-bottom: 1px solid var(--header-border);
+  box-shadow: var(--glass-shadow);
+  color: var(--doc-text-color) !important;
+}
+
+[data-md-color-scheme="city2graph-light"] .md-nav__title {
+  background: var(--header-bg) !important;
+  color: #000000 !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-nav__title {
+  background: linear-gradient(to bottom, rgba(20, 20, 20, 0.95), rgba(20, 20, 20, 0.9)) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--doc-text-color) !important;
+}
+
+/* --- Custom Mobile Drawer Header --- */
+.custom-drawer-header {
+  display: flex;
+  background-color: rgba(255, 255, 255, 0.5);
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.mobile-repo-button {
+  display: flex !important;
+  border-radius: 8px;
+  padding: 0.5rem;
+  color: var(--doc-text-color) !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .mobile-repo-button {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--doc-text-color) !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .custom-drawer-header {
+  background-color: transparent;
+}
+
+.mobile-version-selector {
+  display: block !important;
+  margin-top: 0.5rem;
+}
+
+/* --- Primary Navigation (Mobile Drawer - Dark Mode) --- */
+[data-md-color-scheme="city2graph-dark"] .md-nav--primary,
+[data-md-color-scheme="city2graph-dark"] .md-nav--primary .md-nav {
+  background: rgba(15, 15, 15, 0.9) !important;
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-nav--primary .md-nav__item {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-nav--primary .md-nav__link {
+  color: var(--doc-text-color) !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-nav--primary .md-nav__link:hover,
+[data-md-color-scheme="city2graph-dark"] .md-nav--primary .md-nav__link--active {
+  color: var(--link-color) !important;
+}
+
+/* --- Section Labels (e.g., "API Reference") --- */
+[data-md-color-scheme="city2graph-dark"] .md-nav__item--nested > .md-nav__link,
+[data-md-color-scheme="city2graph-dark"] .md-nav__item--section > .md-nav__link {
+  color: var(--doc-text-color) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-nav__item--section > .md-nav__link--active {
+  color: var(--link-color) !important;
+  font-weight: 600;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-nav__item--section {
+  background: transparent !important;
+}
+
+/* --- Mobile Nav Source (GitHub link) --- */
+[data-md-color-scheme="city2graph-light"] .md-nav__source {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-nav__source {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  color: var(--doc-text-color) !important;
+}
+
+/* --- Secondary Navigation (Table of Contents - Dark Mode) --- */
+[data-md-color-scheme="city2graph-dark"] .md-nav--secondary,
+[data-md-color-scheme="city2graph-dark"] .md-nav--secondary .md-nav {
+  background: rgba(15, 15, 15, 0.9) !important;
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-nav--secondary .md-nav__link {
+  color: var(--doc-text-color) !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-nav--secondary .md-nav__title {
+  background: linear-gradient(to bottom, rgba(20, 20, 20, 0.95), rgba(20, 20, 20, 0.9)) !important;
+  backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(var(--glass-saturate)) blur(var(--glass-blur));
+  color: var(--doc-text-color) !important;
+  box-shadow: var(--glass-shadow);
+}
+
+/* ==========================================================================
+   9. CONTENT COMPONENTS
+   ========================================================================== */
+
+/* --- Admonitions (Glass Cards) --- */
+.md-typeset .admonition,
+.md-typeset details {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border) !important;
+  border-radius: var(--card-radius);
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+}
+
+.md-typeset .admonition-title,
+.md-typeset summary {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--glass-border);
+  font-weight: 600;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-typeset .admonition,
+[data-md-color-scheme="city2graph-dark"] .md-typeset details {
+  color: var(--doc-text-color) !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-typeset .admonition .admonition-title,
+[data-md-color-scheme="city2graph-dark"] .md-typeset summary {
+  color: var(--doc-heading-color) !important;
+}
+
+/* --- See Also Admonition Fix (Dark Mode) --- */
+[data-md-color-scheme="city2graph-dark"] details.see-also,
+[data-md-color-scheme="city2graph-dark"] details.see-also summary,
+[data-md-color-scheme="city2graph-dark"] details.see-also p,
+[data-md-color-scheme="city2graph-dark"] details.see-also li,
+[data-md-color-scheme="city2graph-dark"] details.see-also span,
+[data-md-color-scheme="city2graph-dark"] details.see-also dl,
+[data-md-color-scheme="city2graph-dark"] details.see-also dt,
+[data-md-color-scheme="city2graph-dark"] details.see-also dd {
+  color: var(--doc-text-color) !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] details.see-also a {
+  color: var(--link-color) !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] details.see-also code {
+  background-color: var(--inline-code-bg) !important;
+  border: none !important;
+  color: var(--doc-text-color) !important;
+}
+
+/* --- Buttons --- */
+.md-typeset .md-button {
+  border-radius: 999px;
+  padding: 0.6em 1.6em;
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.md-typeset .md-button--primary {
+  background: var(--md-primary-fg-color);
+  border: none;
+  box-shadow: 0 4px 14px 0 rgba(var(--md-primary-fg-color--rgb), 0.39);
+}
+
+.md-typeset .md-button--primary:hover {
+  background: var(--md-primary-fg-color--dark);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(var(--md-primary-fg-color--rgb), 0.23);
+}
+
+/* --- Images --- */
+.md-typeset img {
+  border-radius: var(--card-radius);
+  box-shadow: var(--image-shadow);
+  border: 1px solid var(--glass-border);
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Make standalone images fill the width to match code blocks */
+.md-typeset p > img:only-of-type,
+.md-typeset p > a:only-of-type > img:only-of-type {
+  width: 100% !important;
+  height: auto;
+  display: block;
+}
+
+/* --- Tables --- */
+.md-typeset table:not([class]) {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  border-radius: var(--card-radius);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--card-shadow);
+  display: inline-block;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: rgba(var(--md-primary-fg-color--rgb), 0.05);
+  color: var(--doc-heading-color);
+}
+
+.md-typeset table:not([class]) tr:hover {
+  box-shadow: none !important;
+  background-color: transparent !important;
+}
+
+/* ==========================================================================
+   10. CODE BLOCKS
+   ========================================================================== */
+
+/* --- Base Code Block Style --- */
+.md-typeset pre {
+  background: var(--code-bg);
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  margin-bottom: 1em;
+  overflow: auto;
+  padding: 0.5em 0.8em !important;
+  position: relative;
+  font-family: var(--md-code-font-family);
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-typeset pre {
+  color: var(--code-text);
+}
+
+.md-typeset pre > code {
+  font-family: var(--md-code-font-family);
+  font-size: inherit;
+  line-height: inherit;
+  background: transparent;
+  padding: 0 !important;
+  display: inline-block;
+  min-width: 100%;
+}
+
+/* --- Inline Code --- */
+.md-typeset code {
+  background-color: var(--inline-code-bg);
+  color: var(--md-primary-fg-color);
+  border-radius: 6px;
+  padding: 0 0.3em;
+  font-size: 0.9em;
+  font-weight: 500;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* --- Code Block Nav & Copy Button --- */
+.md-code__nav {
+  background-color: transparent !important;
+}
+
+.md-code__button {
+  background-color: transparent !important;
+  border-radius: 4px !important;
+  opacity: 1 !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.md-code__button:hover {
+  transform: scale(1.05);
+}
+
+/* Light Mode */
+[data-md-color-scheme="city2graph-light"] .md-code__button {
+  color: rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-md-color-scheme="city2graph-light"] .md-code__button:hover {
+  color: rgba(0, 0, 0, 0.8) !important;
+  background-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Dark Mode */
+[data-md-color-scheme="city2graph-dark"] .md-code__button {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-code__button:hover {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* ==========================================================================
+   11. NOTEBOOK STYLING
+   ========================================================================== */
+
+/* --- Hide Prompts --- */
+.jp-InputPrompt,
+.jp-OutputPrompt {
+  display: none !important;
+}
+
+/* --- Base Reset for Notebook Cells --- */
+.jp-CodeCell,
+.jp-Cell,
+.jp-InputArea,
+.jp-InputArea-editor,
+.jp-RenderedHTMLCommon pre,
+.code_cell .highlight pre,
+.md-content__inner div > div > div > pre {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* --- Notebook Code Blocks (Overrides) --- */
+.jp-InputArea-editor,
+.code_cell .highlight pre,
+.highlight-ipynb pre {
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-size: 1em;
+  padding: 0.8em 1em !important;
+  font-family: var(--md-code-font-family);
+}
+
+/* --- Light Mode Notebook Styling --- */
+[data-md-color-scheme="city2graph-light"] .jp-Cell,
+[data-md-color-scheme="city2graph-light"] .jp-Cell-inputWrapper,
+[data-md-color-scheme="city2graph-light"] .jp-InputArea,
+[data-md-color-scheme="city2graph-light"] .jp-InputPrompt,
+[data-md-color-scheme="city2graph-light"] .jp-InputArea-editor,
+[data-md-color-scheme="city2graph-light"] .jp-CodeMirrorEditor,
+[data-md-color-scheme="city2graph-light"] .CodeMirror,
+[data-md-color-scheme="city2graph-light"] .highlight-ipynb,
+[data-md-color-scheme="city2graph-light"] .highlight {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+[data-md-color-scheme="city2graph-light"] .highlight-ipynb pre {
+  background-color: var(--code-bg) !important;
+  color: var(--code-text) !important;
+  margin-bottom: 0.8em !important;
+}
+
+[data-md-color-scheme="city2graph-light"] .highlight-ipynb pre:hover {
+  background-color: var(--code-bg) !important;
+}
+
+/* --- Dark Mode Notebook Styling --- */
+[data-md-color-scheme="city2graph-dark"] .jp-Cell,
+[data-md-color-scheme="city2graph-dark"] .jp-Cell-inputWrapper,
+[data-md-color-scheme="city2graph-dark"] .jp-InputArea,
+[data-md-color-scheme="city2graph-dark"] .jp-InputPrompt,
+[data-md-color-scheme="city2graph-dark"] .jp-CodeMirrorEditor,
+[data-md-color-scheme="city2graph-dark"] .CodeMirror,
+[data-md-color-scheme="city2graph-dark"] .highlight-ipynb,
+[data-md-color-scheme="city2graph-dark"] .code_cell .highlight {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .jp-InputArea-editor,
+[data-md-color-scheme="city2graph-dark"] .code_cell .highlight pre,
+[data-md-color-scheme="city2graph-dark"] .highlight-ipynb pre {
+  background: var(--code-bg) !important;
+  color: var(--code-text);
+}
+
+[data-md-color-scheme="city2graph-dark"] .jp-InputArea-editor:hover,
+[data-md-color-scheme="city2graph-dark"] .code_cell .highlight pre:hover,
+[data-md-color-scheme="city2graph-dark"] .highlight-ipynb pre:hover {
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* --- Cell Spacing --- */
+[data-md-color-scheme="city2graph-dark"] .jp-Cell,
+[data-md-color-scheme="city2graph-dark"] .jp-CodeCell,
+[data-md-color-scheme="city2graph-dark"] .jp-MarkdownCell,
+[data-md-color-scheme="city2graph-light"] .jp-Cell,
+[data-md-color-scheme="city2graph-light"] .jp-CodeCell,
+[data-md-color-scheme="city2graph-light"] .jp-MarkdownCell {
+  margin-bottom: 1.0em !important;
+}
+
+/* --- Output Cells (Reset styling) --- */
+.md-typeset .jp-OutputArea-output pre,
+.jp-OutputArea-output pre {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-typeset .jp-OutputArea-output pre,
+[data-md-color-scheme="city2graph-dark"] .jp-OutputArea-output pre {
+  color: #c9d1d9 !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .jp-OutputArea-output pre {
+  font-size: 0.9em;
+  margin-left: 0.5em;
+}
+
+[data-md-color-scheme="city2graph-light"] .md-typeset .jp-OutputArea-output pre,
+[data-md-color-scheme="city2graph-light"] .jp-OutputArea-output pre {
+  color: var(--code-text) !important;
+}
+
+/* --- Notebook Syntax Highlighting --- */
+:is(.code_cell .highlight, .highlight-ipynb) :is(.k, .kd, .kn, .kp, .kr, .kt) {
+  color: var(--md-code-hl-keyword-color) !important;
+}
+
+:is(.code_cell .highlight, .highlight-ipynb) :is(.n, .na, .nb, .bp, .nc, .no, .nd, .ni, .ne, .nf, .fm, .nl, .nn, .nt, .nv, .vc, .vg, .vi) {
+  color: var(--md-code-hl-name-color) !important;
+}
+
+:is(.code_cell .highlight, .highlight-ipynb) :is(.s, .sa, .sb, .sc, .dl, .sd, .s2, .se, .sh, .si, .sx, .sr, .s1, .ss) {
+  color: var(--md-code-hl-string-color) !important;
+}
+
+:is(.code_cell .highlight, .highlight-ipynb) :is(.m, .mb, .mf, .mh, .mi, .il, .mo) {
+  color: var(--md-code-hl-number-color) !important;
+}
+
+:is(.code_cell .highlight, .highlight-ipynb) :is(.o, .ow) {
+  color: var(--md-code-hl-operator-color) !important;
+}
+
+:is(.code_cell .highlight, .highlight-ipynb) :is(.c, .ch, .cm, .cp, .cpf, .c1, .cs) {
+  color: var(--md-code-hl-comment-color) !important;
+}
+
+:is(.code_cell .highlight, .highlight-ipynb) .p {
+  color: var(--md-code-hl-punctuation-color) !important;
+}
+
+/* --- Notebook DataFrames / Tables (Dark Mode) --- */
+[data-md-color-scheme="city2graph-dark"] .jp-RenderedHTMLCommon table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin-top: 0.5em;
+  font-size: 0.85em;
+}
+
+[data-md-color-scheme="city2graph-dark"] .jp-RenderedHTMLCommon table th {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #e1e1e3 !important;
+  font-weight: 600;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+
+[data-md-color-scheme="city2graph-dark"] .jp-RenderedHTMLCommon table td {
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  color: #d1d5db !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .jp-RenderedHTMLCommon table tbody tr:nth-child(odd),
+[data-md-color-scheme="city2graph-dark"] .jp-RenderedHTMLCommon table tbody tr:hover {
+  background: transparent !important;
+}
+
+/* --- Notebook Plot Images (Dark Mode) --- */
+[data-md-color-scheme="city2graph-dark"] .jp-OutputArea-output img {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 4px;
+  margin-top: 0.5em;
+}
+
+/* ==========================================================================
+   12. API DOCUMENTATION (mkdocstrings)
+   ========================================================================== */
+
+/* --- Container --- */
+.doc-object {
+  margin-bottom: 4em !important;
+}
+
+/* --- Headings --- */
+.doc-heading {
+  margin-top: 0 !important;
+  margin-bottom: 0.5em !important;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding-bottom: 0.4em;
+}
+
+[data-md-color-scheme="city2graph-dark"] .doc-heading {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.doc-heading code {
+  font-family: var(--md-heading-font-family);
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: transparent !important;
+  padding: 0;
+  color: var(--md-primary-fg-color);
+}
+
+/* --- Signatures --- */
+.doc-signature {
+  font-family: var(--md-code-font-family);
+  font-size: 0.92em;
+  line-height: 1.4;
+  background: rgba(var(--md-primary-fg-color--rgb), 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 0.5em 0.7em;
+  margin-bottom: 1em;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  color: var(--doc-text-color);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.01);
+}
+
+[data-md-color-scheme="city2graph-dark"] .doc-signature {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.doc-signature pre,
+[data-md-color-scheme="city2graph-dark"] .doc-signature pre {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* --- Content & Descriptions --- */
+.doc-contents {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--doc-text-color);
+}
+
+.doc-contents p {
+  margin-bottom: 0.6em;
+}
+
+/* --- Section Titles --- */
+.doc-section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--doc-heading-color);
+  margin-top: 1.5em;
+  margin-bottom: 0.6em;
+  border-bottom: 1px solid var(--glass-border);
+  padding-bottom: 0.2em;
+  display: block;
+  width: 100%;
+}
+
+/* --- Parameter Tables --- */
+.md-typeset .doc-contents table:not([class]) td:first-child code {
+  color: var(--doc-text-color);
+  background-color: rgba(0, 0, 0, 0.05);
+  font-weight: 600;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-typeset .doc-contents table:not([class]) td:first-child code {
+  background-color: var(--inline-code-bg);
+}
+
+/* --- Parameter Definition Lists --- */
+.md-typeset .doc-contents dl {
+  margin-top: 0.5em;
+  margin-bottom: 1em;
+  display: grid;
+  grid-template-columns: max-content auto;
+  column-gap: 1.5em;
+  row-gap: 0.5em;
+  align-items: baseline;
+}
+
+.md-typeset .doc-contents dt {
+  font-family: var(--md-code-font-family);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--doc-heading-color);
+  grid-column: 1;
+  margin: 0;
+}
+
+.md-typeset .doc-contents dt code {
+  font-size: 0.9em;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--doc-text-color);
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-typeset .doc-contents dt code {
+  color: var(--doc-text-color);
+  background: var(--inline-code-bg);
+}
+
+.md-typeset .doc-contents dd {
+  font-size: 0.8125rem;
+  color: var(--doc-text-color);
+  grid-column: 2;
+  margin: 0;
+}
+
+.md-typeset .doc-contents dd p {
+  margin-bottom: 0.4em;
+}
+
+@media (max-width: 600px) {
+  .md-typeset .doc-contents dl {
+    display: block;
+  }
+  .md-typeset .doc-contents dt {
+    margin-top: 0.8em;
+    margin-bottom: 0.2em;
+  }
+  .md-typeset .doc-contents dd {
+    margin-left: 1em;
+    margin-bottom: 0.8em;
+  }
+}
+
+/* --- Labels --- */
+.doc-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15em 0.5em;
+  border-radius: 4px;
+  background-color: rgba(var(--md-accent-fg-color--rgb), 0.15);
+  color: var(--md-accent-fg-color);
+  vertical-align: middle;
+  margin-left: 0.5em;
+  font-weight: 700;
+}
+
+/* --- Hide Unwanted ToC Items --- */
+.md-nav--secondary .md-nav__item:has(.doc-symbol-module),
+.md-nav--secondary .md-nav__item:has(.doc-symbol-class),
+.md-nav--secondary .md-nav__item:has(.doc-symbol-attribute),
+.md-nav--secondary .md-nav__item:has(a[href$="#functions"]),
+.md-nav--secondary .md-nav__item:has(a[href$="#classes"]),
+.md-nav--secondary .md-nav__item:has(a[href$="#attributes"]) {
+  display: none;
+}
+
+/* ==========================================================================
+   13. SCROLLBARS
+   ========================================================================== */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.3);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.5);
+}
+
+/* ==========================================================================
+   14. SIDEBAR FIXES (Dark Mode)
+   ========================================================================== */
+
+/* --- Remove Masks --- */
+.md-sidebar__scrollwrap {
+  mask-image: none !important;
+  -webkit-mask-image: none !important;
+}
+
+/* --- Remove Pseudo-element Backgrounds --- */
+[data-md-color-scheme="city2graph-dark"] .md-sidebar__scrollwrap::before,
+[data-md-color-scheme="city2graph-dark"] .md-sidebar__scrollwrap::after,
+[data-md-color-scheme="city2graph-dark"] .md-nav__title::before,
+[data-md-color-scheme="city2graph-dark"] .md-nav__title::after {
+  background: none !important;
+  box-shadow: none !important;
+  display: none !important;
+  content: none !important;
+}
+
+/* --- Nav Title Reset --- */
+[data-md-color-scheme="city2graph-dark"] .md-nav__title {
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+}
+
+
+/* --- Section Header Pseudo-elements --- */
+[data-md-color-scheme="city2graph-dark"] .md-nav__item--section > .md-nav__link::after,
+[data-md-color-scheme="city2graph-dark"] .md-nav__item--nested > .md-nav__link::after {
+  display: none !important;
+  content: none !important;
+}
+
+/* --- Sidebar Top Offset Fix --- */
+@media screen and (min-width: 76.25em) {
+  .md-sidebar {
+    top: 6rem !important;
+  }
+}
+
+
+/* ==========================================================================
+   15. BREADCRUMBS
+   ========================================================================== */
+.md-path__link {
+  color: var(--doc-muted-color);
+  transition: color 0.25s;
+  font-weight: 500;
+  font-size: 0.5rem;
+}
+
+.md-path__link:hover {
+  color: var(--md-primary-fg-color);
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-path__link:hover {
+  color: var(--md-primary-fg-color--light);
+}
+
+/* ==========================================================================
+   16. LINKS (Dark Mode Readability)
+   ========================================================================== */
+
+/* --- Content Links --- */
+[data-md-color-scheme="city2graph-dark"] .md-typeset a:not(.md-button):not(.md-nav__link):not(.md-source):not(.md-header__button):not(.md-logo):not([class^="md-"]),
+[data-md-color-scheme="city2graph-dark"] .md-content a,
+[data-md-color-scheme="city2graph-dark"] .md-content__inner a,
+[data-md-color-scheme="city2graph-dark"] .md-typeset ul li a,
+[data-md-color-scheme="city2graph-dark"] .md-typeset ol li a {
+  color: var(--link-color) !important;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-typeset a:not(.md-button):not(.md-nav__link):not(.md-source):not(.md-header__button):not(.md-logo):not([class^="md-"]):hover,
+[data-md-color-scheme="city2graph-dark"] .md-content a:hover,
+[data-md-color-scheme="city2graph-dark"] .md-content__inner a:hover,
+[data-md-color-scheme="city2graph-dark"] .md-typeset ul li a:hover,
+[data-md-color-scheme="city2graph-dark"] .md-typeset ol li a:hover {
+  color: var(--link-hover-color) !important;
+}

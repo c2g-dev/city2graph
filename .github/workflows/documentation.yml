@@ -1,69 +1,71 @@
 name: Build and Deploy Documentation
-
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
 
 jobs:
-  build:
-    permissions:
-      contents: read
+  build_mkdocs:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
+        uses: astral-sh/setup-uv@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version-file: pyproject.toml
 
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev
+
       - name: Install dependencies
         run: |
-          sudo apt install pandoc
-          uv sync --locked --extra cpu --group docs --group dev
+          uv sync --group docs --extra cpu
 
-      - name: Build documentation
-        run: uv run make -C docs html
+      - name: Deploy with Mike
+        run: |
+          # Extract version from pyproject.toml
+          VERSION=$(grep "version = " pyproject.toml | head -n 1 | cut -d '"' -f 2)
+          uv run mike deploy --push --update-aliases $VERSION latest
 
-      - name: Upload documentation artifacts
-        uses: actions/upload-artifact@v5
-        with:
-          name: documentation
-          path: docs/build/html
-
-  deploy:
-    needs: build
-    if: github.event_name != 'pull_request'
-    permissions:
-      contents: write
-      pages: write
-      id-token: write
+  deploy_mkdocs:
+    needs: build_mkdocs
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     steps:
-      - name: Download documentation artifact
-        uses: actions/download-artifact@v6
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
         with:
-          name: documentation
-          path: docs/build/html
+          ref: gh-pages
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        with:
-          publish_branch: gh-pages
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: docs/build/html
-          cname: city2graph.net
+        id: deployment
+        uses: actions/deploy-pages@v4

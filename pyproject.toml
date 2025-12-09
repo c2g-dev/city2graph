@@ -31,7 +31,7 @@ dependencies = [
     "geopandas >=1.1.1",
     "libpysal >=4.12.1",
     "momepy",
-    "overturemaps >=0.17.0",
+    "overturemaps>=0.17.0",
     "rustworkx >=0.17.1",
     "scipy >=1.10.0",
 ]
@@ -90,6 +90,7 @@ torch = [
   { index = "pytorch-cu128", extra = "cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'"  },
   { index = "pytorch-cu130", extra = "cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'"  },
 ]
+overturemaps = { git = "https://github.com/OvertureMaps/overturemaps-py.git" }
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
@@ -129,18 +130,17 @@ explicit = true
 
 [dependency-groups]
 docs = [
-    "sphinx",
-    "sphinx-autodoc-typehints",
-    "pydata-sphinx-theme",
-    "myst-parser",
-    "nbsphinx",
-    "numpydoc",
-    "sphinxext-opengraph[social-cards] >=0.10.0",
-    "sphinx-plotly-directive",
-    "sphinx-sitemap",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "mkdocs-jupyter",
+    "mkdocs-gen-files",
+    "mkdocs-literate-nav",
+    "pillow",
+    "cairosvg",
     "toml",
-    "pypandoc-binary",
-    "overturemaps"
+    "mike",
+    "black",
 ]
 dev = [
     "pytest",

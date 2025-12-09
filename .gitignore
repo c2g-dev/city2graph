@@ -1,21 +1,42 @@
-*.geojson
-!tests/data/*.geojson
-*.psd
-.ipynb_checkpoints
+# General
+__pycache__/
+*.pyc
 .DS_Store
-**/__pycache__/
-.pytest_cache/
+.venv/
+.uv-cache/
+.uv_cache/
+
+# IDEs
 .vscode/
-dev/
+.idea/
 
-notebooks/**
-!notebooks/city2graph_demo.ipynb
-
-docs/source/examples/**
-!docs/source/examples/**/*.ipynb
-
-conda/conda-bld/
-docs/build/
-
+# Testing
+.pytest_cache/
 .coverage
 .coverage*
+htmlcov/
+
+# Documentation
+site/
+docs/build/
+
+# Data & Large Files
+*.zip
+*.tar.gz
+*.csv
+# Ignore GeoJSONs generally, but allow in tests/data (preserving existing rule)
+*.geojson
+!tests/data/*.geojson
+
+# Jupyter
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# Project Specific
+cache/
+docs/examples/data/
+docs/examples/*.zip
+docs/examples/*.geojson
+dev/
+documents/
+temp_installation.html

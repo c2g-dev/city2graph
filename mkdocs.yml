@@ -1,0 +1,199 @@
+site_name: City2Graph
+site_url: https://city2graph.net/
+site_author: Yuta Sato
+site_description: Transform urban data into graphs for spatial analysis and Graph Neural Networks
+repo_url: https://github.com/c2g-dev/city2graph
+repo_name: c2g-dev/city2graph
+copyright: Copyright &copy; 2025 Yuta Sato & City2Graph developers
+use_directory_urls: false
+
+theme:
+  name: material
+  custom_dir: docs/overrides  # If you need to override templates
+  font:
+    text: Inter
+    code: JetBrains Mono
+
+  palette:
+    # Auto mode (follows system preference) - Default
+    - media: (prefers-color-scheme)
+      toggle:
+        icon: material/link
+        name: Switch to light mode
+    # Light mode
+    - media: '(prefers-color-scheme: light)'
+      scheme: city2graph-light
+      toggle:
+        icon: material/toggle-switch
+        name: Switch to dark mode
+    # Dark mode
+    - media: '(prefers-color-scheme: dark)'
+      scheme: city2graph-dark
+      toggle:
+        icon: material/toggle-switch-off
+        name: Switch to auto mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    # Social cards (replaces sphinxext.opengraph)
+    - navigation.instant
+    - navigation.tabs.sticky
+    - navigation.path
+  logo: assets/logos/city2graph_logo_wide.png
+  favicon: assets/logos/city2graph_logo.png
+  icon:
+    repo: fontawesome/brands/github
+
+# CSS & JS (Move files from _static to docs/stylesheets and docs/javascripts)
+extra_css:
+  - stylesheets/custom.css
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+  - javascripts/gtag.js
+
+# Plugins
+plugins:
+  - search
+  - autorefs  # Enable cross-references to any Markdown heading
+
+  - mkdocstrings:
+      default_handler: python
+      enable_inventory: true  # Generate objects.inv for cross-project references
+      handlers:
+        python:
+          paths: [.]  # Add root to path so it finds city2graph
+          inventories:
+            # External library inventories for cross-references
+            - https://docs.python.org/3/objects.inv
+            - https://numpy.org/doc/stable/objects.inv
+            - https://pandas.pydata.org/docs/objects.inv
+            - https://geopandas.org/en/stable/objects.inv
+            - https://networkx.org/documentation/stable/objects.inv
+            - https://shapely.readthedocs.io/en/stable/objects.inv
+            - https://pyproj4.github.io/pyproj/stable/objects.inv
+            - https://python-visualization.github.io/folium/latest/objects.inv
+            - https://contextily.readthedocs.io/en/stable/objects.inv
+            - https://pytorch-geometric.readthedocs.io/en/stable/objects.inv
+            - https://docs.scipy.org/doc/scipy/objects.inv
+            - https://matplotlib.org/stable/objects.inv
+            - https://fiona.readthedocs.io/en/latest/objects.inv
+            - https://www.rustworkx.org/objects.inv
+            - https://pytorch.org/docs/stable/objects.inv
+            - http://docs.momepy.org/en/stable/objects.inv
+            - https://osmnx.readthedocs.io/en/stable/objects.inv
+            - https://pysal.org/libpysal/objects.inv
+          options:
+            # General options
+            show_source: false
+            show_bases: true
+            show_inheritance_diagram: true
+
+            # Headings options
+            show_root_heading: true
+            show_root_full_path: true
+            heading_level: 2
+            show_symbol_type_heading: false
+            show_symbol_type_toc: true
+
+            # Members options
+            members_order: source
+            group_by_category: true
+            show_submodules: false
+            show_labels: true
+            summary: true
+            filters:
+              - '!^_'  # Exclude private members
+              - ^__init__$  # But include __init__
+
+            # Docstring options
+            docstring_style: numpy
+            docstring_section_style: table
+            merge_init_into_class: true
+            show_if_no_docstring: false
+            show_docstring_attributes: true
+            show_docstring_functions: true
+            show_docstring_classes: true
+            show_docstring_modules: true
+            show_docstring_description: true
+            show_docstring_examples: true
+            show_docstring_other_parameters: true
+            show_docstring_parameters: true
+            show_docstring_raises: true
+            show_docstring_returns: true
+            show_docstring_warns: true
+            show_docstring_yields: true
+            scoped_crossrefs: true
+
+            # Signature options
+            show_signature: true
+            show_signature_annotations: false
+            separate_signature: true
+            line_length: 80
+            modernize_annotations: true
+            signature_crossrefs: true
+            annotations_path: brief
+            unwrap_annotated: true
+            show_signature_type_parameters: true
+  - mkdocs-jupyter:
+      include_source: true
+      ignore_h1_titles: true
+      theme: dark
+
+# Markdown Extensions (Matches Sphinx features)
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+  - attr_list
+  - pymdownx.arithmatex:  # MathJax support
+      generic: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/c2g-dev/city2graph
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/yuta-sato-633750161/
+    - icon: fontawesome/brands/medium
+      link: https://medium.com/@yuta.sato.now
+  analytics:
+    provider: google
+    property: G-YLJ6HSS8C4
+  version:
+    provider: mike
+
+# Navigation Structure (You must manually map your rst files here)
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Examples:
+      - Introduction: examples/index.md
+      - Metapaths: examples/add_metapaths.ipynb
+      - Proximity Graphs: examples/generating_graphs_by_proximity.ipynb
+      - OD Matrix: examples/generating_graphs_from_od_matrix.ipynb
+      - GTFS: examples/gtfs.ipynb
+      - Morphology: examples/morphological_graph_from_overturemaps.ipynb
+  - API Reference:
+      - Overview: api/index.md
+      - Data: api/data.md
+      - Graph: api/graph.md
+      - Mobility: api/mobility.md
+      - Morphology: api/morphology.md
+      - Proximity: api/proximity.md
+      - Transportation: api/transportation.md
+      - Utils: api/utils.md
+  - Contributing: contributing.md
