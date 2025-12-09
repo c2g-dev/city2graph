@@ -20,6 +20,7 @@ from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
 
+from city2graph import morphology
 from city2graph import utils
 from city2graph.base import GeoDataProcessor
 from city2graph.base import GraphMetadata
@@ -353,7 +354,7 @@ class TestGraphStructures(BaseGraphTest):
     ) -> None:
         """Test conversion of line segments to graph structure."""
         segments_gdf = request.getfixturevalue(segments_fixture)
-        nodes_gdf, edges_gdf = utils.segments_to_graph(segments_gdf, multigraph=multigraph)
+        nodes_gdf, edges_gdf = morphology.segments_to_graph(segments_gdf, multigraph=multigraph)
 
         self.assert_valid_gdf(nodes_gdf, expect_empty)
         self.assert_valid_gdf(edges_gdf, expect_empty)
@@ -376,7 +377,7 @@ class TestGraphStructures(BaseGraphTest):
         duplicate_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test multigraph handling of duplicate edge connections."""
-        nodes_gdf, edges_gdf = utils.segments_to_graph(duplicate_segments_gdf, multigraph=True)
+        nodes_gdf, edges_gdf = morphology.segments_to_graph(duplicate_segments_gdf, multigraph=True)
 
         assert len(nodes_gdf) == 2  # Two unique points
         assert len(edges_gdf) == 2  # Both edges preserved
@@ -1930,7 +1931,7 @@ class TestPlotting(BaseGraphTest):
             warnings.simplefilter("ignore")
             # This should create more axes than needed and hide unused ones
             # The function will internally hide unused axes (line 3441)
-            utils.plot_graph(graph=graph, subplots=True, figsize=(10, 10), show=False)
+            utils.plot_graph(graph=graph, subplots=True, figsize=(10, 10))
 
         plt.close("all")
 
@@ -2174,7 +2175,6 @@ class TestPlotting(BaseGraphTest):
             nodes=sample_nodes_gdf,
             edges=sample_edges_gdf,
             node_color=node_colors,
-            show=False,
         )
         plt.close("all")
 
@@ -2194,7 +2194,6 @@ class TestPlotting(BaseGraphTest):
             nodes=nodes_with_attr,
             edges=sample_edges_gdf,
             node_color="value",
-            show=False,
         )
         plt.close("all")
 
@@ -2239,7 +2238,6 @@ class TestPlotting(BaseGraphTest):
             edges=single_edge_dict,
             subplots=True,
             ncols=2,  # Force 2 columns for 1 item
-            show=False,
         )
         plt.close("all")
 
@@ -2339,293 +2337,3 @@ class TestIdentifySourceTargetCols:
         result = utils._get_col_or_level(df, "my_index")
         assert result is not None
         assert (result == [10, 20, 30]).all()
-
-    """Additional tests to achieve comprehensive code coverage."""
-
-    def test_empty_nodes_in_conversion(self, sample_crs: str) -> None:
-        """Test conversion with completely empty nodes (line 995)."""
-        # Create edges but with no nodes that will result in empty node records
-        edges_gdf = gpd.GeoDataFrame(
-            geometry=[LineString([(0, 0), (1, 1)])],
-            crs=sample_crs,
-        )
-
-        # Create a graph and then remove all node attributes to trigger empty records
-        converter = NxConverter()
-        graph = converter.gdf_to_nx(edges=edges_gdf)
-
-        # Manually clear node data to simulate empty records scenario
-        for node in graph.nodes():
-            # Keep only pos to trigger the empty records path
-            graph.nodes[node].clear()
-            graph.nodes[node]["pos"] = (0, 0)
-
-        # Convert back - this should handle empty node records
-        nodes_gdf, edges_gdf_out = converter.nx_to_gdf(graph)
-        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
-
-    def test_dual_graph_empty_result_with_edge_id_col(
-        self, sample_nodes_gdf: gpd.GeoDataFrame, sample_crs: str
-    ) -> None:
-        """Test dual_graph with empty result and edge_id_col specified (line 1527)."""
-        # Create edges that won't form any dual edges
-        single_edge = gpd.GeoDataFrame(
-            {"edge_id": ["e1"]},
-            geometry=[LineString([(0, 0), (1, 1)])],
-            crs=sample_crs,
-        )
-        single_edge.index = pd.MultiIndex.from_arrays([[0], [1]], names=["u", "v"])
-
-        dual_nodes, dual_edges = utils.dual_graph(
-            (sample_nodes_gdf, single_edge), edge_id_col="edge_id"
-        )
-
-        # Should have nodes but no edges (single edge has no dual connections)
-        assert not dual_nodes.empty
-        assert dual_edges.empty
-        assert dual_edges.index.names == ["from_edge_id", "to_edge_id"]
-
-    def test_empty_tessellation_with_tess_id(self, sample_crs: str) -> None:
-        """Test _create_empty_tessellation with tess_id column (line 2422)."""
-        result = utils._create_empty_tessellation(sample_crs, include_tess_id=True)
-        assert isinstance(result, gpd.GeoDataFrame)
-        assert result.empty
-        assert "tess_id" in result.columns
-        assert "enclosure_index" in result.columns
-
-    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
-    def test_plot_empty_gdf(self, empty_gdf: gpd.GeoDataFrame) -> None:
-        """Test _plot_gdf with empty GeoDataFrame (line 3246)."""
-        # This should not raise and should return early
-        fig, ax = plt.subplots()
-        utils._plot_gdf(empty_gdf, ax)
-        plt.close(fig)
-
-    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
-    def test_plot_with_series_color(
-        self,
-        sample_nodes_gdf: gpd.GeoDataFrame,
-        sample_edges_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Test plot_graph with pd.Series for color parameter (lines 3085, 3263)."""
-        # Create a Series for node colors with numeric indices (0-based from conversion)
-        # When nodes are converted to NetworkX, they get new integer indices
-        num_nodes = len(sample_nodes_gdf)
-        node_colors = pd.Series(["red"] * num_nodes, index=range(num_nodes))
-
-        utils.plot_graph(
-            graph=None,
-            nodes=sample_nodes_gdf,
-            edges=sample_edges_gdf,
-            node_color=node_colors,
-            show=False,
-        )
-        plt.close("all")
-
-    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
-    def test_plot_with_column_name(
-        self,
-        sample_nodes_gdf: gpd.GeoDataFrame,
-        sample_edges_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Test plot_graph with column name string for color (line 3087)."""
-        # Add a numeric column for coloring
-        nodes_with_attr = sample_nodes_gdf.copy()
-        nodes_with_attr["value"] = range(len(nodes_with_attr))
-
-        utils.plot_graph(
-            graph=None,
-            nodes=nodes_with_attr,
-            edges=sample_edges_gdf,
-            node_color="value",
-            show=False,
-        )
-        plt.close("all")
-
-    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
-    def test_plot_hetero_subplots_empty_edges(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-    ) -> None:
-        """Test _plot_hetero_subplots with no edge items (line 3406)."""
-        # Create edges dict with only empty GeoDataFrames
-        empty_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame] = {
-            ("building", "connects", "road"): gpd.GeoDataFrame(geometry=[], crs="EPSG:4326")
-        }
-
-        # This should return early without creating a plot
-        fig, ax = plt.subplots()
-        utils._plot_hetero_subplots(
-            sample_hetero_nodes_dict,
-            empty_edges_dict,
-            figsize=(10, 10),
-            bgcolor="white",
-        )
-        plt.close(fig)
-
-    def test_tessellation_momepy_error_handling(self, sample_crs: str) -> None:
-        """Test tessellation error handling for momepy ValueError (lines 2393-2399)."""
-        # Create geometry that might cause momepy to fail with "No objects to concatenate"
-        # Use a configuration that could trigger internal momepy ValueError
-
-        # Create valid input geometry
-        geometry = gpd.GeoDataFrame(
-            geometry=[Point(0, 0), Point(1, 1)],
-            crs=sample_crs,
-        )
-        barriers = gpd.GeoDataFrame(
-            geometry=[LineString([(0, 0), (1, 1)])],
-            crs=sample_crs,
-        )
-
-        # Mock momepy.enclosed_tessellation to raise ValueError with "No objects to concatenate"
-        # Since utils imports momepy, we patch city2graph.utils.momepy.enclosed_tessellation
-        with mock.patch("city2graph.utils.momepy.enclosed_tessellation") as mock_tess:
-            mock_tess.side_effect = ValueError("No objects to concatenate")
-
-            # Should handle the error and return empty tessellation
-            result = utils.create_tessellation(
-                geometry,
-                primary_barriers=barriers,
-                shrink=0.4,
-            )
-
-            assert isinstance(result, gpd.GeoDataFrame)
-            assert result.empty
-            assert result.crs == sample_crs
-
-    def test_build_edge_index_empty(self) -> None:
-        """Test _build_edge_index with empty original_indices (line 1225)."""
-        converter = NxConverter()
-        result = converter._build_edge_index([], None)
-        assert isinstance(result, pd.Index)
-        assert len(result) == 0
-
-    def test_canonical_edge_pair_self_loop(self) -> None:
-        """Test _canonical_edge_pair with self-loop (line 1370)."""
-        assert utils._canonical_edge_pair(1, 1) == (1, 1)
-        assert utils._canonical_edge_pair("a", "a") == ("a", "a")
-
-    def test_validate_nx_pos_from_xy(self, sample_crs: str) -> None:
-        """Test validate_nx creates pos from x and y attributes (line 2016)."""
-        # Create a graph with x, y but no pos
-        G = nx.Graph()
-        G.add_node(1, x=10.0, y=20.0)
-        G.add_node(2, x=30.0, y=40.0)
-        G.add_edge(1, 2, geometry=LineString([(10, 20), (30, 40)]))
-        G.graph = {"crs": sample_crs, "is_hetero": False}
-
-        # This should set pos from x and y
-        utils.validate_nx(G)
-
-        assert "pos" in G.nodes[1]
-        assert "pos" in G.nodes[2]
-        assert G.nodes[1]["pos"] == (10.0, 20.0)
-        assert G.nodes[2]["pos"] == (30.0, 40.0)
-
-    def test_build_node_index_empty(self) -> None:
-        """Test _build_node_index with empty original_indices (line 1243)."""
-        converter = NxConverter()
-        result = converter._build_node_index([], None)
-        assert isinstance(result, pd.Index)
-        assert len(result) == 0
-
-    def test_empty_graph_node_reconstruction(self, sample_crs: str) -> None:
-        """Test nx_to_gdf with graph that has nodes without attributes (line 996)."""
-        # Create a minimal graph with nodes that have no custom attributes
-        # This will result in empty records when reconstructing
-        G = nx.Graph()
-        G.add_node(0, pos=(0, 0))
-        G.add_node(1, pos=(1, 1))
-        G.graph = {"crs": sample_crs, "is_hetero": False, "node_index_names": None}
-
-        # Convert to GDF - should handle empty records gracefully
-        nodes_gdf, edges_gdf = utils.nx_to_gdf(G)
-        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
-        assert len(nodes_gdf) == 2
-        assert "geometry" in nodes_gdf.columns
-
-    def test_edge_iteration_fallback(self, sample_crs: str) -> None:
-        """Test edge iteration handles unexpected edge format (line 1200)."""
-        # Create a graph and manually add malformed edge to test the fallback
-        converter = NxConverter()
-        graph = nx.Graph()
-        graph.add_node(0, pos=(0, 0))
-        graph.add_node(1, pos=(1, 1))
-        graph.add_edge(0, 1, geometry=LineString([(0, 0), (1, 1)]))
-        graph.graph = {"crs": sample_crs, "is_hetero": False, "edge_index_names": None}
-
-        # The actual iteration path that could hit line 1200 is very defensive
-        # It's hard to trigger without modifying internal NetworkX behavior
-        # Convert to GDF to exercise the edge reconstruction path
-        _, edges_gdf = converter.nx_to_gdf(graph)
-        assert isinstance(edges_gdf, gpd.GeoDataFrame)
-
-    def test_gdf_to_nx_edges_none(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:
-        """Test gdf_to_nx raises ValueError when edges is None."""
-        converter = NxConverter()
-        with pytest.raises(ValueError, match="Edges GeoDataFrame cannot be None"):
-            converter.gdf_to_nx(nodes=sample_nodes_gdf, edges=None)
-
-    def test_nx_to_gdf_multiindex_nodes(self, sample_crs: str) -> None:
-        """Test nx_to_gdf with MultiIndex nodes."""
-        G = nx.Graph()
-        # Add nodes with tuple indices
-        G.add_node((0, "a"), pos=(0, 0), _original_index=(0, "a"))
-        G.add_node((1, "b"), pos=(1, 1), _original_index=(1, "b"))
-        G.graph = {"crs": sample_crs, "is_hetero": False, "node_index_names": ["id", "type"]}
-
-        nodes_gdf, _ = utils.nx_to_gdf(G)
-        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
-        assert isinstance(nodes_gdf.index, pd.MultiIndex)
-        assert nodes_gdf.index.names == ["id", "type"]
-        assert len(nodes_gdf) == 2
-
-    def test_coerce_name_sequence_string(self) -> None:
-        """Test _coerce_name_sequence with string input."""
-        assert utils._coerce_name_sequence("index_name") == ["index_name"]
-        assert utils._coerce_name_sequence(["a", "b"]) == ["a", "b"]
-        assert utils._coerce_name_sequence(None) is None
-
-    def test_dual_graph_as_nx(
-        self, sample_nodes_gdf: gpd.GeoDataFrame, sample_edges_gdf: gpd.GeoDataFrame
-    ) -> None:
-        """Test dual_graph with as_nx=True."""
-        result = utils.dual_graph((sample_nodes_gdf, sample_edges_gdf), as_nx=True)
-        assert isinstance(result, nx.Graph)
-        assert len(result) > 0
-
-    def test_nx_to_gdf_empty_graph_no_nodes(self, sample_crs: str) -> None:
-        """Test nx_to_gdf with a completely empty graph (no nodes)."""
-        G = nx.Graph()
-        G.graph = {"crs": sample_crs, "is_hetero": False}
-        nodes_gdf, edges_gdf = utils.nx_to_gdf(G)
-        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
-        assert isinstance(edges_gdf, gpd.GeoDataFrame)
-        assert nodes_gdf.empty
-        assert edges_gdf.empty
-        assert "geometry" in nodes_gdf.columns
-
-    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
-    def test_plot_graph_subplots_less_than_grid(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Test plot_graph with subplots where number of plots < grid size."""
-        # Create a situation where we have 1 edge type but grid is 2 cols
-        # This triggers the "hide unused axes" logic
-
-        # Filter to just one edge type
-        single_edge_type = next(iter(sample_hetero_edges_dict.keys()))
-        single_edge_dict = {single_edge_type: sample_hetero_edges_dict[single_edge_type]}
-
-        fig, ax = plt.subplots()
-        utils.plot_graph(
-            nodes=sample_hetero_nodes_dict,
-            edges=single_edge_dict,
-            subplots=True,
-            ncols=2,  # Force 2 columns for 1 item
-            show=False,
-        )
-        plt.close("all")
