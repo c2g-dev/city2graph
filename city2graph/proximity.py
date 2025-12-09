@@ -838,7 +838,7 @@ def gabriel_graph(
     Generate a Gabriel graph from a GeoDataFrame of points.
 
     In a Gabriel graph two nodes u and v are connected iff the closed disc that has
-    :math:`uv` as its diameter contains no other node of the set.
+    $uv$ as its diameter contains no other node of the set.
 
     Parameters
     ----------
@@ -867,7 +867,7 @@ def gabriel_graph(
     -----
     - The Gabriel graph is a sub-graph of the Delaunay triangulation; therefore the
       implementation first builds the Delaunay edges then filters them according to the
-      disc-emptiness predicate, achieving an overall :math:`O(n\\log n + mk)`
+      disc-emptiness predicate, achieving an overall $O(n \\log n + mk)$
       complexity (m = Delaunay edges, k = average neighbours tested per edge).
     - When the input layer has exactly two points, the unique edge is returned.
     - If the layer has fewer than two points, an empty graph is produced.
@@ -927,8 +927,8 @@ def relative_neighborhood_graph(
     Generate a Relative-Neighbourhood Graph (RNG) from a GeoDataFrame.
 
     In an RNG two nodes u and v are connected iff there is no third node *w* such that both
-    :math:`d(u,w)<d(u,v)` and :math:`d(v,w)<d(u,v)`. Equivalently, the intersection of the
-    two open discs having radius :math:`d(u,v)` and centres u and v (the lune) is empty.
+    $d(u,w) < d(u,v)$ and $d(v,w) < d(u,v)$. Equivalently, the intersection of the
+    two open discs having radius $d(u,v)$ and centres u and v (the lune) is empty.
 
     Parameters
     ----------
@@ -956,7 +956,7 @@ def relative_neighborhood_graph(
     Notes
     -----
     - The RNG is a sub-graph of the Delaunay triangulation; therefore the
-      implementation first collects Delaunay edges (:math:`O(n\\log n)`) and then filters
+      implementation first collects Delaunay edges ($O(n \\log n)$) and then filters
       them according to the lune-emptiness predicate.
     - When the input layer has exactly two points the unique edge is returned.
     - If the layer has fewer than two points, an empty graph is produced.
@@ -1013,11 +1013,11 @@ def euclidean_minimum_spanning_tree(
     Generate a (generalised) Euclidean Minimum Spanning Tree from a GeoDataFrame of points.
 
     The classical Euclidean Minimum Spanning Tree (EMST) is the minimum-total-length tree
-    that connects a set of points when edge weights are the straight-line (:math:`L_2`)
+    that connects a set of points when edge weights are the straight-line ($L_2$)
     distances. For consistency with the other generators this implementation also supports
     manhattan and network metrics - it simply computes the minimum-weight spanning tree
     under the chosen metric. When the metric is euclidean the edge search is restricted to
-    the Delaunay triangulation (EMST ⊆ Delaunay), guaranteeing an :math:`O(n\\log n)`
+    the Delaunay triangulation (EMST ⊆ Delaunay), guaranteeing an $O(n \log n)$
     overall complexity. With other metrics, or degenerate cases where the triangulation
     cannot be built, the algorithm gracefully falls back to the complete graph.
 
@@ -1054,7 +1054,7 @@ def euclidean_minimum_spanning_tree(
     Notes
     -----
     - The resulting graph always contains n - 1 edges (or 0 / 1 when the input has < 2 points).
-    - For planar Euclidean inputs the computation is :math:`O(n\\log n)` thanks to the
+    - For planar Euclidean inputs the computation is $O(n \\log n)$ thanks to the
       Delaunay pruning.
     - All the usual spatial attributes (weight, geometry, CRS checks, etc.) are attached
       through the shared private helpers.
@@ -1245,9 +1245,9 @@ def waxman_graph(
 
     The connection probability follows the formula:
 
-    .. math::
-
-       P(u,v) = \beta \times \exp \left(-\frac{\text{dist}(u,v)}{r_0}\right)
+    $$
+    P(u,v) = \beta \times \exp \left(-\frac{\text{dist}(u,v)}{r_0}\right)
+    $$
 
     Parameters
     ----------
