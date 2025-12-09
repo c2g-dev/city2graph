@@ -31,13 +31,13 @@ from shapely.creation import linestrings as sh_linestrings
 from shapely.geometry import Point
 
 # Local imports
+from .base import GeoDataProcessor
 from .proximity import contiguity_graph
 from .utils import create_tessellation
 from .utils import dual_graph
 from .utils import filter_graph_by_distance
 from .utils import gdf_to_nx
 from .utils import nx_to_gdf
-from .utils import segments_to_graph
 
 # Public API definition
 __all__ = [
@@ -45,6 +45,7 @@ __all__ = [
     "private_to_private_graph",
     "private_to_public_graph",
     "public_to_public_graph",
+    "segments_to_graph",
 ]
 
 # Module logger configuration
@@ -70,6 +71,7 @@ def morphological_graph(
     primary_barrier_col: str | None = "barrier_geometry",
     contiguity: str = "queen",
     keep_buildings: bool = False,
+    keep_segments: bool = True,
     tolerance: float = 1e-6,
     as_nx: bool = False,
 ) -> tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]] | nx.Graph:
@@ -110,6 +112,9 @@ def morphological_graph(
         Must be either "queen" or "rook".
     keep_buildings : bool, default=False
         If True, preserves building information in the tessellation output.
+    keep_segments : bool, default=True
+        If True, preserves the original segment LineString geometry in a column
+        named 'segment_geometry' in the public nodes GeoDataFrame.
     tolerance : float, default=1e-6
         Buffer distance for public geometries when creating private-to-public connections.
         This parameter controls how close private spaces need to be to public spaces
@@ -222,6 +227,7 @@ def morphological_graph(
         tolerance,
         private_id_col,
         public_id_col,
+        keep_segments,
     )
 
     return (nodes, edges) if not as_nx else gdf_to_nx(nodes, edges)
@@ -611,6 +617,144 @@ def public_to_public_graph(
 
 
 # ============================================================================
+# SEGMENTS TO GRAPH
+# ============================================================================
+
+
+def segments_to_graph(
+    segments_gdf: gpd.GeoDataFrame,
+    multigraph: bool = False,
+    as_nx: bool = False,
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph:
+    r"""
+    Convert a GeoDataFrame of LineString segments into a graph structure.
+
+    This function takes a GeoDataFrame of LineStrings and processes it into a
+    topologically explicit graph representation, consisting of a GeoDataFrame of
+    unique nodes (the endpoints of the lines) and a GeoDataFrame of edges.
+
+    The resulting nodes GeoDataFrame contains unique points representing the start
+    and end points of the input line segments. The edges GeoDataFrame is a copy
+    of the input, but with a new MultiIndex (`from_node_id`, `to_node_id`) that
+    references the IDs in the new nodes GeoDataFrame. If `multigraph` is True
+    and there are multiple edges between the same pair of nodes, an additional
+    index level (`edge_key`) is added to distinguish them.
+
+    Parameters
+    ----------
+    segments_gdf : geopandas.GeoDataFrame
+        A GeoDataFrame where each row represents a line segment, and the
+        'geometry' column contains LineString objects.
+    multigraph : bool, default False
+        If True, supports multiple edges between the same pair of nodes by
+        adding an `edge_key` level to the MultiIndex. This is useful when
+        the input contains duplicate node-to-node connections that should
+        be preserved as separate edges.
+    as_nx : bool, default False
+        If True, returns a NetworkX graph instead of a tuple of GeoDataFrames.
+
+    Returns
+    -------
+    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame]
+        A tuple containing two GeoDataFrames:
+
+        - nodes_gdf: A GeoDataFrame of unique nodes (Points), indexed by `node_id`.
+        - edges_gdf: A GeoDataFrame of edges (LineStrings), with a MultiIndex
+          mapping to the `node_id` in `nodes_gdf`. If `multigraph` is True,
+          the index includes a third level (`edge_key`) for duplicate connections.
+
+    Examples
+    --------
+    >>> import geopandas as gpd
+    >>> from shapely.geometry import LineString
+    >>> # Create a GeoDataFrame of line segments
+    >>> segments = gpd.GeoDataFrame(
+    ...     {"road_name": ["A", "B"]},
+    ...     geometry=[LineString([(0, 0), (1, 1)]), LineString([(1, 1), (1, 0)])],
+    ...     crs="EPSG:32633"
+    ... )
+    >>> # Convert to graph representation
+    >>> nodes_gdf, edges_gdf = segments_to_graph(segments)
+    >>> print(nodes_gdf)
+    >>> print(edges_gdf)
+    node_id  geometry
+    0        POINT (0 0)
+    1        POINT (1 1)
+    2        POINT (1 0)
+                                    road_name   geometry
+    from_node_id to_node_id
+    0            1                  A           LINESTRING (0 0, 1 1)
+    1            2                  B           LINESTRING (1 1, 1 0)
+
+    >>> # Example with duplicate connections (multigraph)
+    >>> segments_with_duplicates = gpd.GeoDataFrame(
+    ...     {"road_name": ["A", "B", "C"]},
+    ...     geometry=[LineString([(0, 0), (1, 1)]),
+    ...               LineString([(0, 0), (1, 1)]),
+    ...               LineString([(1, 1), (1, 0)])],
+    ...     crs="EPSG:32633"
+    ... )
+    >>> nodes_gdf, edges_gdf = segments_to_graph(segments_with_duplicates, multigraph=True)
+    >>> print(edges_gdf.index.names)
+    ['from_node_id', 'to_node_id', 'edge_key']
+    """
+    processor = GeoDataProcessor()
+
+    # Validate input
+    segments_clean = processor.validate_gdf(segments_gdf, ["LineString"])
+
+    if segments_clean is None or segments_clean.empty:
+        empty_nodes = gpd.GeoDataFrame(columns=["geometry"], crs=segments_gdf.crs)
+        empty_edges = gpd.GeoDataFrame(columns=["geometry"], crs=segments_gdf.crs)
+        return empty_nodes, empty_edges
+
+    # Extract coordinates
+    start_coords = processor.extract_coordinates(segments_clean, start=True)
+    end_coords = processor.extract_coordinates(segments_clean, start=False)
+
+    # Create unique nodes
+    all_coords = pd.concat([start_coords, end_coords]).drop_duplicates()
+    coord_to_id = {coord: i for i, coord in enumerate(all_coords)}
+
+    # Create nodes GeoDataFrame efficiently using gpd.points_from_xy
+    coords_array = all_coords.to_numpy()
+    x_coords = [coord[0] for coord in coords_array]
+    y_coords = [coord[1] for coord in coords_array]
+
+    # Create nodes GeoDataFrame with unique node IDs
+    nodes_gdf = gpd.GeoDataFrame(
+        {
+            "node_id": range(len(all_coords)),
+            "geometry": gpd.points_from_xy(x_coords, y_coords),
+        },
+        crs=segments_clean.crs,
+    ).set_index("node_id", drop=True)
+
+    # Create edges with MultiIndex
+    from_ids = start_coords.map(coord_to_id)
+    to_ids = end_coords.map(coord_to_id)
+
+    edges_gdf = segments_clean.copy()
+
+    if multigraph:
+        # For multigraph, handle potential duplicate node pairs by adding edge keys
+        edge_pairs_df = pd.DataFrame({"from_id": from_ids, "to_id": to_ids})
+        edge_keys = edge_pairs_df.groupby(["from_id", "to_id"]).cumcount()
+
+        edges_gdf.index = pd.MultiIndex.from_arrays(
+            [from_ids, to_ids, edge_keys],
+            names=["from_node_id", "to_node_id", "edge_key"],
+        )
+    else:
+        edges_gdf.index = pd.MultiIndex.from_arrays(
+            [from_ids, to_ids],
+            names=["from_node_id", "to_node_id"],
+        )
+
+    return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf) if as_nx else (nodes_gdf, edges_gdf)
+
+
+# ============================================================================
 # VALIDATION AND CRS HELPERS
 # ============================================================================
 
@@ -906,6 +1050,7 @@ def _build_morphological_layers(
     tolerance: float,
     private_id_col: str,
     public_id_col: str,
+    keep_segments: bool = True,
 ) -> tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]:
     """
     Build the node and edge layers for the morphological graph.
@@ -929,6 +1074,9 @@ def _build_morphological_layers(
         Name of the private ID column.
     public_id_col : str
         Name of the public ID column.
+    keep_segments : bool, default True
+        If True, preserves the original segment LineString geometry in a column
+        named 'segment_geometry' in the public nodes GeoDataFrame.
 
     Returns
     -------
@@ -969,9 +1117,24 @@ def _build_morphological_layers(
     if private_to_public_edges.empty:
         logger.warning("No private to public connections found")
 
+    # Prepare private nodes with Point geometry (centroids)
+    # Preserve original tessellation geometry in tessellation_geometry column
+    private_nodes = tessellation.copy()
+    private_nodes["tessellation_geometry"] = private_nodes.geometry
+    # Convert geometry to centroid for private nodes
+    private_nodes["geometry"] = private_nodes.geometry.centroid
+
+    # Prepare public nodes with Point geometry (centroids)
+    # Optionally preserve original segment geometry in segment_geometry column
+    public_nodes = segments_filtered.copy()
+    if keep_segments:
+        public_nodes["segment_geometry"] = public_nodes.geometry
+    # Convert geometry to centroid for public nodes
+    public_nodes["geometry"] = public_nodes.geometry.centroid
+
     nodes = {
-        "private": _set_node_index(tessellation, private_id_col),
-        "public": _set_node_index(segments_filtered, public_id_col),
+        "private": _set_node_index(private_nodes, private_id_col),
+        "public": _set_node_index(public_nodes, public_id_col),
     }
 
     # Organize edges into a dictionary with relationship types as keys
