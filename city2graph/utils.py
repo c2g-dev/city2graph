@@ -64,7 +64,6 @@ __all__ = [
     "nx_to_rx",
     "plot_graph",
     "rx_to_nx",
-    "segments_to_graph",
     "validate_gdf",
     "validate_nx",
 ]
@@ -2002,139 +2001,6 @@ def _identify_source_target_cols(
 
     msg = "Could not identify source and target node columns/indices in edges GeoDataFrame."
     raise ValueError(msg)
-
-
-def segments_to_graph(
-    segments_gdf: gpd.GeoDataFrame,
-    multigraph: bool = False,
-    as_nx: bool = False,
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph:
-    r"""
-    Convert a GeoDataFrame of LineString segments into a graph structure.
-
-    This function takes a GeoDataFrame of LineStrings and processes it into a
-    topologically explicit graph representation, consisting of a GeoDataFrame of
-    unique nodes (the endpoints of the lines) and a GeoDataFrame of edges.
-
-    The resulting nodes GeoDataFrame contains unique points representing the start
-    and end points of the input line segments. The edges GeoDataFrame is a copy
-    of the input, but with a new MultiIndex (`from_node_id`, `to_node_id`) that
-    references the IDs in the new nodes GeoDataFrame. If `multigraph` is True
-    and there are multiple edges between the same pair of nodes, an additional
-    index level (`edge_key`) is added to distinguish them.
-
-    Parameters
-    ----------
-    segments_gdf : geopandas.GeoDataFrame
-        A GeoDataFrame where each row represents a line segment, and the
-        'geometry' column contains LineString objects.
-    multigraph : bool, default False
-        If True, supports multiple edges between the same pair of nodes by
-        adding an `edge_key` level to the MultiIndex. This is useful when
-        the input contains duplicate node-to-node connections that should
-        be preserved as separate edges.
-    as_nx : bool, default False
-        If True, returns a NetworkX graph instead of a tuple of GeoDataFrames.
-
-    Returns
-    -------
-    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame]
-        A tuple containing two GeoDataFrames:
-
-        - nodes_gdf: A GeoDataFrame of unique nodes (Points), indexed by `node_id`.
-        - edges_gdf: A GeoDataFrame of edges (LineStrings), with a MultiIndex
-          mapping to the `node_id` in `nodes_gdf`. If `multigraph` is True,
-          the index includes a third level (`edge_key`) for duplicate connections.
-
-    Examples
-    --------
-    >>> import geopandas as gpd
-    >>> from shapely.geometry import LineString
-    >>> # Create a GeoDataFrame of line segments
-    >>> segments = gpd.GeoDataFrame(
-    ...     {"road_name": ["A", "B"]},
-    ...     geometry=[LineString([(0, 0), (1, 1)]), LineString([(1, 1), (1, 0)])],
-    ...     crs="EPSG:32633"
-    ... )
-    >>> # Convert to graph representation
-    >>> nodes_gdf, edges_gdf = segments_to_graph(segments)
-    >>> print(nodes_gdf)
-    >>> print(edges_gdf)
-    node_id  geometry
-    0        POINT (0 0)
-    1        POINT (1 1)
-    2        POINT (1 0)
-                                    road_name   geometry
-    from_node_id to_node_id
-    0            1                  A           LINESTRING (0 0, 1 1)
-    1            2                  B           LINESTRING (1 1, 1 0)
-
-    >>> # Example with duplicate connections (multigraph)
-    >>> segments_with_duplicates = gpd.GeoDataFrame(
-    ...     {"road_name": ["A", "B", "C"]},
-    ...     geometry=[LineString([(0, 0), (1, 1)]),
-    ...               LineString([(0, 0), (1, 1)]),
-    ...               LineString([(1, 1), (1, 0)])],
-    ...     crs="EPSG:32633"
-    ... )
-    >>> nodes_gdf, edges_gdf = segments_to_graph(segments_with_duplicates, multigraph=True)
-    >>> print(edges_gdf.index.names)
-    ['from_node_id', 'to_node_id', 'edge_key']
-    """
-    processor = GeoDataProcessor()
-
-    # Validate input
-    segments_clean = processor.validate_gdf(segments_gdf, ["LineString"])
-
-    if segments_clean is None or segments_clean.empty:
-        empty_nodes = gpd.GeoDataFrame(columns=["geometry"], crs=segments_gdf.crs)
-        empty_edges = gpd.GeoDataFrame(columns=["geometry"], crs=segments_gdf.crs)
-        return empty_nodes, empty_edges
-
-    # Extract coordinates
-    start_coords = processor.extract_coordinates(segments_clean, start=True)
-    end_coords = processor.extract_coordinates(segments_clean, start=False)
-
-    # Create unique nodes
-    all_coords = pd.concat([start_coords, end_coords]).drop_duplicates()
-    coord_to_id = {coord: i for i, coord in enumerate(all_coords)}
-
-    # Create nodes GeoDataFrame efficiently using gpd.points_from_xy
-    coords_array = all_coords.to_numpy()
-    x_coords = [coord[0] for coord in coords_array]
-    y_coords = [coord[1] for coord in coords_array]
-
-    # Create nodes GeoDataFrame with unique node IDs
-    nodes_gdf = gpd.GeoDataFrame(
-        {
-            "node_id": range(len(all_coords)),
-            "geometry": gpd.points_from_xy(x_coords, y_coords),
-        },
-        crs=segments_clean.crs,
-    ).set_index("node_id", drop=True)
-
-    # Create edges with MultiIndex
-    from_ids = start_coords.map(coord_to_id)
-    to_ids = end_coords.map(coord_to_id)
-
-    edges_gdf = segments_clean.copy()
-
-    if multigraph:
-        # For multigraph, handle potential duplicate node pairs by adding edge keys
-        edge_pairs_df = pd.DataFrame({"from_id": from_ids, "to_id": to_ids})
-        edge_keys = edge_pairs_df.groupby(["from_id", "to_id"]).cumcount()
-
-        edges_gdf.index = pd.MultiIndex.from_arrays(
-            [from_ids, to_ids, edge_keys],
-            names=["from_node_id", "to_node_id", "edge_key"],
-        )
-    else:
-        edges_gdf.index = pd.MultiIndex.from_arrays(
-            [from_ids, to_ids],
-            names=["from_node_id", "to_node_id"],
-        )
-
-    return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf) if as_nx else (nodes_gdf, edges_gdf)
 
 
 def gdf_to_nx(
@@ -4442,25 +4308,54 @@ def _resolve_style_kwargs(
         """
         return val if val is not None else default
 
-    if is_edge:
-        return {
-            "color": _or_default(
-                _get_param("edge_color"), default_color or PLOT_DEFAULTS["edge_color"]
-            ),
-            "linewidth": _or_default(_get_param("edge_linewidth"), PLOT_DEFAULTS["edge_linewidth"]),
-            "alpha": _or_default(_get_param("edge_alpha"), PLOT_DEFAULTS["edge_alpha"]),
-            "zorder": _or_default(_get_param("edge_zorder"), PLOT_DEFAULTS["edge_zorder"]),
-        }
-
-    return {
-        "color": _or_default(
-            _get_param("node_color"), default_color or PLOT_DEFAULTS["node_color"]
-        ),
-        "alpha": _or_default(_get_param("node_alpha"), PLOT_DEFAULTS["node_alpha"]),
-        "zorder": _or_default(_get_param("node_zorder"), PLOT_DEFAULTS["node_zorder"]),
-        "edgecolor": _or_default(_get_param("node_edgecolor"), PLOT_DEFAULTS["node_edgecolor"]),
-        "markersize": _or_default(_get_param("markersize"), PLOT_DEFAULTS["markersize"]),
+    # Keys reserved for C2G-specific styling logic
+    c2g_keys = {
+        "node_color",
+        "node_alpha",
+        "node_zorder",
+        "node_edgecolor",
+        "markersize",
+        "edge_color",
+        "edge_linewidth",
+        "edge_alpha",
+        "edge_zorder",
+        "legend_position",
+        "labelcolor",
+        "title_color",
     }
+
+    # Start with all global kwargs, resolving potential type-specific dictionaries
+    resolved = {}
+    for k, v in global_kwargs.items():
+        if k not in c2g_keys:
+            resolved[k] = _resolve_type_parameter(v, type_key) if type_key else v
+
+    if is_edge:
+        resolved.update(
+            {
+                "linewidth": _or_default(
+                    _get_param("edge_linewidth"), PLOT_DEFAULTS["edge_linewidth"]
+                ),
+                "alpha": _or_default(_get_param("edge_alpha"), PLOT_DEFAULTS["edge_alpha"]),
+                "zorder": _or_default(_get_param("edge_zorder"), PLOT_DEFAULTS["edge_zorder"]),
+                "color": _or_default(_get_param("edge_color"), default_color),
+            }
+        )
+    else:
+        resolved.update(
+            {
+                "color": _or_default(
+                    _get_param("node_color"), default_color or PLOT_DEFAULTS["node_color"]
+                ),
+                "alpha": _or_default(_get_param("node_alpha"), PLOT_DEFAULTS["node_alpha"]),
+                "zorder": _or_default(_get_param("node_zorder"), PLOT_DEFAULTS["node_zorder"]),
+                "edgecolor": _or_default(
+                    _get_param("node_edgecolor"), PLOT_DEFAULTS["node_edgecolor"]
+                ),
+                "markersize": _or_default(_get_param("markersize"), PLOT_DEFAULTS["markersize"]),
+            }
+        )
+    return resolved
 
 
 def _plot_gdf(
@@ -4485,7 +4380,10 @@ def _plot_gdf(
     if gdf.empty:
         return
 
-    plot_kwargs: dict[str, Any] = {"ax": ax}
+    # Start with all kwargs as potential plot arguments
+    plot_kwargs: dict[str, Any] = kwargs.copy()
+    plot_kwargs["ax"] = ax
+
     param_defaults = {
         "color": PLOT_DEFAULTS["node_color"],
         "alpha": PLOT_DEFAULTS["node_alpha"],
@@ -4500,6 +4398,7 @@ def _plot_gdf(
         if val is not None:
             if param_name == "color" and isinstance(val, pd.Series):
                 plot_kwargs["column"] = val
+                plot_kwargs.pop("color", None)
             else:
                 plot_kwargs[param_name] = val
 
