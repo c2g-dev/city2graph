@@ -1,4 +1,4 @@
-name: Build and Deploy Documentation
+name: Build and Deploy Documentation (Latest)
 
 on:
   pull_request:
@@ -78,9 +78,10 @@ jobs:
 
       - name: Deploy with Mike
         run: |
-          # Extract version from pyproject.toml
-          VERSION=$(grep "version = " pyproject.toml | head -n 1 | cut -d '"' -f 2)
-          uv run mike deploy --push --update-aliases $VERSION latest
+          # Deploy 'latest' version (overwrites previous 'latest')
+          uv run mike deploy --push latest
+          # Ensure root redirects to 'latest'
+          uv run mike set-default --push latest
 
       - name: Checkout gh-pages
         uses: actions/checkout@v4
