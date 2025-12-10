@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## 0.2.0 (2025-12-10)
+
+### Added
+- Added `rustworkx` support for enhanced performance in graph operations
+- Added `add_metapaths_by_weight` for weighted metapath addition per edge type
+- Added `plot_graph` utility for unified graph visualization
+- Added `keep_geom` parameter to graph conversion functions to choose whether to preserve geometries or not
+- Added `source_node_types` and `target_node_types` parameters to `bridge_nodes` in `proximity.py`
+
+### Changed
+- Enhanced `create_isochrones` to support heterogeneous graphs with common weights.
+- Refactored `proximity.py` to support `network_weight` for distance calculations
+- Refactored `morphology.py` to include `segments_to_graph` migration
+- Refactored `utils.py` for better code organization
+- Moved core classes to `base.py` for improved package structure
+
+### Fixed
+- Fixed GitHub Actions workflow for documentation deployment
+- Fixed `plot_graph` return types to optionally return axes or ndarray
+- Fixed connector processing logic for Overture Maps to handle list attributes correctly
+- Fixed type errors and implementation issues in `graph.py`
+
+### Documentation
+- Migrated documentation system from Sphinx to MkDocs
+- Updated docstrings to support TeX formulas
+- Added comprehensive description of available Overture Maps types
+
+
 ## 0.1.7 (2025-11-06)
 
 ### Added
