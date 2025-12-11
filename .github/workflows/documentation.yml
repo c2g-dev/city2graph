@@ -50,6 +50,9 @@ jobs:
       - name: Deploy tagged version
         if: startsWith(github.ref, 'refs/tags/')
         run: |
+          # Delete 'latest' if it exists as a version to avoid conflict
+          uv run mike delete latest --push || true
+
           # Extract tag name (e.g., v1.0.0)
           GIT_TAG=${GITHUB_REF#refs/tags/}
 
