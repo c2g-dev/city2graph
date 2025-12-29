@@ -235,4 +235,4 @@ City2Graph uses **MkDocs** for current documentation (v0.2.0+) and keeps **Sphin
 
 This is controlled in `.readthedocs.yaml` using `READTHEDOCS_VERSION_TYPE` and `READTHEDOCS_VERSION_NAME`.
 
-[![GeoGraphic Data Science Lab](http://city2graph.net/_static/gdsl.png)](https://www.liverpool.ac.uk/geographic-data-science/)
+[![GeoGraphic Data Science Lab](https://github.com/user-attachments/assets/569b9550-9a48-461d-a408-18d7a5dfc78c)](https://www.liverpool.ac.uk/geographic-data-science/)
