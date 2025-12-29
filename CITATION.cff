@@ -12,8 +12,8 @@ authors:
 repository-code: "https://github.com/c2g-dev/city2graph"
 url: "https://city2graph.net"
 license: BSD-3-Clause
-version: 0.2.0
-date-released: 2025-11-06
+version: 0.2.1
+date-released: 2025-12-29
 keywords:
   - GeoAI
   - Graph Neural Networks
@@ -40,6 +40,6 @@ preferred-citation:
       family-names: Sato
       email: y.sato@liverpool.ac.uk
       affiliation: University of Liverpool
-  version: 0.2.0
+  version: 0.2.1
   url: "https://github.com/c2g-dev/city2graph"
   year: 2025

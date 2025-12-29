@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## 0.2.1 (2025-12-29)
+
+### Added
+- Added `node_geom_col` and `set_point_nodes` to `contiguity_graph` and `group_nodes` in `proximity.py` to specify the geometry column for nodes
+
+### Changed
+- Bumped `actions/setup-python` from 5 to 6
+- Bumped `actions/checkout` from 4 to 6
+- Bumped `actions/cache` from 4 to 5
+- Bumped `astral-sh/setup-uv` from 5 to 7
+- Separated metapath-related functions (e.g., `add_metapath`, `add_metapaths_by_weight`) from `graph.py` to a new module `metapath.py` for better code organization in https://github.com/c2g-dev/city2graph/pull/96
+
+### Fixed
+- Fixed module imports in tests to align with the new `metapath.py` structure
+- Fixed linting errors and minor bugs
+
+### Documentation
+- Updated documentation with introduction for each module with table of available public APIs
+
 ## 0.2.0 (2025-12-10)
 
 ### Added
