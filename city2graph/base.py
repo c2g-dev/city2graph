@@ -283,6 +283,8 @@ class BaseGraphConverter(ABC):
         graph_data: Any,  # noqa: ANN401
         nodes: bool = True,
         edges: bool = True,
+        additional_node_cols: Any = None,  # noqa: ANN401
+        additional_edge_cols: Any = None,  # noqa: ANN401
     ) -> (
         tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]
         | tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]
@@ -300,6 +302,10 @@ class BaseGraphConverter(ABC):
             Whether to reconstruct node GeoDataFrames.
         edges : bool, default True
             Whether to reconstruct edge GeoDataFrames.
+        additional_node_cols : Any, optional
+            Additional node attributes to extract.
+        additional_edge_cols : Any, optional
+            Additional edge attributes to extract.
 
         Returns
         -------
@@ -311,8 +317,22 @@ class BaseGraphConverter(ABC):
         metadata = self._extract_metadata(graph_data)
 
         if metadata.is_hetero:
-            return self._reconstruct_heterogeneous(graph_data, metadata, nodes, edges)
-        return self._reconstruct_homogeneous(graph_data, metadata, nodes, edges)
+            return self._reconstruct_heterogeneous(
+                graph_data,
+                metadata,
+                nodes,
+                edges,
+                additional_node_cols=additional_node_cols,
+                additional_edge_cols=additional_edge_cols,
+            )
+        return self._reconstruct_homogeneous(
+            graph_data,
+            metadata,
+            nodes,
+            edges,
+            additional_node_cols=additional_node_cols,
+            additional_edge_cols=additional_edge_cols,
+        )
 
     @abstractmethod
     def _convert_homogeneous(
@@ -375,6 +395,8 @@ class BaseGraphConverter(ABC):
         metadata: GraphMetadata,
         nodes: bool,
         edges: bool,
+        additional_node_cols: Any | None = None,  # noqa: ANN401
+        additional_edge_cols: Any | None = None,  # noqa: ANN401
     ) -> tuple[gpd.GeoDataFrame | None, gpd.GeoDataFrame | None] | gpd.GeoDataFrame:
         """
         Reconstruct homogeneous GeoDataFrames.
@@ -392,6 +414,10 @@ class BaseGraphConverter(ABC):
             Whether to reconstruct node GeoDataFrame.
         edges : bool
             Whether to reconstruct edge GeoDataFrame.
+        additional_node_cols : Any or None, optional
+            Additional node attributes to extract.
+        additional_edge_cols : Any or None, optional
+            Additional edge attributes to extract.
         """
 
     @abstractmethod
@@ -401,6 +427,8 @@ class BaseGraphConverter(ABC):
         metadata: GraphMetadata,
         nodes: bool,
         edges: bool,
+        additional_node_cols: Any | None = None,  # noqa: ANN401
+        additional_edge_cols: Any | None = None,  # noqa: ANN401
     ) -> tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]:
         """
         Reconstruct heterogeneous GeoDataFrames.
@@ -418,6 +446,10 @@ class BaseGraphConverter(ABC):
             Whether to reconstruct node GeoDataFrames.
         edges : bool
             Whether to reconstruct edge GeoDataFrames.
+        additional_node_cols : Any or None, optional
+            Additional node attributes to extract.
+        additional_edge_cols : Any or None, optional
+            Additional edge attributes to extract.
         """
 
 

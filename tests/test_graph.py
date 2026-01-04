@@ -942,3 +942,130 @@ class TestGraphGeometry:
         nodes_rec, _ = pyg_to_gdf(data)
         assert isinstance(nodes_rec, dict)
         assert "road" in nodes_rec  # Should still have road nodes but geometry from pos
+
+
+class TestOptionalTensorConversion:
+    """Test conversion of optional tensor attributes."""
+
+    def test_pyg_to_gdf_homo_additional_cols(self) -> None:
+        """Test extracted additional columns for homogeneous graphs."""
+        # Create sample data
+        x = torch.randn(10, 5)
+        z = torch.randn(10)  # Additional 1D tensor
+        pos = torch.rand(10, 2)
+        edge_index = torch.tensor([[0, 1], [1, 2], [2, 3]], dtype=torch.long)
+
+        data = Data(x=x, pos=pos, edge_index=edge_index)
+        data.z = z
+
+        # Metadata is required for pyg_to_gdf
+        metadata = GraphMetadata(is_hetero=False)
+        data.graph_metadata = metadata
+
+        # Test pyg_to_gdf
+        nodes_gdf_tuple = pyg_to_gdf(data, additional_node_cols=["z"])
+        # Unpack tuple safely
+        nodes_gdf = nodes_gdf_tuple[0]
+        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
+        assert "z" in nodes_gdf.columns
+        assert len(nodes_gdf) == 10
+        assert (nodes_gdf["z"].to_numpy() == z.numpy()).all()
+
+        # Test pyg_to_nx
+        nx_graph = pyg_to_nx(data, additional_node_cols=["z"])
+        for i, (_, attrs) in enumerate(nx_graph.nodes(data=True)):
+            assert "z" in attrs
+            assert attrs["z"] == z[i].item()
+
+    def test_pyg_to_gdf_hetero_additional_cols(self) -> None:
+        """Test extracted additional columns for heterogeneous graphs."""
+        data = HeteroData()
+        data["oa"].x = torch.randn(5, 3)
+        data["oa"].z = torch.randn(5)
+        data["oa"].pos = torch.rand(5, 2)
+
+        metadata = GraphMetadata(is_hetero=True)
+        metadata.node_types = ["oa"]
+        metadata.edge_types = []
+        data.graph_metadata = metadata
+
+        # Test pyg_to_gdf
+        result = pyg_to_gdf(data, additional_node_cols={"oa": ["z"]})
+        # Unpack tuple safely. Hetero result is (node_dict, edge_dict)
+        node_gdfs = result[0]
+        assert isinstance(node_gdfs, dict)
+        assert "z" in node_gdfs["oa"].columns
+        assert (node_gdfs["oa"]["z"].to_numpy() == data["oa"].z.numpy()).all()
+
+        # Test pyg_to_nx
+        nx_graph = pyg_to_nx(data, additional_node_cols={"oa": ["z"]})
+        for _, attrs in nx_graph.nodes(data=True):
+            if attrs.get("node_type") == "oa":
+                assert "z" in attrs
+
+    def test_additional_col_collision(self) -> None:
+        """Test that additional_cols logic skips columns already in gdf_data."""
+        # Simple setup: Data with one attribute 'z' and minimal edge_index
+        z = torch.randn(5)
+        data = Data(num_nodes=5, edge_index=torch.empty((2, 0), dtype=torch.long))
+        data.z = z
+        data.graph_metadata = GraphMetadata(is_hetero=False)
+
+        # Request 'z' twice. It should be extracted once, and second time skipped.
+        # and result has 'z', it works.
+        nodes, _ = pyg_to_gdf(data, additional_node_cols=["z", "z"])
+        assert isinstance(nodes, gpd.GeoDataFrame)
+        assert "z" in nodes.columns
+        assert list(nodes.columns).count("z") == 1
+
+    def test_2d_tensor_flattening(self) -> None:
+        """Test flattening of 2D tensor with shape (N, 1) in additional cols."""
+        data = Data(num_nodes=5, edge_index=torch.empty((2, 0), dtype=torch.long))
+        data.pos = torch.rand(5, 2)
+        # 2D tensor with width 1
+        data.z_2d = torch.randn(5, 1)
+        data.graph_metadata = GraphMetadata(is_hetero=False)
+
+        nodes, _ = pyg_to_gdf(data, additional_node_cols=["z_2d"])
+        assert isinstance(nodes, gpd.GeoDataFrame)
+        assert "z_2d" in nodes.columns
+        assert nodes["z_2d"].to_numpy().ndim == 1
+
+    def test_hetero_edge_type_deduction(self) -> None:
+        """Test optional edge column extraction using tuple and relation string keys."""
+        data = HeteroData()
+        data["n"].x = torch.randn(2, 1)
+        data["n"].pos = torch.rand(2, 2)
+
+        edge_type_1 = ("n", "to", "n")
+        data[edge_type_1].edge_index = torch.tensor([[0, 1], [0, 1]])
+        data[edge_type_1].z = torch.randn(2)
+
+        edge_type_2 = ("n", "via", "n")
+        data[edge_type_2].edge_index = torch.tensor([[0, 1], [0, 1]])
+        data[edge_type_2].w = torch.randn(2)
+
+        metadata = GraphMetadata(is_hetero=True)
+        metadata.node_types = ["n"]
+        metadata.edge_types = [edge_type_1, edge_type_2]
+        data.graph_metadata = metadata
+
+        # Test matching by full edge type tuple for e1
+        # and matching by relation string for e2
+        _, edges_dict = pyg_to_gdf(
+            data,
+            additional_edge_cols={edge_type_1: ["z"], "via": ["w"]},
+        )
+        assert isinstance(edges_dict, dict)
+        assert "z" in edges_dict[edge_type_1].columns
+        assert "w" in edges_dict[edge_type_2].columns
+
+    def test_get_device_no_torch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test _get_device raises ImportError when torch is not available."""
+        # Check if _get_device is available in graph_module
+        if hasattr(graph_module, "_get_device"):
+            monkeypatch.setattr(graph_module, "TORCH_AVAILABLE", False)
+            with pytest.raises(ImportError, match="PyTorch and PyTorch Geometric required"):
+                graph_module._get_device(None)
+        else:
+            pytest.skip("_get_device not accessible")

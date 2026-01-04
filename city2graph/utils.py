@@ -976,6 +976,8 @@ class NxConverter(BaseGraphConverter):
         metadata: "GraphMetadata",
         nodes: bool = True,
         edges: bool = True,
+        additional_node_cols: list[str] | None = None,  # noqa: ARG002
+        additional_edge_cols: list[str] | None = None,  # noqa: ARG002
     ) -> tuple[gpd.GeoDataFrame | None, gpd.GeoDataFrame | None] | gpd.GeoDataFrame:
         """
         Reconstruct homogeneous GeoDataFrames from a NetworkX graph.
@@ -994,6 +996,10 @@ class NxConverter(BaseGraphConverter):
             Whether to reconstruct the nodes GeoDataFrame.
         edges : bool, default True
             Whether to reconstruct the edges GeoDataFrame.
+        additional_node_cols : list[str] or None, optional
+            Additional columns to extract. Not used in this implementation.
+        additional_edge_cols : list[str] or None, optional
+            Additional columns to extract. Not used in this implementation.
 
         Returns
         -------
@@ -1021,6 +1027,8 @@ class NxConverter(BaseGraphConverter):
         metadata: "GraphMetadata",
         nodes: bool = True,
         edges: bool = True,
+        additional_node_cols: dict[str, list[str]] | None = None,  # noqa: ARG002
+        additional_edge_cols: dict[str, list[str]] | None = None,  # noqa: ARG002
     ) -> tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]:
         """
         Reconstruct heterogeneous GeoDataFrames from a NetworkX graph.
@@ -1041,6 +1049,10 @@ class NxConverter(BaseGraphConverter):
             Whether to reconstruct the node GeoDataFrames.
         edges : bool, default True
             Whether to reconstruct the edge GeoDataFrames.
+        additional_node_cols : dict[str, list[str]] or None, optional
+            Additional columns to extract. Not used in this implementation.
+        additional_edge_cols : dict[str, list[str]] or None, optional
+            Additional columns to extract. Not used in this implementation.
 
         Returns
         -------

@@ -19,6 +19,7 @@ from __future__ import annotations
 # Standard library imports
 import logging
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import cast
 
 if TYPE_CHECKING:
@@ -180,6 +181,8 @@ class PyGConverter(BaseGraphConverter):
         data: Data | HeteroData,
         _node_types: str | list[str] | None = None,
         _edge_types: str | list[tuple[str, str, str]] | None = None,
+        additional_node_cols: dict[str, list[str]] | list[str] | None = None,
+        additional_edge_cols: dict[str | tuple[str, str, str], list[str]] | list[str] | None = None,
     ) -> (
         tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]
         | tuple[gpd.GeoDataFrame | None, gpd.GeoDataFrame | None]
@@ -198,6 +201,10 @@ class PyGConverter(BaseGraphConverter):
             Node types to extract (unused, kept for API compatibility).
         _edge_types : str or list[tuple[str, str, str]], optional
             Edge types to extract (unused, kept for API compatibility).
+        additional_node_cols : dict[str, list[str]] or list[str] or None, optional
+            Additional columns to extract from the PyG object attributes.
+        additional_edge_cols : dict[str | tuple[str, str, str], list[str]] or list[str] or None, optional
+            Additional columns to extract from the PyG object attributes.
 
         Returns
         -------
@@ -205,7 +212,11 @@ class PyGConverter(BaseGraphConverter):
             Either homogeneous (nodes_gdf, edges_gdf) or heterogeneous
             (dict of node gdfs, dict of edge gdfs) tuple.
         """
-        return self.reconstruct(data)
+        return self.reconstruct(
+            data,
+            additional_node_cols=additional_node_cols,
+            additional_edge_cols=additional_edge_cols,
+        )
 
     def _validate_homogeneous_columns(
         self,
@@ -783,6 +794,7 @@ class PyGConverter(BaseGraphConverter):
         data: Data | HeteroData,
         metadata: GraphMetadata,
         node_type: str | None = None,
+        additional_cols: list[str] | None = None,
     ) -> gpd.GeoDataFrame:
         """
         Reconstruct node GeoDataFrame from PyTorch Geometric data.
@@ -798,6 +810,8 @@ class PyGConverter(BaseGraphConverter):
             Graph metadata.
         node_type : str, optional
             Node type name.
+        additional_cols : list[str] or None, optional
+            Additional columns to extract.
 
         Returns
         -------
@@ -808,7 +822,9 @@ class PyGConverter(BaseGraphConverter):
         obj_data = data[node_type] if is_hetero and node_type else data
 
         # Extract features
-        gdf_data = self._extract_features(obj_data, metadata, node_type, is_node=True)
+        gdf_data = self._extract_features(
+            obj_data, metadata, node_type, is_node=True, additional_cols=additional_cols
+        )
 
         # Create geometry: use stored geometries if available, otherwise create from positions
         geometry = self._get_stored_geometries(metadata, is_hetero, node_type, is_node=True)
@@ -853,6 +869,7 @@ class PyGConverter(BaseGraphConverter):
         data: Data | HeteroData,
         metadata: GraphMetadata,
         edge_type: tuple[str, str, str] | None = None,
+        additional_cols: list[str] | None = None,
     ) -> gpd.GeoDataFrame:
         """
         Reconstruct edge GeoDataFrame from PyTorch Geometric data.
@@ -868,6 +885,8 @@ class PyGConverter(BaseGraphConverter):
             Graph metadata.
         edge_type : tuple, optional
             Edge type tuple.
+        additional_cols : list[str] or None, optional
+            Additional columns to extract.
 
         Returns
         -------
@@ -884,7 +903,9 @@ class PyGConverter(BaseGraphConverter):
         obj_data = data[edge_type] if is_hetero and edge_type else data
 
         # Extract features
-        gdf_data = self._extract_features(obj_data, metadata, edge_type, is_node=False)
+        gdf_data = self._extract_features(
+            obj_data, metadata, edge_type, is_node=False, additional_cols=additional_cols
+        )
 
         # Create geometry: use stored geometries if available, otherwise create from positions
         geometry = self._get_stored_geometries(metadata, is_hetero, edge_type, is_node=False)
@@ -961,6 +982,7 @@ class PyGConverter(BaseGraphConverter):
         metadata: GraphMetadata,
         type_name: str | tuple[str, str, str] | None,
         is_node: bool,
+        additional_cols: list[str] | None = None,
     ) -> dict[str, np.ndarray[tuple[int, ...], np.dtype[np.float32]]]:
         """
         Extract features from data object.
@@ -977,6 +999,8 @@ class PyGConverter(BaseGraphConverter):
             Node or edge type name.
         is_node : bool
             Whether to extract features for nodes.
+        additional_cols : list[str] or None, optional
+            Additional columns to extract.
 
         Returns
         -------
@@ -1032,7 +1056,53 @@ class PyGConverter(BaseGraphConverter):
 
             gdf_data.update(self._extract_tensor_columns(obj_data.edge_attr, cols_list))
 
+        # Extract additional columns if specified
+        if additional_cols:
+            self._extract_additional_columns(obj_data, additional_cols, gdf_data)
+
         return gdf_data
+
+    def _extract_additional_columns(
+        self,
+        obj_data: Data | HeteroData,
+        additional_cols: list[str],
+        gdf_data: dict[str, Any],
+    ) -> None:
+        """
+        Extract additional columns from object data.
+
+        Helper method to extract specified additional columns (tensors) from
+        the data object and add them to the GeoDataFrame dictionary.
+
+        Parameters
+        ----------
+        obj_data : Data or HeteroData
+            PyTorch Geometric data object.
+        additional_cols : list[str]
+            List of attribute names to extract.
+        gdf_data : dict[str, Any]
+            Dictionary to store extracted features.
+        """
+        for col in additional_cols:
+            if col in gdf_data:
+                continue  # Already extracted as regular feature/label
+
+            # Try to get attribute from object
+            if hasattr(obj_data, col):
+                val = getattr(obj_data, col)
+                # Check if it's a tensor using isinstance for safety
+                if val is not None and isinstance(val, torch.Tensor):
+                    # Extract single column tensor or handle appropriately
+                    tensor_data = val.detach().cpu().numpy()
+
+                    # If 1D, just use it
+                    if tensor_data.ndim == 1:
+                        gdf_data[col] = tensor_data
+                    # If 2D and width 1, flatten
+                    elif tensor_data.ndim == 2 and tensor_data.shape[1] == 1:
+                        gdf_data[col] = tensor_data.flatten()
+                    # Multidimensional tensors > 1 col are skipped for now
+                    # unless user explicitly handles them (logic can be extended)
 
     def _create_geometry_from_positions(
         self, node_data: Data | HeteroData
@@ -1262,6 +1332,8 @@ class PyGConverter(BaseGraphConverter):
         metadata: GraphMetadata,
         nodes: bool,
         edges: bool,
+        additional_node_cols: list[str] | None = None,
+        additional_edge_cols: list[str] | None = None,
     ) -> tuple[gpd.GeoDataFrame | None, gpd.GeoDataFrame | None]:
         """
         Reconstruct homogeneous GeoDataFrames.
@@ -1278,6 +1350,10 @@ class PyGConverter(BaseGraphConverter):
             Whether to reconstruct nodes.
         edges : bool
             Whether to reconstruct edges.
+        additional_node_cols : list[str] or None, optional
+            Additional node attributes to extract.
+        additional_edge_cols : list[str] or None, optional
+            Additional edge attributes to extract.
 
         Returns
         -------
@@ -1288,10 +1364,14 @@ class PyGConverter(BaseGraphConverter):
         edges_gdf = None
 
         if nodes:
-            nodes_gdf = self._reconstruct_node_gdf(graph_data, metadata, None)
+            nodes_gdf = self._reconstruct_node_gdf(
+                graph_data, metadata, None, additional_cols=additional_node_cols
+            )
 
         if edges:
-            edges_gdf = self._reconstruct_edge_gdf(graph_data, metadata, None)
+            edges_gdf = self._reconstruct_edge_gdf(
+                graph_data, metadata, None, additional_cols=additional_edge_cols
+            )
 
         return nodes_gdf, edges_gdf
 
@@ -1301,6 +1381,8 @@ class PyGConverter(BaseGraphConverter):
         metadata: GraphMetadata,
         nodes: bool,
         edges: bool,
+        additional_node_cols: dict[str, list[str]] | None = None,
+        additional_edge_cols: dict[str | tuple[str, str, str], list[str]] | None = None,
     ) -> tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]:
         """
         Reconstruct heterogeneous GeoDataFrames.
@@ -1317,6 +1399,10 @@ class PyGConverter(BaseGraphConverter):
             Whether to reconstruct nodes.
         edges : bool
             Whether to reconstruct edges.
+        additional_node_cols : dict[str, list[str]] or None, optional
+            Additional node attributes to extract.
+        additional_edge_cols : dict[str | tuple[str, str, str], list[str]] or None, optional
+            Additional edge attributes to extract.
 
         Returns
         -------
@@ -1328,11 +1414,29 @@ class PyGConverter(BaseGraphConverter):
 
         if nodes and metadata.node_types:
             for node_type in metadata.node_types:
-                nodes_dict[node_type] = self._reconstruct_node_gdf(graph_data, metadata, node_type)
+                add_cols = (
+                    additional_node_cols.get(node_type)
+                    if additional_node_cols and isinstance(additional_node_cols, dict)
+                    else None
+                )
+                nodes_dict[node_type] = self._reconstruct_node_gdf(
+                    graph_data, metadata, node_type, additional_cols=add_cols
+                )
 
         if edges and metadata.edge_types:
             for edge_type in metadata.edge_types:
-                edges_dict[edge_type] = self._reconstruct_edge_gdf(graph_data, metadata, edge_type)
+                add_cols = None
+                if additional_edge_cols and isinstance(additional_edge_cols, dict):
+                    # Try to match edge type tuple
+                    if edge_type in additional_edge_cols:
+                        add_cols = additional_edge_cols.get(edge_type)
+                    # Or try matching by relation type (middle element)
+                    elif edge_type[1] in additional_edge_cols:
+                        add_cols = additional_edge_cols.get(edge_type[1])
+
+                edges_dict[edge_type] = self._reconstruct_edge_gdf(
+                    graph_data, metadata, edge_type, additional_cols=add_cols
+                )
 
         return nodes_dict, edges_dict
 
@@ -1677,6 +1781,8 @@ def pyg_to_gdf(
     node_types: str | list[str] | None = None,
     edge_types: str | list[tuple[str, str, str]] | None = None,
     keep_geom: bool = True,
+    additional_node_cols: dict[str, list[str]] | list[str] | None = None,
+    additional_edge_cols: dict[str | tuple[str, str, str], list[str]] | list[str] | None = None,
 ) -> (
     tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]
     | tuple[gpd.GeoDataFrame | None, gpd.GeoDataFrame | None]
@@ -1704,6 +1810,15 @@ def pyg_to_gdf(
         are stored in metadata, uses the original geometries. If False or no stored
         geometries exist, reconstructs geometries from node positions (creating
         straight-line edges between nodes).
+    additional_node_cols : dict[str, list[str]] or list[str], optional
+        Additional columns to extract from the PyG object attributes.
+        For homogeneous graphs, a list of attribute names.
+        For heterogeneous graphs, a dict mapping node types to lists of attribute names.
+    additional_edge_cols : dict[str | tuple[str, str, str], list[str]] or list[str], optional
+        Additional columns to extract from the PyG object attributes.
+        For homogeneous graphs, a list of attribute names.
+        For heterogeneous graphs, a dict mapping edge type tuples or relation names
+        to lists of attribute names.
 
     Returns
     -------
@@ -1744,7 +1859,13 @@ def pyg_to_gdf(
     ...                                   node_types=['building', 'road'])
     """
     converter = PyGConverter(keep_geom=keep_geom)
-    return converter.pyg_to_gdf(data, node_types, edge_types)
+    return converter.pyg_to_gdf(
+        data,
+        node_types,
+        edge_types,
+        additional_node_cols=additional_node_cols,
+        additional_edge_cols=additional_edge_cols,
+    )
 
 
 # ============================================================================
@@ -1752,7 +1873,12 @@ def pyg_to_gdf(
 # ============================================================================
 
 
-def pyg_to_nx(data: Data | HeteroData, keep_geom: bool = True) -> nx.Graph:
+def pyg_to_nx(
+    data: Data | HeteroData,
+    keep_geom: bool = True,
+    additional_node_cols: dict[str, list[str]] | list[str] | None = None,
+    additional_edge_cols: dict[str | tuple[str, str, str], list[str]] | list[str] | None = None,
+) -> nx.Graph:
     """
     Convert a PyTorch Geometric object to a NetworkX graph.
 
@@ -1768,6 +1894,10 @@ def pyg_to_nx(data: Data | HeteroData, keep_geom: bool = True) -> nx.Graph:
         Whether to use stored geometries for reconstruction. If True and geometries
         are stored in metadata, uses the original geometries. If False or no stored
         geometries exist, reconstructs geometries from node positions.
+    additional_node_cols : dict[str, list[str]] or list[str], optional
+        Additional columns to extract from the PyG object attributes.
+    additional_edge_cols : dict[str | tuple[str, str, str], list[str]] or list[str], optional
+        Additional columns to extract from the PyG object attributes.
 
     Returns
     -------
@@ -1807,7 +1937,12 @@ def pyg_to_nx(data: Data | HeteroData, keep_geom: bool = True) -> nx.Graph:
     >>> centrality = nx.betweenness_centrality(nx_graph)
     >>> communities = nx.community.greedy_modularity_communities(nx_graph)
     """
-    nodes, edges = pyg_to_gdf(data, keep_geom=keep_geom)
+    nodes, edges = pyg_to_gdf(
+        data,
+        keep_geom=keep_geom,
+        additional_node_cols=additional_node_cols,
+        additional_edge_cols=additional_edge_cols,
+    )
     return gdf_to_nx(nodes, edges)
 
 
@@ -2006,10 +2141,10 @@ def _get_device(device: str | torch.device | None) -> torch.device:
 
     Examples
     --------
-    >>> device = _normalize_device("cuda")
-    >>> device = _normalize_device(None)  # Auto-selects best available
+    >>> device = _get_device("cuda")
+    >>> device = _get_device(None)  # Auto-selects best available
     """
-    if not TORCH_AVAILABLE or torch is None:
+    if not TORCH_AVAILABLE:
         raise ImportError(TORCH_ERROR_MSG)
 
     if device is None:
