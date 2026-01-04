@@ -61,6 +61,12 @@ extra_javascript:
 # Plugins
 plugins:
   - search
+  - social
+  - git-revision-date-localized:
+      enable_creation_date: true
+  - minify:
+      minify_html: true
+  - rss
   - autorefs  # Enable cross-references to any Markdown heading
 
   - mkdocstrings:
@@ -182,6 +188,7 @@ nav:
   - Installation: installation.md
   - Examples:
       - Introduction: examples/index.md
+      - Metapath: examples/add_metapaths.ipynb
       - Morphology: examples/morphological_graph_from_overturemaps.ipynb
       - GTFS: examples/gtfs.ipynb
       - OD Matrix: examples/generating_graphs_from_od_matrix.ipynb

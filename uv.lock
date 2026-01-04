@@ -219,7 +219,8 @@ version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "python-dateutil" },
-    { name = "tzdata" },
+    { name = "tzdata", version = "2024.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux' or sys_platform == 'win32' or (sys_platform != 'darwin' and extra == 'extra-10-city2graph-cpu') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu124') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130') or (extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130')" },
+    { name = "tzdata", version = "2025.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-city2graph-cu118') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-city2graph-cu124') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-city2graph-cu126') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-city2graph-cu128') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'darwin' and extra == 'extra-10-city2graph-cpu') or (sys_platform == 'darwin' and extra == 'extra-10-city2graph-cu118') or (sys_platform == 'darwin' and extra == 'extra-10-city2graph-cu124') or (sys_platform == 'darwin' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'darwin' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'darwin' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu124') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu124') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b9/33/032cdc44182491aa708d06a68b62434140d8c50820a087fac7af37703357/arrow-1.4.0.tar.gz", hash = "sha256:ed0cc050e98001b8779e84d461b0098c4ac597e88704a655582b21d116e526d7", size = 152931, upload-time = "2025-10-18T17:46:46.761Z" }
 wheels = [
@@ -344,6 +345,24 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/32/14/9d409124bda3f4ab7af3802aba07181d1fd56aa96cc4b999faea6a27a0d2/branca-0.8.2.tar.gz", hash = "sha256:e5040f4c286e973658c27de9225c1a5a7356dd0702a7c8d84c0f0dfbde388fe7", size = 27890, upload-time = "2025-10-06T10:28:20.305Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/50/fc9680058e63161f2f63165b84c957a0df1415431104c408e8104a3a18ef/branca-0.8.2-py3-none-any.whl", hash = "sha256:2ebaef3983e3312733c1ae2b793b0a8ba3e1c4edeb7598e10328505280cf2f7c", size = 26193, upload-time = "2025-10-06T10:28:19.255Z" },
+]
+
+[[package]]
+name = "cachecontrol"
+version = "0.14.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "msgpack" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2d/f6/c972b32d80760fb79d6b9eeb0b3010a46b89c0b23cf6329417ff7886cd22/cachecontrol-0.14.4.tar.gz", hash = "sha256:e6220afafa4c22a47dd0badb319f84475d79108100d04e26e8542ef7d3ab05a1", size = 16150, upload-time = "2025-11-14T04:32:13.138Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ef/79/c45f2d53efe6ada1110cf6f9fca095e4ff47a0454444aefdde6ac4789179/cachecontrol-0.14.4-py3-none-any.whl", hash = "sha256:b7ac014ff72ee199b5f8af1de29d60239954f223e948196fa3d84adaffc71d2b", size = 22247, upload-time = "2025-11-14T04:32:11.733Z" },
+]
+
+[package.optional-dependencies]
+filecache = [
+    { name = "filelock" },
 ]
 
 [[package]]
@@ -575,9 +594,12 @@ docs = [
     { name = "mike" },
     { name = "mkdocs" },
     { name = "mkdocs-gen-files" },
+    { name = "mkdocs-git-revision-date-localized-plugin" },
     { name = "mkdocs-jupyter" },
     { name = "mkdocs-literate-nav" },
     { name = "mkdocs-material" },
+    { name = "mkdocs-minify-plugin" },
+    { name = "mkdocs-rss-plugin" },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "myst-parser" },
     { name = "nbsphinx" },
@@ -651,9 +673,12 @@ docs = [
     { name = "mike" },
     { name = "mkdocs" },
     { name = "mkdocs-gen-files" },
+    { name = "mkdocs-git-revision-date-localized-plugin" },
     { name = "mkdocs-jupyter" },
     { name = "mkdocs-literate-nav" },
     { name = "mkdocs-material" },
+    { name = "mkdocs-minify-plugin" },
+    { name = "mkdocs-rss-plugin" },
     { name = "mkdocstrings", extras = ["python"] },
     { name = "myst-parser" },
     { name = "nbsphinx" },
@@ -866,6 +891,12 @@ wheels = [
 toml = [
     { name = "tomli", marker = "python_full_version <= '3.11' or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu124') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130')" },
 ]
+
+[[package]]
+name = "csscompressor"
+version = "0.9.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f1/2a/8c3ac3d8bc94e6de8d7ae270bb5bc437b210bb9d6d9e46630c98f4abd20c/csscompressor-0.9.5.tar.gz", hash = "sha256:afa22badbcf3120a4f392e4d22f9fff485c044a1feda4a950ecc5eba9dd31a05", size = 237808, upload-time = "2017-11-26T21:13:08.238Z" }
 
 [[package]]
 name = "cssselect2"
@@ -1164,6 +1195,30 @@ wheels = [
 ]
 
 [[package]]
+name = "gitdb"
+version = "4.0.12"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "smmap" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/94/63b0fc47eb32792c7ba1fe1b694daec9a63620db1e313033d18140c2320a/gitdb-4.0.12.tar.gz", hash = "sha256:5ef71f855d191a3326fcfbc0d5da835f26b13fbcba60c32c21091c349ffdb571", size = 394684, upload-time = "2025-01-02T07:20:46.413Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/61/5c78b91c3143ed5c14207f463aecfc8f9dbb5092fb2869baf37c273b2705/gitdb-4.0.12-py3-none-any.whl", hash = "sha256:67073e15955400952c6565cc3e707c554a4eea2e428946f7a4c162fab9bd9bcf", size = 62794, upload-time = "2025-01-02T07:20:43.624Z" },
+]
+
+[[package]]
+name = "gitpython"
+version = "3.1.46"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "gitdb" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/df/b5/59d16470a1f0dfe8c793f9ef56fd3826093fc52b3bd96d6b9d6c26c7e27b/gitpython-3.1.46.tar.gz", hash = "sha256:400124c7d0ef4ea03f7310ac2fbf7151e09ff97f2a3288d64a440c584a29c37f", size = 215371, upload-time = "2026-01-01T15:37:32.073Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6a/09/e21df6aef1e1ffc0c816f0522ddc3f6dcded766c3261813131c78a704470/gitpython-3.1.46-py3-none-any.whl", hash = "sha256:79812ed143d9d25b6d176a10bb511de0f9c67b1fa641d82097b0ab90398a2058", size = 208620, upload-time = "2026-01-01T15:37:30.574Z" },
+]
+
+[[package]]
 name = "griffe"
 version = "1.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1182,6 +1237,14 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/01/ee/02a2c011bdab74c6fb3c75474d40b3052059d95df7e73351460c8588d963/h11-0.16.0.tar.gz", hash = "sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1", size = 101250, upload-time = "2025-04-24T03:35:25.427Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86", size = 37515, upload-time = "2025-04-24T03:35:24.344Z" },
+]
+
+[[package]]
+name = "htmlmin2"
+version = "0.1.13"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/31/a76f4bfa885f93b8167cb4c85cf32b54d1f64384d0b897d45bc6d19b7b45/htmlmin2-0.1.13-py3-none-any.whl", hash = "sha256:75609f2a42e64f7ce57dbff28a39890363bde9e7e5885db633317efbdf8c79a2", size = 34486, upload-time = "2023-03-14T21:28:30.388Z" },
 ]
 
 [[package]]
@@ -1396,6 +1459,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/e8/5d/447af5ea094b9e4c4
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/e8/685f47e0d754320684db4425a0967f7d3fa70126bffd76110b7009a0090f/joblib-1.5.2-py3-none-any.whl", hash = "sha256:4e1f0bdbb987e6d843c70cf43714cb276623def372df3c22fe5266b2670bc241", size = 308396, upload-time = "2025-08-27T12:15:45.188Z" },
 ]
+
+[[package]]
+name = "jsmin"
+version = "3.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5e/73/e01e4c5e11ad0494f4407a3f623ad4d87714909f50b17a06ed121034ff6e/jsmin-3.0.1.tar.gz", hash = "sha256:c0959a121ef94542e807a674142606f7e90214a2b3d1eb17300244bbb5cc2bfc", size = 13925, upload-time = "2022-01-16T20:35:59.13Z" }
 
 [[package]]
 name = "json5"
@@ -2091,6 +2160,21 @@ wheels = [
 ]
 
 [[package]]
+name = "mkdocs-git-revision-date-localized-plugin"
+version = "1.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "babel" },
+    { name = "gitpython" },
+    { name = "mkdocs" },
+    { name = "tzdata", version = "2024.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32' or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu124') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0f/c5/1d3c4e6ddae6230b89d09105cb79de711655e3ebd6745f7a92efea0f5160/mkdocs_git_revision_date_localized_plugin-1.5.0.tar.gz", hash = "sha256:17345ccfdf69a1905dc96fb1070dce82d03a1eb6b0d48f958081a7589ce3c248", size = 460697, upload-time = "2025-10-31T16:11:34.44Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bc/51/fe0e3fdb16f6eed65c9459d12bae6a4e1f0bb4e2228cb037e7907b002678/mkdocs_git_revision_date_localized_plugin-1.5.0-py3-none-any.whl", hash = "sha256:933f9e35a8c135b113f21bb57610d82e9b7bcc71dd34fb06a029053c97e99656", size = 26153, upload-time = "2025-10-31T16:11:32.987Z" },
+]
+
+[[package]]
 name = "mkdocs-jupyter"
 version = "0.25.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2148,6 +2232,37 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/79/9b/9b4c96d6593b2a541e1cb8b34899a6d021d208bb357042823d4d2cabdbe7/mkdocs_material_extensions-1.3.1.tar.gz", hash = "sha256:10c9511cea88f568257f960358a467d12b970e1f7b2c0e5fb2bb48cab1928443", size = 11847, upload-time = "2023-11-22T19:09:45.208Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5b/54/662a4743aa81d9582ee9339d4ffa3c8fd40a4965e033d77b9da9774d3960/mkdocs_material_extensions-1.3.1-py3-none-any.whl", hash = "sha256:adff8b62700b25cb77b53358dad940f3ef973dd6db797907c49e3c2ef3ab4e31", size = 8728, upload-time = "2023-11-22T19:09:43.465Z" },
+]
+
+[[package]]
+name = "mkdocs-minify-plugin"
+version = "0.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "csscompressor" },
+    { name = "htmlmin2" },
+    { name = "jsmin" },
+    { name = "mkdocs" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/52/67/fe4b77e7a8ae7628392e28b14122588beaf6078b53eb91c7ed000fd158ac/mkdocs-minify-plugin-0.8.0.tar.gz", hash = "sha256:bc11b78b8120d79e817308e2b11539d790d21445eb63df831e393f76e52e753d", size = 8366, upload-time = "2024-01-29T16:11:32.982Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/cd/2e8d0d92421916e2ea4ff97f10a544a9bd5588eb747556701c983581df13/mkdocs_minify_plugin-0.8.0-py3-none-any.whl", hash = "sha256:5fba1a3f7bd9a2142c9954a6559a57e946587b21f133165ece30ea145c66aee6", size = 6723, upload-time = "2024-01-29T16:11:31.851Z" },
+]
+
+[[package]]
+name = "mkdocs-rss-plugin"
+version = "1.17.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cachecontrol", extra = ["filecache"] },
+    { name = "gitpython" },
+    { name = "mkdocs" },
+    { name = "requests" },
+    { name = "tzdata", version = "2024.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'win32' or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu124') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130')" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/90/d3/3e5f900d616fcdaa9f436c6ea5bd6b50b995263086237c1ae5a09089f3e5/mkdocs_rss_plugin-1.17.7.tar.gz", hash = "sha256:6903f85e75ee976ae5f21eb05a54fa4d848bc246a227523945eaf6be7580c930", size = 569581, upload-time = "2025-11-14T20:29:32.964Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ed/49/d6b35e99efac4cde91f37d9123ef073a1aa909bd11fefd730d912efd1319/mkdocs_rss_plugin-1.17.7-py3-none-any.whl", hash = "sha256:17b7b78c2c0b6418b83644b701867d5b2c48ecf069609917250b829bd4c3a718", size = 31404, upload-time = "2025-11-14T20:29:31.225Z" },
 ]
 
 [[package]]
@@ -2211,6 +2326,41 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e0/47/dd32fa426cc72114383ac549964eecb20ecfd886d1e5ccf5340b55b02f57/mpmath-1.3.0.tar.gz", hash = "sha256:7a28eb2a9774d00c7bc92411c19a89209d5da7c4c9a9e227be8330a23a25b91f", size = 508106, upload-time = "2023-03-07T16:47:11.061Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl", hash = "sha256:a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c", size = 536198, upload-time = "2023-03-07T16:47:09.197Z" },
+]
+
+[[package]]
+name = "msgpack"
+version = "1.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4d/f2/bfb55a6236ed8725a96b0aa3acbd0ec17588e6a2c3b62a93eb513ed8783f/msgpack-1.1.2.tar.gz", hash = "sha256:3b60763c1373dd60f398488069bcdc703cd08a711477b5d480eecc9f9626f47e", size = 173581, upload-time = "2025-10-08T09:15:56.596Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2c/97/560d11202bcd537abca693fd85d81cebe2107ba17301de42b01ac1677b69/msgpack-1.1.2-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:2e86a607e558d22985d856948c12a3fa7b42efad264dca8a3ebbcfa2735d786c", size = 82271, upload-time = "2025-10-08T09:14:49.967Z" },
+    { url = "https://files.pythonhosted.org/packages/83/04/28a41024ccbd67467380b6fb440ae916c1e4f25e2cd4c63abe6835ac566e/msgpack-1.1.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:283ae72fc89da59aa004ba147e8fc2f766647b1251500182fac0350d8af299c0", size = 84914, upload-time = "2025-10-08T09:14:50.958Z" },
+    { url = "https://files.pythonhosted.org/packages/71/46/b817349db6886d79e57a966346cf0902a426375aadc1e8e7a86a75e22f19/msgpack-1.1.2-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:61c8aa3bd513d87c72ed0b37b53dd5c5a0f58f2ff9f26e1555d3bd7948fb7296", size = 416962, upload-time = "2025-10-08T09:14:51.997Z" },
+    { url = "https://files.pythonhosted.org/packages/da/e0/6cc2e852837cd6086fe7d8406af4294e66827a60a4cf60b86575a4a65ca8/msgpack-1.1.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:454e29e186285d2ebe65be34629fa0e8605202c60fbc7c4c650ccd41870896ef", size = 426183, upload-time = "2025-10-08T09:14:53.477Z" },
+    { url = "https://files.pythonhosted.org/packages/25/98/6a19f030b3d2ea906696cedd1eb251708e50a5891d0978b012cb6107234c/msgpack-1.1.2-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:7bc8813f88417599564fafa59fd6f95be417179f76b40325b500b3c98409757c", size = 411454, upload-time = "2025-10-08T09:14:54.648Z" },
+    { url = "https://files.pythonhosted.org/packages/b7/cd/9098fcb6adb32187a70b7ecaabf6339da50553351558f37600e53a4a2a23/msgpack-1.1.2-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:bafca952dc13907bdfdedfc6a5f579bf4f292bdd506fadb38389afa3ac5b208e", size = 422341, upload-time = "2025-10-08T09:14:56.328Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/ae/270cecbcf36c1dc85ec086b33a51a4d7d08fc4f404bdbc15b582255d05ff/msgpack-1.1.2-cp311-cp311-win32.whl", hash = "sha256:602b6740e95ffc55bfb078172d279de3773d7b7db1f703b2f1323566b878b90e", size = 64747, upload-time = "2025-10-08T09:14:57.882Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/79/309d0e637f6f37e83c711f547308b91af02b72d2326ddd860b966080ef29/msgpack-1.1.2-cp311-cp311-win_amd64.whl", hash = "sha256:d198d275222dc54244bf3327eb8cbe00307d220241d9cec4d306d49a44e85f68", size = 71633, upload-time = "2025-10-08T09:14:59.177Z" },
+    { url = "https://files.pythonhosted.org/packages/73/4d/7c4e2b3d9b1106cd0aa6cb56cc57c6267f59fa8bfab7d91df5adc802c847/msgpack-1.1.2-cp311-cp311-win_arm64.whl", hash = "sha256:86f8136dfa5c116365a8a651a7d7484b65b13339731dd6faebb9a0242151c406", size = 64755, upload-time = "2025-10-08T09:15:00.48Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/bd/8b0d01c756203fbab65d265859749860682ccd2a59594609aeec3a144efa/msgpack-1.1.2-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:70a0dff9d1f8da25179ffcf880e10cf1aad55fdb63cd59c9a49a1b82290062aa", size = 81939, upload-time = "2025-10-08T09:15:01.472Z" },
+    { url = "https://files.pythonhosted.org/packages/34/68/ba4f155f793a74c1483d4bdef136e1023f7bcba557f0db4ef3db3c665cf1/msgpack-1.1.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:446abdd8b94b55c800ac34b102dffd2f6aa0ce643c55dfc017ad89347db3dbdb", size = 85064, upload-time = "2025-10-08T09:15:03.764Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/60/a064b0345fc36c4c3d2c743c82d9100c40388d77f0b48b2f04d6041dbec1/msgpack-1.1.2-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:c63eea553c69ab05b6747901b97d620bb2a690633c77f23feb0c6a947a8a7b8f", size = 417131, upload-time = "2025-10-08T09:15:05.136Z" },
+    { url = "https://files.pythonhosted.org/packages/65/92/a5100f7185a800a5d29f8d14041f61475b9de465ffcc0f3b9fba606e4505/msgpack-1.1.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:372839311ccf6bdaf39b00b61288e0557916c3729529b301c52c2d88842add42", size = 427556, upload-time = "2025-10-08T09:15:06.837Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/87/ffe21d1bf7d9991354ad93949286f643b2bb6ddbeab66373922b44c3b8cc/msgpack-1.1.2-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:2929af52106ca73fcb28576218476ffbb531a036c2adbcf54a3664de124303e9", size = 404920, upload-time = "2025-10-08T09:15:08.179Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/41/8543ed2b8604f7c0d89ce066f42007faac1eaa7d79a81555f206a5cdb889/msgpack-1.1.2-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:be52a8fc79e45b0364210eef5234a7cf8d330836d0a64dfbb878efa903d84620", size = 415013, upload-time = "2025-10-08T09:15:09.83Z" },
+    { url = "https://files.pythonhosted.org/packages/41/0d/2ddfaa8b7e1cee6c490d46cb0a39742b19e2481600a7a0e96537e9c22f43/msgpack-1.1.2-cp312-cp312-win32.whl", hash = "sha256:1fff3d825d7859ac888b0fbda39a42d59193543920eda9d9bea44d958a878029", size = 65096, upload-time = "2025-10-08T09:15:11.11Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/ec/d431eb7941fb55a31dd6ca3404d41fbb52d99172df2e7707754488390910/msgpack-1.1.2-cp312-cp312-win_amd64.whl", hash = "sha256:1de460f0403172cff81169a30b9a92b260cb809c4cb7e2fc79ae8d0510c78b6b", size = 72708, upload-time = "2025-10-08T09:15:12.554Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/31/5b1a1f70eb0e87d1678e9624908f86317787b536060641d6798e3cf70ace/msgpack-1.1.2-cp312-cp312-win_arm64.whl", hash = "sha256:be5980f3ee0e6bd44f3a9e9dea01054f175b50c3e6cdb692bc9424c0bbb8bf69", size = 64119, upload-time = "2025-10-08T09:15:13.589Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/31/b46518ecc604d7edf3a4f94cb3bf021fc62aa301f0cb849936968164ef23/msgpack-1.1.2-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:4efd7b5979ccb539c221a4c4e16aac1a533efc97f3b759bb5a5ac9f6d10383bf", size = 81212, upload-time = "2025-10-08T09:15:14.552Z" },
+    { url = "https://files.pythonhosted.org/packages/92/dc/c385f38f2c2433333345a82926c6bfa5ecfff3ef787201614317b58dd8be/msgpack-1.1.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:42eefe2c3e2af97ed470eec850facbe1b5ad1d6eacdbadc42ec98e7dcf68b4b7", size = 84315, upload-time = "2025-10-08T09:15:15.543Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/68/93180dce57f684a61a88a45ed13047558ded2be46f03acb8dec6d7c513af/msgpack-1.1.2-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:1fdf7d83102bf09e7ce3357de96c59b627395352a4024f6e2458501f158bf999", size = 412721, upload-time = "2025-10-08T09:15:16.567Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/ba/459f18c16f2b3fc1a1ca871f72f07d70c07bf768ad0a507a698b8052ac58/msgpack-1.1.2-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:fac4be746328f90caa3cd4bc67e6fe36ca2bf61d5c6eb6d895b6527e3f05071e", size = 424657, upload-time = "2025-10-08T09:15:17.825Z" },
+    { url = "https://files.pythonhosted.org/packages/38/f8/4398c46863b093252fe67368b44edc6c13b17f4e6b0e4929dbf0bdb13f23/msgpack-1.1.2-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:fffee09044073e69f2bad787071aeec727183e7580443dfeb8556cbf1978d162", size = 402668, upload-time = "2025-10-08T09:15:19.003Z" },
+    { url = "https://files.pythonhosted.org/packages/28/ce/698c1eff75626e4124b4d78e21cca0b4cc90043afb80a507626ea354ab52/msgpack-1.1.2-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:5928604de9b032bc17f5099496417f113c45bc6bc21b5c6920caf34b3c428794", size = 419040, upload-time = "2025-10-08T09:15:20.183Z" },
+    { url = "https://files.pythonhosted.org/packages/67/32/f3cd1667028424fa7001d82e10ee35386eea1408b93d399b09fb0aa7875f/msgpack-1.1.2-cp313-cp313-win32.whl", hash = "sha256:a7787d353595c7c7e145e2331abf8b7ff1e6673a6b974ded96e6d4ec09f00c8c", size = 65037, upload-time = "2025-10-08T09:15:21.416Z" },
+    { url = "https://files.pythonhosted.org/packages/74/07/1ed8277f8653c40ebc65985180b007879f6a836c525b3885dcc6448ae6cb/msgpack-1.1.2-cp313-cp313-win_amd64.whl", hash = "sha256:a465f0dceb8e13a487e54c07d04ae3ba131c7c5b95e2612596eafde1dccf64a9", size = 72631, upload-time = "2025-10-08T09:15:22.431Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/db/0314e4e2db56ebcf450f277904ffd84a7988b9e5da8d0d61ab2d057df2b6/msgpack-1.1.2-cp313-cp313-win_arm64.whl", hash = "sha256:e69b39f8c0aa5ec24b57737ebee40be647035158f14ed4b40e6f150077e21a84", size = 64118, upload-time = "2025-10-08T09:15:23.402Z" },
 ]
 
 [[package]]
@@ -3495,7 +3645,8 @@ dependencies = [
     { name = "numpy" },
     { name = "python-dateutil" },
     { name = "pytz" },
-    { name = "tzdata" },
+    { name = "tzdata", version = "2024.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux' or sys_platform == 'win32' or (sys_platform != 'darwin' and extra == 'extra-10-city2graph-cpu') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu124') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128') or (extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu130') or (extra == 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130') or (extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130')" },
+    { name = "tzdata", version = "2025.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-city2graph-cu118') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-city2graph-cu124') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-city2graph-cu126') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-city2graph-cu128') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'darwin' and extra == 'extra-10-city2graph-cpu') or (sys_platform == 'darwin' and extra == 'extra-10-city2graph-cu118') or (sys_platform == 'darwin' and extra == 'extra-10-city2graph-cu124') or (sys_platform == 'darwin' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'darwin' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'darwin' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu124') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'linux' and extra == 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu124') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu130') or (sys_platform == 'win32' and extra == 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/33/01/d40b85317f86cf08d853a4f495195c73815fdf205eef3993821720274518/pandas-2.3.3.tar.gz", hash = "sha256:e05e1af93b977f7eafa636d043f9f94c7ee3ac81af99c13508215942e64c993b", size = 4495223, upload-time = "2025-09-29T23:34:51.853Z" }
 wheels = [
@@ -4518,6 +4669,15 @@ wheels = [
 ]
 
 [[package]]
+name = "smmap"
+version = "5.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/cd/a040c4b3119bbe532e5b0732286f805445375489fceaec1f48306068ee3b/smmap-5.0.2.tar.gz", hash = "sha256:26ea65a03958fa0c8a1c7e8c7a58fdc77221b8910f6be2131affade476898ad5", size = 22329, upload-time = "2025-01-02T07:14:40.909Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/be/d09147ad1ec7934636ad912901c5fd7667e1c858e19d355237db0d0cd5e4/smmap-5.0.2-py3-none-any.whl", hash = "sha256:b30115f0def7d7531d22a0fb6502488d879e75b260a9db4d0819cfb25403af5e", size = 24303, upload-time = "2025-01-02T07:14:38.724Z" },
+]
+
+[[package]]
 name = "snowballstemmer"
 version = "3.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -5386,8 +5546,47 @@ wheels = [
 
 [[package]]
 name = "tzdata"
+version = "2024.2"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "(python_full_version >= '3.12' and sys_platform == 'linux' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130') or (python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130')",
+    "(python_full_version < '3.12' and sys_platform == 'linux' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130') or (python_full_version < '3.12' and sys_platform == 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130')",
+    "(python_full_version >= '3.12' and sys_platform == 'linux' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130') or (python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130')",
+    "(python_full_version < '3.12' and sys_platform == 'linux' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130') or (python_full_version < '3.12' and sys_platform == 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130')",
+    "(python_full_version >= '3.12' and sys_platform == 'linux' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130') or (python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130')",
+    "(python_full_version < '3.12' and sys_platform == 'linux' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130') or (python_full_version < '3.12' and sys_platform == 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130')",
+    "(python_full_version >= '3.12' and sys_platform == 'linux' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130') or (python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130')",
+    "(python_full_version < '3.12' and sys_platform == 'linux' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130') or (python_full_version < '3.12' and sys_platform == 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130')",
+    "(python_full_version >= '3.12' and sys_platform == 'linux' and extra != 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130') or (python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130')",
+    "(python_full_version < '3.12' and sys_platform == 'linux' and extra != 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130') or (python_full_version < '3.12' and sys_platform == 'win32' and extra != 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130')",
+    "python_full_version >= '3.12' and sys_platform != 'darwin' and extra == 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+    "python_full_version < '3.12' and sys_platform != 'darwin' and extra == 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+    "python_full_version >= '3.12' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+    "python_full_version < '3.12' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e1/34/943888654477a574a86a98e9896bae89c7aa15078ec29f490fef2f1e5384/tzdata-2024.2.tar.gz", hash = "sha256:7d85cc416e9382e69095b7bdf4afd9e3880418a2413feec7069d533d6b4e31cc", size = 193282, upload-time = "2024-09-23T18:56:46.89Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a6/ab/7e5f53c3b9d14972843a647d8d7a853969a58aecc7559cb3267302c94774/tzdata-2024.2-py2.py3-none-any.whl", hash = "sha256:a48093786cdcde33cad18c2555e8532f34422074448fbc874186f0abd79565cd", size = 346586, upload-time = "2024-09-23T18:56:45.478Z" },
+]
+
+[[package]]
+name = "tzdata"
 version = "2025.2"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.12' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130'",
+    "python_full_version < '3.12' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra == 'extra-10-city2graph-cu130'",
+    "python_full_version >= '3.12' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+    "python_full_version < '3.12' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra == 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+    "python_full_version >= '3.12' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+    "python_full_version < '3.12' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra == 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+    "python_full_version >= '3.12' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+    "python_full_version < '3.12' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra == 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+    "python_full_version >= '3.12' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+    "python_full_version < '3.12' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-10-city2graph-cpu' and extra == 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+    "python_full_version >= '3.12' and sys_platform == 'darwin' and extra == 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+    "python_full_version < '3.12' and sys_platform == 'darwin' and extra == 'extra-10-city2graph-cpu' and extra != 'extra-10-city2graph-cu118' and extra != 'extra-10-city2graph-cu124' and extra != 'extra-10-city2graph-cu126' and extra != 'extra-10-city2graph-cu128' and extra != 'extra-10-city2graph-cu130'",
+]
 sdist = { url = "https://files.pythonhosted.org/packages/95/32/1a225d6164441be760d75c2c42e2780dc0873fe382da3e98a2e1e48361e5/tzdata-2025.2.tar.gz", hash = "sha256:b60a638fcc0daffadf82fe0f57e53d06bdec2f36c4df66280ae79bce6bd6f2b9", size = 196380, upload-time = "2025-03-23T13:54:43.652Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5c/23/c7abc0ca0a1526a0774eca151daeb8de62ec457e77262b66b359c3c7679e/tzdata-2025.2-py2.py3-none-any.whl", hash = "sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8", size = 347839, upload-time = "2025-03-23T13:54:41.845Z" },

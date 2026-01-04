@@ -149,6 +149,9 @@ docs = [
     "sphinxext-opengraph[social-cards] >=0.10.0",
     "sphinx-plotly-directive",
     "sphinx-sitemap",
+    "mkdocs-git-revision-date-localized-plugin",
+    "mkdocs-minify-plugin",
+    "mkdocs-rss-plugin",
     "black",
 ]
 dev = [
