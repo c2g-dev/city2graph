@@ -100,7 +100,7 @@ class GraphMetadata:
         self.node_mappings: dict[str, dict[str, dict[str | int, int] | str | list[str | int]]] = {}
         self.node_feature_cols: dict[str, list[str]] | list[str] | None = None
         self.node_label_cols: dict[str, list[str]] | list[str] | None = None
-        self.edge_feature_cols: dict[str, list[str]] | list[str] | None = None
+        self.edge_feature_cols: dict[tuple[str, str, str], list[str]] | list[str] | None = None
         self.edge_index_values: (
             dict[tuple[str, str, str], list[list[str | int]]] | list[list[str | int]] | None
         ) = None

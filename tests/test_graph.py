@@ -174,7 +174,10 @@ class TestGraphConversion:
                 sample_hetero_edges_dict,
                 node_feature_cols={"building": ["b_feat1"], "road": ["length"]},
                 node_label_cols={"building": ["b_label"]},
-                edge_feature_cols={"connects_to": ["conn_feat1"], "links_to": ["link_feat1"]},
+                edge_feature_cols={
+                    ("building", "connects_to", "road"): ["conn_feat1"],
+                    ("road", "links_to", "road"): ["link_feat1"],
+                },
             )
             assert data["building"].x.shape[1] == 1
             assert data["road"].x.shape[1] == 1
@@ -1050,11 +1053,10 @@ class TestOptionalTensorConversion:
         metadata.edge_types = [edge_type_1, edge_type_2]
         data.graph_metadata = metadata
 
-        # Test matching by full edge type tuple for e1
-        # and matching by relation string for e2
+        # Test matching by full edge type tuple for both
         _, edges_dict = pyg_to_gdf(
             data,
-            additional_edge_cols={edge_type_1: ["z"], "via": ["w"]},
+            additional_edge_cols={edge_type_1: ["z"], edge_type_2: ["w"]},
         )
         assert isinstance(edges_dict, dict)
         assert "z" in edges_dict[edge_type_1].columns
