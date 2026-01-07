@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## 0.2.3 (2026-01-07)
+
+### Added
+- N/A
+
+### Changed
+- N/A
+
+### Fixed
+- Fixed `edge_feature_cols` logic in `gdf_to_pyg` for heterogeneous graphs
+- Fixed `robots.txt` configuration
+
+### Documentation
+- Updated `robots.txt`
+
+
 ## 0.2.2 (2026-01-04)
 
 ### Added

@@ -12,8 +12,8 @@ authors:
 repository-code: "https://github.com/c2g-dev/city2graph"
 url: "https://city2graph.net"
 license: BSD-3-Clause
-version: 0.2.2
-date-released: 2026-01-04
+version: 0.2.3
+date-released: "2026-01-07"
 keywords:
   - GeoAI
   - Graph Neural Networks
