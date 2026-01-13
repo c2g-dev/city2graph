@@ -1,5 +1,5 @@
 site_name: City2Graph
-site_url: https://city2graph.net/
+site_url: https://city2graph.net/latest/
 site_author: Yuta Sato
 site_description: Transform urban data into graphs for spatial analysis and Graph Neural Networks
 repo_url: https://github.com/c2g-dev/city2graph
