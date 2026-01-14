@@ -158,6 +158,7 @@ plugins:
 
 # Markdown Extensions (Matches Sphinx features)
 markdown_extensions:
+  - meta
   - admonition
   - pymdownx.details
   - pymdownx.superfences
