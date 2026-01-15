@@ -1,5 +1,5 @@
 site_name: City2Graph
-site_url: https://city2graph.net/latest/
+site_url: !ENV [READTHEDOCS_CANONICAL_URL, 'https://city2graph.net/latest/']
 site_author: Yuta Sato
 site_description: >-
   City2Graph is a Python library to transform geospatial data (OSM, GTFS, POIs)
@@ -60,12 +60,14 @@ extra_javascript:
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
   - javascripts/gtag.js
   - javascripts/redirect.js
+  - javascripts/readthedocs.js
 
 # Plugins
 plugins:
   - search
   - mike
-  - social
+  # social plugin disabled - using custom OG meta tags in overrides/main.html instead
+  # (social plugin requires Cairo which may not be available on all systems)
   - git-revision-date-localized:
       enable_creation_date: true
   - minify:

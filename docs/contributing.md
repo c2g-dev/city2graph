@@ -1,5 +1,6 @@
 ---
 description: Guidelines for contributing to City2Graph. Learn how to report bugs, suggest features, and submit pull requests to help improve the project.
+keywords: contributing, pull request, bug report, feature request, development environment, pre-commit, pytest, code style, ruff, documentation
 hide:
   - navigation
 ---

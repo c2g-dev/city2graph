@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block site_meta %}
+{{ super() }}
+<meta name="readthedocs-addons-api-version" content="1" />
+
+{# Custom Social Card Meta Tags for SEO #}
+{% set social_image = config.site_url ~ "assets/logos/social_preview_city2graph.png" %}
+
+{# Use page-specific description if available, otherwise use site description #}
+{% if page and page.meta and page.meta.description %}
+  {% set page_description = page.meta.description %}
+{% else %}
+  {% set page_description = config.site_description %}
+{% endif %}
+
+{# Build page title #}
+{% if page and page.title %}
+  {% set page_title = page.title ~ " - " ~ config.site_name %}
+{% else %}
+  {% set page_title = config.site_name %}
+{% endif %}
+
+{# Open Graph meta tags #}
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="{{ config.site_name }}" />
+<meta property="og:title" content="{{ page_title }}" />
+<meta property="og:description" content="{{ page_description }}" />
+<meta property="og:image" content="{{ social_image }}" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1280" />
+<meta property="og:image:height" content="640" />
+<meta property="og:url" content="{{ page.canonical_url }}" />
+
+{# Twitter Card meta tags #}
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="{{ page_title }}" />
+<meta name="twitter:description" content="{{ page_description }}" />
+<meta name="twitter:image" content="{{ social_image }}" />
+
+{# Additional SEO meta tags #}
+<meta name="author" content="{{ config.site_author }}" />
+{% if page and page.meta and page.meta.keywords %}
+<meta name="keywords" content="{{ page.meta.keywords }}" />
+{% endif %}
+{% endblock %}

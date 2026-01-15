@@ -10,6 +10,7 @@ repos:
       - id: check-shebang-scripts-are-executable
       - id: check-toml
       - id: check-yaml
+        exclude: ^mkdocs\.yml$  # MkDocs uses custom !ENV tags
       - id: detect-private-key
       - id: end-of-file-fixer
       - id: fix-byte-order-marker
@@ -22,6 +23,7 @@ repos:
     hooks:
       - id: yamllint
         args: [--strict, --config-file=./tests/.yamllint.yml]
+        exclude: ^mkdocs\.yml$  # MkDocs uses custom syntax
 
   - repo: https://github.com/numpy/numpydoc
     rev: v1.9.0
