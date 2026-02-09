@@ -55,6 +55,7 @@ from .base import GraphMetadata
 
 # Public API definition
 __all__ = [
+    "clip_graph",
     "create_isochrone",
     "create_tessellation",
     "dual_graph",
@@ -63,6 +64,7 @@ __all__ = [
     "nx_to_gdf",
     "nx_to_rx",
     "plot_graph",
+    "remove_isolated_components",
     "rx_to_nx",
     "validate_gdf",
     "validate_nx",
@@ -4756,3 +4758,203 @@ def _plot_homo_graph(
     if nodes is not None and isinstance(nodes, gpd.GeoDataFrame):
         style_kwargs = _resolve_style_kwargs(kwargs, None, is_edge=False)
         _plot_gdf(nodes, ax, **style_kwargs)
+
+
+def _validate_graph_input(
+    graph: gpd.GeoDataFrame | tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph,
+) -> tuple[gpd.GeoDataFrame | None, gpd.GeoDataFrame, str]:
+    """
+    Validate graph input and extract nodes/edges GeoDataFrames.
+
+    Converts various graph representations to a common format for internal processing.
+
+    Parameters
+    ----------
+    graph : GeoDataFrame, tuple, or NetworkX graph
+        Input graph in any supported city2graph format.
+
+    Returns
+    -------
+    tuple[GeoDataFrame | None, GeoDataFrame, str]
+        Tuple of (nodes_gdf, edges_gdf, input_type).
+    """
+    if isinstance(graph, (nx.Graph, nx.MultiGraph)):
+        return *nx_to_gdf(graph, nodes=True, edges=True), "nx"
+    if isinstance(graph, tuple) and len(graph) == 2:
+        return graph[0], graph[1], "tuple"
+    if isinstance(graph, gpd.GeoDataFrame):
+        return None, graph, "gdf"
+    msg = "Input must be GeoDataFrame, (nodes, edges) tuple, or NetworkX graph."
+    raise TypeError(msg)
+
+
+def _return_graph_output(
+    nodes: gpd.GeoDataFrame | None,
+    edges: gpd.GeoDataFrame,
+    input_type: str,
+    as_nx: bool,
+) -> gpd.GeoDataFrame | tuple[gpd.GeoDataFrame | None, gpd.GeoDataFrame] | nx.Graph:
+    """
+    Return graph in format matching input type or as NetworkX if requested.
+
+    Standardizes output format logic for graph manipulation functions.
+
+    Parameters
+    ----------
+    nodes : GeoDataFrame or None
+        Nodes GeoDataFrame, or None for edges-only graphs.
+    edges : GeoDataFrame
+        Edges GeoDataFrame.
+    input_type : str
+        Original input type: "gdf", "tuple", or "nx".
+    as_nx : bool
+        If True, return as NetworkX graph.
+
+    Returns
+    -------
+    GeoDataFrame, tuple, or NetworkX graph
+        Graph in the requested output format.
+    """
+    if as_nx or input_type == "nx":
+        return gdf_to_nx(nodes=nodes, edges=edges) if nodes is not None else gdf_to_nx(edges=edges)
+    return (nodes, edges) if input_type == "tuple" else edges
+
+
+def _filter_nodes_by_edges(
+    nodes: gpd.GeoDataFrame | None,
+    edges: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame | None:
+    """
+    Filter nodes to only those connected to edges via MultiIndex.
+
+    Extracts node IDs from edge MultiIndex and filters nodes accordingly.
+
+    Parameters
+    ----------
+    nodes : GeoDataFrame or None
+        Nodes GeoDataFrame to filter, or None.
+    edges : GeoDataFrame
+        Edges GeoDataFrame with MultiIndex for connectivity info.
+
+    Returns
+    -------
+    GeoDataFrame or None
+        Filtered nodes GeoDataFrame, or None if input was None.
+    """
+    if nodes is None:
+        return None
+    if nodes.empty or edges.empty:
+        return nodes.iloc[0:0].copy()
+    if isinstance(edges.index, pd.MultiIndex) and edges.index.nlevels >= 2:
+        connected = set(edges.index.get_level_values(0)) | set(edges.index.get_level_values(1))
+        return nodes[nodes.index.isin(connected)].copy()
+    return nodes.copy()
+
+
+def clip_graph(
+    graph: gpd.GeoDataFrame | tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph,
+    area: Polygon | MultiPolygon | gpd.GeoDataFrame | gpd.GeoSeries,
+    keep_outer_neighbors: bool = False,
+    as_nx: bool = False,
+) -> gpd.GeoDataFrame | tuple[gpd.GeoDataFrame | None, gpd.GeoDataFrame] | nx.Graph:
+    """
+    Clip a graph to a specific area.
+
+    Filters edges to those within (or intersecting) a polygon area.
+    Nodes are filtered to include only those connected to remaining edges.
+
+    Parameters
+    ----------
+    graph : GeoDataFrame, tuple, or NetworkX graph
+        Input graph as edges GeoDataFrame, (nodes, edges) tuple, or NetworkX graph.
+    area : Polygon, MultiPolygon, GeoDataFrame, or GeoSeries
+        The area to clip to.
+    keep_outer_neighbors : bool, default False
+        If True, keeps segments that intersect the boundary.
+    as_nx : bool, default False
+        If True, return as NetworkX graph.
+
+    Returns
+    -------
+    GeoDataFrame, tuple, or NetworkX graph
+        Clipped graph in same format as input, or NetworkX if as_nx=True.
+    """
+    nodes, edges, input_type = _validate_graph_input(graph)
+
+    if edges.empty:
+        return _return_graph_output(nodes, edges, input_type, as_nx)
+
+    # Extract clip geometry
+    clip_geom = (
+        (area.geometry.union_all() if len(area) > 1 else area.geometry.iloc[0])
+        if isinstance(area, (gpd.GeoDataFrame, gpd.GeoSeries))
+        else area
+    )
+
+    # Filter or clip edges
+    clipped_edges = (
+        edges[edges.geometry.intersects(clip_geom)].copy()
+        if keep_outer_neighbors
+        else gpd.clip(edges, clip_geom)
+    )
+
+    # Explode MultiLineStrings (created by clipping or existing)
+    if not clipped_edges.empty and "MultiLineString" in clipped_edges.geometry.type.to_numpy():
+        clipped_edges = clipped_edges.explode(ignore_index=True)
+
+    return _return_graph_output(
+        _filter_nodes_by_edges(nodes, clipped_edges), clipped_edges, input_type, as_nx
+    )
+
+
+def remove_isolated_components(
+    graph: gpd.GeoDataFrame | tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph,
+    as_nx: bool = False,
+) -> gpd.GeoDataFrame | tuple[gpd.GeoDataFrame | None, gpd.GeoDataFrame] | nx.Graph:
+    """
+    Keep only the largest connected component of a graph.
+
+    Identifies all connected components and retains only the largest one.
+
+    Parameters
+    ----------
+    graph : GeoDataFrame, tuple, or NetworkX graph
+        Input graph as edges GeoDataFrame, (nodes, edges) tuple, or NetworkX graph.
+    as_nx : bool, default False
+        If True, return as NetworkX graph.
+
+    Returns
+    -------
+    GeoDataFrame, tuple, or NetworkX graph
+        Graph with only largest component, in same format as input.
+    """
+    nodes, edges, input_type = _validate_graph_input(graph)
+
+    if edges.empty:
+        return _return_graph_output(nodes, edges, input_type, as_nx)
+
+    # Build graph for component analysis
+    try:
+        nx_graph = gdf_to_nx(edges=edges)
+    except (ValueError, TypeError, KeyError):
+        return _return_graph_output(nodes, edges, input_type, as_nx)
+
+    if nx_graph.number_of_nodes() == 0:
+        return _return_graph_output(nodes, edges, input_type, as_nx)
+
+    # Find largest component
+    cc_func = nx.weakly_connected_components if nx_graph.is_directed() else nx.connected_components
+    largest_cc = max(cc_func(nx_graph), key=len)
+    subgraph = nx_graph.subgraph(largest_cc)
+
+    # Get original edge indices
+    edge_indices = [
+        d["_original_edge_index"]
+        for _, _, d in subgraph.edges(data=True)
+        if "_original_edge_index" in d
+    ]
+    filtered_edges = edges.loc[edge_indices] if edge_indices else edges.iloc[0:0]
+
+    return _return_graph_output(
+        _filter_nodes_by_edges(nodes, filtered_edges), filtered_edges, input_type, as_nx
+    )

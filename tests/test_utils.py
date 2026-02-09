@@ -17,6 +17,7 @@ import pandas as pd
 import pytest
 import rustworkx as rx
 from shapely.geometry import LineString
+from shapely.geometry import MultiLineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
 
@@ -2337,3 +2338,315 @@ class TestIdentifySourceTargetCols:
         result = utils._get_col_or_level(df, "my_index")
         assert result is not None
         assert (result == [10, 20, 30]).all()
+
+
+# ============================================================================
+# UTILITIES TESTS
+# ============================================================================
+
+
+class TestClipGraph(BaseGraphTest):
+    """Test graph clipping functionality."""
+
+    def test_clip_graph_basic(self, sample_crs: str) -> None:
+        """Test basic clipping with a polygon (default: strict within)."""
+        clip_poly = Polygon([(0, 0), (1, 0), (1, 2), (0, 2)])
+
+        gdf = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    LineString([(0, 0), (2, 0)]),  # partially inside
+                    LineString([(0.5, 0.5), (0.5, 1.5)]),  # fully inside
+                    LineString([(2, 0), (3, 0)]),  # fully outside
+                ]
+            },
+            crs=sample_crs,
+        )
+
+        # Default behavior: geometric clipping
+        clipped = utils.clip_graph(gdf, clip_poly)
+        assert isinstance(clipped, gpd.GeoDataFrame)
+        assert len(clipped) == 2  # Now keeps both fully inside and partially inside (clipped)
+
+        # Check that the partially inside line was clipped
+        _ = clipped[clipped.geometry.length < 1.1]  # The one that was clipped (length 1.0)
+        # Note: Depending on order/index, we need to be careful.
+        # Original: LineString([(0, 0), (2, 0)]) -> clipped to [(0,0), (1,0)]
+
+        # Verify geometries
+        # 1. [(0.5, 0.5), (0.5, 1.5)] - Unchanged, length 1.0
+        # 2. [(0, 0), (1, 0)] - Clipped, length 1.0
+
+        lengths = clipped.geometry.length.sort_values().to_numpy()
+        assert len(lengths) == 2
+        assert np.isclose(lengths[0], 1.0)
+        assert np.isclose(lengths[1], 1.0)
+
+    def test_clip_graph_keep_outer(self, sample_crs: str) -> None:
+        """Test clipping with keep_outer_neighbors=True (intersects)."""
+        clip_poly = Polygon([(0, 0), (1, 0), (1, 2), (0, 2)])
+        gdf = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    LineString([(0, 0), (2, 0)]),  # partially inside (intersects)
+                    LineString([(0.5, 0.5), (0.5, 1.5)]),  # fully inside
+                    LineString([(2, 0), (3, 0)]),  # fully outside
+                ]
+            },
+            crs=sample_crs,
+        )
+
+        clipped = utils.clip_graph(gdf, clip_poly, keep_outer_neighbors=True)
+        assert len(clipped) == 2
+
+    def test_clip_graph_geometry_handling(self, sample_crs: str) -> None:
+        """Test that MultiLineStrings are exploded."""
+        clip_poly = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+        gdf = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    MultiLineString([LineString([(1, 1), (2, 2)]), LineString([(3, 3), (4, 4)])])
+                ]
+            },
+            crs=sample_crs,
+        )
+
+        clipped = utils.clip_graph(gdf, clip_poly)
+        assert isinstance(clipped, gpd.GeoDataFrame)
+        assert len(clipped) == 2
+        assert all(isinstance(g, LineString) for g in clipped.geometry)
+
+    def test_clip_graph_empty_input(self, sample_crs: str) -> None:
+        """Test with empty input GeoDataFrame."""
+        empty_gdf = gpd.GeoDataFrame(geometry=[], crs=sample_crs)
+        clip_poly = Polygon([(0, 0), (1, 1), (1, 0)])
+
+        result = utils.clip_graph(empty_gdf, clip_poly)
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.empty
+
+    def test_clip_graph_area_as_gdf(self, sample_crs: str) -> None:
+        """Test passing area as GeoDataFrame."""
+        clip_poly = Polygon([(0, 0), (1, 0), (1, 2), (0, 2)])
+        area_gdf = gpd.GeoDataFrame({"geometry": [clip_poly]}, crs=sample_crs)
+
+        gdf = gpd.GeoDataFrame({"geometry": [LineString([(0.5, 0.5), (0.5, 1.5)])]}, crs=sample_crs)
+
+        clipped = utils.clip_graph(gdf, area_gdf)
+        assert len(clipped) == 1
+
+    def test_clip_graph_with_tuple_input(self, sample_crs: str) -> None:
+        """Test clipping with (nodes, edges) tuple input."""
+        clip_poly = Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])
+
+        nodes = gpd.GeoDataFrame(
+            {"geometry": [Point(0, 0), Point(1, 1), Point(3, 3)]},
+            index=pd.Index([1, 2, 3], name="node_id"),
+            crs=sample_crs,
+        )
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (1, 1)]), LineString([(1, 1), (3, 3)])]},
+            index=pd.MultiIndex.from_tuples([(1, 2), (2, 3)], names=["u", "v"]),
+            crs=sample_crs,
+        )
+
+        clipped_nodes, clipped_edges = utils.clip_graph((nodes, edges), clip_poly)
+        assert isinstance(clipped_nodes, gpd.GeoDataFrame)
+        assert isinstance(clipped_edges, gpd.GeoDataFrame)
+        assert len(clipped_edges) == 2  # Both edges now kept (one clipped)
+        assert len(clipped_nodes) == 3  # All nodes connected to kept edges
+
+    def test_clip_graph_with_nx_input(self, sample_crs: str) -> None:
+        """Test clipping with NetworkX graph input."""
+        clip_poly = Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])
+
+        nodes = gpd.GeoDataFrame(
+            {"geometry": [Point(0, 0), Point(1, 1), Point(3, 3)]},
+            index=pd.Index([1, 2, 3], name="node_id"),
+            crs=sample_crs,
+        )
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (1, 1)]), LineString([(1, 1), (3, 3)])]},
+            index=pd.MultiIndex.from_tuples([(1, 2), (2, 3)], names=["u", "v"]),
+            crs=sample_crs,
+        )
+        nx_graph = utils.gdf_to_nx(nodes=nodes, edges=edges)
+
+        result = utils.clip_graph(nx_graph, clip_poly)
+        assert isinstance(result, nx.Graph)
+
+    def test_clip_graph_as_nx_output(self, sample_crs: str) -> None:
+        """Test clipping with as_nx=True returns NetworkX graph."""
+        clip_poly = Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])
+        gdf = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0.5, 0.5), (1, 1)])]},
+            crs=sample_crs,
+        )
+
+        result = utils.clip_graph(gdf, clip_poly, as_nx=True)
+        assert isinstance(result, nx.Graph)
+
+
+class TestRemoveIsolatedComponents(BaseGraphTest):
+    """Test remove_isolated_components functionality."""
+
+    def test_remove_isolated_basic(self, sample_crs: str) -> None:
+        """Test basic isolation removal with GeoDataFrame."""
+        # Create a graph with two disconnected components
+        gdf = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    # Large component (3 edges)
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(1, 0), (2, 0)]),
+                    LineString([(2, 0), (3, 0)]),
+                    # Small isolated component (1 edge)
+                    LineString([(10, 10), (11, 10)]),
+                ]
+            },
+            crs=sample_crs,
+        )
+
+        result = utils.remove_isolated_components(gdf)
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert len(result) == 3  # Only large component kept
+
+    def test_remove_isolated_with_tuple_input(self, sample_crs: str) -> None:
+        """Test with (nodes, edges) tuple input."""
+        nodes = gpd.GeoDataFrame(
+            {"geometry": [Point(0, 0), Point(1, 0), Point(10, 10), Point(11, 10)]},
+            index=pd.Index([1, 2, 3, 4], name="node_id"),
+            crs=sample_crs,
+        )
+        edges = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    LineString([(0, 0), (1, 0)]),  # Component 1
+                    LineString([(10, 10), (11, 10)]),  # Component 2 (isolated)
+                ]
+            },
+            index=pd.MultiIndex.from_tuples([(1, 2), (3, 4)], names=["u", "v"]),
+            crs=sample_crs,
+        )
+
+        result_nodes, result_edges = utils.remove_isolated_components((nodes, edges))
+        assert isinstance(result_nodes, gpd.GeoDataFrame)
+        assert isinstance(result_edges, gpd.GeoDataFrame)
+        # Both components have same size (1 edge), first one should be kept
+        assert len(result_edges) == 1
+
+    def test_remove_isolated_with_nx_input(self, sample_crs: str) -> None:
+        """Test with NetworkX graph input."""
+        nodes = gpd.GeoDataFrame(
+            {"geometry": [Point(0, 0), Point(1, 0), Point(10, 10)]},
+            index=pd.Index([1, 2, 3], name="node_id"),
+            crs=sample_crs,
+        )
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (1, 0)])]},
+            index=pd.MultiIndex.from_tuples([(1, 2)], names=["u", "v"]),
+            crs=sample_crs,
+        )
+        nx_graph = utils.gdf_to_nx(nodes=nodes, edges=edges)
+        # Add isolated node
+        nx_graph.add_node(999, pos=(10, 10), geometry=Point(10, 10))
+
+        result = utils.remove_isolated_components(nx_graph)
+        assert isinstance(result, nx.Graph)
+
+    def test_remove_isolated_as_nx_output(self, sample_crs: str) -> None:
+        """Test with as_nx=True returns NetworkX graph."""
+        gdf = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (1, 0)])]},
+            crs=sample_crs,
+        )
+
+        result = utils.remove_isolated_components(gdf, as_nx=True)
+        assert isinstance(result, nx.Graph)
+
+    def test_remove_isolated_empty_input(self, sample_crs: str) -> None:
+        """Test with empty GeoDataFrame."""
+        empty_gdf = gpd.GeoDataFrame(geometry=[], crs=sample_crs)
+
+        result = utils.remove_isolated_components(empty_gdf)
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.empty
+
+    def test_remove_isolated_graph_conversion_error(self, sample_crs: str) -> None:
+        """Test remove_isolated_components when graph conversion fails (covers lines 4936-4940)."""
+        # Create a GeoDataFrame with geometry but invalid structure for graph conversion
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (1, 0)])]},
+            crs=sample_crs,
+        )
+        # Set a non-standard index that will cause issues
+        edges.index = pd.Index(["edge1"], name="weird_id")
+
+        # Should handle the error gracefully
+        result = utils.remove_isolated_components(edges)
+        assert isinstance(result, gpd.GeoDataFrame)
+
+    def test_remove_isolated_invalid_graph_structure(self, sample_crs: str) -> None:
+        """Test remove_isolated_components with edges that fail graph conversion."""
+        # Create a GeoDataFrame with geometry but non-standard index
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (1, 0)])]},
+            crs=sample_crs,
+        )
+        # No MultiIndex, just a simple index that won't convert to graph properly
+        edges.index = pd.Index(["edge1"], name="weird_id")
+
+        # Should handle gracefully
+        result = utils.remove_isolated_components(edges)
+        assert isinstance(result, gpd.GeoDataFrame)
+
+    def test_nx_to_gdf_pos_from_xy_attributes(self) -> None:
+        """Test nx_to_gdf with pos populated from x/y attributes (covers line 2237)."""
+        G = nx.Graph()
+        G.add_node(1, x=0.0, y=0.0)
+        G.add_node(2, x=1.0, y=1.0)
+        G.add_edge(1, 2)
+        G.graph = {"crs": "EPSG:27700", "is_hetero": False}
+
+        # Should populate 'pos' from x/y when calling nx_to_gdf
+        nodes_gdf = nx_to_gdf(G, nodes=True, edges=False)
+        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
+        assert len(nodes_gdf) == 2
+
+    def test_concave_hull_knn_two_points(self) -> None:
+        """Test concave_hull_knn with 2 points returns LineString (covers line 3000)."""
+        points = [Point(0, 0), Point(1, 1)]
+        result = utils._concave_hull_knn(points, k=10)
+        # With 2 points, should return a LineString
+        assert result.geom_type == "LineString"
+
+    def test_concave_hull_knn_one_point(self) -> None:
+        """Test concave_hull_knn with 1 point returns Point (covers line 3000)."""
+        points = [Point(0, 0)]
+        result = utils._concave_hull_knn(points, k=10)
+        # With 1 point, should return a Point
+        assert result.geom_type == "Point"
+
+    def test_concave_hull_alpha_degenerate(self) -> None:
+        """Test _concave_hull_alpha with 2 points (covers line 3300)."""
+        points = [Point(0, 0), Point(1, 1)]
+        result = utils._concave_hull_alpha(points, ratio=0.5, allow_holes=False)
+        # Should fallback to convex hull
+        assert result.geom_type in ["Polygon", "LineString", "Point"]
+
+    def test_isochrone_buffer_returns_non_polygon(self) -> None:
+        """Test create_isochrone handles non-polygon geometry from buffer."""
+        # Create a simple graph that might result in a geometry collection
+        G = nx.Graph()
+        G.add_node(1, pos=(0, 0), geometry=Point(0, 0))
+        G.graph = {"crs": "EPSG:27700"}
+
+        result = utils.create_isochrone(
+            G,
+            center_point=Point(0, 0),
+            threshold=10,
+            method="buffer",
+            buffer_distance=0.01,
+        )
+        # Result should always be Polygon or MultiPolygon
+        assert result.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]

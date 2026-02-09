@@ -8,22 +8,28 @@ operations commonly needed for urban network analysis.
 """
 
 # Standard library imports
+import io
 import json
 import subprocess
+import warnings
 from pathlib import Path
 
 # Third-party imports
 import geopandas as gpd
 import pandas as pd
+from geopy.geocoders import Nominatim
 from overturemaps.core import ALL_RELEASES
 from pyproj import CRS
 from shapely.geometry import LineString
 from shapely.geometry import MultiLineString
+from shapely.geometry import MultiPolygon
 from shapely.geometry import Polygon
 from shapely.ops import substring
 
+from .utils import clip_graph
+
 # Public API definition
-__all__ = ["load_overture_data", "process_overture_segments"]
+__all__ = ["get_boundaries", "load_overture_data", "process_overture_segments"]
 
 # =============================================================================
 # CONSTANTS AND CONFIGURATION
@@ -53,7 +59,8 @@ WGS84_CRS = "EPSG:4326"
 
 
 def load_overture_data(
-    area: list[float] | Polygon,
+    area: list[float] | Polygon | MultiPolygon | gpd.GeoSeries | gpd.GeoDataFrame | None = None,
+    place_name: str | None = None,
     types: list[str] | None = None,
     output_dir: str = ".",
     prefix: str = "",
@@ -63,6 +70,7 @@ def load_overture_data(
     connect_timeout: float | None = None,
     request_timeout: float | None = None,
     use_stac: bool = True,
+    **kwargs: bool,
 ) -> dict[str, gpd.GeoDataFrame]:
     """
     Load data from Overture Maps using the CLI tool and optionally save to GeoJSON files.
@@ -73,9 +81,15 @@ def load_overture_data(
 
     Parameters
     ----------
-    area : list[float] or Polygon
-        The area of interest. Can be either a bounding box as [min_lon, min_lat, max_lon, max_lat]
-        or a Polygon geometry.
+    area : list[float], Polygon, MultiPolygon, GeoSeries, or GeoDataFrame, optional
+        The area of interest. Can be:
+        - A bounding box as [min_lon, min_lat, max_lon, max_lat] in WGS84
+        - A Shapely Polygon/MultiPolygon (assumed to be in WGS84)
+        - A GeoSeries or GeoDataFrame with CRS info (will be reprojected to WGS84 if needed)
+        Mutually exclusive with place_name.
+    place_name : str, optional
+        Name of a place to geocode (e.g., "Liverpool, UK"). Uses Nominatim to retrieve
+        the boundary polygon. Mutually exclusive with area.
     types : list[str], optional
         List of Overture data types to download. If None, downloads all available types.
 
@@ -122,6 +136,10 @@ def load_overture_data(
     use_stac : bool, default True
         Whether to use Overture's STAC-geoparquet catalog to speed up queries. If False,
         data will be read normally without the STAC optimization.
+    **kwargs
+        Additional keyword arguments:
+        - keep_outer_neighbors (bool, default False): Whether to keep segments that
+          partially intersect the boundary (True) or only those fully within (False).
 
     Returns
     -------
@@ -161,6 +179,14 @@ def load_overture_data(
     >>> # Download without STAC optimization
     >>> data = load_overture_data(bbox, types=['building'], use_stac=False)
     """
+    # Validate area/place_name mutual exclusion
+    if (area is None) == (place_name is None):
+        msg = "Exactly one of 'area' or 'place_name' must be provided"
+        raise ValueError(msg)
+
+    if place_name is not None:
+        area = get_boundaries(place_name).geometry.iloc[0]
+
     # Validate input parameters
     types = types or list(VALID_OVERTURE_TYPES)
     invalid_types = [t for t in types if t not in VALID_OVERTURE_TYPES]
@@ -195,11 +221,68 @@ def load_overture_data(
             connect_timeout,
             request_timeout,
             use_stac,
+            keep_outer_neighbors=kwargs.get("keep_outer_neighbors", False),
         )
         if return_data:
             result[data_type] = gdf
 
     return result
+
+
+def get_boundaries(place_name: str, user_agent: str = "city2graph") -> gpd.GeoDataFrame:
+    """
+    Retrieve polygon boundary for a place using Nominatim geocoding.
+
+    Uses the Nominatim geocoding service to find the geographic boundary
+    of a named place (city, country, region) and returns it as a GeoDataFrame.
+
+    Parameters
+    ----------
+    place_name : str
+        Name of the place to geocode (e.g., "Liverpool, UK").
+    user_agent : str, default "city2graph"
+        User agent string for Nominatim API.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        GeoDataFrame with polygon geometry and place_name property.
+
+    Raises
+    ------
+    ValueError
+        If place is not found or returns non-polygon geometry.
+
+    Examples
+    --------
+    >>> boundary = get_boundaries("Liverpool, UK")
+    >>> data = load_overture_data(area=boundary.geometry.iloc[0], types=['building'])
+    """
+    # Get all geocoding results (not just the first one)
+    locations = Nominatim(user_agent=user_agent).geocode(
+        place_name, geometry="geojson", exactly_one=False
+    )
+
+    if not locations:
+        msg = f"Place not found: '{place_name}'"
+        raise ValueError(msg)
+
+    # Find the first result with a Polygon or MultiPolygon geometry
+    geojson = None
+    for location in locations:
+        geom = location.raw.get("geojson")
+        if geom is not None and geom.get("type") in ("Polygon", "MultiPolygon"):
+            geojson = geom
+            break
+
+    if geojson is None:
+        msg = f"No polygon boundary for '{place_name}'. Try an administrative region."
+        raise ValueError(msg)
+
+    return gpd.GeoDataFrame.from_features(
+        [{"type": "Feature", "geometry": geojson, "properties": {"place_name": place_name}}],
+        crs=WGS84_CRS,
+    )
 
 
 def process_overture_segments(
@@ -254,6 +337,15 @@ def process_overture_segments(
     if segments_gdf.empty:
         return segments_gdf
 
+    # Warn if CRS is geographic or missing
+    if segments_gdf.crs is None or segments_gdf.crs == WGS84_CRS:
+        warnings.warn(
+            "Segments GeoDataFrame has no CRS or is in WGS84 (EPSG:4326). "
+            "Projected CRS is recommended for accurate length calculation and processing.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     # Initialize result and ensure required columns exist
     result_gdf = segments_gdf.copy()
     if "level_rules" not in result_gdf.columns:
@@ -278,7 +370,9 @@ def process_overture_segments(
     return result_gdf
 
 
-def _prepare_area_and_bbox(area: list[float] | Polygon) -> tuple[str, Polygon | None]:
+def _prepare_area_and_bbox(
+    area: list[float] | Polygon | MultiPolygon | gpd.GeoSeries | gpd.GeoDataFrame,
+) -> tuple[str, Polygon | MultiPolygon | None]:
     """
     Prepare area input and convert to bbox string and clipping geometry.
 
@@ -287,14 +381,16 @@ def _prepare_area_and_bbox(area: list[float] | Polygon) -> tuple[str, Polygon | 
 
     Parameters
     ----------
-    area : list[float] or Polygon
-        The area of interest. Can be either a bounding box as [min_lon, min_lat, max_lon, max_lat]
-        or a Polygon geometry.
+    area : list[float], Polygon, MultiPolygon, GeoSeries, or GeoDataFrame
+        The area of interest. Can be:
+        - A bounding box as [min_lon, min_lat, max_lon, max_lat] in WGS84
+        - A Shapely Polygon/MultiPolygon (assumed to be in WGS84)
+        - A GeoSeries or GeoDataFrame with CRS info (will be reprojected to WGS84 if needed)
 
     Returns
     -------
-    tuple[str, Polygon or None]
-        Tuple containing bbox string and optional clipping geometry.
+    tuple[str, Polygon | MultiPolygon | None]
+        Tuple containing bbox string and optional clipping geometry (in WGS84).
 
     See Also
     --------
@@ -307,13 +403,17 @@ def _prepare_area_and_bbox(area: list[float] | Polygon) -> tuple[str, Polygon | 
     >>> bbox_str
     '-74.1,40.7,-74.0,40.8'
     """
-    if isinstance(area, Polygon):
-        # Convert to WGS84 if needed
-        area_wgs84 = (
-            area.to_crs(WGS84_CRS) if hasattr(area, "crs") and area.crs != WGS84_CRS else area
-        )
-        bbox_str = ",".join(str(round(c, 10)) for c in area_wgs84.bounds)
-        clip_geom = area_wgs84
+    # Handle GeoDataFrame/GeoSeries - extract geometry and reproject if needed
+    if isinstance(area, (gpd.GeoDataFrame, gpd.GeoSeries)):
+        wgs84_crs = CRS.from_epsg(4326)
+        if area.crs is not None and CRS.from_user_input(area.crs) != wgs84_crs:
+            area = area.to_crs(wgs84_crs)
+        # Extract the first geometry
+        area = area.geometry.iloc[0] if isinstance(area, gpd.GeoDataFrame) else area.iloc[0]
+
+    if isinstance(area, (Polygon, MultiPolygon)):
+        bbox_str = ",".join(str(round(c, 10)) for c in area.bounds)
+        clip_geom = area
     else:
         bbox_str = ",".join(str(float(b)) for b in area)
         clip_geom = None
@@ -321,18 +421,19 @@ def _prepare_area_and_bbox(area: list[float] | Polygon) -> tuple[str, Polygon | 
     return bbox_str, clip_geom
 
 
-def _download_and_process_type(
+def _download_and_process_type(  # noqa: PLR0912, PLR0913, C901
     data_type: str,
     bbox_str: str,
     output_dir: str,
     prefix: str,
     save_to_file: bool,
     return_data: bool,
-    clip_geom: Polygon | None,
+    clip_geom: Polygon | MultiPolygon | None,
     release: str | None = None,
     connect_timeout: float | None = None,
     request_timeout: float | None = None,
     use_stac: bool = True,
+    keep_outer_neighbors: bool = False,
 ) -> gpd.GeoDataFrame:
     """
     Download and process a single data type from Overture Maps.
@@ -354,7 +455,7 @@ def _download_and_process_type(
         Whether to save data to file.
     return_data : bool
         Whether to return the data.
-    clip_geom : Polygon or None
+    clip_geom : Polygon, MultiPolygon, or None
         Optional geometry for precise clipping.
     release : str or None
         Overture Maps release version to use.
@@ -368,6 +469,8 @@ def _download_and_process_type(
     use_stac : bool, default True
         Whether to use Overture's STAC-geoparquet catalog to speed up queries. If False,
         data will be read normally without the STAC optimization.
+    keep_outer_neighbors : bool, default False
+        Whether to keep segments that partially intersect the boundary.
 
     Returns
     -------
@@ -398,17 +501,31 @@ def _download_and_process_type(
     if save_to_file:
         cmd.extend(["-o", str(output_path)])
 
-    subprocess.run(cmd, check=True, capture_output=not save_to_file, text=True)
+    result = subprocess.run(cmd, check=True, capture_output=not save_to_file, text=True)
 
     if not return_data:
         return gpd.GeoDataFrame(geometry=[], crs=WGS84_CRS)
 
     # Load and clip data if needed
-    gdf = (
-        gpd.read_file(output_path)
-        if save_to_file and output_path.exists()
-        else gpd.GeoDataFrame(geometry=[], crs=WGS84_CRS)
-    )
+    if save_to_file and output_path.exists():
+        gdf = gpd.read_file(output_path)
+    elif not save_to_file and result.stdout and isinstance(result.stdout, str):
+        # Parse GeoJSON from subprocess stdout when not saving to file
+        # The CLI may output warning messages before the GeoJSON, so we need to
+        # find where the actual JSON starts (either { for object or [ for array)
+        stdout = result.stdout
+        json_start = -1
+        for i, char in enumerate(stdout):
+            if char in "{[":
+                json_start = i
+                break
+        gdf = (
+            gpd.read_file(io.StringIO(stdout[json_start:]))
+            if json_start >= 0
+            else gpd.GeoDataFrame(geometry=[], crs=WGS84_CRS)
+        )
+    else:
+        gdf = gpd.GeoDataFrame(geometry=[], crs=WGS84_CRS)
 
     if clip_geom is not None and not gdf.empty:
         clip_gdf = gpd.GeoDataFrame(geometry=[clip_geom], crs=WGS84_CRS)
@@ -421,7 +538,23 @@ def _download_and_process_type(
         if clip_crs_valid and gdf_crs_valid:
             if clip_gdf.crs != gdf.crs:
                 clip_gdf = clip_gdf.to_crs(gdf.crs)
-            gdf = gpd.clip(gdf, clip_gdf)
+
+            if data_type == "segment":
+                # For segments, use topological subsetting to preserve network integrity
+                gdf = clip_graph(
+                    gdf, clip_gdf.geometry.iloc[0], keep_outer_neighbors=keep_outer_neighbors
+                )
+            else:
+                # For visual features (buildings, etc.), use geometric clipping
+                gdf = gpd.clip(gdf, clip_gdf)
+
+    # Filter non-LineString geometries for segments
+    if data_type == "segment" and not gdf.empty:
+        valid_types = ["LineString", "MultiLineString"]
+        gdf = gdf[gdf.geometry.type.isin(valid_types)]
+
+        if "MultiLineString" in gdf.geometry.type.to_numpy():
+            gdf = gdf.explode(ignore_index=True)
 
     return gdf
 

@@ -31,9 +31,10 @@ dependencies = [
     "geopandas >=1.1.1",
     "libpysal >=4.12.1",
     "momepy",
-    "overturemaps>=0.17.0",
+    "overturemaps>=0.18.1",
     "rustworkx >=0.17.1",
     "scipy >=1.10.0",
+    "geopy >=2.4.0",
 ]
 
 [project.optional-dependencies]
