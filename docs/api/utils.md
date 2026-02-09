@@ -22,3 +22,5 @@ The utils module provides core utility functions for graph conversion, validatio
         - create_tessellation
         - create_isochrone
         - plot_graph
+        - clip_graph
+        - remove_isolated_components
