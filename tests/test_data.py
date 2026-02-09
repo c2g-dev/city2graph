@@ -249,14 +249,18 @@ class TestLoadOvertureData:
         args = mock_subprocess.call_args[0][0]
         assert "-o" not in args
 
+    @patch("city2graph.data.Path.exists")
     @patch("city2graph.data.subprocess.run")
     @patch("city2graph.data.gpd.read_file")
     def test_segment_geometry_filtering(
         self,
         mock_read_file: Mock,
+        mock_subprocess: Mock,
+        mock_exists: Mock,
         test_bbox: list[float],
     ) -> None:
         """Test that non-LineString geometries are filtered from segments."""
+        mock_exists.return_value = True
         # Create mixed geometry segments
         line = LineString([(0, 0), (1, 1)])
         point = Point(0.5, 0.5)
@@ -274,6 +278,7 @@ class TestLoadOvertureData:
 
         result = load_overture_data(test_bbox, types=["segment"])
 
+        mock_subprocess.assert_called()
         assert "segment" in result
         segments = result["segment"]
 
