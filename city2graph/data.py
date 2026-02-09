@@ -550,11 +550,13 @@ def _download_and_process_type(  # noqa: PLR0912, PLR0913, C901
 
     # Filter non-LineString geometries for segments
     if data_type == "segment" and not gdf.empty:
-        valid_types = ["LineString", "MultiLineString"]
-        gdf = gdf[gdf.geometry.type.isin(valid_types)]
-
-        if "MultiLineString" in gdf.geometry.type.to_numpy():
-            gdf = gdf.explode(ignore_index=True)
+        # Keep only LineStrings and explode MultiLineString
+        lines = gdf[gdf.geometry.type == "LineString"]
+        multi = gdf[gdf.geometry.type == "MultiLineString"]
+        if not multi.empty:
+            exploded = multi.explode(index_parts=False)
+            lines = pd.concat([lines, exploded])
+        gdf = lines.reset_index(drop=True)
 
     return gdf
 
