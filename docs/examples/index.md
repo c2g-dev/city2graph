@@ -21,6 +21,6 @@ This section provides examples of how to use City2Graph in various urban analysi
 | :--- | :--- | :--- | :--- | :--- |
 | [City2Graph: Python package for spatial network analysis and GeoAI with GNNs](https://medium.com/@yuta.sato.now/city2graph-a-python-package-for-spatial-network-analysis-and-graph-neural-networks-gnns-bc943dd6d85e) | Yuta Sato | EN | Tutorial | Sep 23, 2025 |
 | [I created a Python library that converts geospatial data into graph representations for heterogeneous GNNs](https://zenn.dev/yutasato/articles/9d7994dc53d378) | Yuta Sato | JA | Tutorial | Oct 14, 2025 |
-| [Verifying Hiroshima Station Redevelopment with Network Science using city2graph](https://nttdocomo-developers.jp/entry/2025/12/22/090000_6) | Koki Eguchi | JA | Blog | Dec 22, 2025 |
+| [Verifying Hiroshima Station Redevelopment with Network Science using city2graph](https://nttdocomo-developers.jp/entry/2025/12/22/090000_6_2) | Koki Eguchi | JA | Blog | Dec 22, 2025 |
 
 *Note*: We welcome external examples! Please submit [a pull request](https://github.com/c2g-dev/city2graph/pulls) if you have an example to share.
