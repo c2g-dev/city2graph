@@ -2151,6 +2151,38 @@ class TestPlotting(BaseGraphTest):
         finally:
             plt.close(fig)
 
+    def test_plot_graph_homo_with_legend_kwargs_and_title(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Homogeneous plotting should support legend kwargs and title."""
+        if not utils.MATPLOTLIB_AVAILABLE:
+            pytest.skip("matplotlib not available")
+
+        nodes = sample_nodes_gdf.copy()
+        nodes["centrality_quantile"] = range(len(nodes))
+
+        edge_linewidth = pd.Series([1.0] * len(sample_edges_gdf), index=sample_edges_gdf.index)
+        fig, ax = plt.subplots(figsize=(5, 5))
+        try:
+            utils.plot_graph(
+                nodes=nodes,
+                edges=sample_edges_gdf,
+                node_color="centrality_quantile",
+                edge_color="#bbbbbb",
+                edge_linewidth=edge_linewidth,
+                legend=True,
+                legend_kwargs={"label": "Betweenness Centrality", "orientation": "horizontal"},
+                title="Central London Transit Network Betweenness Centrality of Stops",
+                ax=ax,
+            )
+            assert (
+                ax.get_title() == "Central London Transit Network Betweenness Centrality of Stops"
+            )
+        finally:
+            plt.close(fig)
+
     @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_empty_gdf(self, empty_gdf: gpd.GeoDataFrame) -> None:
         """Test _plot_gdf with empty GeoDataFrame (line 3246)."""

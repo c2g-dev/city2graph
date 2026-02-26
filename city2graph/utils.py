@@ -4177,7 +4177,7 @@ def _resolve_plot_parameter(
     param_value: str | float | pd.Series | None,
     _param_name: str,
     default_value: Any,  # noqa: ANN401
-) -> str | float | pd.Series:
+) -> str | float | np.ndarray | pd.Series:
     """
     Resolve a plot parameter to a value usable by GeoPandas plot().
 
@@ -4196,15 +4196,15 @@ def _resolve_plot_parameter(
 
     Returns
     -------
-    str, float, or pd.Series
+    str, float, pd.Series, or np.ndarray
         Resolved parameter value.
     """
     if param_value is None:
         return default_value  # type: ignore[no-any-return]
     if isinstance(param_value, pd.Series):
-        return param_value
+        return param_value.to_numpy()
     if isinstance(param_value, str) and param_value in gdf.columns:
-        return gdf[param_value]  # type: ignore[no-any-return]
+        return gdf[param_value].to_numpy()  # type: ignore[no-any-return]
     return param_value
 
 
@@ -4336,6 +4336,9 @@ def _resolve_style_kwargs(
         "legend_position",
         "labelcolor",
         "title_color",
+        "legend",
+        "legend_kwargs",
+        "title",
     }
 
     # Start with all global kwargs, resolving potential type-specific dictionaries
@@ -4410,7 +4413,7 @@ def _plot_gdf(
     for param_name, default_val in param_defaults.items():
         val = _resolve_plot_parameter(gdf, kwargs.get(param_name), param_name, default_val)
         if val is not None:
-            if param_name == "color" and isinstance(val, pd.Series):
+            if param_name == "color" and isinstance(val, (pd.Series, np.ndarray)):
                 plot_kwargs["column"] = val
                 plot_kwargs.pop("color", None)
             else:
@@ -4749,15 +4752,31 @@ def _plot_homo_graph(
     **kwargs : Any
         Additional styling arguments.
     """
+    title = kwargs.get("title")
+    legend = kwargs.get("legend")
+    legend_kwargs = kwargs.get("legend_kwargs")
+    plot_kwargs = {k: v for k, v in kwargs.items() if k not in {"title", "legend", "legend_kwargs"}}
+
     # Plot edges first (in background)
     if edges is not None and isinstance(edges, gpd.GeoDataFrame):
-        style_kwargs = _resolve_style_kwargs(kwargs, None, is_edge=True)
+        style_kwargs = _resolve_style_kwargs(plot_kwargs, None, is_edge=True)
         _plot_gdf(edges, ax, **style_kwargs)
 
     # Plot nodes on top
     if nodes is not None and isinstance(nodes, gpd.GeoDataFrame):
-        style_kwargs = _resolve_style_kwargs(kwargs, None, is_edge=False)
+        style_kwargs = _resolve_style_kwargs(plot_kwargs, None, is_edge=False)
+        if legend is not None:
+            style_kwargs["legend"] = legend
+        if legend_kwargs is not None:
+            style_kwargs["legend_kwds"] = legend_kwargs
         _plot_gdf(nodes, ax, **style_kwargs)
+
+    if title is not None:
+        title_color = kwargs.get("title_color")
+        ax.set_title(
+            title,
+            color=title_color if title_color is not None else PLOT_DEFAULTS["title_color"],
+        )
 
 
 def _validate_graph_input(
