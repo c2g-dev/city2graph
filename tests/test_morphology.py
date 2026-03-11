@@ -544,7 +544,8 @@ class TestInputValidationAndErrors(TestMorphologyBase):
                 for msg in warning_messages
                 if "Source node for distance filtering not found" in msg
             ]
-            assert len(distance_warnings) > 0
+            # Since the str() cast bug is fixed, KDTree always returns a valid node ID
+            assert len(distance_warnings) == 0
 
         # Should still return valid (possibly empty) results
         self.validate_basic_output(nodes, edges, ["private", "public"])

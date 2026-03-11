@@ -4200,12 +4200,12 @@ def _resolve_plot_parameter(
         Resolved parameter value.
     """
     if param_value is None:
-        return default_value  # type: ignore[no-any-return]
+        return typing.cast("str | float | np.ndarray | pd.Series", default_value)
     if isinstance(param_value, pd.Series):
         return param_value.to_numpy()
     if isinstance(param_value, str) and param_value in gdf.columns:
-        return gdf[param_value].to_numpy()  # type: ignore[no-any-return]
-    return param_value
+        return typing.cast("str | float | np.ndarray | pd.Series", gdf[param_value].to_numpy())
+    return typing.cast("str | float | np.ndarray | pd.Series", param_value)
 
 
 def _get_color_for_type(i: int) -> str | tuple[float, float, float, float]:

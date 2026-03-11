@@ -18,6 +18,7 @@ The module specializes in three types of spatial relationships:
 import itertools
 import logging
 import math
+import typing
 import warnings
 
 # Third-party imports
@@ -1238,6 +1239,11 @@ def _add_building_info(
 
         # Remove the temporary 'index_right' column
         joined = joined.drop(columns=["index_right"])
+    else:
+        # Always allocate the "building_geometry" column even if sjoin yields 0 matches
+        joined["building_geometry"] = gpd.GeoSeries(
+            [None] * len(joined), index=joined.index, crs=buildings.crs
+        )
 
     return joined  # Return tessellation with added building geometry (if any)
 
@@ -1391,7 +1397,7 @@ def _filter_tessellation_by_network_distance(
 
 def _filter_nodes_by_path_length(
     graph: nx.Graph,
-    source_node_id: str,
+    source_node_id: typing.Hashable,
     max_distance: float,
     centroid_iloc_to_node_id: dict[int, str],
 ) -> list[int]:
@@ -1407,7 +1413,7 @@ def _filter_nodes_by_path_length(
     ----------
     graph : networkx.Graph
         The graph to perform the search on.
-    source_node_id : str
+    source_node_id : typing.Hashable
         The ID of the source node for the path length calculation.
     max_distance : float
         The maximum path length for a node to be included.
@@ -1591,7 +1597,7 @@ def _connect_centroids_to_centroids(
 def _find_closest_node_to_center(
     graph: nx.Graph,
     center_point_geom: Point,
-) -> str:
+) -> typing.Hashable:
     """
     Find the graph node ID closest to a geometric center point.
 
@@ -1622,8 +1628,8 @@ def _find_closest_node_to_center(
     # Query for the closest node to the center point
     _, idx = kdtree.query([center_point_geom.x, center_point_geom.y])
 
-    # Return the ID of the closest node
-    return str(node_ids[idx])
+    # Return the exact native ID of the closest node
+    return typing.cast("typing.Hashable", node_ids[int(idx)])
 
 
 # ============================================================================
