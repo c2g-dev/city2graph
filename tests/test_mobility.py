@@ -57,7 +57,7 @@ class TestODMatrixToGraph:
                 "w2": [10, 0, 2],
             }
         )
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             E,
             od_zones_gdf,
             zone_id_col="zone_id",
@@ -112,7 +112,7 @@ class TestODMatrixToGraph:
                 "flow": [3, 2, 1, 4],
             }
         )
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             E,
             od_zones_gdf,
             zone_id_col="zone_id",
@@ -137,7 +137,7 @@ class TestODMatrixToGraph:
                 "flow": [1, 1, 1],
             }
         )
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             E,
             od_zones_gdf,
             zone_id_col="zone_id",
@@ -269,7 +269,7 @@ class TestODMatrixToGraph:
             index=od_zones_gdf["zone_id"],
             columns=od_zones_gdf["zone_id"],
         )
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             A,
             od_zones_gdf,
             zone_id_col="zone_id",
@@ -287,7 +287,7 @@ class TestODMatrixToGraph:
         """Unknown IDs are dropped; if nothing remains, ValueError is raised."""
         # One valid, one invalid edge -> should drop invalid
         E = pd.DataFrame({"source": ["A", "X"], "target": ["B", "A"], "flow": [1, 3]})
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             E,
             od_zones_gdf,
             zone_id_col="zone_id",
@@ -316,7 +316,7 @@ class TestODMatrixToGraph:
     ) -> None:
         """High threshold removes all edges but preserves schema columns."""
         E = pd.DataFrame({"source": ["A"], "target": ["B"], "w1": [1], "w2": [5]})
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             E,
             od_zones_gdf,
             zone_id_col="zone_id",
@@ -332,7 +332,7 @@ class TestODMatrixToGraph:
     def test_undirected_with_self_loop_preserved(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """In undirected mode, self-loops are preserved as-is after symmetrization."""
         E = pd.DataFrame({"source": ["A", "A"], "target": ["A", "B"], "flow": [2, 3]})
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             E,
             od_zones_gdf,
             zone_id_col="zone_id",
@@ -495,7 +495,7 @@ class TestODMatrixToGraph:
         zones = od_zones_gdf.copy()
         zones.loc[1, "geometry"] = None  # make B missing
         E = pd.DataFrame({"source": ["A", "B"], "target": ["B", "A"], "flow": [1, 2]})
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             E,
             zones,
             zone_id_col="zone_id",
@@ -515,7 +515,7 @@ class TestODMatrixToGraph:
         A = pd.DataFrame(
             np.zeros((3, 3)), index=od_zones_gdf["zone_id"], columns=od_zones_gdf["zone_id"]
         )
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             A, od_zones_gdf, zone_id_col="zone_id", matrix_type="adjacency"
         )
         assert edges.empty
@@ -585,7 +585,7 @@ class TestODMatrixToGraph:
                 "flow": [np.nan, -1, 0.5, 0],
             }
         )
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             E, od_zones_gdf, zone_id_col="zone_id", matrix_type="edgelist", weight_cols=["flow"]
         )
         # NaN->0 then drop zeros; negative retained but threshold None drops values <=0
@@ -596,7 +596,7 @@ class TestODMatrixToGraph:
     def test_self_loop_removed_when_not_included(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """Self-loop is removed by default include_self_loops=False."""
         E = pd.DataFrame({"source": ["A", "A"], "target": ["A", "B"], "flow": [5, 1]})
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             E,
             od_zones_gdf,
             zone_id_col="zone_id",
@@ -616,7 +616,7 @@ class TestODMatrixToGraph:
             index=["A", "B", "X"],
             columns=["A", "B", "X"],
         )
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             A, od_zones_gdf, zone_id_col="zone_id", matrix_type="adjacency"
         )
         # Only edges among A,B retained
@@ -630,7 +630,7 @@ class TestODMatrixToGraph:
         # Remove CRS in a version-robust way (GeoPandas requires allow_override when overriding)
         zones = zones.set_crs(None, allow_override=True)
         E = pd.DataFrame({"source": ["A"], "target": ["B"], "flow": [1]})
-        nodes, edges = od_matrix_to_graph(
+        nodes, _edges = od_matrix_to_graph(
             E,
             zones,
             zone_id_col="zone_id",
@@ -682,7 +682,7 @@ class TestODMatrixToGraph:
                 "w2": [10, 20, 30, 40],
             }
         )
-        nodes, edges = od_matrix_to_graph(
+        _nodes, edges = od_matrix_to_graph(
             E,
             od_zones_gdf,
             zone_id_col="zone_id",

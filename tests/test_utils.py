@@ -1439,7 +1439,7 @@ class TestNxConversions(BaseConversionTest):
             graph.nodes[node]["pos"] = (0, 0)
 
         # Convert back - this should handle empty node records
-        nodes_gdf, edges_gdf_out = converter.nx_to_gdf(graph)
+        nodes_gdf, _edges_gdf_out = converter.nx_to_gdf(graph)
         assert isinstance(nodes_gdf, gpd.GeoDataFrame)
 
     def test_build_edge_index_empty(self) -> None:
@@ -1466,7 +1466,7 @@ class TestNxConversions(BaseConversionTest):
         G.graph = {"crs": sample_crs, "is_hetero": False, "node_index_names": None}
 
         # Convert to GDF - should handle empty records gracefully
-        nodes_gdf, edges_gdf = utils.nx_to_gdf(G)
+        nodes_gdf, _edges_gdf = utils.nx_to_gdf(G)
         assert isinstance(nodes_gdf, gpd.GeoDataFrame)
         assert len(nodes_gdf) == 2
         assert "geometry" in nodes_gdf.columns
@@ -1965,7 +1965,7 @@ class TestPlotting(BaseGraphTest):
         """Test error when matplotlib is missing."""
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(utils, "MATPLOTLIB_AVAILABLE", False)
-            with pytest.raises(ImportError, match="(?i)matplotlib is required"):
+            with pytest.raises(ImportError, match=r"(?i)matplotlib is required"):
                 utils.plot_graph(sample_nx_graph)
 
     def test_plot_graph_no_input(self) -> None:
@@ -2242,7 +2242,7 @@ class TestPlotting(BaseGraphTest):
         }
 
         # This should return early without creating a plot
-        fig, ax = plt.subplots()
+        fig, _ax = plt.subplots()
         utils._plot_hetero_subplots(
             sample_hetero_nodes_dict,
             empty_edges_dict,
@@ -2265,7 +2265,7 @@ class TestPlotting(BaseGraphTest):
         single_edge_type = next(iter(sample_hetero_edges_dict.keys()))
         single_edge_dict = {single_edge_type: sample_hetero_edges_dict[single_edge_type]}
 
-        fig, ax = plt.subplots()
+        _fig, _ax = plt.subplots()
         utils.plot_graph(
             nodes=sample_hetero_nodes_dict,
             edges=single_edge_dict,

@@ -656,13 +656,13 @@ class TestGraphValidation:
         # Position tensor mismatch
         data = gdf_to_pyg(sample_nodes_gdf)
         data.pos = torch.randn(1, 2)  # Wrong size
-        with pytest.raises(ValueError, match="position tensor size.*doesn't match"):
+        with pytest.raises(ValueError, match=r"position tensor size.*doesn't match"):
             validate_pyg(data)
 
         # Label tensor mismatch
         data = gdf_to_pyg(sample_nodes_gdf, node_label_cols=["label1"])
         data.y = torch.randn(1, 1)  # Wrong size
-        with pytest.raises(ValueError, match="label tensor size.*doesn't match"):
+        with pytest.raises(ValueError, match=r"label tensor size.*doesn't match"):
             validate_pyg(data)
 
     def test_hetero_label_tensor_mismatch(
@@ -681,7 +681,7 @@ class TestGraphValidation:
 
         with pytest.raises(
             ValueError,
-            match="Node type 'building': label tensor size.*doesn't match",
+            match=r"Node type 'building': label tensor size.*doesn't match",
         ):
             validate_pyg(data)
 
@@ -722,7 +722,7 @@ class TestGraphValidation:
         data.edge_attr = torch.randn(2, 1)  # Wrong size
         with pytest.raises(
             ValueError,
-            match="Edge attribute tensor size.*doesn't match number of edges",
+            match=r"Edge attribute tensor size.*doesn't match number of edges",
         ):
             validate_pyg(data)
 
@@ -730,7 +730,7 @@ class TestGraphValidation:
         """Test tensor validation for heterogeneous graphs."""
         node_type = next(iter(sample_pyg_hetero_data.node_types))
         sample_pyg_hetero_data[node_type].pos = torch.randn(1, 2)  # Wrong size
-        with pytest.raises(ValueError, match="position tensor size.*doesn't match"):
+        with pytest.raises(ValueError, match=r"position tensor size.*doesn't match"):
             validate_pyg(sample_pyg_hetero_data)
 
     def test_homogeneous_validation_errors(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:

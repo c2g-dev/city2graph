@@ -259,7 +259,7 @@ def add_metapaths_by_weight(  # noqa: PLR0913
 
     # Prepare data for sparse matrix construction
     (
-        node_to_idx,
+        _node_to_idx,
         idx_to_node,
         endpoint_indices,
         row_indices,
@@ -983,7 +983,7 @@ def _empty_metapath_frame(
     pandas.DataFrame
         Empty DataFrame with the requested columns and index structure.
     """
-    columns = ["weight"] + (edge_attrs if edge_attrs else [])
+    columns = ["weight"] + (edge_attrs or [])
     frame = pd.DataFrame(columns=columns)
     frame.index = pd.MultiIndex.from_tuples([], names=[start_index_name, end_index_name])
     return frame

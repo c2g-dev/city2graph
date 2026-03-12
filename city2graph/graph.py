@@ -574,7 +574,7 @@ class PyGConverter(BaseGraphConverter):
 
         for edge_type, edge_gdf in edges_dict.items():
             # Extract source, relation, and destination types from edge_type tuple
-            src_type, rel_type, dst_type = edge_type
+            src_type, _, dst_type = edge_type
 
             # Get the mapping dictionaries (not the full metadata)
             # The type system guarantees these are dictionaries based on _process_hetero_nodes
@@ -599,8 +599,6 @@ class PyGConverter(BaseGraphConverter):
                     if edge_pairs
                     else torch.zeros((2, 0), dtype=torch.long, device=device)
                 )
-                data[edge_type].edge_index = edge_index
-
                 data[edge_type].edge_index = edge_index
 
                 feature_cols = edge_feature_cols.get(edge_type) if edge_feature_cols else None
@@ -858,7 +856,7 @@ class PyGConverter(BaseGraphConverter):
         else:
             # Handle missing geometry
             length = len(next(iter(gdf_data.values()))) if gdf_data else 0
-            empty_geom = gpd.GeoSeries([None] * length, crs=metadata.crs if metadata.crs else None)
+            empty_geom = gpd.GeoSeries([None] * length, crs=metadata.crs or None)
             gdf = gpd.GeoDataFrame(gdf_data, geometry=empty_geom, index=index_values)
 
         # Set index names and CRS
@@ -937,7 +935,7 @@ class PyGConverter(BaseGraphConverter):
         else:
             # Handle missing geometry
             length = len(next(iter(gdf_data.values()))) if gdf_data else 0
-            empty_geom = gpd.GeoSeries([None] * length, crs=metadata.crs if metadata.crs else None)
+            empty_geom = gpd.GeoSeries([None] * length, crs=metadata.crs or None)
             gdf = gpd.GeoDataFrame(gdf_data, geometry=empty_geom, index=index_values)
 
         # Set index names and CRS

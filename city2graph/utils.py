@@ -1785,7 +1785,7 @@ def dual_graph(
     >>> dual_nodes, dual_edges = dual_graph((nodes, edges))
     """
     # Validate input type and extract GeoDataFrames
-    nodes_gdf, edges_gdf = _validate_dual_graph_input(graph)
+    _nodes_gdf, edges_gdf = _validate_dual_graph_input(graph)
 
     # Ensure edges have a CRS
     if edges_gdf.crs is None:

@@ -247,7 +247,7 @@ class TestMorphologicalGraphEdgeCases(TestMorphologyBase):
         Point(0, 0)
 
         # Test negative clipping buffer (this should raise ValueError)
-        with pytest.raises(ValueError, match="clipping_buffer cannot be negative."):
+        with pytest.raises(ValueError, match=r"clipping_buffer cannot be negative."):
             morphological_graph(
                 sample_buildings_gdf,
                 sample_segments_gdf,
@@ -433,7 +433,7 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
 
     def test_public_to_public_edge_structure(self, sample_segments_gdf: gpd.GeoDataFrame) -> None:
         """Test public-to-public edge structure."""
-        nodes, edges = public_to_public_graph(sample_segments_gdf)
+        _nodes, edges = public_to_public_graph(sample_segments_gdf)
         self.validate_edge_columns(edges, ["from_public_id", "to_public_id"])
 
     def test_public_to_public_multiindex_handling(self, sample_crs: str) -> None:

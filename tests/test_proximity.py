@@ -310,7 +310,7 @@ def test_group_nodes_predicate_alias_within() -> None:
     """Predicate 'within' excludes boundary point so only interior point remains."""
     polys, pts = make_poly_points_pair()
     # Shift third point to be strictly outside
-    nodes, edges = group_nodes(polys, pts, predicate="within")
+    _nodes, edges = group_nodes(polys, pts, predicate="within")
     edge_key = next(iter(edges))
     # Points 1 only strictly within (point 2 is on boundary so excluded for within)
     e = edges[edge_key]
@@ -361,7 +361,7 @@ class TestContiguityPublicAPI:
     def test_small_grid(self) -> None:
         """Smoke test small grid contiguity output symmetry."""
         gdf = make_square_polygons()
-        nodes, edges = contiguity_graph(gdf)
+        nodes, _edges = contiguity_graph(gdf)
         assert set(nodes.index) == set(gdf.index)
         # Edges GeoDataFrame stores undirected edges once (u,v where u<v maybe);
         # validate symmetry by converting to networkx graph and checking neighbors.
@@ -422,7 +422,7 @@ def test_delaunay_network_metric(
     network_edges: gpd.GeoDataFrame, small_points: gpd.GeoDataFrame
 ) -> None:
     """Delaunay with network metric attaches network-based weights/geometries."""
-    nodes, edges = delaunay_graph(
+    _nodes, edges = delaunay_graph(
         small_points, distance_metric="network", network_gdf=network_edges
     )
     if len(small_points) >= 3:
@@ -451,7 +451,7 @@ def test_mst_network_metric(
     network_edges: gpd.GeoDataFrame, small_points: gpd.GeoDataFrame
 ) -> None:
     """Minimum spanning tree under network metric (complete graph fallback)."""
-    nodes, edges = euclidean_minimum_spanning_tree(
+    _nodes, edges = euclidean_minimum_spanning_tree(
         small_points, distance_metric="network", network_gdf=network_edges
     )
     # Tree edges <= n-1
@@ -470,7 +470,7 @@ def test_fixed_radius_network_metric(
 
 def test_waxman_basic(small_points: gpd.GeoDataFrame) -> None:
     """Waxman graph probabilistic construction (schema validation)."""
-    nodes, edges = waxman_graph(small_points, beta=0.5, r0=3.0, seed=123)
+    _nodes, edges = waxman_graph(small_points, beta=0.5, r0=3.0, seed=123)
     assert set(edges.columns) >= {"weight", "geometry"}
 
 
@@ -571,7 +571,7 @@ def test_group_nodes_network_metric_success() -> None:
         lines.append(LineString([poly_centroid, p]))
     mi = pd.MultiIndex.from_arrays([src, dst], names=("source_id", "target_id"))
     net = gpd.GeoDataFrame({"geometry": lines}, index=mi, crs=polys.crs)
-    nodes, edges = group_nodes(polys, pts, distance_metric="network", network_gdf=net)
+    _nodes, edges = group_nodes(polys, pts, distance_metric="network", network_gdf=net)
     edge_key = next(iter(edges))
     e = edges[edge_key]
     assert len(e) == 2  # two contained points
@@ -593,7 +593,7 @@ def test_group_nodes_network_with_length_weight() -> None:
         lengths.append(seg.length)
     mi = pd.MultiIndex.from_arrays([src, dst], names=("source_id", "target_id"))
     net = gpd.GeoDataFrame({"length": lengths, "geometry": lines}, index=mi, crs=polys.crs)
-    nodes, edges = group_nodes(polys, pts, distance_metric="network", network_gdf=net)
+    _nodes, edges = group_nodes(polys, pts, distance_metric="network", network_gdf=net)
     edge_key = next(iter(edges))
     e = edges[edge_key]
     assert len(e) == 2
@@ -613,7 +613,7 @@ def test_group_nodes_no_matches_nonempty() -> None:
         geometry=[Point(0, 0), Point(1, 1)],
         crs="EPSG:3857",
     ).set_index("pid")
-    nodes, edges = group_nodes(polys, pts)
+    _nodes, edges = group_nodes(polys, pts)
     edge_key = next(iter(edges))
     assert edges[edge_key].empty
 
@@ -650,7 +650,7 @@ def test_contiguity_network_metric_success() -> None:
         index=pd.MultiIndex.from_arrays([[0], [1]], names=("source_id", "target_id")),
         crs=gdf.crs,
     )
-    nodes, edges = contiguity_graph(gdf, distance_metric="network", network_gdf=net)
+    _nodes, edges = contiguity_graph(gdf, distance_metric="network", network_gdf=net)
     assert len(edges) == 1
 
 
@@ -681,7 +681,7 @@ def test_contiguity_network_length_weight_branch() -> None:
         index=pd.MultiIndex.from_arrays([[0], [1]], names=("source_id", "target_id")),
         crs=gdf.crs,
     )
-    nodes, edges = contiguity_graph(gdf, distance_metric="network", network_gdf=net)
+    _nodes, edges = contiguity_graph(gdf, distance_metric="network", network_gdf=net)
     assert len(edges) == 1
     # Ensure geometry and weight present (path weight via 'length')
     assert set(edges.columns) >= {"weight", "geometry"}

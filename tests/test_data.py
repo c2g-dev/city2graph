@@ -180,7 +180,7 @@ class TestLoadOvertureData:
             ),
             pytest.raises(
                 ValueError,
-                match="Invalid release: 2099-99-99.0. Valid releases are: 2025-08-20.0, 2025-08-20.1, 2025-09-24.0",
+                match=r"Invalid release: 2099-99-99.0. Valid releases are: 2025-08-20.0, 2025-08-20.1, 2025-09-24.0",
             ),
         ):
             load_overture_data(test_bbox, types=["building"], release=invalid_release)

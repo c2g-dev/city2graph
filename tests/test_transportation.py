@@ -393,7 +393,7 @@ class TestTravelSummaryGraph:
 
         with pytest.raises(
             ValueError,
-            match="calendar_start/calendar_end specified but GTFS feed has no calendar.txt",
+            match=r"calendar_start/calendar_end specified but GTFS feed has no calendar.txt",
         ):
             travel_summary_graph(gtfs_copy, calendar_start="20240101", calendar_end="20240107")
 
@@ -409,7 +409,7 @@ class TestTravelSummaryGraph:
 
         with pytest.raises(
             ValueError,
-            match="calendar_start/calendar_end specified but calendar.txt is empty",
+            match=r"calendar_start/calendar_end specified but calendar.txt is empty",
         ):
             travel_summary_graph(gtfs_copy, calendar_start="20240101", calendar_end="20240107")
 
@@ -420,7 +420,7 @@ class TestTravelSummaryGraph:
         """Test travel summary graph with invalid calendar_start format."""
         with pytest.raises(
             ValueError,
-            match="Invalid calendar_start format: invalid-date. Expected YYYYMMDD.",
+            match=r"Invalid calendar_start format: invalid-date. Expected YYYYMMDD.",
         ):
             travel_summary_graph(
                 sample_gtfs_dict,
@@ -435,7 +435,7 @@ class TestTravelSummaryGraph:
         """Test travel summary graph with invalid calendar_end format."""
         with pytest.raises(
             ValueError,
-            match="Invalid calendar_end format: invalid-date. Expected YYYYMMDD.",
+            match=r"Invalid calendar_end format: invalid-date. Expected YYYYMMDD.",
         ):
             travel_summary_graph(
                 sample_gtfs_dict,

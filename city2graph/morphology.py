@@ -806,7 +806,7 @@ def _validate_input_gdfs(buildings_gdf: gpd.GeoDataFrame, segments_gdf: gpd.GeoD
     if not segments_gdf.empty:
         # Assuming LineString is required for operations like dual_graph
         segment_geom_types = segments_gdf.geometry.geom_type.unique()
-        if not all(geom_type in {"LineString"} for geom_type in segment_geom_types):
+        if not all(geom_type == "LineString" for geom_type in segment_geom_types):
             msg = (
                 f"segments_gdf must contain only LineString geometries. "
                 f"Found: {', '.join(segment_geom_types)}"

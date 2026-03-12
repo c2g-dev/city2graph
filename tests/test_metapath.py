@@ -359,7 +359,7 @@ class TestMetapaths:
             assert ("road", "metapath_0", "road") in edges_rev
         else:
             bad_mp = [("x", "y", "z"), ("z", "y", "x")]
-            with pytest.raises(KeyError, match="Edge type .* not found"):
+            with pytest.raises(KeyError, match=r"Edge type .* not found"):
                 add_metapaths(
                     (sample_hetero_nodes_dict, sample_hetero_edges_dict),
                     sequence=bad_mp,
