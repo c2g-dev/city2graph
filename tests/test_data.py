@@ -139,6 +139,35 @@ class TestLoadOvertureData:
 
     @patch("city2graph.data.subprocess.run")
     @patch("city2graph.data.gpd.read_file")
+    @patch("city2graph.data.clip_graph")
+    @patch("city2graph.data.Path.exists")
+    def test_segment_polygon_clipping_uses_topological_subset(
+        self,
+        mock_exists: Mock,
+        mock_clip_graph: Mock,
+        mock_read_file: Mock,
+        mock_subprocess: Mock,
+        test_polygon: Polygon,
+    ) -> None:
+        """Segment clipping should use clip_graph instead of geometric clipping."""
+        segment_gdf = gpd.GeoDataFrame(
+            {"id": ["seg1"]},
+            geometry=[LineString([(0, 0), (1, 1)])],
+            crs=WGS84_CRS,
+        )
+        clipped_gdf = segment_gdf.copy()
+        mock_exists.return_value = True
+        mock_read_file.return_value = segment_gdf
+        mock_clip_graph.return_value = clipped_gdf
+
+        result = load_overture_data(test_polygon, types=["segment"])
+
+        mock_clip_graph.assert_called_once()
+        mock_subprocess.assert_called_once()
+        assert result["segment"].equals(clipped_gdf)
+
+    @patch("city2graph.data.subprocess.run")
+    @patch("city2graph.data.gpd.read_file")
     @patch("city2graph.data.Path.mkdir")
     def test_with_multipolygon(
         self,
@@ -950,18 +979,21 @@ class TestProcessOvertureSegments:
 
     def test_connectors_as_list(self) -> None:
         """Test process_overture_segments when connectors column is already a list."""
-        segments_gdf = make_segments_gdf(
-            ids=["seg1"],
-            geoms_or_coords=[[(0, 0), (2, 0)]],
-            connectors='[{"connector_id": "c1", "at": 0.5}]',
-            level_rules="",
+        segments_gdf = gpd.GeoDataFrame(
+            {
+                "id": ["seg1"],
+                "connectors": [[{"connector_id": "c1", "at": 0.5}]],
+                "level_rules": [""],
+            },
+            geometry=[LineString([(0, 0), (2, 0)])],
             crs=WGS84_CRS,
         )
         connectors_gdf = make_connectors_gdf(ids=["c1"], coords=[(1, 0)], crs=WGS84_CRS)
 
         result = process_overture_segments(segments_gdf, connectors_gdf=connectors_gdf)
 
-        assert len(result) >= 1
+        assert len(result) == 2
+        assert set(result["id"]) == {"seg1_1", "seg1_2"}
 
     def test_connectors_json_decode_error(self) -> None:
         """Test process_overture_segments with JSON that causes decode error."""
@@ -980,16 +1012,19 @@ class TestProcessOvertureSegments:
 
     def test_level_rules_as_list(self) -> None:
         """Test process_overture_segments when level_rules is already a list."""
-        segments_gdf = make_segments_gdf(
-            ids=["seg1"],
-            geoms_or_coords=[[(0, 0), (4, 4)]],
-            level_rules='[{"value": 1, "between": [0.1, 0.5]}]',
+        segments_gdf = gpd.GeoDataFrame(
+            {
+                "id": ["seg1"],
+                "level_rules": [[{"value": 1, "between": [0.1, 0.5]}]],
+            },
+            geometry=[LineString([(0, 0), (4, 4)])],
             crs=WGS84_CRS,
         )
 
         result = process_overture_segments(segments_gdf, get_barriers=True)
 
         assert "barrier_geometry" in result.columns
+        assert result["barrier_geometry"].iloc[0] is not None
 
     def test_connectors_single_dict(self) -> None:
         """Test process_overture_segments when connectors parses to a single dict."""

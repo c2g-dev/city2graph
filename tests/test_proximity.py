@@ -22,14 +22,12 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 import geopandas as gpd
+import networkx as nx
 import pandas as pd
 import pytest
 from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
-
-if TYPE_CHECKING:  # Only for typing/cast, avoid runtime import
-    import networkx as nx
 
 from city2graph.proximity import bridge_nodes
 from city2graph.proximity import contiguity_graph
@@ -1044,3 +1042,86 @@ def test_network_metric_no_valid_positions() -> None:
         ValueError, match="network_gdf must include geometries with valid node positions"
     ):
         knn_graph(pts, k=1, distance_metric="network", network_gdf=net)
+
+
+class TestNetworkMetricPublicApis:
+    """Public API coverage for network-distance fallback branches."""
+
+    def test_knn_graph_uses_position_fallback_for_network_edge_lengths(
+        self,
+        small_points: gpd.GeoDataFrame,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """KNN should still work when network edges lack geometry but nodes have positions."""
+        graph = nx.Graph()
+        graph.add_node("a", pos=(0.0, 0.0))
+        graph.add_node("b", pos=(1.0, 0.0))
+        graph.add_edge("a", "b", geometry=None)
+
+        dummy_network = make_network_edges(
+            src_ids=[0],
+            dst_ids=[1],
+            geometries=[LineString([(0, 0), (1, 0)])],
+            crs=small_points.crs,
+        )
+
+        def fake_gdf_to_nx(*, edges: gpd.GeoDataFrame) -> nx.Graph:
+            _ = edges
+            return graph
+
+        monkeypatch.setattr("city2graph.proximity.gdf_to_nx", fake_gdf_to_nx)
+
+        nodes, edges = knn_graph(
+            small_points.iloc[:2],
+            k=1,
+            distance_metric="network",
+            network_gdf=dummy_network,
+        )
+
+        assert_valid_proximity_result(nodes, edges, 2)
+
+    def test_knn_graph_surfaces_missing_network_via_public_path(
+        self,
+        small_points: gpd.GeoDataFrame,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Public API should still raise the network_gdf error if early validation is bypassed."""
+        monkeypatch.setattr(
+            "city2graph.proximity.DistanceMetric.validate", lambda _self, _crs: None
+        )
+
+        with pytest.raises(ValueError, match="network_gdf is required for network distance metric"):
+            knn_graph(small_points.iloc[:2], k=1, distance_metric="network", network_gdf=None)
+
+    def test_knn_graph_handles_network_edges_without_positions_or_geometry(
+        self,
+        small_points: gpd.GeoDataFrame,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """KNN should tolerate network edges whose fallback length resolves to zero."""
+        graph = nx.Graph()
+        graph.add_node("a", pos=(0.0, 0.0))
+        graph.add_node("b")
+        graph.add_edge("a", "b", geometry=None)
+
+        dummy_network = make_network_edges(
+            src_ids=[0],
+            dst_ids=[1],
+            geometries=[LineString([(0, 0), (1, 0)])],
+            crs=small_points.crs,
+        )
+
+        def fake_gdf_to_nx(*, edges: gpd.GeoDataFrame) -> nx.Graph:
+            _ = edges
+            return graph
+
+        monkeypatch.setattr("city2graph.proximity.gdf_to_nx", fake_gdf_to_nx)
+
+        nodes, edges = knn_graph(
+            small_points.iloc[:2],
+            k=1,
+            distance_metric="network",
+            network_gdf=dummy_network,
+        )
+
+        assert_valid_proximity_result(nodes, edges, 2)

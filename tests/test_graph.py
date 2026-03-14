@@ -1062,6 +1062,26 @@ class TestOptionalTensorConversion:
         assert "z" in edges_dict[edge_type_1].columns
         assert "w" in edges_dict[edge_type_2].columns
 
+    def test_hetero_edge_type_deduction_by_relation_name(self) -> None:
+        """Edge column lookup should also support relation-name keys."""
+        data = HeteroData()
+        data["n"].x = torch.randn(2, 1)
+        data["n"].pos = torch.rand(2, 2)
+
+        edge_type = ("n", "via", "n")
+        data[edge_type].edge_index = torch.tensor([[0, 1], [1, 0]])
+        data[edge_type].w = torch.randn(2)
+
+        metadata = GraphMetadata(is_hetero=True)
+        metadata.node_types = ["n"]
+        metadata.edge_types = [edge_type]
+        data.graph_metadata = metadata
+
+        _, edges_dict = pyg_to_gdf(data, additional_edge_cols={edge_type: ["w"]})
+
+        assert isinstance(edges_dict, dict)
+        assert "w" in edges_dict[edge_type].columns
+
     def test_get_device_no_torch(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test _get_device raises ImportError when torch is not available."""
         # Check if _get_device is available in graph_module

@@ -2682,3 +2682,202 @@ class TestRemoveIsolatedComponents(BaseGraphTest):
         )
         # Result should always be Polygon or MultiPolygon
         assert result.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
+
+
+class TestPublicUtilityBranches(BaseGraphTest):
+    """Coverage-oriented tests exercised through public utility APIs."""
+
+    def test_create_isochrone_buffers_non_polygon_union(
+        self,
+        sample_nx_graph: nx.Graph,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """create_isochrone should normalize non-polygon unions back into polygon output."""
+        monkeypatch.setattr(
+            utils,
+            "_generate_component_polygons",
+            lambda _reachable, _method, _crs, **_kwargs: [LineString([(0, 0), (1, 0)])],
+        )
+
+        result = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=Point(0, 0),
+            threshold=10.0,
+            method="buffer",
+        )
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert len(result) == 1
+
+    def test_create_isochrone_with_duplicate_positions_uses_degenerate_knn_path(self) -> None:
+        """Duplicate reachable positions should still produce an isochrone through the public API."""
+        graph = nx.Graph()
+        graph.add_node("a", pos=(0.0, 0.0))
+        graph.add_node("b", pos=(0.0, 0.0))
+        graph.add_node("c", pos=(1.0, 0.0))
+        graph.add_edge("a", "b", length=0.0)
+        graph.add_edge("b", "c", length=1.0)
+        graph.graph["crs"] = "EPSG:27700"
+
+        result = utils.create_isochrone(
+            graph,
+            center_point=Point(0, 0),
+            threshold=5.0,
+            method="concave_hull_knn",
+        )
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert len(result) == 1
+
+    def test_create_tessellation_reraises_unexpected_value_error(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Unexpected momepy ValueError instances should still surface to callers."""
+
+        def raise_boom(*_args: object, **_kwargs: object) -> object:
+            msg = "boom"
+            error = ValueError(msg)
+            raise error
+
+        monkeypatch.setattr("city2graph.utils.momepy.enclosed_tessellation", raise_boom)
+
+        with pytest.raises(ValueError, match="boom"):
+            utils.create_tessellation(sample_buildings_gdf, primary_barriers=sample_segments_gdf)
+
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    def test_plot_graph_resolves_type_specific_kwargs_for_subplots(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """plot_graph should resolve non-standard kwargs from type-keyed dictionaries."""
+        edge_type = next(iter(sample_hetero_edges_dict))
+
+        utils.plot_graph(
+            nodes=sample_hetero_nodes_dict,
+            edges=sample_hetero_edges_dict,
+            subplots=True,
+            rasterized={"building": False, "road": False, edge_type: False},
+        )
+
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    def test_plot_graph_hides_unused_provided_axes(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Provided axis lists should be supported and unused axes hidden."""
+        edge_key, edge_gdf = next(iter(sample_hetero_edges_dict.items()))
+        fig, axes = plt.subplots(1, 2)
+
+        try:
+            returned_axes = utils.plot_graph(
+                nodes=sample_hetero_nodes_dict,
+                edges={edge_key: edge_gdf},
+                subplots=True,
+                ax=axes,
+            )
+            assert isinstance(returned_axes, np.ndarray)
+            assert list(returned_axes) == list(axes)
+            assert not axes[1].get_visible()
+        finally:
+            plt.close(fig)
+
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    def test_plot_graph_accepts_single_provided_axis_for_one_subplot(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """A single provided axis should be wrapped for subplot plotting."""
+        edge_key, edge_gdf = next(iter(sample_hetero_edges_dict.items()))
+        fig, ax = plt.subplots(1, 1)
+
+        try:
+            returned_ax = utils.plot_graph(
+                nodes=sample_hetero_nodes_dict,
+                edges={edge_key: edge_gdf},
+                subplots=True,
+                ax=ax,
+            )
+            assert returned_ax is ax
+        finally:
+            plt.close(fig)
+
+    def test_clip_graph_rejects_invalid_input_type(self) -> None:
+        """clip_graph should reject unsupported graph inputs."""
+        with pytest.raises(TypeError, match="Input must be GeoDataFrame"):
+            utils.clip_graph("not_a_graph", Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]))
+
+    def test_clip_graph_returns_empty_nodes_when_edges_clip_out(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Tuple clipping should return empty nodes when no clipped edges remain."""
+        clip_poly = Polygon([(100, 100), (101, 100), (101, 101), (100, 101)])
+
+        clipped_nodes, clipped_edges = utils.clip_graph(
+            (sample_nodes_gdf, sample_edges_gdf), clip_poly
+        )
+
+        assert clipped_edges.empty
+        assert clipped_nodes is not None
+        assert clipped_nodes.empty
+
+    def test_clip_graph_preserves_nodes_for_non_multiindex_edges(self, sample_crs: str) -> None:
+        """Tuple clipping should leave nodes untouched when edges have no connectivity index."""
+        nodes = gpd.GeoDataFrame({"value": [1]}, geometry=[Point(0, 0)], crs=sample_crs)
+        nodes.index = pd.Index(["n1"])
+        edges = gpd.GeoDataFrame(
+            {"value": [1]},
+            geometry=[LineString([(0, 0), (1, 0)])],
+            crs=sample_crs,
+        )
+        edges.index = pd.Index(["edge-1"])
+        clip_poly = Polygon([(-1, -1), (2, -1), (2, 1), (-1, 1)])
+
+        clipped_nodes, clipped_edges = utils.clip_graph((nodes, edges), clip_poly)
+
+        assert not clipped_edges.empty
+        assert clipped_nodes is not None
+        assert clipped_nodes.equals(nodes)
+
+    def test_remove_isolated_components_returns_original_on_conversion_error(
+        self,
+        sample_edges_gdf: gpd.GeoDataFrame,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """remove_isolated_components should fall back cleanly when conversion fails."""
+
+        def raise_bad_graph(*_args: object, **_kwargs: object) -> object:
+            msg = "bad graph"
+            error = ValueError(msg)
+            raise error
+
+        monkeypatch.setattr(
+            utils,
+            "gdf_to_nx",
+            raise_bad_graph,
+        )
+
+        result = utils.remove_isolated_components(sample_edges_gdf)
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.equals(sample_edges_gdf)
+
+    def test_remove_isolated_components_handles_empty_networkx_graph(
+        self,
+        sample_edges_gdf: gpd.GeoDataFrame,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """remove_isolated_components should fall back when conversion yields an empty graph."""
+        monkeypatch.setattr(utils, "gdf_to_nx", lambda *_args, **_kwargs: nx.Graph())
+
+        result = utils.remove_isolated_components(sample_edges_gdf)
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.equals(sample_edges_gdf)

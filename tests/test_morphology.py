@@ -126,6 +126,93 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
 
         self.validate_basic_output(nodes, edges, ["private", "public"])
 
+    def test_keep_buildings_handles_join_without_index_right(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """keep_buildings should still allocate building_geometry when sjoin omits index_right."""
+
+        def fake_sjoin(
+            tessellation: gpd.GeoDataFrame,
+            _buildings: gpd.GeoDataFrame,
+            *,
+            how: str,
+            predicate: str,
+        ) -> gpd.GeoDataFrame:
+            assert how == "left"
+            assert predicate == "intersects"
+            return tessellation.copy()
+
+        monkeypatch.setattr("city2graph.morphology.gpd.sjoin", fake_sjoin)
+
+        nodes, _edges = morphological_graph(
+            sample_buildings_gdf,
+            sample_segments_gdf,
+            keep_buildings=True,
+        )
+
+        assert "building_geometry" in nodes["private"].columns
+
+    def test_distance_filter_handles_missing_center_node(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        sample_crs: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Distance filtering should degrade to an empty private layer if the center node is absent."""
+        center_point = gpd.GeoSeries([Point(0.5, 0.5)], crs=sample_crs)
+
+        def fake_create_tessellation(
+            buildings_gdf: gpd.GeoDataFrame,
+            primary_barriers: gpd.GeoDataFrame | None = None,
+        ) -> gpd.GeoDataFrame:
+            _ = (buildings_gdf, primary_barriers)
+            return gpd.GeoDataFrame(
+                {"tess_id": ["t1"]},
+                geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+                crs=sample_crs,
+            )
+
+        def fake_filter_adjacent_tessellation(
+            tessellation: gpd.GeoDataFrame,
+            segments: gpd.GeoDataFrame,
+            max_distance: float = float("inf"),
+        ) -> gpd.GeoDataFrame:
+            _ = (segments, max_distance)
+            return tessellation
+
+        def fake_find_closest_node_to_center(
+            graph: nx.Graph,
+            center_geom: gpd.GeoSeries | gpd.GeoDataFrame,
+        ) -> str:
+            _ = (graph, center_geom)
+            return "missing-node"
+
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            fake_create_tessellation,
+        )
+        monkeypatch.setattr(
+            "city2graph.morphology._filter_adjacent_tessellation",
+            fake_filter_adjacent_tessellation,
+        )
+        monkeypatch.setattr(
+            "city2graph.morphology._find_closest_node_to_center",
+            fake_find_closest_node_to_center,
+        )
+
+        nodes, _edges = morphological_graph(
+            sample_buildings_gdf,
+            sample_segments_gdf,
+            center_point=center_point,
+            distance=10.0,
+        )
+
+        assert nodes["private"].empty
+
     def test_networkx_conversion(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
