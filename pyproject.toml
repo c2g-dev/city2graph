@@ -26,6 +26,7 @@ keywords = ["GeoAI", "Graph Neural Networks", "GNNs", "PyTorch Geometric", "Geos
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "networkx >=2.8",
+    "duckdb >=1.1.0",
     "osmnx >=2.0.3",
     "shapely >=2.1.0",
     "geopandas >=1.1.1",
