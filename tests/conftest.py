@@ -1860,3 +1860,50 @@ def gtfs_dict_remove_service(
 
     gtfs_dict["calendar_dates"] = calendar_dates_df
     return gtfs_dict
+
+
+@pytest.fixture
+def sample_gtfs_dict_with_frequencies(
+    sample_gtfs_dict: dict[str, pd.DataFrame],
+) -> dict[str, pd.DataFrame]:
+    """Create a sample GTFS dictionary with a frequencies table."""
+    gtfs_dict = sample_gtfs_dict.copy()
+
+    # Add frequencies.txt: trip1 runs every 600 seconds (10 min) from 08:00 to 09:00
+    # That gives floor((09:00:00 - 08:00:00) / 600) = 6 departures
+    frequencies_df = pd.DataFrame(
+        {
+            "trip_id": ["trip1"],
+            "start_time": ["08:00:00"],
+            "end_time": ["09:00:00"],
+            "headway_secs": [600],
+        },
+    )
+    gtfs_dict["frequencies"] = frequencies_df
+    return gtfs_dict
+
+
+@pytest.fixture
+def sample_gtfs_dict_with_shapes(
+    sample_gtfs_dict: dict[str, pd.DataFrame],
+) -> dict[str, pd.DataFrame]:
+    """Create a sample GTFS dictionary with shapes data and shape_id on trips."""
+    gtfs_dict = sample_gtfs_dict.copy()
+
+    # Add shape_id to trips
+    trips_df = gtfs_dict["trips"].copy()
+    trips_df["shape_id"] = ["shape1", "shape1"]
+    gtfs_dict["trips"] = trips_df
+
+    # Add shapes.txt with 3 intermediate points between stops
+    shapes_df = pd.DataFrame(
+        {
+            "shape_id": ["shape1"] * 5,
+            "shape_pt_lat": [40.7128, 40.7250, 40.7400, 40.7505, 40.7589],
+            "shape_pt_lon": [-74.0060, -74.0010, -73.9960, -73.9934, -73.9851],
+            "shape_pt_sequence": [1, 2, 3, 4, 5],
+        },
+    )
+    gtfs_dict["shapes"] = shapes_df
+
+    return gtfs_dict
