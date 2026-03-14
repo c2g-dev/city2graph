@@ -27,7 +27,7 @@ def dict_to_con(d: dict[str, pd.DataFrame]) -> duckdb.DuckDBPyConnection:
 
     for k, v in d.items():
         v = v.copy()
-        if k in ("stops", "shapes") and "geometry" in v.columns:
+        if k == "stops" and "geometry" in v.columns:
             v = v.drop(columns=["geometry"])
         # explicitly cast all columns to string so duckdb matching gtfs behaves consistently
         for col in v.columns:
@@ -101,11 +101,6 @@ class TestLoadGtfs:
         assert isinstance(con, duckdb.DuckDBPyConnection)
         tables = [r[0] for r in con.execute("SHOW TABLES").fetchall()]
         assert {"stops", "routes", "trips", "stop_times", "calendar"}.issubset(set(tables))
-
-    def test_load_gtfs_with_shapes(self, sample_gtfs_zip_with_shapes: str) -> None:
-        con = load_gtfs(sample_gtfs_zip_with_shapes)
-        tables = [r[0] for r in con.execute("SHOW TABLES").fetchall()]
-        assert "shapes_geom" in tables
 
     def test_load_gtfs_empty_zip(self, empty_gtfs_zip: str) -> None:
         con = load_gtfs(empty_gtfs_zip)
@@ -486,22 +481,6 @@ class TestTravelSummaryGraph:
         _nodes, edges_without = travel_summary_graph(con, use_frequencies=False)
         assert len(edges_without) > 0
 
-    def test_travel_summary_graph_use_shapes(
-        self, sample_gtfs_dict_with_shapes: dict[str, pd.DataFrame]
-    ) -> None:
-        con = dict_to_con(sample_gtfs_dict_with_shapes)
-        _nodes, edges = travel_summary_graph(con, use_shapes=True, directed=True)
-        assert len(edges) > 0
-        # At least some edges should have non-null geometry
-        assert edges.geometry.notna().any()
-
-    def test_travel_summary_graph_no_shapes(
-        self, sample_gtfs_dict: dict[str, pd.DataFrame]
-    ) -> None:
-        con = dict_to_con(sample_gtfs_dict)
-        _nodes, edges = travel_summary_graph(con, use_shapes=False)
-        assert len(edges) > 0
-
     def test_travel_summary_graph_without_calendar_falls_back_to_trip_counts(
         self, sample_gtfs_dict: dict[str, pd.DataFrame]
     ) -> None:
@@ -615,13 +594,3 @@ class TestTravelSummaryGraph:
 
         with pytest.raises(ValueError, match="stops must contain either a geometry column"):
             travel_summary_graph(con)
-
-    def test_travel_summary_graph_uses_shape_segments_from_loaded_feed(
-        self, sample_gtfs_zip_with_shapes: str
-    ) -> None:
-        con = load_gtfs(sample_gtfs_zip_with_shapes)
-
-        _nodes_gdf, edges_gdf = travel_summary_graph(con, use_shapes=True, directed=True)
-
-        assert not edges_gdf.empty
-        assert edges_gdf.geometry.notna().any()

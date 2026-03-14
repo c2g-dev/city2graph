@@ -500,10 +500,8 @@ def load_gtfs(path: str | Path) -> duckdb.DuckDBPyConnection:
     Load a GTFS ZIP archive into an in-memory DuckDB database.
 
     The function reads ``*.txt`` GTFS files as tables, registers a time parsing
-    UDF, and materializes optional spatial helpers:
-
-    - ``stops.geometry`` as points from ``stop_lon``/``stop_lat``
-    - ``shapes_geom`` as one polyline per ``shape_id``
+    UDF, and materializes ``stops.geometry`` as points from
+    ``stop_lon``/``stop_lat`` when stop coordinates are available.
 
     Parameters
     ----------
@@ -549,24 +547,6 @@ def load_gtfs(path: str | Path) -> duckdb.DuckDBPyConnection:
             ALTER TABLE stops ADD COLUMN geometry GEOMETRY;
             UPDATE stops SET geometry = ST_Point(CAST(NULLIF(stop_lon, '') AS DOUBLE), CAST(NULLIF(stop_lat, '') AS DOUBLE))
             WHERE try_cast(NULLIF(stop_lon, '') as DOUBLE) IS NOT NULL AND try_cast(NULLIF(stop_lat, '') as DOUBLE) IS NOT NULL;
-        """)
-
-    if "shapes" in tables:
-        con.execute("""
-            CREATE TABLE shapes_geom AS
-            SELECT
-                shape_id,
-                ST_MakeLine(
-                    list(
-                        ST_Point(
-                            CAST(NULLIF(shape_pt_lon, '') AS DOUBLE),
-                            CAST(NULLIF(shape_pt_lat, '') AS DOUBLE)
-                        ) ORDER BY CAST(NULLIF(shape_pt_sequence, '') AS INTEGER)
-                    )
-                ) AS geometry
-            FROM shapes
-            WHERE try_cast(NULLIF(shape_pt_lon, '') as DOUBLE) IS NOT NULL AND try_cast(NULLIF(shape_pt_lat, '') as DOUBLE) IS NOT NULL
-            GROUP BY shape_id;
         """)
 
     logger.info("GTFS loaded: %s", ", ".join(tables))
@@ -637,104 +617,6 @@ def _build_frequency_multipliers(
         SELECT * FROM freq_trips
         UNION ALL
         SELECT * FROM non_freq_trips
-        """
-    )
-
-
-def _build_shape_edge_geometry(
-    con: duckdb.DuckDBPyConnection,
-    *,
-    tables: set[str],
-) -> None:
-    """
-    Build a temp table mapping stop-pairs to shape-derived edge geometries.
-
-    For each directed ``(from_stop_id, to_stop_id)`` pair, the function finds
-    the most common ``shape_id`` among trips serving that pair, then extracts
-    the sub-linestring between the two stop projections on the shape.
-
-    Parameters
-    ----------
-    con : duckdb.DuckDBPyConnection
-        Open DuckDB connection.
-    tables : set[str]
-        Available GTFS table names.
-
-    Returns
-    -------
-    None
-        Creates or replaces the ``_shape_edges`` temp table with columns
-        ``(from_stop_id, to_stop_id, geometry)``.
-    """
-    trip_cols = _table_columns(con, "trips")
-    if "shapes_geom" not in tables or "shape_id" not in trip_cols:
-        con.execute(
-            """
-            CREATE OR REPLACE TEMP TABLE _shape_edges (
-                from_stop_id VARCHAR,
-                to_stop_id VARCHAR,
-                geometry GEOMETRY
-            )
-            """
-        )
-        return
-
-    con.execute(
-        """
-        CREATE OR REPLACE TEMP TABLE _shape_edges AS
-        WITH stop_pairs_shapes AS (
-            SELECT
-                st1.stop_id AS from_stop_id,
-                st2.stop_id AS to_stop_id,
-                t.shape_id,
-                COUNT(*) AS cnt
-            FROM stop_times st1
-            JOIN stop_times st2
-              ON st1.trip_id = st2.trip_id
-             AND CAST(st2.stop_sequence AS INTEGER) = CAST(st1.stop_sequence AS INTEGER) + 1
-            JOIN trips t
-              ON st1.trip_id = t.trip_id
-            WHERE t.shape_id IS NOT NULL
-              AND t.shape_id != ''
-              AND try_cast(st1.stop_sequence AS INTEGER) IS NOT NULL
-              AND try_cast(st2.stop_sequence AS INTEGER) IS NOT NULL
-            GROUP BY st1.stop_id, st2.stop_id, t.shape_id
-        ),
-        ranked AS (
-            SELECT *,
-                   ROW_NUMBER() OVER (
-                       PARTITION BY from_stop_id, to_stop_id
-                       ORDER BY cnt DESC
-                   ) AS rn
-            FROM stop_pairs_shapes
-        ),
-        best_shape AS (
-            SELECT from_stop_id, to_stop_id, shape_id
-            FROM ranked
-            WHERE rn = 1
-        )
-        SELECT
-            bs.from_stop_id,
-            bs.to_stop_id,
-            CASE
-                WHEN sg.geometry IS NOT NULL
-                 AND s1.geometry IS NOT NULL
-                 AND s2.geometry IS NOT NULL
-                 AND ST_LineLocatePoint(sg.geometry, s1.geometry) IS NOT NULL
-                 AND ST_LineLocatePoint(sg.geometry, s2.geometry) IS NOT NULL
-                 AND ST_LineLocatePoint(sg.geometry, s1.geometry)
-                    < ST_LineLocatePoint(sg.geometry, s2.geometry)
-                THEN ST_LineSubstring(
-                    sg.geometry,
-                    ST_LineLocatePoint(sg.geometry, s1.geometry),
-                    ST_LineLocatePoint(sg.geometry, s2.geometry)
-                )
-                ELSE NULL
-            END AS geometry
-        FROM best_shape bs
-        JOIN shapes_geom sg ON bs.shape_id = sg.shape_id
-        LEFT JOIN _stops_for_graph s1 ON bs.from_stop_id = s1.stop_id
-        LEFT JOIN _stops_for_graph s2 ON bs.to_stop_id = s2.stop_id
         """
     )
 
@@ -1013,13 +895,12 @@ def _prepare_summary_graph_support(
     *,
     tables: set[str],
     use_frequencies: bool,
-    use_shapes: bool,
 ) -> None:
     """
     Prepare optional temp tables used by the summary graph query.
 
-    These tables encapsulate optional headway expansion and shape-based edge
-    geometry so the main query stays focused on aggregation.
+    These tables encapsulate optional headway expansion so the main query stays
+    focused on aggregation.
 
     Parameters
     ----------
@@ -1029,8 +910,6 @@ def _prepare_summary_graph_support(
         Available GTFS table names.
     use_frequencies : bool
         Whether to expand ``frequencies.txt`` headways into trip counts.
-    use_shapes : bool
-        Whether to derive edge geometry from GTFS shapes.
 
     Returns
     -------
@@ -1048,20 +927,6 @@ def _prepare_summary_graph_support(
             """
         )
 
-    if use_shapes:
-        _build_shape_edge_geometry(con, tables=tables)
-        return
-
-    con.execute(
-        """
-        CREATE OR REPLACE TEMP TABLE _shape_edges (
-            from_stop_id VARCHAR,
-            to_stop_id VARCHAR,
-            geometry GEOMETRY
-        )
-        """
-    )
-
 
 def _build_travel_summary_edges(
     con: duckdb.DuckDBPyConnection,
@@ -1074,7 +939,7 @@ def _build_travel_summary_edges(
     Build aggregated stop-to-stop edges for the travel summary graph.
 
     The result includes weighted average travel times, service frequencies,
-    and either shape-derived or straight-line geometries.
+    and stop-to-stop line geometries.
 
     Parameters
     ----------
@@ -1161,19 +1026,13 @@ def _build_travel_summary_edges(
             a.travel_time_sec,
             CAST(a.frequency AS BIGINT) AS frequency,
             ST_AsText(
-                COALESCE(
-                    se.geometry,
-                    CASE
-                        WHEN s1.geometry IS NOT NULL AND s2.geometry IS NOT NULL
-                        THEN ST_MakeLine(s1.geometry, s2.geometry)
-                        ELSE NULL
-                    END
-                )
+                CASE
+                    WHEN s1.geometry IS NOT NULL AND s2.geometry IS NOT NULL
+                    THEN ST_MakeLine(s1.geometry, s2.geometry)
+                    ELSE NULL
+                END
             ) AS geometry_wkt
         FROM agg_pairs a
-        LEFT JOIN _shape_edges se
-          ON a.stop_id = se.from_stop_id
-         AND a.next_stop_id = se.to_stop_id
         LEFT JOIN _stops_for_graph s1
           ON a.stop_id = s1.stop_id
         LEFT JOIN _stops_for_graph s2
@@ -1287,7 +1146,6 @@ def travel_summary_graph(
     as_nx: bool = False,
     directed: bool = False,
     use_frequencies: bool = True,
-    use_shapes: bool = True,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.DiGraph | nx.Graph:
     """
     Aggregate GTFS service into a weighted stop-to-stop summary graph.
@@ -1309,9 +1167,7 @@ def travel_summary_graph(
 
     Edge geometry
     ~~~~~~~~~~~~~
-    Edge geometry follows the GTFS shape path when ``use_shapes=True`` and
-    ``shapes_geom`` is available; otherwise a straight stop-to-stop line is
-    used.
+    Edge geometry is represented as a straight stop-to-stop line.
 
     Parameters
     ----------
@@ -1335,9 +1191,6 @@ def travel_summary_graph(
     use_frequencies : bool, default=True
         If ``True`` and ``frequencies.txt`` exists, expand headway-based
         service into effective trip counts for the ``frequency`` attribute.
-    use_shapes : bool, default=True
-        If ``True`` and ``shapes_geom`` is available, derive edge geometry
-        from the GTFS shape path instead of straight stop-to-stop lines.
 
     Returns
     -------
@@ -1366,7 +1219,6 @@ def travel_summary_graph(
         con,
         tables=tables,
         use_frequencies=use_frequencies,
-        use_shapes=use_shapes,
     )
     edges_gdf = _build_travel_summary_edges(
         con,
