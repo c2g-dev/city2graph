@@ -139,6 +139,48 @@ class TestLoadOvertureData:
 
     @patch("city2graph.data.subprocess.run")
     @patch("city2graph.data.gpd.read_file")
+    @patch("city2graph.data.gpd.clip")
+    @patch("city2graph.data.Path.exists")
+    def test_polygon_clipping_rewrites_saved_file_when_not_returning_data(
+        self,
+        mock_exists: Mock,
+        mock_clip: Mock,
+        mock_read_file: Mock,
+        mock_subprocess: Mock,
+        test_polygon: Polygon,
+    ) -> None:
+        """Processed polygon queries should overwrite the saved GeoJSON on disk."""
+        raw_gdf = gpd.GeoDataFrame(
+            {"id": ["raw"]},
+            geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 0)])],
+            crs=WGS84_CRS,
+        )
+        clipped_gdf = gpd.GeoDataFrame(
+            {"id": ["clipped"]},
+            geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 0)])],
+            crs=WGS84_CRS,
+        )
+        clipped_gdf.to_file = Mock()
+        mock_exists.return_value = True
+        mock_read_file.return_value = raw_gdf
+        mock_clip.return_value = clipped_gdf
+
+        result = load_overture_data(
+            test_polygon,
+            types=["building"],
+            return_data=False,
+            prefix="processed_",
+        )
+
+        assert result == {}
+        clipped_gdf.to_file.assert_called_once()
+        output_path = clipped_gdf.to_file.call_args.args[0]
+        assert output_path.name == "processed_building.geojson"
+        assert clipped_gdf.to_file.call_args.kwargs == {"driver": "GeoJSON"}
+        mock_subprocess.assert_called_once()
+
+    @patch("city2graph.data.subprocess.run")
+    @patch("city2graph.data.gpd.read_file")
     @patch("city2graph.data.clip_graph")
     @patch("city2graph.data.Path.exists")
     def test_segment_polygon_clipping_uses_topological_subset(

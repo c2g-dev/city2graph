@@ -487,6 +487,7 @@ def _download_and_process_type(  # noqa: PLR0912, PLR0913, C901
     ...                                  './data', 'nyc', True, True, None, '2024-11-13.0')
     """
     output_path = Path(output_dir) / f"{prefix}{data_type}.geojson"
+    needs_postprocessing = clip_geom is not None or data_type == "segment"
 
     # Build and execute download command
     cmd = ["overturemaps", "download", f"--bbox={bbox_str}", "-f", "geojson", f"--type={data_type}"]
@@ -503,11 +504,12 @@ def _download_and_process_type(  # noqa: PLR0912, PLR0913, C901
 
     result = subprocess.run(cmd, check=True, capture_output=not save_to_file, text=True)
 
-    if not return_data:
+    output_exists = save_to_file and output_path.exists()
+    if not return_data and not (output_exists and needs_postprocessing):
         return gpd.GeoDataFrame(geometry=[], crs=WGS84_CRS)
 
     # Load and clip data if needed
-    if save_to_file and output_path.exists():
+    if output_exists:
         gdf = gpd.read_file(output_path)
     elif not save_to_file and result.stdout and isinstance(result.stdout, str):
         # Parse GeoJSON from subprocess stdout when not saving to file
@@ -557,6 +559,9 @@ def _download_and_process_type(  # noqa: PLR0912, PLR0913, C901
             exploded = multi.explode(index_parts=False)
             lines = pd.concat([lines, exploded])
         gdf = lines.reset_index(drop=True)
+
+    if output_exists and needs_postprocessing:
+        gdf.to_file(output_path, driver="GeoJSON")
 
     return gdf
 
