@@ -485,6 +485,26 @@ class TestGraphAnalysis(BaseGraphTest):
         assert sorted(reachable.nodes()) == [1, 2, 3, 4]
         assert sorted(tuple(sorted(edge)) for edge in reachable.edges()) == [(1, 2), (3, 4)]
 
+    def test_filter_graph_multi_center_sequence_union(self, sample_crs: str) -> None:
+        """Plain Point sequences should union the reachable components."""
+        G = nx.Graph()
+        G.graph["crs"] = sample_crs
+        G.add_node(1, pos=(0, 0))
+        G.add_node(2, pos=(1, 0))
+        G.add_node(3, pos=(10, 0))
+        G.add_node(4, pos=(11, 0))
+        G.add_edge(1, 2, length=1.0)
+        G.add_edge(3, 4, length=1.0)
+
+        reachable = utils.filter_graph_by_distance(
+            G,
+            center_point=[Point(0, 0), Point(10, 0)],
+            threshold=1.0,
+        )
+
+        assert sorted(reachable.nodes()) == [1, 2, 3, 4]
+        assert sorted(tuple(sorted(edge)) for edge in reachable.edges()) == [(1, 2), (3, 4)]
+
     def test_filter_graph_edge_attr_none_falls_back_to_length(self, sample_crs: str) -> None:
         """edge_attr=None should preserve the existing length fallback."""
         G = nx.Graph()
@@ -984,6 +1004,13 @@ class TestGraphAnalysis(BaseGraphTest):
         with pytest.raises(ValueError, match="threshold sequence must not be empty"):
             utils.create_isochrone(sample_nx_graph, center_point=Point(0, 0), threshold=[])
 
+        with pytest.raises(TypeError, match="center_point must be a Point"):
+            utils.create_isochrone(
+                sample_nx_graph,
+                center_point=[Point(0, 0), "bad"],
+                threshold=10,
+            )
+
     def test_create_isochrone_multi_center(self, sample_nx_graph: nx.Graph) -> None:
         """Test isochrone with multiple center points."""
         centers = gpd.GeoSeries([Point(0, 0), Point(1, 1)], crs=sample_nx_graph.graph["crs"])
@@ -992,6 +1019,82 @@ class TestGraphAnalysis(BaseGraphTest):
             sample_nx_graph, center_point=centers, threshold=2.0, method="convex_hull"
         )
         assert not iso.empty
+
+    def test_create_isochrone_multi_center_sequence(self, sample_crs: str) -> None:
+        """Plain Point sequences should work for isochrone generation."""
+        graph = nx.Graph()
+        graph.graph["crs"] = sample_crs
+        graph.add_node(1, pos=(0, 0))
+        graph.add_node(2, pos=(1, 0))
+        graph.add_node(3, pos=(10, 0))
+        graph.add_node(4, pos=(11, 0))
+        graph.add_edge(1, 2, length=1.0)
+        graph.add_edge(3, 4, length=1.0)
+
+        iso = utils.create_isochrone(
+            graph,
+            center_point=[Point(0, 0), Point(10, 0)],
+            threshold=1.0,
+            edge_attr="length",
+            method="convex_hull",
+        )
+
+        assert not iso.empty
+        assert iso.geometry.iloc[0].intersects(Point(0, 0))
+        assert iso.geometry.iloc[0].intersects(Point(10, 0))
+
+    def test_create_isochrone_multi_center_tuple_sequence(self, sample_crs: str) -> None:
+        """Tuple Point sequences should be accepted the same way as lists."""
+        graph = nx.Graph()
+        graph.graph["crs"] = sample_crs
+        graph.add_node(1, pos=(0, 0))
+        graph.add_node(2, pos=(1, 0))
+        graph.add_edge(1, 2, length=1.0)
+
+        iso = utils.create_isochrone(
+            graph,
+            center_point=(Point(0, 0), Point(1, 0)),
+            threshold=1.0,
+            edge_attr="length",
+            method="convex_hull",
+        )
+
+        assert not iso.empty
+
+    def test_filter_graph_invalid_center_sequence_member(self, sample_nx_graph: nx.Graph) -> None:
+        """Invalid sequence members should raise a clear TypeError."""
+        with pytest.raises(TypeError, match="center_point must be a Point"):
+            utils.filter_graph_by_distance(
+                sample_nx_graph,
+                center_point=[Point(0, 0), "bad"],
+                threshold=1.0,
+            )
+
+    def test_create_isochrone_empty_center_sequence_returns_empty(
+        self, sample_nx_graph: nx.Graph
+    ) -> None:
+        """Empty center sequences should preserve empty-output behavior."""
+        iso = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=[],
+            threshold=1.0,
+            method="convex_hull",
+        )
+
+        assert iso.empty
+
+    def test_filter_graph_empty_center_sequence_returns_empty(
+        self, sample_nx_graph: nx.Graph
+    ) -> None:
+        """Empty center sequences should preserve empty-graph behavior."""
+        reachable = utils.filter_graph_by_distance(
+            sample_nx_graph,
+            center_point=[],
+            threshold=1.0,
+        )
+
+        assert isinstance(reachable, nx.Graph)
+        assert len(reachable.nodes()) == 0
 
     def test_create_isochrone_buffer_none(self, sample_nx_graph: nx.Graph) -> None:
         """Test buffer method with buffer_distance=None (should return Polygon/MultiPolygon)."""

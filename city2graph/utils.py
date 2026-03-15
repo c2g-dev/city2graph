@@ -2255,7 +2255,7 @@ def nx_to_gdf(
 
 def filter_graph_by_distance(
     graph: gpd.GeoDataFrame | nx.Graph | nx.MultiGraph,
-    center_point: Point | gpd.GeoSeries | gpd.GeoDataFrame,
+    center_point: Point | Sequence[Point] | gpd.GeoSeries | gpd.GeoDataFrame,
     threshold: float,
     edge_attr: str | None = "length",
     node_id_col: str | None = None,  # noqa: ARG001
@@ -2273,7 +2273,7 @@ def filter_graph_by_distance(
     graph : geopandas.GeoDataFrame or networkx.Graph or networkx.MultiGraph
         The graph to filter. If a GeoDataFrame, it represents the edges of the
         graph and will be converted to a NetworkX graph internally.
-    center_point : Point or geopandas.GeoSeries or geopandas.GeoDataFrame
+    center_point : Point or Sequence[Point] or geopandas.GeoSeries or geopandas.GeoDataFrame
         The origin point(s) for the distance calculation. If multiple points
         are provided, the filter will include nodes reachable from any of them.
     threshold : float
@@ -2351,7 +2351,7 @@ def create_isochrone(
     graph: nx.Graph | nx.MultiGraph | None = None,
     nodes: gpd.GeoDataFrame | dict[str, gpd.GeoDataFrame] | None = None,
     edges: gpd.GeoDataFrame | dict[tuple[str, str, str], gpd.GeoDataFrame] | None = None,
-    center_point: Point | gpd.GeoSeries | gpd.GeoDataFrame | None = None,
+    center_point: Point | Sequence[Point] | gpd.GeoSeries | gpd.GeoDataFrame | None = None,
     threshold: float | Sequence[float] | None = None,
     edge_attr: str | None = None,
     cut_edge_types: list[tuple[str, str, str]] | None = None,
@@ -2374,8 +2374,9 @@ def create_isochrone(
         Nodes of the graph.
     edges : geopandas.GeoDataFrame or dict, optional
         Edges of the graph.
-    center_point : Point or geopandas.GeoSeries or geopandas.GeoDataFrame
-        The origin point(s) for the isochrone calculation.
+    center_point : Point or Sequence[Point] or geopandas.GeoSeries or geopandas.GeoDataFrame
+        The origin point(s) for the isochrone calculation. When multiple
+        points are provided, reachability is unioned across all centers.
     threshold : float or Sequence[float]
         The maximum travel distance (or time) that defines the boundary of the
         isochrone. When a sequence is provided, the function returns one
@@ -2519,7 +2520,7 @@ def _normalize_isochrone_thresholds(
 
 
 def _normalize_center_points(
-    center_point: Point | gpd.GeoSeries | gpd.GeoDataFrame,
+    center_point: Point | Sequence[Point] | gpd.GeoSeries | gpd.GeoDataFrame,
 ) -> list[Point]:
     """
     Normalize center point inputs to a list of Point geometries.
@@ -2529,7 +2530,7 @@ def _normalize_center_points(
 
     Parameters
     ----------
-    center_point : Point or geopandas.GeoSeries or geopandas.GeoDataFrame
+    center_point : Point or Sequence[Point] or geopandas.GeoSeries or geopandas.GeoDataFrame
         The center point input.
 
     Returns
@@ -2541,15 +2542,24 @@ def _normalize_center_points(
         center_points = center_point.geometry.tolist()
     elif isinstance(center_point, gpd.GeoSeries):
         center_points = center_point.tolist()
+    elif isinstance(center_point, Sequence) and not isinstance(center_point, str | bytes):
+        center_points = list(center_point)
     else:
         center_points = [center_point]
+
+    invalid_points = [point for point in center_points if not isinstance(point, Point)]
+    if invalid_points:
+        msg = (
+            "center_point must be a Point, a sequence of Point objects, GeoSeries, or GeoDataFrame."
+        )
+        raise TypeError(msg)
 
     return typing.cast("list[Point]", center_points)
 
 
 def _compute_center_node_distances(
     graph: nx.Graph | nx.MultiGraph,
-    center_point: Point | gpd.GeoSeries | gpd.GeoDataFrame,
+    center_point: Point | Sequence[Point] | gpd.GeoSeries | gpd.GeoDataFrame,
     edge_attr: str | None,
     cutoff: float,
 ) -> dict[Any, float]:
@@ -2563,7 +2573,7 @@ def _compute_center_node_distances(
     ----------
     graph : networkx.Graph or networkx.MultiGraph
         The graph to traverse.
-    center_point : Point or geopandas.GeoSeries or geopandas.GeoDataFrame
+    center_point : Point or Sequence[Point] or geopandas.GeoSeries or geopandas.GeoDataFrame
         Center points that will be snapped to the nearest graph nodes.
     edge_attr : str or None
         Edge attribute used as traversal weight.
