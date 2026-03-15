@@ -2355,14 +2355,13 @@ def filter_graph_by_distance(
         _, idx = tree.query((point.x, point.y))
         source_node = node_ids[idx]
 
-        # Dijkstra
-        lengths = nx.single_source_dijkstra_path_length(
+        ego_subgraph = nx.ego_graph(
             nx_graph,
             source_node,
-            cutoff=threshold,
-            weight=edge_attr or "length",
+            radius=threshold,
+            distance=edge_attr or "length",
         )
-        all_reachable.update(lengths.keys())
+        all_reachable.update(ego_subgraph.nodes)
 
     # Create subgraph
     subgraph = nx_graph.subgraph(all_reachable)

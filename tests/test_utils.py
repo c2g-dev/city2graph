@@ -467,6 +467,89 @@ class TestGraphAnalysis(BaseGraphTest):
         else:
             self.assert_valid_gdf(reachable, expect_empty)
 
+    def test_filter_graph_multi_center_union(self, sample_crs: str) -> None:
+        """Multiple centers should union the reachable components."""
+        G = nx.Graph()
+        G.graph["crs"] = sample_crs
+        G.add_node(1, pos=(0, 0))
+        G.add_node(2, pos=(1, 0))
+        G.add_node(3, pos=(10, 0))
+        G.add_node(4, pos=(11, 0))
+        G.add_edge(1, 2, length=1.0)
+        G.add_edge(3, 4, length=1.0)
+
+        centers = gpd.GeoSeries([Point(0, 0), Point(10, 0)], crs=sample_crs)
+
+        reachable = utils.filter_graph_by_distance(G, center_point=centers, threshold=1.0)
+
+        assert sorted(reachable.nodes()) == [1, 2, 3, 4]
+        assert sorted(tuple(sorted(edge)) for edge in reachable.edges()) == [(1, 2), (3, 4)]
+
+    def test_filter_graph_edge_attr_none_falls_back_to_length(self, sample_crs: str) -> None:
+        """edge_attr=None should preserve the existing length fallback."""
+        G = nx.Graph()
+        G.graph["crs"] = sample_crs
+        G.add_node(1, pos=(0, 0))
+        G.add_node(2, pos=(1, 0))
+        G.add_node(3, pos=(0, 1))
+        G.add_edge(1, 2, length=1.0)
+        G.add_edge(1, 3, length=1.0)
+
+        reachable_default = utils.filter_graph_by_distance(
+            G,
+            center_point=Point(0, 0),
+            threshold=1.0,
+            edge_attr=None,
+        )
+        reachable_length = utils.filter_graph_by_distance(
+            G,
+            center_point=Point(0, 0),
+            threshold=1.0,
+            edge_attr="length",
+        )
+
+        assert sorted(reachable_default.nodes()) == sorted(reachable_length.nodes())
+        assert sorted(tuple(sorted(edge)) for edge in reachable_default.edges()) == sorted(
+            tuple(sorted(edge)) for edge in reachable_length.edges()
+        )
+
+    def test_filter_graph_gdf_preserves_edge_membership_and_crs(self, sample_crs: str) -> None:
+        """GeoDataFrame input should keep the same filtered edge set and CRS."""
+        edges = gpd.GeoDataFrame(
+            {
+                "u": [1, 2],
+                "v": [2, 3],
+                "length": [1.0, 1.0],
+                "geometry": [
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(1, 0), (2, 0)]),
+                ],
+            },
+            crs=sample_crs,
+        ).set_index(["u", "v"])
+
+        reachable = utils.filter_graph_by_distance(edges, center_point=Point(0, 0), threshold=1.0)
+
+        assert isinstance(reachable, gpd.GeoDataFrame)
+        assert list(reachable.index) == [(1, 2)]
+        assert reachable.crs == edges.crs
+
+    def test_filter_graph_excludes_disconnected_components(self, sample_crs: str) -> None:
+        """Filtering should not leak into disconnected components."""
+        G = nx.Graph()
+        G.graph["crs"] = sample_crs
+        G.add_node(1, pos=(0, 0))
+        G.add_node(2, pos=(1, 0))
+        G.add_node(3, pos=(10, 10))
+        G.add_node(4, pos=(11, 10))
+        G.add_edge(1, 2, length=1.0)
+        G.add_edge(3, 4, length=1.0)
+
+        reachable = utils.filter_graph_by_distance(G, center_point=Point(0, 0), threshold=2.0)
+
+        assert sorted(reachable.nodes()) == [1, 2]
+        assert sorted(tuple(sorted(edge)) for edge in reachable.edges()) == [(1, 2)]
+
     def test_create_isochrone_basic(self, sample_nx_graph: nx.Graph) -> None:
         """Test basic isochrone creation."""
         center = Point(0, 0)
