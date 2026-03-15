@@ -2894,11 +2894,10 @@ def _process_component(
     if method == "concave_hull_knn":
         coords = _extract_node_coordinate_array(component)
         coords = coords[np.isfinite(coords).all(axis=1)]
-
         if len(coords) == 0:
             return None
-
-        poly = _concave_hull_knn(coords, k=kwargs.get("k", 50))
+        gs = gpd.GeoSeries(shapely.points(coords[:, 0], coords[:, 1]), crs=crs)
+        poly = _generate_concave_hull_knn(gs, **kwargs)
     else:
         geoms = _extract_isochrone_geometries(component, method)
         if not geoms:
@@ -3163,13 +3162,9 @@ def _extract_node_coordinate_array(graph: nx.Graph | nx.MultiGraph) -> np.ndarra
         is returned when coordinates are unavailable or malformed.
     """
     pos_dict = nx.get_node_attributes(graph, "pos")
-    if not pos_dict:
-        return np.empty((0, 2), dtype=float)
-
-    coords = np.asarray(list(pos_dict.values()), dtype=float)
+    coords = np.asarray(list(pos_dict.values()), dtype=float) if pos_dict else np.empty((0, 2))
     if coords.ndim != 2 or coords.shape[1] < 2:
         return np.empty((0, 2), dtype=float)
-
     return coords[:, :2]
 
 
@@ -3231,13 +3226,8 @@ def _concave_hull_knn(
         else np.asarray(points, dtype=float)
     )
 
-    if raw_coords.size == 0:
-        return LineString()
-
-    if raw_coords.ndim == 1:
-        raw_coords = np.atleast_2d(raw_coords)
-
-    if raw_coords.shape[1] < 2:
+    raw_coords = np.atleast_2d(raw_coords) if raw_coords.ndim == 1 else raw_coords
+    if raw_coords.size == 0 or raw_coords.shape[1] < 2:
         return LineString()
 
     raw_coords = raw_coords[:, :2]
@@ -3344,6 +3334,14 @@ class _HullWalkState:
             Segment end coordinate as a length-2 array.
         """
         self.existing_lines.append(LineString([start, end]))
+        if self.segment_count >= len(self.seg_bounds_min):
+            grow_by = max(1, len(self.seg_bounds_min))
+            self.seg_bounds_min = np.vstack(
+                [self.seg_bounds_min, np.empty((grow_by, 2), dtype=float)]
+            )
+            self.seg_bounds_max = np.vstack(
+                [self.seg_bounds_max, np.empty((grow_by, 2), dtype=float)]
+            )
         self.seg_bounds_min[self.segment_count] = np.minimum(start, end)
         self.seg_bounds_max[self.segment_count] = np.maximum(start, end)
         self.segment_count += 1
@@ -3475,9 +3473,6 @@ def _polygon_covers_all_points(
     bool
         ``True`` when all points are covered or touched by the buffered hull.
     """
-    if poly.is_empty:
-        return False
-
     test_poly = poly.buffer(tol)
     all_points = (
         coords
@@ -3604,10 +3599,7 @@ def _find_next_hull_point(
             if best_idx is not None:
                 return best_idx
 
-        if current_k == n_points - 1:
-            break
-
-        current_k = min(current_k + 5, n_points - 1)
+        current_k = n_points if current_k == n_points - 1 else min(current_k + 5, n_points - 1)
 
     return None
 
@@ -3677,12 +3669,6 @@ def _find_best_candidate(
 
     if hull_state is None:
         hull_state = _HullWalkState.create(max(0, len(hull_indices) - 2))
-        if len(hull_indices) >= 3:
-            hull_arr = np.asarray(hull_indices, dtype=int)
-            seg_starts = coords[hull_arr[:-2]]
-            seg_ends = coords[hull_arr[1:-1]]
-            for start, end in zip(seg_starts, seg_ends, strict=True):
-                hull_state.append_segment(start, end)
 
     for idx in sorted_indices:
         candidate_idx = int(candidates_array[idx])
@@ -3729,9 +3715,6 @@ def _bbox_overlap_indices(
     np.ndarray
         Integer indices of potentially overlapping segments.
     """
-    if len(seg_bounds_min) == 0:
-        return np.empty(0, dtype=int)
-
     edge_min = np.minimum(start, end)
     edge_max = np.maximum(start, end)
 
@@ -3803,20 +3786,12 @@ def _is_valid_edge(
     for i in possible_hits:
         existing_edge = existing_lines[int(i)]
 
-        if not new_edge.intersects(existing_edge):
-            continue
-
         intersection = new_edge.intersection(existing_edge)
 
         # Allow touching at start point when closing the loop
-        if (
-            candidate_idx == start_idx
-            and int(i) == 0
-            and (isinstance(intersection, Point) or intersection.is_empty)
+        if not intersection.is_empty and not (
+            candidate_idx == start_idx and int(i) == 0 and isinstance(intersection, Point)
         ):
-            continue
-
-        if not intersection.is_empty:
             return False
 
     return True
@@ -3847,6 +3822,7 @@ def _coerce_seg_bounds_arrays(
     tuple[np.ndarray, np.ndarray]
         Pair ``(min_bounds, max_bounds)`` where each array has shape ``(n, 2)``.
     """
+    bounds_arr = np.asarray([] if seg_bounds is None else seg_bounds, dtype=float)
     if seg_bounds_min is not None or seg_bounds_max is not None:
         min_arr = (
             np.empty((0, 2), dtype=float)
@@ -3858,16 +3834,13 @@ def _coerce_seg_bounds_arrays(
             if seg_bounds_max is None
             else np.asarray(seg_bounds_max, dtype=float).reshape(-1, 2)
         )
-        return min_arr, max_arr
+        bounds_arr = (
+            np.hstack([min_arr, max_arr]) if len(min_arr) or len(max_arr) else np.empty((0, 4))
+        )
 
-    if seg_bounds is None:
-        return np.empty((0, 2), dtype=float), np.empty((0, 2), dtype=float)
-
-    bounds_arr = np.asarray(seg_bounds, dtype=float)
-    if bounds_arr.size == 0:
-        return np.empty((0, 2), dtype=float), np.empty((0, 2), dtype=float)
-
-    bounds_arr = np.atleast_2d(bounds_arr)
+    bounds_arr = (
+        np.empty((0, 4), dtype=float) if bounds_arr.size == 0 else np.atleast_2d(bounds_arr)
+    )
     return bounds_arr[:, :2], bounds_arr[:, 2:]
 
 
@@ -3888,10 +3861,8 @@ def _extract_coordinate_array_from_geometries(geoms: gpd.GeoSeries | list[Any]) 
     np.ndarray
         Coordinate array with shape ``(n, 2)`` and dtype float.
     """
-    coords = shapely.get_coordinates(geoms)
-    if coords.size == 0:
-        return np.empty((0, 2), dtype=float)
-    return np.asarray(coords[:, :2], dtype=float)
+    coords = np.asarray(shapely.get_coordinates(geoms), dtype=float)
+    return np.empty((0, 2), dtype=float) if coords.size == 0 else coords[:, :2]
 
 
 def _extract_points_from_geometries(geoms: gpd.GeoSeries | list[Any]) -> list[Point]:

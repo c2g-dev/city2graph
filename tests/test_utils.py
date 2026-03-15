@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import warnings
 from typing import TYPE_CHECKING
+from typing import Any
+from typing import cast
 from unittest import mock
 
 import geopandas as gpd
+import momepy
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -185,6 +188,40 @@ class TestTessellation(BaseGraphTest):
             assert isinstance(result, gpd.GeoDataFrame)
             assert result.empty
             assert result.crs == sample_crs
+
+    def test_tessellation_returns_empty_when_momepy_concat_fails_with_enclosures(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Enclosed tessellation should warn and return an empty schema on concat failures."""
+        monkeypatch.setattr(
+            momepy,
+            "enclosures",
+            lambda **_kwargs: gpd.GeoDataFrame(
+                {"eID": [1]},
+                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
+                crs=sample_buildings_gdf.crs,
+            ),
+        )
+
+        def raise_concat_error(**_kwargs: object) -> gpd.GeoDataFrame:
+            msg = "No objects to concatenate"
+            raise ValueError(msg)
+
+        monkeypatch.setattr(momepy, "enclosed_tessellation", raise_concat_error)
+
+        with caplog.at_level("WARNING"):
+            result = utils.create_tessellation(
+                sample_buildings_gdf,
+                primary_barriers=sample_segments_gdf,
+            )
+
+        assert result.empty
+        assert list(result.columns) == ["geometry", "enclosure_index", "tess_id"]
+        assert "returning empty GeoDataFrame" in caplog.text
 
 
 # ============================================================================
@@ -1440,6 +1477,39 @@ class TestGraphAnalysis(BaseGraphTest):
             assert not iso.empty
             mock_fallback.assert_called_once()
             assert iso.geometry.iloc[0].equals(mock_fallback.return_value)
+
+    def test_create_isochrone_falls_back_when_hull_walk_never_closes(self, sample_crs: str) -> None:
+        """Isochrone generation should fall back when the concave walk exhausts without closure."""
+        graph = nx.Graph()
+        graph.graph["crs"] = sample_crs
+        graph.add_node(1, pos=(0, 0))
+        graph.add_node(2, pos=(2, 0))
+        graph.add_node(3, pos=(1, 1))
+        graph.add_edge(1, 2, length=1.0)
+        graph.add_edge(2, 3, length=1.0)
+
+        next_indices = iter([1, 2, 1, 2])
+
+        with (
+            mock.patch(
+                "city2graph.utils._find_next_hull_point",
+                side_effect=lambda **_kwargs: next(next_indices),
+            ),
+            mock.patch(
+                "city2graph.utils._concave_fallback_alpha",
+                return_value=Polygon([(0, 0), (2, 0), (1, 1)]),
+            ) as mock_fallback,
+        ):
+            iso = utils.create_isochrone(
+                graph,
+                center_point=Point(0, 0),
+                threshold=10.0,
+                edge_attr="length",
+                method="concave_hull_knn",
+            )
+
+        assert not iso.empty
+        mock_fallback.assert_called_once()
 
     def test_buffer_negative_distance(self, sample_nx_graph: nx.Graph) -> None:
         """Test buffer method with negative distance (results in empty polygon)."""
@@ -3269,6 +3339,29 @@ class TestPublicUtilityBranches(BaseGraphTest):
                 ax=ax,
             )
             assert returned_ax is ax
+        finally:
+            plt.close(fig)
+
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    def test_plot_graph_accepts_axis_lists_for_subplots(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Subplot rendering should accept a plain list of axes."""
+        edge_key, edge_gdf = next(iter(sample_hetero_edges_dict.items()))
+        fig, axes = plt.subplots(1, 2)
+        axes_list = list(axes)
+
+        try:
+            returned_axes = utils.plot_graph(
+                nodes=sample_hetero_nodes_dict,
+                edges={edge_key: edge_gdf},
+                subplots=True,
+                ax=cast("Any", axes_list),
+            )
+            assert returned_axes == axes_list
+            assert not axes_list[1].get_visible()
         finally:
             plt.close(fig)
 
