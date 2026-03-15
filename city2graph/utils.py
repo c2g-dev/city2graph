@@ -4902,12 +4902,20 @@ def clip_graph(
     if edges.empty:
         return _return_graph_output(nodes, edges, input_type, as_nx)
 
-    # Extract clip geometry
-    clip_geom = (
-        (area.geometry.union_all() if len(area) > 1 else area.geometry.iloc[0])
-        if isinstance(area, (gpd.GeoDataFrame, gpd.GeoSeries))
-        else area
-    )
+    # Align clip geometry CRS to edges CRS when area is geospatial tabular input.
+    if isinstance(area, (gpd.GeoDataFrame, gpd.GeoSeries)):
+        area_aligned = area.to_crs(edges.crs) if area.crs != edges.crs else area
+        clip_geom = (
+            area_aligned.geometry.union_all()
+            if isinstance(area_aligned, gpd.GeoDataFrame) and len(area_aligned) > 1
+            else area_aligned.union_all()
+            if isinstance(area_aligned, gpd.GeoSeries) and len(area_aligned) > 1
+            else area_aligned.geometry.iloc[0]
+            if isinstance(area_aligned, gpd.GeoDataFrame)
+            else area_aligned.iloc[0]
+        )
+    else:
+        clip_geom = area
 
     # Filter or clip edges
     clipped_edges = (
@@ -4918,11 +4926,24 @@ def clip_graph(
 
     # Explode MultiLineStrings (created by clipping or existing)
     if not clipped_edges.empty and "MultiLineString" in clipped_edges.geometry.type.to_numpy():
-        clipped_edges = clipped_edges.explode(ignore_index=True)
+        clipped_edges = clipped_edges.explode(index_parts=False)
 
-    return _return_graph_output(
-        _filter_nodes_by_edges(nodes, clipped_edges), clipped_edges, input_type, as_nx
-    )
+    # For strict clipping, keep only nodes inside the boundary and edges whose
+    # endpoints are both inside. This avoids retaining outside endpoints when
+    # an edge intersects the boundary.
+    if nodes is not None and not keep_outer_neighbors:
+        clipped_nodes = nodes[nodes.geometry.intersects(clip_geom)].copy()
+        if isinstance(clipped_edges.index, pd.MultiIndex) and clipped_edges.index.nlevels >= 2:
+            in_bound_ids = set(clipped_nodes.index)
+            clipped_edges = clipped_edges[
+                clipped_edges.index.get_level_values(0).isin(in_bound_ids)
+                & clipped_edges.index.get_level_values(1).isin(in_bound_ids)
+            ].copy()
+        filtered_nodes = _filter_nodes_by_edges(clipped_nodes, clipped_edges)
+    else:
+        filtered_nodes = _filter_nodes_by_edges(nodes, clipped_edges)
+
+    return _return_graph_output(filtered_nodes, clipped_edges, input_type, as_nx)
 
 
 def remove_isolated_components(

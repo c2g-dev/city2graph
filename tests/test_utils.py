@@ -2568,8 +2568,111 @@ class TestClipGraph(BaseGraphTest):
         clipped_nodes, clipped_edges = utils.clip_graph((nodes, edges), clip_poly)
         assert isinstance(clipped_nodes, gpd.GeoDataFrame)
         assert isinstance(clipped_edges, gpd.GeoDataFrame)
-        assert len(clipped_edges) == 2  # Both edges now kept (one clipped)
-        assert len(clipped_nodes) == 3  # All nodes connected to kept edges
+        assert len(clipped_edges) == 1
+        assert len(clipped_nodes) == 2
+        assert isinstance(clipped_edges.index, pd.MultiIndex)
+        assert clipped_edges.index.names == ["u", "v"]
+        assert set(clipped_nodes.index.to_list()) == {1, 2}
+
+    def test_clip_graph_preserves_multiindex_after_explode(self, sample_crs: str) -> None:
+        """Test tuple clipping preserves edge MultiIndex after MultiLineString explode."""
+        clip_poly = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+
+        nodes = gpd.GeoDataFrame(
+            {"geometry": [Point(1, 1), Point(4, 4), Point(9, 9)]},
+            index=pd.Index([1, 2, 3], name="node_id"),
+            crs=sample_crs,
+        )
+        edges = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    MultiLineString([LineString([(1, 1), (2, 2)]), LineString([(3, 3), (4, 4)])])
+                ]
+            },
+            index=pd.MultiIndex.from_tuples([(1, 2)], names=["u", "v"]),
+            crs=sample_crs,
+        )
+
+        clipped_nodes, clipped_edges = utils.clip_graph((nodes, edges), clip_poly)
+
+        assert isinstance(clipped_nodes, gpd.GeoDataFrame)
+        assert isinstance(clipped_edges.index, pd.MultiIndex)
+        assert clipped_edges.index.names == ["u", "v"]
+        assert len(clipped_edges) == 2
+        assert set(clipped_nodes.index.to_list()) == {1, 2}
+
+    def test_clip_graph_area_gdf_crs_alignment(self) -> None:
+        """Test clipping aligns area CRS with edge CRS when area is GeoDataFrame."""
+        nodes = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    Point(-0.150, 51.505),
+                    Point(-0.140, 51.510),
+                    Point(-0.220, 51.600),
+                ]
+            },
+            index=pd.Index([1, 2, 3], name="node_id"),
+            crs="EPSG:4326",
+        )
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(-0.150, 51.505), (-0.140, 51.510)])]},
+            index=pd.MultiIndex.from_tuples([(1, 2)], names=["u", "v"]),
+            crs="EPSG:4326",
+        )
+
+        area_wgs84 = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    Polygon(
+                        [
+                            (-0.170, 51.490),
+                            (-0.120, 51.490),
+                            (-0.120, 51.530),
+                            (-0.170, 51.530),
+                        ]
+                    )
+                ]
+            },
+            crs="EPSG:4326",
+        )
+        area_bng = area_wgs84.to_crs(epsg=27700)
+
+        clipped_nodes, clipped_edges = utils.clip_graph((nodes, edges), area_bng)
+
+        assert isinstance(clipped_nodes, gpd.GeoDataFrame)
+        assert len(clipped_edges) == 1
+        assert isinstance(clipped_edges.index, pd.MultiIndex)
+        assert set(clipped_nodes.index.to_list()) == {1, 2}
+
+    def test_clip_graph_removes_out_of_boundary_endpoints(self, sample_crs: str) -> None:
+        """Test strict clipping removes outside endpoint nodes and crossing edges."""
+        clip_poly = Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])
+
+        nodes = gpd.GeoDataFrame(
+            {"geometry": [Point(0.5, 0.5), Point(1.5, 1.5), Point(3.0, 3.0)]},
+            index=pd.Index([1, 2, 3], name="node_id"),
+            crs=sample_crs,
+        )
+        edges = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    LineString([(0.5, 0.5), (1.5, 1.5)]),
+                    LineString([(1.5, 1.5), (3.0, 3.0)]),
+                ]
+            },
+            index=pd.MultiIndex.from_tuples([(1, 2), (2, 3)], names=["u", "v"]),
+            crs=sample_crs,
+        )
+
+        clipped_nodes, clipped_edges = utils.clip_graph(
+            (nodes, edges),
+            clip_poly,
+            keep_outer_neighbors=False,
+        )
+
+        assert isinstance(clipped_nodes, gpd.GeoDataFrame)
+        assert set(clipped_nodes.index.to_list()) == {1, 2}
+        assert set(clipped_edges.index.to_list()) == {(1, 2)}
 
     def test_clip_graph_with_nx_input(self, sample_crs: str) -> None:
         """Test clipping with NetworkX graph input."""
