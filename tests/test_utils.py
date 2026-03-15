@@ -587,6 +587,142 @@ class TestGraphAnalysis(BaseGraphTest):
         assert len(isochrone) == 1
         assert isochrone.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
 
+    def test_create_isochrone_multi_threshold_returns_layered_rows(
+        self, sample_nx_graph: nx.Graph
+    ) -> None:
+        """Sequence thresholds should return one row per requested layer."""
+        result = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=Point(0, 0),
+            threshold=[2.0, 1.0, 2.0],
+            edge_attr="edge_feature1",
+            method="convex_hull",
+        )
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert list(result["threshold"]) == [2.0, 1.0, 2.0]
+        assert len(result) == 3
+        assert result.crs == sample_nx_graph.graph["crs"]
+        assert result.geometry.notna().all()
+
+    def test_create_isochrone_scalar_threshold_keeps_legacy_shape(
+        self, sample_nx_graph: nx.Graph
+    ) -> None:
+        """Scalar thresholds should keep the pre-existing single-row schema."""
+        result = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=Point(0, 0),
+            threshold=2.0,
+            edge_attr="edge_feature1",
+            method="convex_hull",
+        )
+
+        assert len(result) == 1
+        assert list(result.columns) == ["geometry"]
+
+    def test_create_isochrone_multi_threshold_preserves_empty_layers(self) -> None:
+        """Multi-threshold mode should keep rows even when no polygon is generated."""
+        empty_graph = nx.Graph()
+        empty_graph.graph["crs"] = "EPSG:4326"
+
+        result = utils.create_isochrone(
+            empty_graph,
+            center_point=Point(0, 0),
+            threshold=[10.0, 20.0],
+            method="convex_hull",
+        )
+
+        assert list(result["threshold"]) == [10.0, 20.0]
+        assert len(result) == 2
+        assert result.geometry.is_empty.tolist() == [True, True]
+
+    def test_create_isochrone_multi_threshold_cut_edge_types(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Cut edge filtering should still apply when layered output is requested."""
+        graph = gdf_to_nx(nodes=sample_hetero_nodes_dict, edges=sample_hetero_edges_dict)
+        cut_type = ("building", "connects_to", "road")
+
+        iso_full = utils.create_isochrone(
+            graph,
+            center_point=Point(0, 0),
+            threshold=[100.0],
+            method="buffer",
+            buffer_distance=1.0,
+        )
+        iso_cut = utils.create_isochrone(
+            graph,
+            center_point=Point(0, 0),
+            threshold=[100.0],
+            method="buffer",
+            buffer_distance=1.0,
+            cut_edge_types=[cut_type],
+        )
+
+        assert iso_cut.geometry.iloc[0].area < iso_full.geometry.iloc[0].area
+
+    def test_create_isochrone_multi_threshold_from_gdf_inputs(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Layered isochrones should work with nodes/edges inputs."""
+        result = utils.create_isochrone(
+            nodes=sample_nodes_gdf,
+            edges=sample_edges_gdf,
+            center_point=Point(0, 0),
+            threshold=[1.0, 2.0],
+            method="convex_hull",
+        )
+
+        assert list(result["threshold"]) == [1.0, 2.0]
+        assert len(result) == 2
+        assert result.geometry.notna().all()
+
+    def test_create_isochrone_multi_threshold_multi_center(self, sample_crs: str) -> None:
+        """Layered output should still union reachability from multiple centers."""
+        graph = nx.Graph()
+        graph.graph["crs"] = sample_crs
+        graph.add_node(1, pos=(0, 0))
+        graph.add_node(2, pos=(1, 0))
+        graph.add_node(3, pos=(10, 0))
+        graph.add_node(4, pos=(11, 0))
+        graph.add_edge(1, 2, length=1.0)
+        graph.add_edge(3, 4, length=1.0)
+
+        result = utils.create_isochrone(
+            graph,
+            center_point=gpd.GeoSeries([Point(0, 0), Point(10, 0)], crs=sample_crs),
+            threshold=[1.0, 2.0],
+            edge_attr="length",
+            method="convex_hull",
+        )
+
+        assert list(result["threshold"]) == [1.0, 2.0]
+        assert result.geometry.iloc[0].intersects(Point(0, 0))
+        assert result.geometry.iloc[0].intersects(Point(10, 0))
+
+    def test_create_isochrone_multi_threshold_computes_distances_once(
+        self, sample_nx_graph: nx.Graph
+    ) -> None:
+        """Layered isochrones should reuse a single distance computation."""
+        with mock.patch(
+            "city2graph.utils._compute_center_node_distances",
+            wraps=utils._compute_center_node_distances,
+        ) as mock_compute:
+            result = utils.create_isochrone(
+                sample_nx_graph,
+                center_point=Point(0, 0),
+                threshold=[1.0, 2.0, 3.0],
+                edge_attr="edge_feature1",
+                method="convex_hull",
+            )
+
+        assert len(result) == 3
+        assert mock_compute.call_count == 1
+
     def test_isochrone_with_cut_edge_types(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
@@ -747,8 +883,7 @@ class TestGraphAnalysis(BaseGraphTest):
 
         assert isinstance(isochrone, gpd.GeoDataFrame)
         assert len(isochrone) == 1
-        # concave_hull_knn produces Polygon
-        assert isochrone.geometry.iloc[0].geom_type == "Polygon"
+        assert isochrone.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
 
     def test_create_isochrone_concave_hull_knn_params(self, sample_nx_graph: nx.Graph) -> None:
         """Test concave_hull_knn with different k values."""
@@ -765,7 +900,7 @@ class TestGraphAnalysis(BaseGraphTest):
         )
         assert not iso_k1.empty
 
-        # k larger than n_points (should fallback to convex hull)
+        # k larger than n_points should clamp and still produce a polygonal hull.
         iso_k_large = utils.create_isochrone(
             sample_nx_graph,
             center_point=center,
@@ -845,6 +980,9 @@ class TestGraphAnalysis(BaseGraphTest):
             utils.create_isochrone(
                 graph=None, nodes=None, edges=None, center_point=Point(0, 0), threshold=10
             )
+
+        with pytest.raises(ValueError, match="threshold sequence must not be empty"):
+            utils.create_isochrone(sample_nx_graph, center_point=Point(0, 0), threshold=[])
 
     def test_create_isochrone_multi_center(self, sample_nx_graph: nx.Graph) -> None:
         """Test isochrone with multiple center points."""
@@ -1048,16 +1186,37 @@ class TestGraphAnalysis(BaseGraphTest):
         # Hull: (0,0) -> (10,0) -> (10,10) -> (0,10)
         hull_indices = [0, 1, 2, 3]
         start_idx = 0
+        hull_arr = np.asarray(hull_indices, dtype=int)
+        seg_starts = coords[hull_arr[:-2]]
+        seg_ends = coords[hull_arr[1:-1]]
+        existing_lines = [
+            LineString([start, end]) for start, end in zip(seg_starts, seg_ends, strict=True)
+        ]
+        seg_bounds_min = np.minimum(seg_starts, seg_ends)
+        seg_bounds_max = np.maximum(seg_starts, seg_ends)
 
         # Edge from (0,10) to (5,5) is valid (inside)
-        new_edge_valid = LineString([(0, 10), (5, 5)])
-        assert utils._is_valid_edge(new_edge_valid, coords, hull_indices, start_idx, 4)
+        assert utils._is_valid_edge(
+            coords=coords,
+            current_idx=3,
+            candidate_idx=4,
+            start_idx=start_idx,
+            existing_lines=existing_lines,
+            seg_bounds_min=seg_bounds_min,
+            seg_bounds_max=seg_bounds_max,
+        )
 
         # Edge from (0,10) to (5, -5) crosses (0,0)-(10,0)
-        new_edge_invalid = LineString([(0, 10), (5, -5)])
+        invalid_coords = np.vstack([coords, np.array([(5, -5)])])
         assert not utils._is_valid_edge(
-            new_edge_invalid, coords, hull_indices, start_idx, -1
-        )  # -1 as dummy candidate
+            coords=invalid_coords,
+            current_idx=3,
+            candidate_idx=5,
+            start_idx=start_idx,
+            existing_lines=existing_lines,
+            seg_bounds_min=seg_bounds_min,
+            seg_bounds_max=seg_bounds_max,
+        )
 
     def test_create_isochrone_empty_result(self) -> None:
         """Test create_isochrone returning empty result."""
@@ -1127,6 +1286,7 @@ class TestGraphAnalysis(BaseGraphTest):
                 sample_nx_graph,
                 center_point=Point(0, 0),
                 threshold=100,
+                method="convex_hull",
                 edge_attr="edge_feature1",
             )
             assert iso.empty
@@ -1145,11 +1305,26 @@ class TestGraphAnalysis(BaseGraphTest):
         )
         assert not iso.empty
 
+    def test_concave_hull_knn_retries_with_larger_k(self) -> None:
+        """concave_hull_knn should retry the full walk with a larger neighborhood."""
+        points = np.array([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)], dtype=float)
+
+        with mock.patch("city2graph.utils._trace_concave_hull_once") as mock_trace:
+            mock_trace.side_effect = [None, [0, 1, 2, 3]]
+
+            poly = utils._concave_hull_knn(points, k=2)
+
+        assert isinstance(poly, Polygon)
+        assert [call.args[2] for call in mock_trace.call_args_list] == [2, 3]
+
     def test_concave_hull_knn_fallback(self, sample_nx_graph: nx.Graph) -> None:
-        """Test concave_hull_knn fallback to convex hull."""
-        # We can mock _find_next_hull_point to always return None
-        with mock.patch("city2graph.utils._find_next_hull_point") as mock_find:
+        """Test concave_hull_knn fallback to alpha hull when the walker cannot progress."""
+        with (
+            mock.patch("city2graph.utils._find_next_hull_point") as mock_find,
+            mock.patch("city2graph.utils._concave_fallback_alpha") as mock_fallback,
+        ):
             mock_find.return_value = None
+            mock_fallback.return_value = Polygon([(0, 0), (1, 0), (0, 1)])
 
             iso = utils.create_isochrone(
                 sample_nx_graph,
@@ -1160,8 +1335,8 @@ class TestGraphAnalysis(BaseGraphTest):
                 edge_attr="edge_feature1",
             )
             assert not iso.empty
-            # Should be convex hull
-            assert iso.geometry.iloc[0].equals(iso.geometry.iloc[0].convex_hull)
+            mock_fallback.assert_called_once()
+            assert iso.geometry.iloc[0].equals(mock_fallback.return_value)
 
     def test_buffer_negative_distance(self, sample_nx_graph: nx.Graph) -> None:
         """Test buffer method with negative distance (results in empty polygon)."""
@@ -1196,6 +1371,7 @@ class TestGraphAnalysis(BaseGraphTest):
                 sample_nx_graph,
                 center_point=Point(0, 0),
                 threshold=10.0,
+                method="convex_hull",
             )
             assert iso.empty
 

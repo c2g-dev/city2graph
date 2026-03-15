@@ -17,6 +17,7 @@ import warnings
 from collections import defaultdict
 from collections.abc import Iterable
 from collections.abc import Sequence
+from dataclasses import dataclass
 from itertools import combinations
 from typing import TYPE_CHECKING
 from typing import Any
@@ -31,6 +32,7 @@ import pandas as pd
 import rustworkx as rx
 import shapely
 from scipy.spatial import cKDTree
+from shapely.geometry import GeometryCollection
 from shapely.geometry import LineString
 from shapely.geometry import MultiPoint
 from shapely.geometry import MultiPolygon
@@ -2323,48 +2325,19 @@ def filter_graph_by_distance(
         nx_graph = converter.gdf_to_nx(edges=graph)
         original_crs = graph.crs if hasattr(graph, "crs") else None
 
-    # Extract node positions
-    pos_dict = nx.get_node_attributes(nx_graph, "pos")
-    if not pos_dict:
+    distances = _compute_center_node_distances(
+        nx_graph,
+        center_point=center_point,
+        edge_attr=edge_attr,
+        cutoff=threshold,
+    )
+    if not distances and not nx.get_node_attributes(nx_graph, "pos"):
         if is_graph_input:
             graph_type = type(graph)
             return graph_type()
         return gpd.GeoDataFrame(geometry=[], crs=original_crs)
 
-    # Prepare KDTree for fast nearest neighbor search
-    node_ids = list(pos_dict.keys())
-    coordinates = list(pos_dict.values())
-    tree = cKDTree(coordinates)
-
-    # Normalize center points
-    if isinstance(center_point, gpd.GeoDataFrame):
-        center_points = center_point.geometry
-    elif isinstance(center_point, gpd.GeoSeries):
-        center_points = center_point
-    else:
-        center_points = [center_point]
-
-    center_points_list = (
-        center_points.tolist() if hasattr(center_points, "tolist") else list(center_points)
-    )
-
-    # Compute reachable nodes
-    all_reachable = set()
-    for point in center_points_list:
-        # Find nearest node using KDTree
-        _, idx = tree.query((point.x, point.y))
-        source_node = node_ids[idx]
-
-        ego_subgraph = nx.ego_graph(
-            nx_graph,
-            source_node,
-            radius=threshold,
-            distance=edge_attr or "length",
-        )
-        all_reachable.update(ego_subgraph.nodes)
-
-    # Create subgraph
-    subgraph = nx_graph.subgraph(all_reachable)
+    subgraph = _build_reachable_subgraph(nx_graph, distances, threshold)
 
     if is_graph_input:
         return subgraph
@@ -2379,7 +2352,7 @@ def create_isochrone(
     nodes: gpd.GeoDataFrame | dict[str, gpd.GeoDataFrame] | None = None,
     edges: gpd.GeoDataFrame | dict[tuple[str, str, str], gpd.GeoDataFrame] | None = None,
     center_point: Point | gpd.GeoSeries | gpd.GeoDataFrame | None = None,
-    threshold: float | None = None,
+    threshold: float | Sequence[float] | None = None,
     edge_attr: str | None = None,
     cut_edge_types: list[tuple[str, str, str]] | None = None,
     method: str = "concave_hull_knn",
@@ -2403,9 +2376,11 @@ def create_isochrone(
         Edges of the graph.
     center_point : Point or geopandas.GeoSeries or geopandas.GeoDataFrame
         The origin point(s) for the isochrone calculation.
-    threshold : float
+    threshold : float or Sequence[float]
         The maximum travel distance (or time) that defines the boundary of the
-        isochrone.
+        isochrone. When a sequence is provided, the function returns one
+        isochrone layer per threshold using a single shared distance
+        calculation.
     edge_attr : str, default "travel_time"
         The edge attribute to use for distance calculation (e.g., 'length',
         'travel_time'). If None, the function will use the default edge attribute.
@@ -2423,11 +2398,13 @@ def create_isochrone(
         Additional parameters for specific isochrone generation methods:
 
         For method="concave_hull_knn":
-            k : int, default 100
-                The number of nearest neighbors to consider.
+            k : int, default 50
+                The number of nearest neighbors to consider. Increasing `k`
+                generally produces a smoother, less concave boundary that moves
+                closer to the convex hull.
 
         For method="concave_hull_alpha":
-            hull_ratio : float, default 0.3
+            hull_ratio : float, default 0.0
                 The ratio for concave hull generation (0.0 to 1.0). Higher values mean tighter fit.
             allow_holes : bool, default False
                 Whether to allow holes in the concave hull.
@@ -2445,8 +2422,10 @@ def create_isochrone(
     Returns
     -------
     geopandas.GeoDataFrame
-        A GeoDataFrame containing a single Polygon or MultiPolygon geometry that
-        represents the isochrone.
+        A GeoDataFrame containing Polygon or MultiPolygon geometry. Scalar
+        threshold input returns a single-row GeoDataFrame matching the existing
+        API. Sequence input returns one row per threshold with columns
+        ``threshold`` and ``geometry``.
 
     Raises
     ------
@@ -2462,33 +2441,233 @@ def create_isochrone(
         msg = "center_point and threshold must be provided."
         raise ValueError(msg)
 
+    thresholds, is_multi_threshold = _normalize_isochrone_thresholds(threshold)
+
     # Prepare the graph
     nx_graph = _prepare_isochrone_graph(graph, nodes, edges, edge_attr)
-
-    # Compute Reachable Subgraph
-    reachable = filter_graph_by_distance(nx_graph, center_point, threshold, edge_attr)
-
-    # Filter Edge Types if requested
-    if cut_edge_types and isinstance(reachable, (nx.Graph, nx.MultiGraph)):
-        reachable = _filter_edges_by_type(reachable, cut_edge_types)
-
-    # Get CRS
     crs = nx_graph.graph.get("crs")
 
-    # Generate polygons
-    polygons = _generate_component_polygons(reachable, method, crs, **kwargs)
+    distances = _compute_center_node_distances(
+        nx_graph,
+        center_point=center_point,
+        edge_attr=edge_attr,
+        cutoff=max(thresholds),
+    )
 
-    if not polygons:
+    if is_multi_threshold:
+        rows: list[dict[str, float | Polygon | MultiPolygon | GeometryCollection]] = []
+        for layer_threshold in thresholds:
+            reachable = _build_reachable_subgraph(nx_graph, distances, layer_threshold)
+            if cut_edge_types:
+                reachable = _filter_edges_by_type(reachable, cut_edge_types)
+
+            geometry = _build_isochrone_geometry(reachable, method, crs, **kwargs)
+            rows.append(
+                {
+                    "threshold": layer_threshold,
+                    "geometry": geometry if geometry is not None else GeometryCollection(),
+                }
+            )
+
+        return gpd.GeoDataFrame(rows, geometry="geometry", crs=crs)
+
+    reachable = _build_reachable_subgraph(nx_graph, distances, thresholds[0])
+
+    # Filter Edge Types if requested
+    if cut_edge_types:
+        reachable = _filter_edges_by_type(reachable, cut_edge_types)
+
+    final_geom = _build_isochrone_geometry(reachable, method, crs, **kwargs)
+
+    if final_geom is None:
         return gpd.GeoDataFrame(geometry=[], crs=crs)
 
-    # Union all component polygons
+    return gpd.GeoDataFrame(geometry=[final_geom], crs=crs)
+
+
+def _normalize_isochrone_thresholds(
+    threshold: float | Sequence[float],
+) -> tuple[list[float], bool]:
+    """
+    Normalize scalar or layered isochrone thresholds.
+
+    This helper converts all threshold inputs to a float list and records
+    whether the caller requested layered output.
+
+    Parameters
+    ----------
+    threshold : float or Sequence[float]
+        The requested threshold input.
+
+    Returns
+    -------
+    tuple[list[float], bool]
+        Normalized thresholds and a flag indicating sequence input.
+
+    Raises
+    ------
+    ValueError
+        If a threshold sequence is empty.
+    """
+    if isinstance(threshold, Sequence) and not isinstance(threshold, str | bytes):
+        if not threshold:
+            msg = "threshold sequence must not be empty."
+            raise ValueError(msg)
+        return [float(value) for value in threshold], True
+
+    return [float(threshold)], False
+
+
+def _normalize_center_points(
+    center_point: Point | gpd.GeoSeries | gpd.GeoDataFrame,
+) -> list[Point]:
+    """
+    Normalize center point inputs to a list of Point geometries.
+
+    This ensures downstream snapping logic can always iterate over a
+    homogeneous list of Point objects.
+
+    Parameters
+    ----------
+    center_point : Point or geopandas.GeoSeries or geopandas.GeoDataFrame
+        The center point input.
+
+    Returns
+    -------
+    list[Point]
+        The normalized center points.
+    """
+    if isinstance(center_point, gpd.GeoDataFrame):
+        center_points = center_point.geometry.tolist()
+    elif isinstance(center_point, gpd.GeoSeries):
+        center_points = center_point.tolist()
+    else:
+        center_points = [center_point]
+
+    return typing.cast("list[Point]", center_points)
+
+
+def _compute_center_node_distances(
+    graph: nx.Graph | nx.MultiGraph,
+    center_point: Point | gpd.GeoSeries | gpd.GeoDataFrame,
+    edge_attr: str | None,
+    cutoff: float,
+) -> dict[Any, float]:
+    """
+    Compute shortest-path distances from snapped center points once.
+
+    Each center point is snapped to its nearest node, and a single multi-source
+    Dijkstra run is used to obtain distances to all reachable nodes.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+        The graph to traverse.
+    center_point : Point or geopandas.GeoSeries or geopandas.GeoDataFrame
+        Center points that will be snapped to the nearest graph nodes.
+    edge_attr : str or None
+        Edge attribute used as traversal weight.
+    cutoff : float
+        Maximum distance used to limit traversal.
+
+    Returns
+    -------
+    dict[Any, float]
+        Reachable node distances keyed by node id.
+    """
+    pos_dict = nx.get_node_attributes(graph, "pos")
+    if not pos_dict:
+        return {}
+
+    node_ids = list(pos_dict.keys())
+    coordinates = list(pos_dict.values())
+    tree = cKDTree(coordinates)
+
+    source_nodes = []
+    for point in _normalize_center_points(center_point):
+        _, idx = tree.query((point.x, point.y))
+        source_nodes.append(node_ids[idx])
+
+    if not source_nodes:
+        return {}
+
+    deduped_sources = list(dict.fromkeys(source_nodes))
+    distances = nx.multi_source_dijkstra_path_length(
+        graph,
+        deduped_sources,
+        cutoff=cutoff,
+        weight=edge_attr or "length",
+    )
+    return typing.cast("dict[Any, float]", distances)
+
+
+def _build_reachable_subgraph(
+    graph: nx.Graph | nx.MultiGraph,
+    distances: dict[Any, float],
+    threshold: float,
+) -> nx.Graph | nx.MultiGraph:
+    """
+    Induce a reachable subgraph from precomputed node distances.
+
+    Nodes with shortest-path distance less than or equal to the threshold are
+    retained, preserving graph type and edge attributes.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+        Source graph.
+    distances : dict[Any, float]
+        Precomputed shortest-path distances.
+    threshold : float
+        Threshold used to keep nodes.
+
+    Returns
+    -------
+    networkx.Graph or networkx.MultiGraph
+        Reachable subgraph view.
+    """
+    reachable_nodes = [node for node, distance in distances.items() if distance <= threshold]
+    return graph.subgraph(reachable_nodes)
+
+
+def _build_isochrone_geometry(
+    reachable: nx.Graph | nx.MultiGraph,
+    method: str,
+    crs: Any,  # noqa: ANN401
+    **kwargs: Any,  # noqa: ANN401
+) -> Polygon | MultiPolygon | None:
+    """
+    Build the final isochrone geometry for a reachable subgraph.
+
+    Component polygons are generated per connected component and merged into a
+    single polygonal geometry for output.
+
+    Parameters
+    ----------
+    reachable : networkx.Graph or networkx.MultiGraph
+        Reachable subgraph.
+    method : str
+        Isochrone generation method.
+    crs : Any
+        Coordinate reference system.
+    **kwargs : Any
+        Geometry generation options.
+
+    Returns
+    -------
+    Polygon or MultiPolygon or None
+        Final geometry, or None when no component polygons can be generated.
+    """
+    polygons = _generate_component_polygons(reachable, method, crs, **kwargs)
+    if not polygons:
+        return None
+
     final_geom = gpd.GeoSeries(polygons, crs=crs).union_all()
 
-    # Ensure the final geometry is a Polygon or MultiPolygon
     if not isinstance(final_geom, (Polygon, MultiPolygon)):
         final_geom = final_geom.buffer(0)
 
-    return gpd.GeoDataFrame(geometry=[final_geom], crs=crs)
+    return final_geom
 
 
 def _prepare_isochrone_graph(
@@ -2702,18 +2881,27 @@ def _process_component(
     Polygon or MultiPolygon or None
         The generated Polygon or MultiPolygon geometry, or None if failed or empty.
     """
-    geoms = _extract_isochrone_geometries(component, method)
-    if not geoms:
-        return None
+    if method == "concave_hull_knn":
+        coords = _extract_node_coordinate_array(component)
+        coords = coords[np.isfinite(coords).all(axis=1)]
 
-    gs = gpd.GeoSeries(geoms, crs=crs)
-    # Filter invalid geometries
-    gs = gs[~gs.is_empty & gs.is_valid]
+        if len(coords) == 0:
+            return None
 
-    if gs.empty:
-        return None
+        poly = _concave_hull_knn(coords, k=kwargs.get("k", 50))
+    else:
+        geoms = _extract_isochrone_geometries(component, method)
+        if not geoms:
+            return None
 
-    poly = _generate_polygon(gs, method, **kwargs)
+        gs = gpd.GeoSeries(geoms, crs=crs)
+        # Filter invalid geometries
+        gs = gs[~gs.is_empty & gs.is_valid]
+
+        if gs.empty:
+            return None
+
+        poly = _generate_polygon(gs, method, **kwargs)
 
     if poly is None or poly.is_empty:
         return None
@@ -2794,9 +2982,9 @@ def _generate_concave_hull_knn(
     Polygon or LineString or Point or None
         The concave hull geometry, or None if empty.
     """
-    k = kwargs.get("k", 100)
-    points = _extract_points_from_geometries(gs)
-    return _concave_hull_knn(points, k=k) if points else None
+    k = kwargs.get("k", 50)
+    coords = _extract_coordinate_array_from_geometries(gs)
+    return _concave_hull_knn(coords, k=k) if len(coords) else None
 
 
 def _generate_concave_hull_alpha(
@@ -2821,7 +3009,7 @@ def _generate_concave_hull_alpha(
     Polygon or MultiPolygon or None
         The concave hull geometry, or None if empty.
     """
-    hull_ratio = kwargs.get("hull_ratio", 0.3)
+    hull_ratio = kwargs.get("hull_ratio", 0.0)
     allow_holes = kwargs.get("allow_holes", False)
     points = _extract_points_from_geometries(gs)
     return (
@@ -2946,6 +3134,35 @@ def _extract_node_geometries(graph: nx.Graph | nx.MultiGraph) -> list[Point]:
     return [Point(p) for p in pos_dict.values()] if pos_dict else []
 
 
+def _extract_node_coordinate_array(graph: nx.Graph | nx.MultiGraph) -> np.ndarray:
+    """
+    Extract node positions as a dense (n, 2) NumPy array.
+
+    This avoids building temporary Point geometries when only raw coordinates are
+    needed, such as for the k-NN concave hull path.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+        Input graph containing node ``pos`` attributes.
+
+    Returns
+    -------
+    np.ndarray
+        Node coordinates with shape ``(n, 2)`` and dtype float. An empty array
+        is returned when coordinates are unavailable or malformed.
+    """
+    pos_dict = nx.get_node_attributes(graph, "pos")
+    if not pos_dict:
+        return np.empty((0, 2), dtype=float)
+
+    coords = np.asarray(list(pos_dict.values()), dtype=float)
+    if coords.ndim != 2 or coords.shape[1] < 2:
+        return np.empty((0, 2), dtype=float)
+
+    return coords[:, :2]
+
+
 def _extract_edge_geometries(graph: nx.Graph | nx.MultiGraph) -> list[Any]:
     """
     Extract edge geometries from graph.
@@ -2965,66 +3182,329 @@ def _extract_edge_geometries(graph: nx.Graph | nx.MultiGraph) -> list[Any]:
     return [data["geometry"] for _, _, data in graph.edges(data=True) if "geometry" in data]
 
 
-def _concave_hull_knn(points: list[Point] | np.ndarray, k: int) -> Polygon | LineString | Point:
+def _concave_hull_knn(
+    points: list[Point] | np.ndarray, k: int
+) -> Polygon | MultiPolygon | LineString | Point:
     """
     Compute the concave hull of a set of points using the k-nearest neighbors approach.
 
     This function implements the k-nearest neighbors algorithm to generate a concave hull
     from a set of points. It constructs the hull by iteratively finding the next point
     that forms the largest right-turn angle, ensuring a tight fit around the point cloud.
-    Based on the algorithm by Moreira and Santos (2007).
+    Larger values of `k` usually produce a smoother, less detailed boundary and can
+    make the result approach the convex hull, while smaller values allow tighter,
+    more locally adaptive concavities.
 
     Parameters
     ----------
     points : list[Point] or np.ndarray
         The input points.
     k : int
-        The number of nearest neighbors to consider.
+        The number of nearest neighbors to consider. Increasing `k` generally
+        reduces concavity and smooths the hull.
 
     Returns
     -------
     Polygon or LineString or Point
         The concave hull geometry.
-    """
-    # Handle degenerate cases
-    if len(points) < 3:
-        return points[0] if len(points) == 1 else LineString(points)
 
-    # Prepare coordinates
-    coords = np.array([(p.x, p.y) for p in points]) if isinstance(points, list) else points
-    coords = np.unique(coords, axis=0)
+    References
+    ----------
+    .. [1] Moreira, Adriano and Santos, Maribel Yasmina. "Concave hull:
+       A k-nearest neighbours approach for the computation of the region occupied
+       by a set of points." International Conference on Computer Graphics Theory
+       and Applications, vol. 2, pp. 61-68, SciTePress, 2007.
+    """
+    raw_coords = (
+        np.asarray([(p.x, p.y) for p in points], dtype=float)
+        if isinstance(points, list)
+        else np.asarray(points, dtype=float)
+    )
+
+    if raw_coords.size == 0:
+        return LineString()
+
+    if raw_coords.ndim == 1:
+        raw_coords = np.atleast_2d(raw_coords)
+
+    if raw_coords.shape[1] < 2:
+        return LineString()
+
+    raw_coords = raw_coords[:, :2]
+    raw_coords = raw_coords[np.isfinite(raw_coords).all(axis=1)]
+
+    # Preserve original degenerate-case behavior before de-duplication.
+    if len(raw_coords) < 3:
+        return Point(raw_coords[0]) if len(raw_coords) == 1 else LineString(raw_coords)
+
+    coords = np.unique(raw_coords, axis=0)
     n_points = len(coords)
 
     if n_points < 3:
         return LineString(coords) if n_points == 2 else Point(coords[0])
 
-    # Build KDTree and find starting point (lowest Y, then lowest X)
+    start_idx = int(np.lexsort((coords[:, 0], coords[:, 1]))[0])
+    min_k = max(2, min(int(k), n_points - 1))
     tree = cKDTree(coords)
-    start_idx = np.lexsort((coords[:, 0], coords[:, 1]))[0]
+    all_points = MultiPoint(coords.tolist())
+    neighbor_cache: dict[int, np.ndarray] = {}
 
-    # Initialize hull
+    for current_k in range(min_k, n_points):
+        hull_indices = _trace_concave_hull_once(
+            coords,
+            start_idx,
+            current_k,
+            tree=tree,
+            neighbor_cache=neighbor_cache,
+        )
+        if hull_indices is None or len(hull_indices) < 3:
+            continue
+
+        poly = Polygon(coords[hull_indices])
+        if not poly.is_valid:
+            poly = poly.buffer(0)
+
+        if poly.is_empty or not isinstance(poly, (Polygon, MultiPolygon)):
+            continue
+
+        if _polygon_covers_all_points(poly, all_points):
+            return poly
+
+    return _concave_fallback_alpha(coords)
+
+
+@dataclass(slots=True)
+class _HullWalkState:
+    """
+    Mutable state for a single greedy concave-hull walk.
+
+    The state tracks accepted edges and their axis-aligned bounds so edge
+    intersection checks can be accelerated with vectorized bbox filtering.
+    """
+
+    existing_lines: list[LineString]
+    seg_bounds_min: np.ndarray
+    seg_bounds_max: np.ndarray
+    segment_count: int
+    neighbor_cache: dict[int, np.ndarray]
+
+    @classmethod
+    def create(
+        cls, max_segments: int, *, neighbor_cache: dict[int, np.ndarray] | None = None
+    ) -> "_HullWalkState":
+        """
+        Build an empty walk state with preallocated segment-bound arrays.
+
+        This initializer centralizes array allocation and optional cache wiring
+        so each hull trace starts from a predictable memory layout.
+
+        Parameters
+        ----------
+        max_segments : int
+            Upper bound for the number of segments expected during one hull
+            trace. The preallocated arrays are sized from this value.
+        neighbor_cache : dict[int, np.ndarray] or None, optional
+            Optional shared cache for KDTree neighbor index lookups.
+
+        Returns
+        -------
+        _HullWalkState
+            Initialized state ready for a hull walk.
+        """
+        return cls(
+            existing_lines=[],
+            seg_bounds_min=np.empty((max_segments, 2), dtype=float),
+            seg_bounds_max=np.empty((max_segments, 2), dtype=float),
+            segment_count=0,
+            neighbor_cache={} if neighbor_cache is None else neighbor_cache,
+        )
+
+    def append_segment(self, start: np.ndarray, end: np.ndarray) -> None:
+        """
+        Append an accepted hull segment and cache its bbox.
+
+        The segment is stored as a `LineString`, and min/max coordinate bounds
+        are written into preallocated arrays for fast overlap pruning.
+
+        Parameters
+        ----------
+        start : np.ndarray
+            Segment start coordinate as a length-2 array.
+        end : np.ndarray
+            Segment end coordinate as a length-2 array.
+        """
+        self.existing_lines.append(LineString([start, end]))
+        self.seg_bounds_min[self.segment_count] = np.minimum(start, end)
+        self.seg_bounds_max[self.segment_count] = np.maximum(start, end)
+        self.segment_count += 1
+
+    def bounds_min_view(self) -> np.ndarray:
+        """
+        Return the populated minimum bounds view.
+
+        This slices the preallocated bounds array to only the rows associated
+        with currently accepted segments.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape ``(segment_count, 2)`` with per-segment minimum
+            coordinates.
+        """
+        return self.seg_bounds_min[: self.segment_count]
+
+    def bounds_max_view(self) -> np.ndarray:
+        """
+        Return the populated maximum bounds view.
+
+        This slices the preallocated bounds array to only the rows associated
+        with currently accepted segments.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape ``(segment_count, 2)`` with per-segment maximum
+            coordinates.
+        """
+        return self.seg_bounds_max[: self.segment_count]
+
+
+def _trace_concave_hull_once(
+    coords: np.ndarray,
+    start_idx: int,
+    k: int,
+    *,
+    tree: cKDTree | None = None,
+    neighbor_cache: dict[int, np.ndarray] | None = None,
+) -> list[int] | None:
+    """
+    Run one greedy k-NN hull walk.
+
+    The walk iteratively chooses valid next hull points until it closes on the
+    start index or fails to find a legal extension.
+
+    Parameters
+    ----------
+    coords : np.ndarray
+        Unique 2D point coordinates used to build the hull.
+    start_idx : int
+        Index of the starting vertex in ``coords``.
+    k : int
+        Number of nearest neighbors considered at each step.
+    tree : scipy.spatial.cKDTree, optional
+        Optional KDTree built from ``coords`` to avoid rebuilding it.
+    neighbor_cache : dict[int, np.ndarray] or None, optional
+        Optional cache of neighbor indices keyed by point index.
+
+    Returns
+    -------
+    list[int] or None
+        Ordered hull vertex indices when a closed walk is found, otherwise
+        ``None``.
+    """
+    n_points = len(coords)
+    tree = cKDTree(coords) if tree is None else tree
+
     hull_indices = [start_idx]
     current_idx = start_idx
-    prev_vec = np.array([1.0, 0.0])  # Initial direction: East
+    prev_vec = np.array([1.0, 0.0], dtype=float)
     visited = {start_idx}
+    hull_state = _HullWalkState.create(max(0, n_points - 1), neighbor_cache=neighbor_cache)
 
-    # Loop until we close the polygon or fail
-    while True:
+    for _ in range(n_points + 1):
         next_idx = _find_next_hull_point(
-            tree, coords, current_idx, k, prev_vec, hull_indices, start_idx, visited, n_points
+            tree=tree,
+            coords=coords,
+            current_idx=current_idx,
+            k=k,
+            prev_vec=prev_vec,
+            hull_indices=hull_indices,
+            start_idx=start_idx,
+            visited=visited,
+            n_points=n_points,
+            hull_state=hull_state,
         )
 
         if next_idx is None:
-            # Fallback to convex hull if we get stuck
-            return MultiPoint(points).convex_hull
+            return None
 
         if next_idx == start_idx:
-            return Polygon(coords[hull_indices])
+            return hull_indices
+
+        if len(hull_indices) >= 2:
+            hull_state.append_segment(coords[hull_indices[-2]], coords[hull_indices[-1]])
 
         hull_indices.append(next_idx)
         visited.add(next_idx)
+        prev_vec = coords[next_idx] - coords[current_idx]
         current_idx = next_idx
-        prev_vec = coords[next_idx] - coords[hull_indices[-2]]
+
+    return None
+
+
+def _polygon_covers_all_points(
+    poly: Polygon | MultiPolygon, coords: MultiPoint | np.ndarray, tol: float = 1e-9
+) -> bool:
+    """
+    Check whether all points are covered by the polygonal hull.
+
+    A small positive buffer is applied before testing to reduce numerical
+    precision issues near polygon boundaries.
+
+    Parameters
+    ----------
+    poly : Polygon or MultiPolygon
+        Candidate hull geometry.
+    coords : MultiPoint or np.ndarray
+        Input points to test against the hull.
+    tol : float, default=1e-9
+        Buffer distance used to stabilize boundary inclusion checks.
+
+    Returns
+    -------
+    bool
+        ``True`` when all points are covered or touched by the buffered hull.
+    """
+    if poly.is_empty:
+        return False
+
+    test_poly = poly.buffer(tol)
+    all_points = (
+        coords
+        if isinstance(coords, MultiPoint)
+        else MultiPoint(np.asarray(coords, dtype=float).tolist())
+    )
+    return typing.cast("bool", test_poly.covers(all_points))
+
+
+def _concave_fallback_alpha(
+    coords: np.ndarray,
+) -> Polygon | MultiPolygon | LineString | Point:
+    """
+    Build a fallback concave hull using alpha-shape candidates.
+
+    Multiple alpha ratios are attempted from tighter to smoother boundaries
+    before returning a final fallback geometry.
+
+    Parameters
+    ----------
+    coords : np.ndarray
+        Input 2D coordinates.
+
+    Returns
+    -------
+    Polygon or MultiPolygon or LineString or Point
+        First non-empty polygonal result, or the final alpha-shape fallback for
+        degenerate inputs.
+    """
+    points = [Point(x, y) for x, y in coords]
+
+    for ratio in (0.05, 0.1, 0.2, 0.35, 0.5):
+        geom = _concave_hull_alpha(points, ratio=ratio, allow_holes=False)
+        if isinstance(geom, (Polygon, MultiPolygon)) and not geom.is_empty:
+            return geom
+
+    return _concave_hull_alpha(points, ratio=0.5, allow_holes=False)
 
 
 def _find_next_hull_point(
@@ -3037,6 +3517,7 @@ def _find_next_hull_point(
     start_idx: int,
     visited: set[int],
     n_points: int,
+    hull_state: _HullWalkState | None = None,
 ) -> int | None:
     """
     Find the next point in the concave hull.
@@ -3065,40 +3546,58 @@ def _find_next_hull_point(
         Set of visited point indices.
     n_points : int
         Total number of points.
+    hull_state : _HullWalkState or None, optional
+        Cached hull edges, segment bounds, and nearest-neighbor query results.
 
     Returns
     -------
     int or None
         The index of the next point, or None if no valid point found.
     """
-    current_k = k
-    while current_k <= n_points:
-        # Query k nearest neighbors
-        query_k = min(current_k + 1, n_points)
-        _, indices = tree.query(coords[current_idx], k=query_k)
+    current_k = max(2, min(int(k), n_points - 1))
+    neighbor_cache = {} if hull_state is None else hull_state.neighbor_cache
+    neighbor_indices = neighbor_cache.get(current_idx)
 
-        if not isinstance(indices, (list, np.ndarray)):
-            indices = [indices]
+    while current_k <= n_points - 1:
+        required = min(current_k + 1, n_points)
+
+        if neighbor_indices is None or len(neighbor_indices) < required:
+            query_k = min(
+                n_points,
+                max(
+                    required,
+                    len(neighbor_indices) * 2 if neighbor_indices is not None else required,
+                ),
+            )
+            _, neighbor_indices = tree.query(coords[current_idx], k=query_k)
+            neighbor_indices = np.atleast_1d(neighbor_indices)
+            neighbor_cache[current_idx] = neighbor_indices
 
         # Filter candidates
         candidates = [
-            idx
-            for idx in indices
+            int(idx)
+            for idx in neighbor_indices[:required]
             if idx != current_idx
             and (idx not in visited or (idx == start_idx and len(hull_indices) >= 3))
         ]
 
         if candidates:
             best_idx = _find_best_candidate(
-                coords, current_idx, candidates, prev_vec, hull_indices, start_idx
+                coords,
+                current_idx,
+                candidates,
+                prev_vec,
+                hull_indices,
+                start_idx,
+                hull_state=hull_state,
             )
             if best_idx is not None:
                 return best_idx
 
-        # Increase k if no valid candidate found
-        current_k = min(current_k + 5, n_points)
-        if current_k == n_points:  # Avoid infinite loop
+        if current_k == n_points - 1:
             break
+
+        current_k = min(current_k + 5, n_points - 1)
 
     return None
 
@@ -3110,6 +3609,7 @@ def _find_best_candidate(
     prev_vec: np.ndarray,
     hull_indices: list[int],
     start_idx: int,
+    hull_state: _HullWalkState | None = None,
 ) -> int | None:
     """
     Find the best candidate point with the largest right-turn angle.
@@ -3132,6 +3632,8 @@ def _find_best_candidate(
         List of indices currently in the hull.
     start_idx : int
         Index of the starting point of the hull.
+    hull_state : _HullWalkState or None, optional
+        Cached hull edges and segment bounds used to prevent self-intersections.
 
     Returns
     -------
@@ -3151,7 +3653,7 @@ def _find_best_candidate(
         return None
 
     vecs = vecs[valid_mask]
-    candidates_array = np.array(candidates)[valid_mask]
+    candidates_array = np.asarray(candidates, dtype=int)[valid_mask]
     vecs /= norms[valid_mask][:, np.newaxis]
 
     # Calculate angles relative to previous vector
@@ -3163,23 +3665,84 @@ def _find_best_candidate(
     diffs = (angles - prev_angle + np.pi) % (2 * np.pi) - np.pi
     sorted_indices = np.argsort(diffs)
 
-    # Check validity of candidates in order
+    if hull_state is None:
+        hull_state = _HullWalkState.create(max(0, len(hull_indices) - 2))
+        if len(hull_indices) >= 3:
+            hull_arr = np.asarray(hull_indices, dtype=int)
+            seg_starts = coords[hull_arr[:-2]]
+            seg_ends = coords[hull_arr[1:-1]]
+            for start, end in zip(seg_starts, seg_ends, strict=True):
+                hull_state.append_segment(start, end)
+
     for idx in sorted_indices:
         candidate_idx = int(candidates_array[idx])
-        new_edge = LineString([coords[current_idx], coords[candidate_idx]])
 
-        if _is_valid_edge(new_edge, coords, hull_indices, start_idx, candidate_idx):
+        if _is_valid_edge(
+            coords=coords,
+            current_idx=current_idx,
+            candidate_idx=candidate_idx,
+            start_idx=start_idx,
+            existing_lines=hull_state.existing_lines,
+            seg_bounds_min=hull_state.bounds_min_view(),
+            seg_bounds_max=hull_state.bounds_max_view(),
+        ):
             return candidate_idx
 
     return None
 
 
+def _bbox_overlap_indices(
+    start: np.ndarray,
+    end: np.ndarray,
+    seg_bounds_min: np.ndarray,
+    seg_bounds_max: np.ndarray,
+) -> np.ndarray:
+    """
+    Return indices of existing segments whose bounding boxes overlap the candidate segment.
+
+    This is only a prefilter. Exact validity remains determined by the Shapely
+    intersection checks in `_is_valid_edge`.
+
+    Parameters
+    ----------
+    start : np.ndarray
+        Start coordinate of the candidate segment.
+    end : np.ndarray
+        End coordinate of the candidate segment.
+    seg_bounds_min : np.ndarray
+        Per-segment minimum ``(x, y)`` bounds.
+    seg_bounds_max : np.ndarray
+        Per-segment maximum ``(x, y)`` bounds.
+
+    Returns
+    -------
+    np.ndarray
+        Integer indices of potentially overlapping segments.
+    """
+    if len(seg_bounds_min) == 0:
+        return np.empty(0, dtype=int)
+
+    edge_min = np.minimum(start, end)
+    edge_max = np.maximum(start, end)
+
+    overlap_mask = (
+        (seg_bounds_max[:, 0] >= edge_min[0])
+        & (seg_bounds_min[:, 0] <= edge_max[0])
+        & (seg_bounds_max[:, 1] >= edge_min[1])
+        & (seg_bounds_min[:, 1] <= edge_max[1])
+    )
+    return np.flatnonzero(overlap_mask)
+
+
 def _is_valid_edge(
-    new_edge: LineString,
     coords: np.ndarray,
-    hull_indices: list[int],
-    start_idx: int,
+    current_idx: int,
     candidate_idx: int,
+    start_idx: int,
+    existing_lines: Sequence[LineString],
+    seg_bounds: Sequence[tuple[float, float, float, float]] | None = None,
+    seg_bounds_min: np.ndarray | None = None,
+    seg_bounds_max: np.ndarray | None = None,
 ) -> bool:
     """
     Check if the new edge intersects with any existing hull edges.
@@ -3189,61 +3752,136 @@ def _is_valid_edge(
 
     Parameters
     ----------
-    new_edge : shapely.geometry.LineString
-        The potential new edge to add to the hull.
     coords : np.ndarray
         Array of all point coordinates.
-    hull_indices : list[int]
-        List of indices currently in the hull.
-    start_idx : int
-        Index of the starting point of the hull.
+    current_idx : int
+        Index of the current hull point.
     candidate_idx : int
         Index of the candidate point for the new edge.
+    start_idx : int
+        Index of the starting point of the hull.
+    existing_lines : Sequence[LineString]
+        Cached existing hull edges excluding the immediate predecessor edge.
+    seg_bounds : Sequence[tuple[float, float, float, float]] or None, optional
+        Cached per-edge bounding boxes used when available.
+    seg_bounds_min : np.ndarray
+        Minimum x/y values for the cached hull edge bounding boxes.
+    seg_bounds_max : np.ndarray
+        Maximum x/y values for the cached hull edge bounding boxes.
 
     Returns
     -------
     bool
         True if the edge is valid (no self-intersection), False otherwise.
     """
-    if len(hull_indices) < 3:
+    if not existing_lines:
         return True
 
-    # Check against existing edges (excluding the immediate predecessor)
-    # We only need to check segments that could possibly intersect
-    # Optimization: check bounding box first? (Shapely does this internally)
+    start = coords[current_idx]
+    end = coords[candidate_idx]
+    seg_bounds_min_arr, seg_bounds_max_arr = _coerce_seg_bounds_arrays(
+        seg_bounds=seg_bounds,
+        seg_bounds_min=seg_bounds_min,
+        seg_bounds_max=seg_bounds_max,
+    )
+    possible_hits = _bbox_overlap_indices(start, end, seg_bounds_min_arr, seg_bounds_max_arr)
+    if len(possible_hits) == 0:
+        return True
 
-    # Create a MultiLineString of existing edges to check against in one go?
-    # Or just iterate. Iterating is fine for now.
+    new_edge = LineString([start, end])
 
-    # We skip the last added edge (predecessor) because we share a vertex with it.
-    for i in range(len(hull_indices) - 2):
-        p1 = coords[hull_indices[i]]
-        p2 = coords[hull_indices[i + 1]]
-        existing_edge = LineString([p1, p2])
+    for i in possible_hits:
+        existing_edge = existing_lines[int(i)]
 
-        if new_edge.intersects(existing_edge):
-            intersection = new_edge.intersection(existing_edge)
+        if not new_edge.intersects(existing_edge):
+            continue
 
-            # Allow touching at start point when closing the loop
-            if (
-                candidate_idx == start_idx
-                and i == 0
-                and (isinstance(intersection, Point) or intersection.is_empty)
-            ):
-                continue
+        intersection = new_edge.intersection(existing_edge)
 
-            # If intersection is just a point and it's not the shared vertex (which we skipped)
-            # it might be a problem if it's not an endpoint.
-            # But intersects() returns true for shared endpoints.
-            # We skipped the immediate predecessor, so we shouldn't share endpoints with checked edges
-            # UNLESS we are closing the loop (checked above).
+        # Allow touching at start point when closing the loop
+        if (
+            candidate_idx == start_idx
+            and int(i) == 0
+            and (isinstance(intersection, Point) or intersection.is_empty)
+        ):
+            continue
 
-            if not intersection.is_empty:
-                # If it's a proper intersection (not just touching), reject
-                # Or if it touches at a place that isn't allowed
-                return False
+        if not intersection.is_empty:
+            return False
 
     return True
+
+
+def _coerce_seg_bounds_arrays(
+    seg_bounds: Sequence[tuple[float, float, float, float]] | None = None,
+    seg_bounds_min: np.ndarray | None = None,
+    seg_bounds_max: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Normalize cached segment bounds to ``(n, 2)`` NumPy arrays.
+
+    This keeps `_is_valid_edge()` on the vectorized bbox-overlap path even when
+    callers still provide legacy tuple-based bounds.
+
+    Parameters
+    ----------
+    seg_bounds : Sequence[tuple[float, float, float, float]] or None, optional
+        Legacy sequence of segment bounds as ``(minx, miny, maxx, maxy)``.
+    seg_bounds_min : np.ndarray or None, optional
+        Optional array of minimum coordinates with shape ``(n, 2)``.
+    seg_bounds_max : np.ndarray or None, optional
+        Optional array of maximum coordinates with shape ``(n, 2)``.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        Pair ``(min_bounds, max_bounds)`` where each array has shape ``(n, 2)``.
+    """
+    if seg_bounds_min is not None or seg_bounds_max is not None:
+        min_arr = (
+            np.empty((0, 2), dtype=float)
+            if seg_bounds_min is None
+            else np.asarray(seg_bounds_min, dtype=float).reshape(-1, 2)
+        )
+        max_arr = (
+            np.empty((0, 2), dtype=float)
+            if seg_bounds_max is None
+            else np.asarray(seg_bounds_max, dtype=float).reshape(-1, 2)
+        )
+        return min_arr, max_arr
+
+    if seg_bounds is None:
+        return np.empty((0, 2), dtype=float), np.empty((0, 2), dtype=float)
+
+    bounds_arr = np.asarray(seg_bounds, dtype=float)
+    if bounds_arr.size == 0:
+        return np.empty((0, 2), dtype=float), np.empty((0, 2), dtype=float)
+
+    bounds_arr = np.atleast_2d(bounds_arr)
+    return bounds_arr[:, :2], bounds_arr[:, 2:]
+
+
+def _extract_coordinate_array_from_geometries(geoms: gpd.GeoSeries | list[Any]) -> np.ndarray:
+    """
+    Extract coordinates from geometries as a NumPy array.
+
+    This is faster than converting coordinates into temporary Point objects when
+    only raw coordinates are needed.
+
+    Parameters
+    ----------
+    geoms : geopandas.GeoSeries or list[Any]
+        Input geometries from which coordinates are extracted.
+
+    Returns
+    -------
+    np.ndarray
+        Coordinate array with shape ``(n, 2)`` and dtype float.
+    """
+    coords = shapely.get_coordinates(geoms)
+    if coords.size == 0:
+        return np.empty((0, 2), dtype=float)
+    return np.asarray(coords[:, :2], dtype=float)
 
 
 def _extract_points_from_geometries(geoms: gpd.GeoSeries | list[Any]) -> list[Point]:
