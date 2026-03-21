@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## 0.3.1 (2026-03-21)
+
+### Added
+- Added regression coverage for undirected metapath deduplication in `add_metapaths()` and `add_metapaths_by_weight()` across GeoDataFrame and NetworkX graph outputs.
+
+### Changed
+- Refreshed the locked dependencies in `uv.lock`.
+
+### Fixed
+- Fixed undirected metapath materialization so mirrored traversals collapse into one path signature when `directed=False`.
+- Fixed undirected weighted metapath extraction so endpoint pairs are emitted only once instead of duplicating reversed edges.
+
+### Documentation
+- Updated release metadata and versioned documentation links for `v0.3.1`.
+
+
 ## 0.3.0 (2026-03-15)
 
 ### Added
