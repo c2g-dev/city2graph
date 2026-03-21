@@ -366,6 +366,76 @@ class TestMetapaths:
                     directed=True,
                 )
 
+    def test_add_metapaths_undirected_deduplicates_mirrored_paths(self) -> None:
+        """Undirected metapaths should not materialize mirrored terminal pairs twice."""
+        buildings = gpd.GeoDataFrame(
+            {
+                "geometry": [Point(0, 0), Point(10, 0)],
+                "node_type": "building",
+            },
+            index=[1, 2],
+            crs="EPSG:4326",
+        )
+        streets = gpd.GeoDataFrame(
+            {
+                "geometry": [Point(0, 1), Point(10, 1)],
+                "node_type": "street",
+            },
+            index=[101, 102],
+            crs="EPSG:4326",
+        )
+        nodes = {"building": buildings, "street": streets}
+        edges = {
+            ("building", "access", "street"): gpd.GeoDataFrame(
+                {
+                    "edge_type": "access",
+                    "geometry": [
+                        LineString([(0, 0), (0, 1)]),
+                        LineString([(10, 0), (10, 1)]),
+                    ],
+                },
+                index=pd.MultiIndex.from_tuples([(1, 101), (2, 102)]),
+                crs="EPSG:4326",
+            ),
+            ("street", "access", "building"): gpd.GeoDataFrame(
+                {
+                    "edge_type": "access",
+                    "geometry": [
+                        LineString([(0, 1), (0, 0)]),
+                        LineString([(10, 1), (10, 0)]),
+                    ],
+                },
+                index=pd.MultiIndex.from_tuples([(101, 1), (102, 2)]),
+                crs="EPSG:4326",
+            ),
+            ("street", "road", "street"): gpd.GeoDataFrame(
+                {
+                    "edge_type": "road",
+                    "geometry": [
+                        LineString([(0, 1), (10, 1)]),
+                        LineString([(10, 1), (0, 1)]),
+                    ],
+                },
+                index=pd.MultiIndex.from_tuples([(101, 102), (102, 101)]),
+                crs="EPSG:4326",
+            ),
+        }
+        sequence = [
+            ("building", "access", "street"),
+            ("street", "road", "street"),
+            ("street", "access", "building"),
+        ]
+        relation = ("building", "metapath_0", "building")
+
+        _, undirected_edges = add_metapaths((nodes, edges), sequence=sequence, directed=False)
+        undirected_pairs = set(undirected_edges[relation].index.tolist())
+        assert undirected_pairs == {(1, 2)}
+        assert undirected_edges[relation].loc[(1, 2), "weight"] == 1
+
+        _, directed_edges = add_metapaths((nodes, edges), sequence=sequence, directed=True)
+        directed_pairs = set(directed_edges[relation].index.tolist())
+        assert directed_pairs == {(1, 2), (2, 1)}
+
     @pytest.mark.parametrize(
         "join_case", ["empty_hop", "disjoint", "nan_sources", "index_normalization"]
     )
@@ -556,6 +626,32 @@ class TestMetapaths:
         assert isinstance(geom, LineString)
         assert list(geom.coords) == [(0.0, 0.0), (10.0, 0.0)]
 
+    def test_add_metapaths_by_weight_undirected_deduplicates_pairs(
+        self,
+        sample_weight_graph_data: WeightGraphData,
+    ) -> None:
+        """Undirected weighted metapaths should emit each endpoint pair once."""
+        nodes_dict, edges_dict = sample_weight_graph_data
+
+        _, edges_out = add_metapaths_by_weight(
+            (nodes_dict, edges_dict),
+            endpoint_type="building",
+            weight="weight",
+            threshold=15.0,
+            directed=False,
+        )
+
+        relation = ("building", "connected_within_0.0_15.0", "building")
+        assert relation in edges_out
+
+        new_edges = edges_out[relation]
+        pairs = set(new_edges.index.tolist())
+        assert pairs == {(1, 2), (2, 3)}
+        assert (2, 1) not in pairs
+        assert (3, 2) not in pairs
+        assert new_edges.loc[(1, 2), "weight"] == pytest.approx(12.0)
+        assert new_edges.loc[(2, 3), "weight"] == pytest.approx(12.0)
+
     def test_add_metapaths_by_weight_threshold_controls(
         self,
         sample_weight_graph_data: WeightGraphData,
@@ -648,6 +744,45 @@ class TestMetapaths:
             data.get("edge_type") == ("building", "connected_within_0.0_15.0", "building")
             for _, _, data in nx_roundtrip.edges(data=True)
         )
+
+    def test_add_metapaths_by_weight_networkx_multigraph_undirected_deduplicates(
+        self,
+        sample_weight_graph_data: WeightGraphData,
+    ) -> None:
+        """Undirected MultiGraph output should not include mirrored metapath duplicates."""
+        nodes_dict, edges_dict = sample_weight_graph_data
+        nx_multigraph = gdf_to_nx(nodes=nodes_dict, edges=edges_dict, multigraph=True)
+
+        nx_result = add_metapaths_by_weight(
+            nx_multigraph,
+            endpoint_type="building",
+            weight="weight",
+            threshold=15.0,
+            directed=False,
+            as_nx=True,
+            multigraph=True,
+        )
+
+        assert isinstance(nx_result, nx.MultiGraph)
+        metapath_edges = [
+            (u, v, data)
+            for u, v, _, data in nx_result.edges(data=True, keys=True)
+            if data.get("edge_type") == ("building", "connected_within_0.0_15.0", "building")
+        ]
+        endpoint_pairs = {
+            tuple(
+                sorted(
+                    (
+                        nx_result.nodes[u].get("_original_index", u),
+                        nx_result.nodes[v].get("_original_index", v),
+                    )
+                )
+            )
+            for u, v, _ in metapath_edges
+        }
+
+        assert endpoint_pairs == {(1, 2), (2, 3)}
+        assert len(metapath_edges) == 2
 
     def test_add_metapaths_by_weight_missing_endpoint(
         self,

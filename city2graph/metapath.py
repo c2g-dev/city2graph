@@ -757,9 +757,34 @@ def _materialize_metapath(
             right_on=f"src_{idx}",
             how="inner",
             copy=False,
+            suffixes=("", "_right"),
         )
+        joined["path_nodes"] = [
+            left + right[1:]
+            for left, right in zip(
+                joined["path_nodes"],
+                joined["path_nodes_right"],
+                strict=False,
+            )
+        ]
+        joined["path_edges"] = [
+            left + right
+            for left, right in zip(
+                joined["path_edges"],
+                joined["path_edges_right"],
+                strict=False,
+            )
+        ]
         # Drop intermediate join columns to save memory
-        joined = joined.drop(columns=[f"dst_{idx - 1}", f"src_{idx}"], errors="ignore")
+        joined = joined.drop(
+            columns=[
+                f"dst_{idx - 1}",
+                f"src_{idx}",
+                "path_nodes_right",
+                "path_edges_right",
+            ],
+            errors="ignore",
+        )
 
         if joined.empty:
             return (
@@ -778,6 +803,7 @@ def _materialize_metapath(
         aggregation=aggregation,
         start_index_name=start_index_name,
         end_index_name=end_index_name,
+        directed=directed,
     )
 
     if aggregated.empty:
@@ -872,6 +898,14 @@ def _build_hop_frame(
     data = {
         src_col: edge_gdf.index.get_level_values(src_level).to_numpy(),
         dst_col: edge_gdf.index.get_level_values(dst_level).to_numpy(),
+        "path_nodes": list(
+            zip(
+                edge_gdf.index.get_level_values(src_level).to_numpy(),
+                edge_gdf.index.get_level_values(dst_level).to_numpy(),
+                strict=False,
+            )
+        ),
+        "path_edges": [(index_value,) for index_value in edge_gdf.index.to_list()],
     }
 
     if edge_attrs:
@@ -893,6 +927,7 @@ def _aggregate_paths(
     aggregation: _EdgeAttrAggregation,
     start_index_name: str,
     end_index_name: str,
+    directed: bool,
 ) -> pd.DataFrame:
     """
     Group joined paths into terminal node pairs with aggregated weights.
@@ -913,6 +948,8 @@ def _aggregate_paths(
         Name of the start node index.
     end_index_name : str
         Name of the end node index.
+    directed : bool
+        Whether the metapath should preserve edge orientation.
 
     Returns
     -------
@@ -926,11 +963,24 @@ def _aggregate_paths(
     agg_map: dict[str, str | Callable[[pd.Series], float]] = {"weight": "sum"}
 
     # Base workload with path count (weight=1 for each path)
-    workload_data = {
+    path_nodes = cast("list[tuple[object, ...]]", combined["path_nodes"].to_list())
+    workload_data: dict[str, object] = {
         "src": combined[src_col].to_numpy(),
         "dst": combined[dst_col].to_numpy(),
         "weight": np.ones(len(combined), dtype=float),
     }
+
+    if not directed:
+        canonical_paths = [_canonicalize_undirected_sequence(path) for path in path_nodes]
+        canonical_edge_paths = [
+            _canonicalize_undirected_sequence(
+                tuple(_canonicalize_undirected_edge_id(edge_id) for edge_id in edge_path)
+            )
+            for edge_path in cast("list[tuple[object, ...]]", combined["path_edges"].to_list())
+        ]
+        workload_data["src"] = [path[0] for path in canonical_paths]
+        workload_data["dst"] = [path[-1] for path in canonical_paths]
+        workload_data["path_signature"] = canonical_edge_paths
 
     if edge_attrs:
         for attr in edge_attrs:
@@ -948,6 +998,9 @@ def _aggregate_paths(
 
     workload = pd.DataFrame(workload_data)
 
+    if not directed:
+        workload = workload.drop_duplicates(subset=["path_signature"], keep="first")
+
     # Group by terminal nodes and aggregate (e.g. sum of weights = number of paths)
     aggregated = workload.groupby(["src", "dst"], sort=False).agg(agg_map)
 
@@ -956,6 +1009,96 @@ def _aggregate_paths(
 
     aggregated.index = aggregated.index.set_names([start_index_name, end_index_name])
     return aggregated
+
+
+def _stable_value_key(value: object) -> tuple[str, str]:
+    """
+    Return a deterministic sort key for heterogeneous identifiers.
+
+    This avoids direct comparisons between incomparable Python objects while
+    preserving a stable ordering for canonicalization.
+
+    Parameters
+    ----------
+    value : object
+        Value to convert into a stable ordering key.
+
+    Returns
+    -------
+    tuple[str, str]
+        Key composed of the type name and repr string.
+    """
+    return (type(value).__name__, repr(value))
+
+
+def _canonicalize_undirected_pair(value_a: object, value_b: object) -> tuple[object, object]:
+    """
+    Return a deterministic ordering for an undirected pair.
+
+    The pair is ordered via :func:`_stable_value_key` so mirrored edges collapse
+    to the same representation.
+
+    Parameters
+    ----------
+    value_a : object
+        First value in the pair.
+    value_b : object
+        Second value in the pair.
+
+    Returns
+    -------
+    tuple[object, object]
+        Canonically ordered pair.
+    """
+    key_a = _stable_value_key(value_a)
+    key_b = _stable_value_key(value_b)
+    return (value_a, value_b) if key_a <= key_b else (value_b, value_a)
+
+
+def _canonicalize_undirected_edge_id(edge_id: object) -> object:
+    """
+    Canonicalize an edge identifier for undirected path comparison.
+
+    For tuple-like edge identifiers, only the terminal node pair is reordered;
+    any additional index levels are preserved as-is.
+
+    Parameters
+    ----------
+    edge_id : object
+        Edge identifier, typically a tuple derived from a MultiIndex row.
+
+    Returns
+    -------
+    object
+        Edge identifier with its terminal node pair canonically ordered.
+    """
+    if isinstance(edge_id, tuple) and len(edge_id) >= 2:
+        edge_u, edge_v = _canonicalize_undirected_pair(edge_id[0], edge_id[1])
+        return (edge_u, edge_v, *edge_id[2:])
+    return edge_id
+
+
+def _canonicalize_undirected_sequence(values: tuple[object, ...]) -> tuple[object, ...]:
+    """
+    Canonicalize a path-like sequence against its reversal.
+
+    The lexicographically smaller orientation under :func:`_stable_value_key`
+    is retained so forward and reversed traversals share one signature.
+
+    Parameters
+    ----------
+    values : tuple[object, ...]
+        Sequence to compare with its reversed orientation.
+
+    Returns
+    -------
+    tuple[object, ...]
+        Deterministically oriented sequence.
+    """
+    reversed_values = values[::-1]
+    forward_key = tuple(_stable_value_key(value) for value in values)
+    reverse_key = tuple(_stable_value_key(value) for value in reversed_values)
+    return values if forward_key <= reverse_key else reversed_values
 
 
 def _empty_metapath_frame(
@@ -1545,6 +1688,7 @@ def _extract_metapath_edges(
     """
     new_edges_data = []
     endpoint_indices_arr = np.array(endpoint_indices)
+    seen_pairs: set[tuple[object, object]] = set()
 
     for i, start_idx in enumerate(endpoint_indices):
         dists = dist_matrix[i]
@@ -1581,10 +1725,20 @@ def _extract_metapath_edges(
                     start_orig = graph.nodes[start_node].get("_original_index", start_node)
                     end_orig = graph.nodes[end_node].get("_original_index", end_node)
 
-                orig_edge_index = (start_orig, end_orig)
+                if not directed:
+                    start_key = (type(start_orig).__name__, repr(start_orig))
+                    end_key = (type(end_orig).__name__, repr(end_orig))
 
-                if not directed and start_orig > end_orig:  # type: ignore[operator]
-                    orig_edge_index = (end_orig, start_orig)
+                    if start_key > end_key:
+                        start_node, end_node = end_node, start_node
+                        start_orig, end_orig = end_orig, start_orig
+
+                    canonical_pair = (start_orig, end_orig)
+                    if canonical_pair in seen_pairs:
+                        continue
+                    seen_pairs.add(canonical_pair)
+
+                orig_edge_index = (start_orig, end_orig)
 
                 new_edges_data.append(
                     {
