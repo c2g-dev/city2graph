@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<net version="1.16" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/net_file.xsd">
+    <location netOffset="0.00,0.00" convBoundary="-0.10,51.500,-0.08,51.502"
+              origBoundary="-0.10,51.500,-0.08,51.502"
+              projParameter="!"/>
+    <junction id="A" type="priority" x="-0.100" y="51.500" incLanes="" intLanes="" shape=""/>
+    <junction id="B" type="priority" x="-0.090" y="51.501" incLanes="" intLanes="" shape=""/>
+    <junction id="C" type="priority" x="-0.080" y="51.502" incLanes="" intLanes="" shape=""/>
+    <junction id=":internal_0" type="internal" x="-0.095" y="51.500" incLanes="" intLanes="" shape=""/>
+    <edge id="AB" from="A" to="B" priority="1" type="highway.residential">
+        <lane id="AB_0" index="0" speed="13.89" length="141.42"
+              shape="-0.100,51.500 -0.090,51.501"/>
+        <lane id="AB_1" index="1" speed="13.89" length="141.42"
+              shape="-0.100,51.500 -0.090,51.501"/>
+    </edge>
+    <edge id="BC" from="B" to="C" priority="1" type="highway.residential">
+        <lane id="BC_0" index="0" speed="8.33" length="120.00"
+              shape="-0.090,51.501 -0.080,51.502"/>
+    </edge>
+    <edge id="BA" from="B" to="A" priority="1" type="highway.residential">
+        <lane id="BA_0" index="0" speed="13.89" length="141.42"
+              shape="-0.090,51.501 -0.100,51.500"/>
+    </edge>
+    <edge id=":internal_conn" from=":internal_0" to="B" priority="-1">
+        <lane id=":internal_conn_0" index="0" speed="5.00" length="10.00" shape=""/>
+    </edge>
+</net>

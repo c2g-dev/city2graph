@@ -31,6 +31,7 @@ from .metapath import *  # noqa: F403
 # Explicit re-export to preserve typing information for mypy on public API
 from .mobility import *  # noqa: F403
 from .morphology import *  # noqa: F403
+from .networks import *  # noqa: F403
 from .proximity import *  # noqa: F403
 from .transportation import *  # noqa: F403
 from .utils import *  # noqa: F403
