@@ -108,6 +108,10 @@ class PyGConverter(BaseGraphConverter):
         Data type for float tensors.
     keep_geom : bool, default True
         Whether to preserve geometry information during conversion.
+    directed : bool, default False
+        Whether to treat edges as directed. If False (default), edges are
+        symmetrized during conversion to PyG (reverse edges are added) and
+        deduplicated during reconstruction back to GeoDataFrames.
     """
 
     def __init__(
@@ -118,6 +122,7 @@ class PyGConverter(BaseGraphConverter):
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
         keep_geom: bool = True,
+        directed: bool = False,
     ) -> None:
         """
         Initialize PyGConverter.
@@ -141,8 +146,12 @@ class PyGConverter(BaseGraphConverter):
             If True, original geometries are serialized and stored in metadata.
             If False, geometries are reconstructed from node positions during
             conversion back to GeoDataFrames.
+        directed : bool, default False
+            Whether to treat edges as directed. If False (default), edges are
+            symmetrized during conversion to PyG (reverse edges are added) and
+            deduplicated during reconstruction back to GeoDataFrames.
         """
-        super().__init__(keep_geom=keep_geom)
+        super().__init__(keep_geom=keep_geom, directed=directed)
         self.node_feature_cols = node_feature_cols
         self.node_label_cols = node_label_cols
         self.edge_feature_cols = edge_feature_cols
@@ -319,6 +328,10 @@ class PyGConverter(BaseGraphConverter):
                 )
             edge_attr = self._create_features(edges, edge_feature_cols_homo)
 
+            # Symmetrize edges for undirected graphs
+            if not self.directed and edge_index.size(1) > 0:
+                edge_index, edge_attr = self._symmetrize_edges(edge_index, edge_attr, device)
+
         data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, pos=pos)
 
         # Store metadata
@@ -332,6 +345,7 @@ class PyGConverter(BaseGraphConverter):
             node_label_cols_homo,
             edge_feature_cols_homo,
         )
+        metadata.is_directed = self.directed
 
         data.graph_metadata = metadata
         return data
@@ -395,9 +409,15 @@ class PyGConverter(BaseGraphConverter):
             metadata.edge_index_names = edges.index.names
 
             # Store original edge index values for reconstruction
-            metadata.edge_index_values = [
+            edge_idx_vals = [
                 edges.index.get_level_values(i).tolist() for i in range(edges.index.nlevels)
             ]
+
+            # Symmetrize edge index values for undirected graphs
+            if not self.directed and len(edge_idx_vals) == 2:
+                edge_idx_vals = self._symmetrize_edge_index_values(edge_idx_vals)
+
+            metadata.edge_index_values = edge_idx_vals
         else:
             metadata.edge_index_names = None
             metadata.edge_index_values = None
@@ -410,7 +430,13 @@ class PyGConverter(BaseGraphConverter):
         if self.keep_geom:
             metadata.node_geometries = self._serialize_geometries(nodes)
             if edges is not None and not edges.empty:
-                metadata.edge_geometries = self._serialize_geometries(edges)
+                edge_geoms = self._serialize_geometries(edges)
+
+                # Symmetrize edge geometries for undirected graphs
+                if not self.directed and edge_geoms is not None:
+                    edge_geoms = self._symmetrize_edge_geometries(edges, edge_geoms)
+
+                metadata.edge_geometries = edge_geoms
 
         return metadata
 
@@ -599,10 +625,18 @@ class PyGConverter(BaseGraphConverter):
                     if edge_pairs
                     else torch.zeros((2, 0), dtype=torch.long, device=device)
                 )
-                data[edge_type].edge_index = edge_index
 
                 feature_cols = edge_feature_cols.get(edge_type) if edge_feature_cols else None
-                data[edge_type].edge_attr = self._create_features(edge_gdf, feature_cols)
+                edge_attr = self._create_features(edge_gdf, feature_cols)
+
+                # Symmetrize edges for undirected graphs (only same-type edges)
+                # Cross-type edges (src_type != dst_type) cannot be symmetrized
+                # within the same edge type.
+                if not self.directed and edge_index.size(1) > 0 and src_type == dst_type:
+                    edge_index, edge_attr = self._symmetrize_edges(edge_index, edge_attr, device)
+
+                data[edge_type].edge_index = edge_index
+                data[edge_type].edge_attr = edge_attr
             else:
                 data[edge_type].edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
                 data[edge_type].edge_attr = torch.empty(
@@ -667,10 +701,17 @@ class PyGConverter(BaseGraphConverter):
                 metadata.edge_index_names[edge_type] = edge_gdf.index.names
 
                 # Store original edge index values for reconstruction
-                metadata.edge_index_values[edge_type] = [
+                edge_idx_vals = [
                     edge_gdf.index.get_level_values(i).tolist()
                     for i in range(edge_gdf.index.nlevels)
                 ]
+
+                # Symmetrize edge index values for undirected same-type edges
+                src_type, _, dst_type = edge_type
+                if not self.directed and len(edge_idx_vals) == 2 and src_type == dst_type:
+                    edge_idx_vals = self._symmetrize_edge_index_values(edge_idx_vals)
+
+                metadata.edge_index_values[edge_type] = edge_idx_vals
 
         # Set CRS
         crs_values = [gdf.crs for gdf in nodes_dict.values() if hasattr(gdf, "crs") and gdf.crs]
@@ -691,8 +732,13 @@ class PyGConverter(BaseGraphConverter):
                 if edge_gdf is not None and not edge_gdf.empty:
                     geoms = self._serialize_geometries(edge_gdf)
                     if geoms is not None:
+                        # Symmetrize edge geometries for undirected same-type edges
+                        src_type, _, dst_type = edge_type
+                        if not self.directed and src_type == dst_type:
+                            geoms = self._symmetrize_edge_geometries(edge_gdf, geoms)
                         metadata.edge_geometries[edge_type] = geoms
 
+        metadata.is_directed = self.directed
         data.graph_metadata = metadata
 
     def _create_node_id_mapping(
@@ -788,6 +834,153 @@ class PyGConverter(BaseGraphConverter):
         combined_array = np.column_stack([from_indices, to_indices]).astype(int)
         result: list[list[int]] = combined_array.tolist()
         return result
+
+    def _symmetrize_edges(
+        self,
+        edge_index: torch.Tensor,
+        edge_attr: torch.Tensor,
+        device: torch.device,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Symmetrize directed edges to represent an undirected graph.
+
+        For each edge (u, v) where u != v, adds the reverse edge (v, u).
+        Self-loops (u, u) are not duplicated. Edge attributes are duplicated
+        accordingly.
+
+        Parameters
+        ----------
+        edge_index : torch.Tensor
+            Edge connectivity tensor of shape [2, num_edges].
+        edge_attr : torch.Tensor
+            Edge attribute tensor of shape [num_edges, num_features].
+        device : torch.device
+            Target device for tensors.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            Symmetrized (edge_index, edge_attr).
+        """
+        src, dst = edge_index[0], edge_index[1]
+
+        # Identify non-self-loop edges to reverse
+        non_self_loop_mask = src != dst
+
+        # Create reverse edges (only for non-self-loops)
+        rev_src = dst[non_self_loop_mask]
+        rev_dst = src[non_self_loop_mask]
+        rev_edge_index = torch.stack([rev_src, rev_dst], dim=0)  # noqa: PD013
+
+        # Concatenate original + reverse
+        edge_index = torch.cat([edge_index, rev_edge_index], dim=1)
+
+        # Symmetrize edge attributes
+        if edge_attr is not None and edge_attr.shape[0] > 0:
+            if edge_attr.shape[1] > 0:
+                # Has actual features: duplicate them for reverse edges
+                rev_edge_attr = edge_attr[non_self_loop_mask]
+                edge_attr = torch.cat([edge_attr, rev_edge_attr], dim=0)
+            else:
+                # Empty features (shape [N, 0]): resize to match new edge count
+                edge_attr = torch.empty(
+                    (edge_index.size(1), 0), dtype=edge_attr.dtype, device=device
+                )
+
+        return edge_index, edge_attr
+
+    @staticmethod
+    def _symmetrize_edge_index_values(
+        edge_idx_vals: list[list[str | int]],
+    ) -> list[list[str | int]]:
+        """
+        Symmetrize edge index values for undirected graph metadata.
+
+        Appends reverse pairs (level_1, level_0) for non-self-loop edges
+        so that reconstructed edge GeoDataFrame includes both directions.
+
+        Parameters
+        ----------
+        edge_idx_vals : list[list[str | int]]
+            Two-element list: [level_0_values, level_1_values].
+
+        Returns
+        -------
+        list[list[str | int]]
+            Symmetrized edge index values.
+        """
+        srcs, dsts = edge_idx_vals[0], edge_idx_vals[1]
+        rev_srcs = []
+        rev_dsts = []
+        for s, d in zip(srcs, dsts, strict=True):
+            if s != d:
+                rev_srcs.append(d)
+                rev_dsts.append(s)
+        return [srcs + rev_srcs, dsts + rev_dsts]
+
+    @staticmethod
+    def _symmetrize_edge_geometries(
+        edges: gpd.GeoDataFrame,
+        edge_geoms: list[str],
+    ) -> list[str]:
+        """
+        Symmetrize serialized edge geometries for undirected graph metadata.
+
+        Appends geometry entries for reverse edges (non-self-loops).
+
+        Parameters
+        ----------
+        edges : gpd.GeoDataFrame
+            Original edge GeoDataFrame with MultiIndex.
+        edge_geoms : list[str]
+            Serialized WKB hex geometries.
+
+        Returns
+        -------
+        list[str]
+            Symmetrized geometry list.
+        """
+        rev_geoms = []
+        for i, (src, dst) in enumerate(edges.index):
+            if src != dst:
+                rev_geoms.append(edge_geoms[i])
+        return edge_geoms + rev_geoms
+
+    @staticmethod
+    def _deduplicate_undirected_edges(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        """
+        Deduplicate symmetrized edges back to canonical undirected pairs.
+
+        For each pair of edges (u, v) and (v, u), keeps only the canonical
+        form where the first index value is less than or equal to the second.
+        Self-loops (u, u) are always kept.
+
+        Parameters
+        ----------
+        gdf : gpd.GeoDataFrame
+            Edge GeoDataFrame with MultiIndex (source, target).
+
+        Returns
+        -------
+        gpd.GeoDataFrame
+            Deduplicated GeoDataFrame with only canonical edge pairs.
+        """
+        level_0 = gdf.index.get_level_values(0)
+        level_1 = gdf.index.get_level_values(1)
+
+        # Create canonical keys: sort each pair so (u,v) and (v,u) map to same key
+        canonical = pd.DataFrame(
+            {"a": level_0, "b": level_1},
+            index=gdf.index,
+        )
+        # For comparable types, use element-wise min/max
+        canonical["key_0"] = canonical[["a", "b"]].min(axis=1)
+        canonical["key_1"] = canonical[["a", "b"]].max(axis=1)
+        canonical["canonical_key"] = list(zip(canonical["key_0"], canonical["key_1"], strict=True))
+
+        # Keep first occurrence of each canonical pair
+        mask = ~canonical["canonical_key"].duplicated(keep="first")
+        return gdf[mask]
 
     def _reconstruct_node_gdf(
         self,
@@ -945,6 +1138,28 @@ class PyGConverter(BaseGraphConverter):
                 gdf.crs = metadata.crs
             else:
                 gdf.set_crs(metadata.crs, allow_override=True, inplace=True)
+
+        # Deduplicate edges for undirected graphs
+        # When is_directed is False, edges were symmetrized during gdf_to_pyg.
+        # Restore the original undirected edge table by keeping canonical pairs.
+        # For hetero graphs, only same-type edges were symmetrized.
+        is_directed_flag = metadata.is_directed
+        if isinstance(is_directed_flag, dict) and edge_type is not None:
+            is_directed_flag = is_directed_flag.get(edge_type, False)
+
+        # Check if this edge type was actually symmetrized
+        is_same_type = True
+        if is_hetero and isinstance(edge_type, tuple) and len(edge_type) == 3:
+            is_same_type = edge_type[0] == edge_type[2]
+
+        if (
+            not is_directed_flag
+            and is_same_type
+            and isinstance(gdf.index, pd.MultiIndex)
+            and gdf.index.nlevels == 2
+            and not gdf.empty
+        ):
+            gdf = self._deduplicate_undirected_edges(gdf)
 
         return gdf
 
@@ -1649,6 +1864,7 @@ def gdf_to_pyg(
     device: str | torch.device | None = None,
     dtype: torch.dtype | None = None,
     keep_geom: bool = True,
+    directed: bool = False,
 ) -> Data | HeteroData:
     """
     Convert GeoDataFrames (nodes/edges) to a PyTorch Geometric object.
@@ -1697,6 +1913,12 @@ def gdf_to_pyg(
         exact reconstruction. If False, geometries are reconstructed from node
         positions during conversion back to GeoDataFrames (creating straight-line
         edges between nodes).
+    directed : bool, default False
+        Whether to treat edges as directed. If False (default), each edge
+        ``(u, v)`` in the input GeoDataFrame is symmetrized by adding the
+        reverse edge ``(v, u)`` so that PyTorch Geometric receives a proper
+        undirected graph. Self-loops are not duplicated. Edge attributes are
+        duplicated for reverse edges. If True, edges are kept as-is.
 
     Returns
     -------
@@ -1772,6 +1994,7 @@ def gdf_to_pyg(
         device=device,
         dtype=dtype,
         keep_geom=keep_geom,
+        directed=directed,
     )
     return converter.gdf_to_pyg(nodes, edges)
 

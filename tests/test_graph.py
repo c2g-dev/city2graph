@@ -138,7 +138,8 @@ class TestGraphConversion:
             data = gdf_to_pyg(sample_nodes_gdf, sample_edges_gdf)
             assert isinstance(data, Data)
             assert data.num_nodes == len(sample_nodes_gdf)
-            assert data.num_edges == len(sample_edges_gdf)
+            # Edges are symmetrized by default (directed=False), so doubled
+            assert data.num_edges == len(sample_edges_gdf) * 2
             assert not data.graph_metadata.is_hetero
         else:
             data = gdf_to_pyg(sample_hetero_nodes_dict, sample_hetero_edges_dict)
@@ -216,9 +217,10 @@ class TestGraphConversion:
         data = nx_to_pyg(sample_nx_graph)
         assert isinstance(data, Data)
         assert data.num_nodes == sample_nx_graph.number_of_nodes()
-        assert data.num_edges == sample_nx_graph.number_of_edges()
+        # Edges are symmetrized by default (directed=False), so doubled
+        assert data.num_edges == sample_nx_graph.number_of_edges() * 2
 
-        # PyG -> NX (round trip)
+        # PyG -> NX (round trip) — pyg_to_nx uses pyg_to_gdf which deduplicates
         nx_restored = pyg_to_nx(data)
         assert isinstance(nx_restored, nx.Graph)
         assert nx_restored.graph.get("is_hetero") is False
@@ -1091,3 +1093,148 @@ class TestOptionalTensorConversion:
                 graph_module._get_device(None)
         else:
             pytest.skip("_get_device not accessible")
+
+
+class TestUndirectedEdgeHandling:
+    """Test undirected edge symmetrization and deduplication."""
+
+    @pytest.fixture
+    def simple_nodes(self) -> gpd.GeoDataFrame:
+        """Create simple nodes for testing."""
+        data = {
+            "node_id": [1, 2, 3],
+            "feature": [10.0, 20.0, 30.0],
+            "geometry": [Point(0, 0), Point(1, 0), Point(1, 1)],
+        }
+        return gpd.GeoDataFrame(data, crs="EPSG:27700").set_index("node_id")
+
+    @pytest.fixture
+    def simple_edges(self) -> gpd.GeoDataFrame:
+        """Create simple undirected edges (each pair once)."""
+        source_ids = [1, 2]
+        target_ids = [2, 3]
+        data = {
+            "source_id": source_ids,
+            "target_id": target_ids,
+            "weight": [0.5, 1.5],
+            "geometry": [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(1, 0), (1, 1)]),
+            ],
+        }
+        idx = pd.MultiIndex.from_arrays([source_ids, target_ids], names=["source_id", "target_id"])
+        return gpd.GeoDataFrame(data, index=idx, crs="EPSG:27700")
+
+    def test_default_symmetrizes_edges(
+        self, simple_nodes: gpd.GeoDataFrame, simple_edges: gpd.GeoDataFrame
+    ) -> None:
+        """Default (directed=False) doubles edges via symmetrization."""
+        data = gdf_to_pyg(simple_nodes, simple_edges)
+        # 2 original edges → 4 after symmetrization
+        assert data.num_edges == 4
+
+    def test_every_edge_has_reverse(
+        self, simple_nodes: gpd.GeoDataFrame, simple_edges: gpd.GeoDataFrame
+    ) -> None:
+        """Every (u,v) should have a matching (v,u)."""
+        data = gdf_to_pyg(simple_nodes, simple_edges)
+        edge_set = set()
+        ei = data.edge_index
+        for i in range(ei.size(1)):
+            edge_set.add((ei[0, i].item(), ei[1, i].item()))
+        for u, v in list(edge_set):
+            assert (v, u) in edge_set, f"Missing reverse edge ({v}, {u})"
+
+    def test_directed_true_no_symmetrization(
+        self, simple_nodes: gpd.GeoDataFrame, simple_edges: gpd.GeoDataFrame
+    ) -> None:
+        """directed=True keeps edges as-is (no doubling)."""
+        data = gdf_to_pyg(simple_nodes, simple_edges, directed=True)
+        assert data.num_edges == 2
+
+    def test_round_trip_restores_original_edges(
+        self, simple_nodes: gpd.GeoDataFrame, simple_edges: gpd.GeoDataFrame
+    ) -> None:
+        """gdf_to_pyg → pyg_to_gdf round trip restores original edge count."""
+        data = gdf_to_pyg(simple_nodes, simple_edges)
+        assert data.num_edges == 4  # symmetrized
+
+        _, edges_restored = pyg_to_gdf(data)
+        assert isinstance(edges_restored, gpd.GeoDataFrame)
+        # Should be deduplicated back to original count
+        assert len(edges_restored) == 2
+
+    def test_edge_features_duplicated(
+        self, simple_nodes: gpd.GeoDataFrame, simple_edges: gpd.GeoDataFrame
+    ) -> None:
+        """Edge features are correctly duplicated for reverse edges."""
+        data = gdf_to_pyg(simple_nodes, simple_edges, edge_feature_cols=["weight"])
+        assert data.edge_attr.shape == (4, 1)
+        # Original: [0.5, 1.5], Reverse: [0.5, 1.5]
+        weights = data.edge_attr[:, 0].tolist()
+        assert weights == [0.5, 1.5, 0.5, 1.5]
+
+    def test_self_loops_not_duplicated(self) -> None:
+        """Self-loops should not be duplicated during symmetrization."""
+        nodes = gpd.GeoDataFrame(
+            {"node_id": [1, 2], "geometry": [Point(0, 0), Point(1, 0)]},
+            crs="EPSG:27700",
+        ).set_index("node_id")
+
+        source_ids = [1, 1]
+        target_ids = [2, 1]
+        edges_data = {
+            "source_id": source_ids,
+            "target_id": target_ids,  # 1→2 and 1→1 (self-loop)
+            "geometry": [LineString([(0, 0), (1, 0)]), LineString([(0, 0), (0, 0)])],
+        }
+        idx = pd.MultiIndex.from_arrays(
+            [source_ids, target_ids],
+            names=["source_id", "target_id"],
+        )
+        edges = gpd.GeoDataFrame(edges_data, index=idx, crs="EPSG:27700")
+
+        data = gdf_to_pyg(nodes, edges)
+        # 1→2 gets reversed (adds 2→1), 1→1 stays as is: total 3
+        assert data.num_edges == 3
+
+    def test_hetero_same_type_symmetrized(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Same-type hetero edges (road→road) are symmetrized."""
+        # Create edges with road→road only having one direction
+        road_links = gpd.GeoDataFrame(
+            {
+                "source_road_id": ["r1"],
+                "target_road_id": ["r2"],
+                "feat": [1.0],
+                "geometry": [LineString([(10, 12), (12, 12)])],
+            },
+            crs="EPSG:27700",
+        )
+        road_links = road_links.set_index(
+            pd.MultiIndex.from_arrays(
+                [road_links["source_road_id"], road_links["target_road_id"]],
+                names=["source_road_id", "target_road_id"],
+            )
+        )
+
+        edges_dict = {("road", "links_to", "road"): road_links}
+        data = gdf_to_pyg(sample_hetero_nodes_dict, edges_dict)
+
+        # 1 edge → 2 after symmetrization
+        et = ("road", "links_to", "road")
+        assert data[et].edge_index.size(1) == 2
+
+    def test_hetero_cross_type_not_symmetrized(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Cross-type hetero edges (building→road) are NOT symmetrized."""
+        data = gdf_to_pyg(sample_hetero_nodes_dict, sample_hetero_edges_dict)
+
+        # building→road: 3 edges, NOT symmetrized (different types)
+        et_cross = ("building", "connects_to", "road")
+        assert data[et_cross].edge_index.size(1) == 3

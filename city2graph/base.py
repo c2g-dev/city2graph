@@ -109,6 +109,10 @@ class GraphMetadata:
         self.node_geometries: dict[str, list[str]] | list[str] | None = None
         self.edge_geometries: dict[tuple[str, str, str], list[str]] | list[str] | None = None
 
+        # Directed flag: tracks whether edges are directed in the PyG representation.
+        # When False (default), gdf_to_pyg symmetrizes edges and pyg_to_gdf deduplicates.
+        self.is_directed: bool | dict[tuple[str, str, str], bool] = False
+
     def to_dict(self) -> dict[str, object]:
         """
         Convert to dictionary for NetworkX graph metadata.
