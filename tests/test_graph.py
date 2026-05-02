@@ -146,7 +146,9 @@ class TestGraphConversion:
             assert isinstance(data, HeteroData)
             assert data.graph_metadata.is_hetero
             assert set(data.node_types) == set(sample_hetero_nodes_dict.keys())
-            assert set(data.edge_types) == set(sample_hetero_edges_dict.keys())
+            # Original edge types should be present; generated reverse stores
+            # for cross-type undirected edges add extra edge types.
+            assert set(sample_hetero_edges_dict.keys()).issubset(set(data.edge_types))
 
     @pytest.mark.parametrize("graph_type", ["homogeneous", "heterogeneous"])
     def test_gdf_to_pyg_with_features(
@@ -1238,3 +1240,606 @@ class TestUndirectedEdgeHandling:
         # building→road: 3 edges, NOT symmetrized (different types)
         et_cross = ("building", "connects_to", "road")
         assert data[et_cross].edge_index.size(1) == 3
+
+    # ------------------------------------------------------------------
+    # NEW: Graph-semantics tests from Implementation Plan v2 Step 7
+    # ------------------------------------------------------------------
+
+    def test_nx_digraph_stays_directed(self) -> None:
+        """nx.DiGraph edges are not symmetrized in PyG."""
+        G = nx.DiGraph()
+        G.add_node(1, pos=(0, 0), geometry=Point(0, 0))
+        G.add_node(2, pos=(1, 0), geometry=Point(1, 0))
+        G.add_edge(1, 2, geometry=LineString([(0, 0), (1, 0)]))
+        G.graph["crs"] = "EPSG:27700"
+        G.graph["is_hetero"] = False
+
+        data = nx_to_pyg(G)
+        # Directed: edges should NOT be doubled
+        assert data.num_edges == 1, f"Expected 1 directed edge, got {data.num_edges}"
+        assert data.graph_metadata.is_directed is True
+
+    def test_nx_multidigraph_stays_directed(self) -> None:
+        """nx.MultiDiGraph edges are not symmetrized in PyG."""
+        G = nx.MultiDiGraph()
+        G.add_node(1, pos=(0, 0), geometry=Point(0, 0))
+        G.add_node(2, pos=(1, 0), geometry=Point(1, 0))
+        G.add_edge(1, 2, key=0, geometry=LineString([(0, 0), (1, 0)]))
+        G.graph["crs"] = "EPSG:27700"
+        G.graph["is_hetero"] = False
+
+        data = nx_to_pyg(G)
+        assert data.num_edges == 1, f"Expected 1 directed edge, got {data.num_edges}"
+        assert data.graph_metadata.is_directed is True
+
+    def test_nx_graph_symmetrized(self) -> None:
+        """nx.Graph edges are symmetrized in PyG (bidirectional)."""
+        G = nx.Graph()
+        G.add_node(1, pos=(0, 0), geometry=Point(0, 0))
+        G.add_node(2, pos=(1, 0), geometry=Point(1, 0))
+        G.add_edge(1, 2, geometry=LineString([(0, 0), (1, 0)]))
+        G.graph["crs"] = "EPSG:27700"
+        G.graph["is_hetero"] = False
+
+        data = nx_to_pyg(G)
+        # Undirected: edges should be doubled
+        assert data.num_edges == 2, f"Expected 2 edges after symmetrization, got {data.num_edges}"
+        assert data.graph_metadata.is_directed is False
+
+    def test_already_bidirectional_gdf_rejected(self, simple_nodes: gpd.GeoDataFrame) -> None:
+        """GDF with both (u,v) and (v,u) raises ValueError when directed=False."""
+        source_ids = [1, 2]
+        target_ids = [2, 1]
+        edges_data = {
+            "source_id": source_ids,
+            "target_id": target_ids,
+            "geometry": [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(1, 0), (0, 0)]),
+            ],
+        }
+        idx = pd.MultiIndex.from_arrays(
+            [source_ids, target_ids],
+            names=["source_id", "target_id"],
+        )
+        edges = gpd.GeoDataFrame(edges_data, index=idx, crs="EPSG:27700")
+
+        with pytest.raises(ValueError, match="Ambiguous undirected input"):
+            gdf_to_pyg(simple_nodes, edges, directed=False)
+
+    def test_already_bidirectional_ok_when_directed(self, simple_nodes: gpd.GeoDataFrame) -> None:
+        """Already-bidirectional GDF is fine when directed=True."""
+        source_ids = [1, 2]
+        target_ids = [2, 1]
+        edges_data = {
+            "source_id": source_ids,
+            "target_id": target_ids,
+            "geometry": [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(1, 0), (0, 0)]),
+            ],
+        }
+        idx = pd.MultiIndex.from_arrays(
+            [source_ids, target_ids],
+            names=["source_id", "target_id"],
+        )
+        edges = gpd.GeoDataFrame(edges_data, index=idx, crs="EPSG:27700")
+
+        data = gdf_to_pyg(simple_nodes, edges, directed=True)
+        assert data.num_edges == 2
+
+    def test_parallel_undirected_rows_rejected(self, simple_nodes: gpd.GeoDataFrame) -> None:
+        """Duplicate unordered keys (parallel undirected) raise ValueError."""
+        source_ids = [1, 1]
+        target_ids = [2, 2]
+        edges_data = {
+            "source_id": source_ids,
+            "target_id": target_ids,
+            "geometry": [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(0, 0), (1, 0)]),
+            ],
+        }
+        idx = pd.MultiIndex.from_arrays(
+            [source_ids, target_ids],
+            names=["source_id", "target_id"],
+        )
+        edges = gpd.GeoDataFrame(edges_data, index=idx, crs="EPSG:27700")
+
+        with pytest.raises(ValueError, match="Parallel undirected edges"):
+            gdf_to_pyg(simple_nodes, edges, directed=False)
+
+    def test_cross_type_auto_reverse_store(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Cross-type undirected edges generate auto reverse stores."""
+        conn_data = {
+            "building_id": ["b1"],
+            "road_id": ["r1"],
+            "geometry": [LineString([(10, 10), (10, 12)])],
+        }
+        conn_gdf = gpd.GeoDataFrame(
+            conn_data,
+            index=pd.MultiIndex.from_arrays(
+                [conn_data["building_id"], conn_data["road_id"]],
+                names=["building_id", "road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        edges_dict = {("building", "connects_to", "road"): conn_gdf}
+
+        data = gdf_to_pyg(sample_hetero_nodes_dict, edges_dict)
+
+        # Original edge type still has 1 edge
+        et = ("building", "connects_to", "road")
+        assert data[et].edge_index.size(1) == 1
+
+        # Generated reverse store should exist
+        rev_et = ("road", "rev_connects_to", "building")
+        assert rev_et in data.edge_types
+        assert data[rev_et].edge_index.size(1) == 1
+
+        # Reverse should flip source/target
+        assert data[rev_et].edge_index[0].tolist() == data[et].edge_index[1].tolist()
+        assert data[rev_et].edge_index[1].tolist() == data[et].edge_index[0].tolist()
+
+    def test_cross_type_explicit_reverse_mapping(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Explicit reverse_edge_types mapping is used for cross-type edges."""
+        conn_data = {
+            "building_id": ["b1"],
+            "road_id": ["r1"],
+            "geometry": [LineString([(10, 10), (10, 12)])],
+        }
+        conn_gdf = gpd.GeoDataFrame(
+            conn_data,
+            index=pd.MultiIndex.from_arrays(
+                [conn_data["building_id"], conn_data["road_id"]],
+                names=["building_id", "road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        edges_dict = {("building", "connects_to", "road"): conn_gdf}
+
+        custom_rev = ("road", "served_by", "building")
+        data = gdf_to_pyg(
+            sample_hetero_nodes_dict,
+            edges_dict,
+            reverse_edge_types={("building", "connects_to", "road"): custom_rev},
+        )
+
+        assert custom_rev in data.edge_types
+        # Auto-generated name should NOT exist
+        assert ("road", "rev_connects_to", "building") not in data.edge_types
+
+    def test_cross_type_strict_mode_raises(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """reverse_edge_types=None (strict mode) raises for undirected cross-type."""
+        conn_data = {
+            "building_id": ["b1"],
+            "road_id": ["r1"],
+            "geometry": [LineString([(10, 10), (10, 12)])],
+        }
+        conn_gdf = gpd.GeoDataFrame(
+            conn_data,
+            index=pd.MultiIndex.from_arrays(
+                [conn_data["building_id"], conn_data["road_id"]],
+                names=["building_id", "road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        edges_dict = {("building", "connects_to", "road"): conn_gdf}
+
+        with pytest.raises(ValueError, match="strict mode"):
+            gdf_to_pyg(
+                sample_hetero_nodes_dict,
+                edges_dict,
+                reverse_edge_types=None,
+            )
+
+    def test_cross_type_directed_no_reverse_store(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Cross-type directed edges don't generate reverse stores."""
+        conn_data = {
+            "building_id": ["b1"],
+            "road_id": ["r1"],
+            "geometry": [LineString([(10, 10), (10, 12)])],
+        }
+        conn_gdf = gpd.GeoDataFrame(
+            conn_data,
+            index=pd.MultiIndex.from_arrays(
+                [conn_data["building_id"], conn_data["road_id"]],
+                names=["building_id", "road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        edges_dict = {("building", "connects_to", "road"): conn_gdf}
+
+        data = gdf_to_pyg(sample_hetero_nodes_dict, edges_dict, directed=True)
+        assert ("road", "rev_connects_to", "building") not in data.edge_types
+        assert data[("building", "connects_to", "road")].edge_index.size(1) == 1
+
+    def test_directed_dict_complete(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Complete directed dict: road→road directed, building→road undirected."""
+        road_data = {
+            "source_road_id": ["r1"],
+            "target_road_id": ["r2"],
+            "geometry": [LineString([(10, 12), (12, 12)])],
+        }
+        road_gdf = gpd.GeoDataFrame(
+            road_data,
+            index=pd.MultiIndex.from_arrays(
+                [road_data["source_road_id"], road_data["target_road_id"]],
+                names=["source_road_id", "target_road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        conn_data = {
+            "building_id": ["b1"],
+            "road_id": ["r1"],
+            "geometry": [LineString([(10, 10), (10, 12)])],
+        }
+        conn_gdf = gpd.GeoDataFrame(
+            conn_data,
+            index=pd.MultiIndex.from_arrays(
+                [conn_data["building_id"], conn_data["road_id"]],
+                names=["building_id", "road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+
+        edges_dict = {
+            ("road", "links_to", "road"): road_gdf,
+            ("building", "connects_to", "road"): conn_gdf,
+        }
+
+        data = gdf_to_pyg(
+            sample_hetero_nodes_dict,
+            edges_dict,
+            directed={
+                ("road", "links_to", "road"): True,
+                ("building", "connects_to", "road"): False,
+            },
+        )
+
+        # road→road is directed: no symmetrization, 1 edge
+        assert data[("road", "links_to", "road")].edge_index.size(1) == 1
+        # building→road is undirected: has reverse store
+        assert data[("building", "connects_to", "road")].edge_index.size(1) == 1
+        assert ("road", "rev_connects_to", "building") in data.edge_types
+
+    def test_directed_dict_missing_keys_raises(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Incomplete directed dict raises ValueError."""
+        road_data = {
+            "source_road_id": ["r1"],
+            "target_road_id": ["r2"],
+            "geometry": [LineString([(10, 12), (12, 12)])],
+        }
+        road_gdf = gpd.GeoDataFrame(
+            road_data,
+            index=pd.MultiIndex.from_arrays(
+                [road_data["source_road_id"], road_data["target_road_id"]],
+                names=["source_road_id", "target_road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        conn_data = {
+            "building_id": ["b1"],
+            "road_id": ["r1"],
+            "geometry": [LineString([(10, 10), (10, 12)])],
+        }
+        conn_gdf = gpd.GeoDataFrame(
+            conn_data,
+            index=pd.MultiIndex.from_arrays(
+                [conn_data["building_id"], conn_data["road_id"]],
+                names=["building_id", "road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+
+        edges_dict = {
+            ("road", "links_to", "road"): road_gdf,
+            ("building", "connects_to", "road"): conn_gdf,
+        }
+
+        with pytest.raises(ValueError, match="directed dict is missing keys"):
+            gdf_to_pyg(
+                sample_hetero_nodes_dict,
+                edges_dict,
+                directed={("road", "links_to", "road"): True},  # missing building→road
+            )
+
+    def test_directed_dict_extra_keys_raises(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Extra keys in directed dict raises ValueError."""
+        road_data = {
+            "source_road_id": ["r1"],
+            "target_road_id": ["r2"],
+            "geometry": [LineString([(10, 12), (12, 12)])],
+        }
+        road_gdf = gpd.GeoDataFrame(
+            road_data,
+            index=pd.MultiIndex.from_arrays(
+                [road_data["source_road_id"], road_data["target_road_id"]],
+                names=["source_road_id", "target_road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        edges_dict = {("road", "links_to", "road"): road_gdf}
+
+        with pytest.raises(ValueError, match="directed dict has extra keys"):
+            gdf_to_pyg(
+                sample_hetero_nodes_dict,
+                edges_dict,
+                directed={
+                    ("road", "links_to", "road"): True,
+                    ("building", "fake_rel", "road"): False,
+                },
+            )
+
+    def test_pyg_to_gdf_skips_generated_reverse_stores(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """pyg_to_gdf skips generated reverse edge stores during reconstruction."""
+        conn_data = {
+            "building_id": ["b1"],
+            "road_id": ["r1"],
+            "geometry": [LineString([(10, 10), (10, 12)])],
+        }
+        conn_gdf = gpd.GeoDataFrame(
+            conn_data,
+            index=pd.MultiIndex.from_arrays(
+                [conn_data["building_id"], conn_data["road_id"]],
+                names=["building_id", "road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        edges_dict = {("building", "connects_to", "road"): conn_gdf}
+
+        data = gdf_to_pyg(sample_hetero_nodes_dict, edges_dict)
+        _, edges_restored = pyg_to_gdf(data)
+
+        assert isinstance(edges_restored, dict)
+        # Only the original edge type should be returned
+        assert ("building", "connects_to", "road") in edges_restored
+        assert ("road", "rev_connects_to", "building") not in edges_restored
+
+    def test_reverse_type_collision_raises(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Auto-generated reverse type colliding with user type raises ValueError."""
+        conn_data = {
+            "building_id": ["b1"],
+            "road_id": ["r1"],
+            "geometry": [LineString([(10, 10), (10, 12)])],
+        }
+        conn_gdf = gpd.GeoDataFrame(
+            conn_data,
+            index=pd.MultiIndex.from_arrays(
+                [conn_data["building_id"], conn_data["road_id"]],
+                names=["building_id", "road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        # Provide a user edge type that would collide with auto-generated reverse
+        rev_data = {
+            "road_id": ["r1"],
+            "building_id": ["b1"],
+            "geometry": [LineString([(10, 12), (10, 10)])],
+        }
+        rev_gdf = gpd.GeoDataFrame(
+            rev_data,
+            index=pd.MultiIndex.from_arrays(
+                [rev_data["road_id"], rev_data["building_id"]],
+                names=["road_id", "building_id"],
+            ),
+            crs="EPSG:27700",
+        )
+
+        edges_dict = {
+            ("building", "connects_to", "road"): conn_gdf,
+            ("road", "rev_connects_to", "building"): rev_gdf,
+        }
+
+        with pytest.raises(ValueError, match="collides with an existing"):
+            gdf_to_pyg(sample_hetero_nodes_dict, edges_dict)
+
+    def test_round_trip_with_cross_type_undirected(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Round trip preserves original edge count for cross-type undirected edges."""
+        conn_data = {
+            "building_id": ["b1", "b2"],
+            "road_id": ["r1", "r2"],
+            "feat": [1.0, 2.0],
+            "geometry": [
+                LineString([(10, 10), (10, 12)]),
+                LineString([(11, 11), (12, 12)]),
+            ],
+        }
+        conn_gdf = gpd.GeoDataFrame(
+            conn_data,
+            index=pd.MultiIndex.from_arrays(
+                [["b1", "b2"], ["r1", "r2"]],
+                names=["building_id", "road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        edges_dict = {("building", "connects_to", "road"): conn_gdf}
+
+        data = gdf_to_pyg(sample_hetero_nodes_dict, edges_dict)
+        _, edges_restored = pyg_to_gdf(data)
+
+        assert isinstance(edges_restored, dict)
+        et = ("building", "connects_to", "road")
+        assert len(edges_restored[et]) == 2
+
+    def test_metadata_edge_was_symmetrized_homo(
+        self, simple_nodes: gpd.GeoDataFrame, simple_edges: gpd.GeoDataFrame
+    ) -> None:
+        """Homogeneous edge_was_symmetrized is True when directed=False."""
+        data = gdf_to_pyg(simple_nodes, simple_edges, directed=False)
+        assert data.graph_metadata.edge_was_symmetrized is True
+
+        data_dir = gdf_to_pyg(simple_nodes, simple_edges, directed=True)
+        assert data_dir.graph_metadata.edge_was_symmetrized is False
+
+    def test_metadata_edge_was_symmetrized_hetero(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Hetero edge_was_symmetrized is per-edge-type dict."""
+        road_data = {
+            "source_road_id": ["r1"],
+            "target_road_id": ["r2"],
+            "geometry": [LineString([(10, 12), (12, 12)])],
+        }
+        road_gdf = gpd.GeoDataFrame(
+            road_data,
+            index=pd.MultiIndex.from_arrays(
+                [road_data["source_road_id"], road_data["target_road_id"]],
+                names=["source_road_id", "target_road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        edges_dict = {("road", "links_to", "road"): road_gdf}
+
+        data = gdf_to_pyg(sample_hetero_nodes_dict, edges_dict)
+        ews = data.graph_metadata.edge_was_symmetrized
+        assert isinstance(ews, dict)
+        assert ews[("road", "links_to", "road")] is True
+
+    def test_directed_dict_for_homogeneous_raises(
+        self, simple_nodes: gpd.GeoDataFrame, simple_edges: gpd.GeoDataFrame
+    ) -> None:
+        """Homogeneous graphs reject directed dict."""
+        with pytest.raises(TypeError, match="directed must be a bool for homogeneous"):
+            gdf_to_pyg(
+                simple_nodes,
+                simple_edges,
+                directed={("n", "r", "n"): True},
+            )
+
+    def test_explicit_reverse_inconsistent_endpoints_raises(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Explicit reverse with wrong endpoints raises ValueError."""
+        conn_data = {
+            "building_id": ["b1"],
+            "road_id": ["r1"],
+            "geometry": [LineString([(10, 10), (10, 12)])],
+        }
+        conn_gdf = gpd.GeoDataFrame(
+            conn_data,
+            index=pd.MultiIndex.from_arrays(
+                [conn_data["building_id"], conn_data["road_id"]],
+                names=["building_id", "road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        edges_dict = {("building", "connects_to", "road"): conn_gdf}
+
+        with pytest.raises(ValueError, match="inconsistent endpoints"):
+            gdf_to_pyg(
+                sample_hetero_nodes_dict,
+                edges_dict,
+                reverse_edge_types={
+                    ("building", "connects_to", "road"): ("building", "wrong_rev", "road"),
+                },
+            )
+
+    def test_explicit_reverse_missing_mapping_raises(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Explicit reverse dict missing a mapping raises ValueError."""
+        conn_data = {
+            "building_id": ["b1"],
+            "road_id": ["r1"],
+            "geometry": [LineString([(10, 10), (10, 12)])],
+        }
+        conn_gdf = gpd.GeoDataFrame(
+            conn_data,
+            index=pd.MultiIndex.from_arrays(
+                [conn_data["building_id"], conn_data["road_id"]],
+                names=["building_id", "road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        edges_dict = {("building", "connects_to", "road"): conn_gdf}
+
+        with pytest.raises(ValueError, match="missing a mapping"):
+            gdf_to_pyg(
+                sample_hetero_nodes_dict,
+                edges_dict,
+                reverse_edge_types={},  # empty dict, missing the required mapping
+            )
+
+    def test_original_edge_types_metadata(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """original_edge_types records only user-supplied edge types."""
+        data = gdf_to_pyg(sample_hetero_nodes_dict, sample_hetero_edges_dict)
+        oets = data.graph_metadata.original_edge_types
+        assert set(oets) == set(sample_hetero_edges_dict.keys())
+        # Should NOT include generated reverse stores
+        gen = data.graph_metadata.generated_reverse_edge_types
+        for gen_et in gen:
+            assert gen_et not in oets
+
+    def test_backward_compat_old_metadata_no_dedup(self) -> None:
+        """Old metadata without edge_was_symmetrized defaults to no dedup."""
+        nodes = gpd.GeoDataFrame(
+            {"node_id": [1, 2], "geometry": [Point(0, 0), Point(1, 0)]},
+            crs="EPSG:27700",
+        ).set_index("node_id")
+
+        source_ids = [1, 2]
+        target_ids = [2, 1]
+        edges = gpd.GeoDataFrame(
+            {
+                "source_id": source_ids,
+                "target_id": target_ids,
+                "geometry": [
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(1, 0), (0, 0)]),
+                ],
+            },
+            index=pd.MultiIndex.from_arrays(
+                [source_ids, target_ids], names=["source_id", "target_id"]
+            ),
+            crs="EPSG:27700",
+        )
+
+        # Build PyG data directly (simulating old metadata)
+        data = gdf_to_pyg(nodes, edges, directed=True)
+        # Remove edge_was_symmetrized to simulate old metadata
+        if hasattr(data.graph_metadata, "edge_was_symmetrized"):
+            delattr(data.graph_metadata, "edge_was_symmetrized")
+        # Ensure is_directed is True (old default) so backward compat path won't dedup
+        data.graph_metadata.is_directed = True
+
+        _, edges_restored = pyg_to_gdf(data)
+        assert isinstance(edges_restored, gpd.GeoDataFrame)
+        assert len(edges_restored) == 2

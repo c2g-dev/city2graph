@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Literal
 from typing import cast
 
 if TYPE_CHECKING:
@@ -94,6 +95,12 @@ class PyGConverter(BaseGraphConverter):
     This converter handles feature extraction, tensor creation, and manages
     the bidirectional conversion while preserving spatial and attribute information.
 
+    For homogeneous graphs, ``directed`` is a single boolean. For heterogeneous
+    graphs, ``directed`` can be a complete dictionary keyed by edge type so that
+    each relation independently controls whether its edges are directed or
+    symmetrised. Cross-type undirected edges are represented as paired directed
+    stores (original + generated reverse) rather than in-place symmetrisation.
+
     Parameters
     ----------
     node_feature_cols : dict[str, list[str]] or list[str], optional
@@ -108,10 +115,18 @@ class PyGConverter(BaseGraphConverter):
         Data type for float tensors.
     keep_geom : bool, default True
         Whether to preserve geometry information during conversion.
-    directed : bool, default False
+    directed : bool or dict[tuple[str, str, str], bool], default False
         Whether to treat edges as directed. If False (default), edges are
         symmetrized during conversion to PyG (reverse edges are added) and
         deduplicated during reconstruction back to GeoDataFrames.
+        For heterogeneous graphs, can be a complete dictionary mapping each
+        edge type to its directionality flag.
+    reverse_edge_types : ``"auto"``, dict, or None, default ``"auto"``
+        Controls how undirected cross-type heterogeneous edges are handled.
+        ``"auto"`` generates ``(dst_type, "rev_<relation>", src_type)``
+        automatically. A dict provides explicit mappings from original to
+        reverse edge types. ``None`` raises ``ValueError`` for any undirected
+        cross-type edge (strict mode).
     """
 
     def __init__(
@@ -122,7 +137,10 @@ class PyGConverter(BaseGraphConverter):
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
         keep_geom: bool = True,
-        directed: bool = False,
+        directed: bool | dict[tuple[str, str, str], bool] = False,
+        reverse_edge_types: (
+            Literal["auto"] | dict[tuple[str, str, str], tuple[str, str, str]] | None
+        ) = "auto",
     ) -> None:
         """
         Initialize PyGConverter.
@@ -146,12 +164,25 @@ class PyGConverter(BaseGraphConverter):
             If True, original geometries are serialized and stored in metadata.
             If False, geometries are reconstructed from node positions during
             conversion back to GeoDataFrames.
-        directed : bool, default False
+        directed : bool or dict[tuple[str, str, str], bool], default False
             Whether to treat edges as directed. If False (default), edges are
             symmetrized during conversion to PyG (reverse edges are added) and
             deduplicated during reconstruction back to GeoDataFrames.
+            For heterogeneous graphs, can be a complete dictionary mapping each
+            edge type to its directionality flag.
+        reverse_edge_types : ``"auto"``, dict, or None, default ``"auto"``
+            Controls how undirected cross-type heterogeneous edges are handled.
+            ``"auto"`` generates ``(dst_type, "rev_<relation>", src_type)``
+            automatically. A dict provides explicit mappings. ``None`` raises
+            ``ValueError`` for any undirected cross-type edge (strict mode).
         """
-        super().__init__(keep_geom=keep_geom, directed=directed)
+        # BaseGraphConverter expects a bool; pass True if any dict form is used,
+        # since per-edge-type resolution happens later in the PyG-specific code.
+        directed_bool = directed if isinstance(directed, bool) else False
+        super().__init__(keep_geom=keep_geom, directed=directed_bool)
+        # Store the full directed spec (bool or dict) for per-edge-type use.
+        self.directed: bool | dict[tuple[str, str, str], bool] = directed  # type: ignore[assignment]
+        self.reverse_edge_types_spec = reverse_edge_types
         self.node_feature_cols = node_feature_cols
         self.node_label_cols = node_label_cols
         self.edge_feature_cols = edge_feature_cols
@@ -292,6 +323,12 @@ class PyGConverter(BaseGraphConverter):
             msg = "Nodes GeoDataFrame is required for PyG conversion"
             raise ValueError(msg)
 
+        # Resolve directed to a single bool for homogeneous graphs
+        if isinstance(self.directed, dict):
+            msg = "directed must be a bool for homogeneous graphs, not a dict"
+            raise TypeError(msg)
+        directed_bool: bool = self.directed
+
         # Validate column types
         node_feature_cols_homo, node_label_cols_homo, edge_feature_cols_homo = (
             self._validate_homogeneous_columns()
@@ -315,6 +352,9 @@ class PyGConverter(BaseGraphConverter):
         edge_attr = torch.empty((0, 0), dtype=self.dtype or torch.float32, device=device)
 
         if edges is not None and not edges.empty:
+            # Validate edge table
+            self._validate_edge_gdf_for_pyg(edges, directed=directed_bool)
+
             edge_pairs = self._create_edge_indices(
                 edges,
                 id_mapping,
@@ -329,7 +369,7 @@ class PyGConverter(BaseGraphConverter):
             edge_attr = self._create_features(edges, edge_feature_cols_homo)
 
             # Symmetrize edges for undirected graphs
-            if not self.directed and edge_index.size(1) > 0:
+            if not directed_bool and edge_index.size(1) > 0:
                 edge_index, edge_attr = self._symmetrize_edges(edge_index, edge_attr, device)
 
         data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, pos=pos)
@@ -345,7 +385,8 @@ class PyGConverter(BaseGraphConverter):
             node_label_cols_homo,
             edge_feature_cols_homo,
         )
-        metadata.is_directed = self.directed
+        metadata.is_directed = directed_bool
+        metadata.edge_was_symmetrized = not directed_bool
 
         data.graph_metadata = metadata
         return data
@@ -499,11 +540,13 @@ class PyGConverter(BaseGraphConverter):
         )
 
         # Process edges
-        self._process_hetero_edges(
-            data,
-            edges_dict,
-            node_mappings,
-            edge_feature_cols_hetero,
+        directed_by_et, symmetrized_by_et, reverse_et_map, gen_reverse_et_map = (
+            self._process_hetero_edges(
+                data,
+                edges_dict,
+                node_mappings,
+                edge_feature_cols_hetero,
+            )
         )
 
         # Store metadata
@@ -515,6 +558,10 @@ class PyGConverter(BaseGraphConverter):
             node_feature_cols_hetero,
             node_label_cols_hetero,
             edge_feature_cols_hetero,
+            directed_by_et=directed_by_et,
+            symmetrized_by_et=symmetrized_by_et,
+            reverse_et_map=reverse_et_map,
+            gen_reverse_et_map=gen_reverse_et_map,
         )
 
         return data
@@ -579,11 +626,18 @@ class PyGConverter(BaseGraphConverter):
         edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
         node_mappings: dict[str, dict[str, dict[str | int, int] | str | list[str | int]]],
         edge_feature_cols: dict[tuple[str, str, str], list[str]] | None,
-    ) -> None:
+    ) -> tuple[
+        dict[tuple[str, str, str], bool],
+        dict[tuple[str, str, str], bool],
+        dict[tuple[str, str, str], tuple[str, str, str]],
+        dict[tuple[str, str, str], tuple[str, str, str]],
+    ]:
         """
         Process all edge types for heterogeneous graph.
 
-        Extended summary of edge processing for heterogeneous graphs.
+        Resolves per-edge-type directionality, validates each edge table,
+        symmetrises safe same-type undirected edges in-place, and creates
+        generated reverse edge stores for cross-type undirected relations.
 
         Parameters
         ----------
@@ -595,26 +649,42 @@ class PyGConverter(BaseGraphConverter):
             Dictionary containing node mapping information.
         edge_feature_cols : dict[tuple[str, str, str], list[str]], optional
             Dictionary mapping edge types to feature column names.
+
+        Returns
+        -------
+        tuple
+            ``(directed_by_et, symmetrized_by_et, reverse_et_map, gen_reverse_et_map)``
+            used by ``_store_hetero_metadata`` to record provenance.
         """
         device = _get_device(self.device)
 
-        for edge_type, edge_gdf in edges_dict.items():
-            # Extract source, relation, and destination types from edge_type tuple
-            src_type, _, dst_type = edge_type
+        # Resolve per-edge-type direction flags
+        directed_by_et = self._resolve_edge_directedness(edges_dict)
 
-            # Get the mapping dictionaries (not the full metadata)
-            # The type system guarantees these are dictionaries based on _process_hetero_nodes
+        # Track symmetrization and reverse store generation
+        symmetrized_by_et: dict[tuple[str, str, str], bool] = {}
+        reverse_et_map: dict[tuple[str, str, str], tuple[str, str, str]] = {}
+        gen_reverse_et_map: dict[tuple[str, str, str], tuple[str, str, str]] = {}
+        user_et_keys = set(edges_dict.keys())
+
+        for edge_type, edge_gdf in edges_dict.items():
+            src_type, _, dst_type = edge_type
+            is_directed_et = directed_by_et[edge_type]
+
+            # Get the mapping dictionaries
             src_mapping_raw = node_mappings[src_type]["mapping"]
             dst_mapping_raw = node_mappings[dst_type]["mapping"]
-
-            # Type assertion for mypy - these are guaranteed to be dicts by construction
             assert isinstance(src_mapping_raw, dict), f"Expected dict mapping for {src_type}"
             assert isinstance(dst_mapping_raw, dict), f"Expected dict mapping for {dst_type}"
-
             src_mapping: dict[str | int, int] = src_mapping_raw
             dst_mapping: dict[str | int, int] = dst_mapping_raw
 
             if edge_gdf is not None and not edge_gdf.empty:
+                # Validate edge table
+                self._validate_edge_gdf_for_pyg(
+                    edge_gdf, directed=is_directed_et, edge_type=edge_type
+                )
+
                 edge_pairs = self._create_edge_indices(
                     edge_gdf,
                     src_mapping,
@@ -629,14 +699,24 @@ class PyGConverter(BaseGraphConverter):
                 feature_cols = edge_feature_cols.get(edge_type) if edge_feature_cols else None
                 edge_attr = self._create_features(edge_gdf, feature_cols)
 
-                # Symmetrize edges for undirected graphs (only same-type edges)
-                # Cross-type edges (src_type != dst_type) cannot be symmetrized
-                # within the same edge type.
-                if not self.directed and edge_index.size(1) > 0 and src_type == dst_type:
+                # Decide symmetrization strategy
+                is_same_type = src_type == dst_type
+                if not is_directed_et and edge_index.size(1) > 0 and is_same_type:
+                    # Same-type undirected: symmetrise in-place
                     edge_index, edge_attr = self._symmetrize_edges(edge_index, edge_attr, device)
+                    symmetrized_by_et[edge_type] = True
+                else:
+                    symmetrized_by_et[edge_type] = False
 
                 data[edge_type].edge_index = edge_index
                 data[edge_type].edge_attr = edge_attr
+
+                # Cross-type undirected: create generated reverse edge store
+                if not is_directed_et and not is_same_type and edge_index.size(1) > 0:
+                    reverse_et = self._resolve_reverse_edge_type(edge_type, user_et_keys)
+                    self._add_generated_reverse_edge_store(data, edge_type, reverse_et)
+                    reverse_et_map[edge_type] = reverse_et
+                    gen_reverse_et_map[reverse_et] = edge_type
             else:
                 data[edge_type].edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
                 data[edge_type].edge_attr = torch.empty(
@@ -644,6 +724,9 @@ class PyGConverter(BaseGraphConverter):
                     dtype=self.dtype or torch.float32,
                     device=device,
                 )
+                symmetrized_by_et[edge_type] = False
+
+        return directed_by_et, symmetrized_by_et, reverse_et_map, gen_reverse_et_map
 
     def _store_hetero_metadata(
         self,
@@ -654,11 +737,17 @@ class PyGConverter(BaseGraphConverter):
         node_feature_cols: dict[str, list[str]] | None,
         node_label_cols: dict[str, list[str]] | None,
         edge_feature_cols: dict[tuple[str, str, str], list[str]] | None,
+        *,
+        directed_by_et: dict[tuple[str, str, str], bool],
+        symmetrized_by_et: dict[tuple[str, str, str], bool],
+        reverse_et_map: dict[tuple[str, str, str], tuple[str, str, str]],
+        gen_reverse_et_map: dict[tuple[str, str, str], tuple[str, str, str]],
     ) -> None:
         """
         Store metadata for heterogeneous graph.
 
-        Extended summary of metadata storage for heterogeneous graphs.
+        Records per-edge-type directionality, symmetrisation provenance, and
+        cross-type reverse edge type mappings alongside the standard metadata.
 
         Parameters
         ----------
@@ -676,6 +765,14 @@ class PyGConverter(BaseGraphConverter):
             Dictionary mapping node types to label column names.
         edge_feature_cols : dict[tuple[str, str, str], list[str]], optional
             Dictionary mapping edge types to feature column names.
+        directed_by_et : dict[tuple[str, str, str], bool]
+            Per-edge-type direction flags.
+        symmetrized_by_et : dict[tuple[str, str, str], bool]
+            Per-edge-type symmetrisation flags.
+        reverse_et_map : dict[tuple[str, str, str], tuple[str, str, str]]
+            Maps original edge types to generated reverse edge types.
+        gen_reverse_et_map : dict[tuple[str, str, str], tuple[str, str, str]]
+            Maps generated reverse edge types back to originals.
         """
         # Store mappings and column metadata
         metadata = GraphMetadata(is_hetero=True)
@@ -706,9 +803,8 @@ class PyGConverter(BaseGraphConverter):
                     for i in range(edge_gdf.index.nlevels)
                 ]
 
-                # Symmetrize edge index values for undirected same-type edges
-                src_type, _, dst_type = edge_type
-                if not self.directed and len(edge_idx_vals) == 2 and src_type == dst_type:
+                # Symmetrize edge index values only for edges that were symmetrized
+                if symmetrized_by_et.get(edge_type, False) and len(edge_idx_vals) == 2:
                     edge_idx_vals = self._symmetrize_edge_index_values(edge_idx_vals)
 
                 metadata.edge_index_values[edge_type] = edge_idx_vals
@@ -732,13 +828,17 @@ class PyGConverter(BaseGraphConverter):
                 if edge_gdf is not None and not edge_gdf.empty:
                     geoms = self._serialize_geometries(edge_gdf)
                     if geoms is not None:
-                        # Symmetrize edge geometries for undirected same-type edges
-                        src_type, _, dst_type = edge_type
-                        if not self.directed and src_type == dst_type:
+                        # Symmetrize edge geometries only for edges that were symmetrized
+                        if symmetrized_by_et.get(edge_type, False):
                             geoms = self._symmetrize_edge_geometries(edge_gdf, geoms)
                         metadata.edge_geometries[edge_type] = geoms
 
-        metadata.is_directed = self.directed
+        # Per-edge-type directionality and provenance metadata
+        metadata.is_directed = directed_by_et
+        metadata.edge_was_symmetrized = symmetrized_by_et
+        metadata.original_edge_types = list(edges_dict.keys())
+        metadata.reverse_edge_types = reverse_et_map
+        metadata.generated_reverse_edge_types = gen_reverse_et_map
         data.graph_metadata = metadata
 
     def _create_node_id_mapping(
@@ -834,6 +934,242 @@ class PyGConverter(BaseGraphConverter):
         combined_array = np.column_stack([from_indices, to_indices]).astype(int)
         result: list[list[int]] = combined_array.tolist()
         return result
+
+    # ------------------------------------------------------------------
+    # Edge validation and directedness resolution helpers (Steps 3 & 4)
+    # ------------------------------------------------------------------
+
+    def _validate_edge_gdf_for_pyg(
+        self,
+        edges: gpd.GeoDataFrame,
+        *,
+        directed: bool,
+        edge_type: tuple[str, str, str] | None = None,
+    ) -> None:
+        """
+        Validate an edge GeoDataFrame before creating PyG edge tensors.
+
+        Ensures the edge table has a proper two-level MultiIndex, and rejects
+        ambiguous inputs when ``directed=False``:
+        * already-bidirectional pairs (both ``(u, v)`` and ``(v, u)`` present)
+        * parallel undirected rows (duplicate unordered keys)
+        Self-loops are always allowed and not considered duplicates.
+
+        Parameters
+        ----------
+        edges : gpd.GeoDataFrame
+            Edge GeoDataFrame to validate.
+        directed : bool
+            Whether this edge table is treated as directed.
+        edge_type : tuple[str, str, str] or None, optional
+            Edge type tuple for error messages in heterogeneous graphs.
+        """
+        if edges.empty:
+            return
+
+        # 1. Require at least a two-level MultiIndex (source, target).
+        # MultiGraph/MultiDiGraph edges from nx_to_gdf may have a 3-level
+        # MultiIndex (source, target, key), which is also acceptable.
+        if not isinstance(edges.index, pd.MultiIndex) or edges.index.nlevels < 2:
+            et_label = f" for edge type {edge_type}" if edge_type else ""
+            msg = (
+                f"Edge GeoDataFrame index must be a MultiIndex with at least "
+                f"two levels (source, target){et_label}."
+            )
+            raise ValueError(msg)
+
+        if directed:
+            return  # No further validation needed for directed edges
+
+        # 2. Reject already-bidirectional pairs when directed=False
+        srcs = edges.index.get_level_values(0)
+        dsts = edges.index.get_level_values(1)
+        # Build sets of ordered edges; check for reverse presence
+        edge_set: set[tuple[object, object]] = set()
+        for s, d in zip(srcs, dsts, strict=True):
+            if s == d:
+                continue  # self-loops are fine
+            if (d, s) in edge_set:
+                et_label = f" for edge type {edge_type}" if edge_type else ""
+                msg = (
+                    f"Ambiguous undirected input{et_label}: both ({s}, {d}) and "
+                    f"({d}, {s}) are present. Pass directed=True for directed edges, "
+                    f"or provide only one row per undirected edge."
+                )
+                raise ValueError(msg)
+            edge_set.add((s, d))
+
+        # 3. Reject parallel undirected rows (duplicate unordered keys)
+        canonical_keys: list[tuple[object, object]] = []
+        for s, d in zip(srcs, dsts, strict=True):
+            key = (min(s, d), max(s, d)) if s != d else (s, d)
+            canonical_keys.append(key)
+        if len(canonical_keys) != len(set(canonical_keys)):
+            et_label = f" for edge type {edge_type}" if edge_type else ""
+            msg = (
+                f"Parallel undirected edges detected{et_label}. "
+                f"Round-trip reconstruction cannot safely preserve multiple "
+                f"geometries/attributes for the same unordered pair without "
+                f"explicit multigraph support. Pass directed=True to keep "
+                f"parallel edges as directed rows."
+            )
+            raise ValueError(msg)
+
+    def _resolve_edge_directedness(
+        self,
+        edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> dict[tuple[str, str, str], bool]:
+        """
+        Resolve per-edge-type directionality flags.
+
+        If ``self.directed`` is a ``bool``, applies it globally to every edge
+        type as a convenience. If it is a ``dict``, requires exact key equality
+        with the edge types present in *edges_dict*: missing or extra keys
+        raise ``ValueError``.
+
+        Parameters
+        ----------
+        edges_dict : dict[tuple[str, str, str], gpd.GeoDataFrame]
+            Dictionary mapping edge types to GeoDataFrames.
+
+        Returns
+        -------
+        dict[tuple[str, str, str], bool]
+            Complete mapping from every edge type to its direction flag.
+        """
+        if isinstance(self.directed, bool):
+            return dict.fromkeys(edges_dict, self.directed)
+
+        directed_dict = self.directed
+        provided = set(directed_dict.keys())
+        expected = set(edges_dict.keys())
+        missing = expected - provided
+        extra = provided - expected
+        if missing:
+            msg = (
+                f"directed dict is missing keys for edge types: {missing}. "
+                f"Provide a complete dictionary with one entry per edge type."
+            )
+            raise ValueError(msg)
+        if extra:
+            msg = (
+                f"directed dict has extra keys not in edges: {extra}. "
+                f"Remove keys that do not correspond to any edge type."
+            )
+            raise ValueError(msg)
+        return dict(directed_dict)
+
+    def _resolve_reverse_edge_type(
+        self,
+        edge_type: tuple[str, str, str],
+        edges_dict_keys: set[tuple[str, str, str]],
+    ) -> tuple[str, str, str]:
+        """
+        Resolve the concrete reverse edge type for a cross-type undirected relation.
+
+        Same-type edges (``src_type == dst_type``) do not require reverse types
+        because they are symmetrised in-place. This method should only be called
+        for cross-type edges that are declared undirected.
+
+        Parameters
+        ----------
+        edge_type : tuple[str, str, str]
+            The original ``(src_type, relation, dst_type)`` edge type.
+        edges_dict_keys : set[tuple[str, str, str]]
+            The set of all user-supplied edge type keys, used for collision
+            detection.
+
+        Returns
+        -------
+        tuple[str, str, str]
+            The reverse edge type ``(dst_type, rev_relation, src_type)``.
+
+        Raises
+        ------
+        ValueError
+            If ``reverse_edge_types`` is ``None`` (strict mode), or if the
+            generated/explicit reverse type collides with a user-supplied type,
+            or if explicit reverse type endpoints are inconsistent.
+        """
+        src_type, relation, dst_type = edge_type
+        spec = self.reverse_edge_types_spec
+
+        if spec is None:
+            msg = (
+                f"Cross-type edge {edge_type} is declared undirected but "
+                f"reverse_edge_types=None (strict mode). Either set the edge "
+                f"to directed=True, or provide reverse_edge_types='auto' or "
+                f"an explicit mapping."
+            )
+            raise ValueError(msg)
+
+        if spec == "auto":
+            reverse_et: tuple[str, str, str] = (dst_type, f"rev_{relation}", src_type)
+        elif isinstance(spec, dict):
+            if edge_type not in spec:
+                msg = (
+                    f"reverse_edge_types dict is missing a mapping for "
+                    f"undirected cross-type edge {edge_type}."
+                )
+                raise ValueError(msg)
+            reverse_et = spec[edge_type]
+            # Validate endpoint consistency
+            if reverse_et[0] != dst_type or reverse_et[2] != src_type:
+                msg = (
+                    f"Explicit reverse edge type {reverse_et} has inconsistent "
+                    f"endpoints for original edge type {edge_type}. Expected "
+                    f"reverse_edge_type[0]=={dst_type!r} and "
+                    f"reverse_edge_type[2]=={src_type!r}."
+                )
+                raise ValueError(msg)
+        else:
+            msg = (  # pragma: no cover
+                f"reverse_edge_types must be 'auto', a dict, or None; got {type(spec).__name__}"
+            )
+            raise TypeError(msg)  # pragma: no cover
+
+        # Collision detection
+        if reverse_et in edges_dict_keys:
+            msg = (
+                f"Generated reverse edge type {reverse_et} for original "
+                f"edge type {edge_type} collides with an existing "
+                f"user-supplied edge type. Provide an explicit "
+                f"reverse_edge_types mapping to resolve this."
+            )
+            raise ValueError(msg)
+
+        return reverse_et
+
+    @staticmethod
+    def _add_generated_reverse_edge_store(
+        data: HeteroData,
+        edge_type: tuple[str, str, str],
+        reverse_edge_type: tuple[str, str, str],
+    ) -> None:
+        """
+        Create a generated reverse edge store for cross-type undirected edges.
+
+        Instead of symmetrising a cross-type edge table in-place (which is
+        impossible because the source and destination node types differ), this
+        method creates a new PyG edge store with the reversed edge index and
+        cloned edge attributes.
+
+        Generated reverse stores are PyG message-passing artefacts, not original
+        input edge tables. They are skipped by default during ``pyg_to_gdf``
+        reconstruction.
+
+        Parameters
+        ----------
+        data : HeteroData
+            HeteroData object to add the reverse store to.
+        edge_type : tuple[str, str, str]
+            Original edge type whose edges are being reversed.
+        reverse_edge_type : tuple[str, str, str]
+            The new reverse edge type to create.
+        """
+        data[reverse_edge_type].edge_index = data[edge_type].edge_index.flip(0)
+        if hasattr(data[edge_type], "edge_attr") and data[edge_type].edge_attr is not None:
+            data[reverse_edge_type].edge_attr = data[edge_type].edge_attr.clone()
 
     def _symmetrize_edges(
         self,
@@ -1139,22 +1475,9 @@ class PyGConverter(BaseGraphConverter):
             else:
                 gdf.set_crs(metadata.crs, allow_override=True, inplace=True)
 
-        # Deduplicate edges for undirected graphs
-        # When is_directed is False, edges were symmetrized during gdf_to_pyg.
-        # Restore the original undirected edge table by keeping canonical pairs.
-        # For hetero graphs, only same-type edges were symmetrized.
-        is_directed_flag = metadata.is_directed
-        if isinstance(is_directed_flag, dict) and edge_type is not None:
-            is_directed_flag = is_directed_flag.get(edge_type, False)
-
-        # Check if this edge type was actually symmetrized
-        is_same_type = True
-        if is_hetero and isinstance(edge_type, tuple) and len(edge_type) == 3:
-            is_same_type = edge_type[0] == edge_type[2]
-
+        # Deduplicate edges that city2graph symmetrized for PyG message passing.
         if (
-            not is_directed_flag
-            and is_same_type
+            self._should_deduplicate_edges(metadata, edge_type, is_hetero)
             and isinstance(gdf.index, pd.MultiIndex)
             and gdf.index.nlevels == 2
             and not gdf.empty
@@ -1162,6 +1485,56 @@ class PyGConverter(BaseGraphConverter):
             gdf = self._deduplicate_undirected_edges(gdf)
 
         return gdf
+
+    @staticmethod
+    def _should_deduplicate_edges(
+        metadata: GraphMetadata,
+        edge_type: tuple[str, str, str] | None,
+        is_hetero: bool,
+    ) -> bool:
+        """
+        Decide whether reconstructed edges should be deduplicated.
+
+        Uses ``edge_was_symmetrized`` (preferred) with a backward-compatible
+        fallback to ``is_directed``. Never deduplicates directed edge types,
+        cross-type heterogeneous relations, or edge types that were never
+        symmetrised.
+
+        Parameters
+        ----------
+        metadata : GraphMetadata
+            Graph metadata from the PyG object.
+        edge_type : tuple or None
+            Edge type tuple for heterogeneous graphs.
+        is_hetero : bool
+            Whether this is a heterogeneous graph.
+
+        Returns
+        -------
+        bool
+            True if the edges should be deduplicated.
+        """
+        edge_was_symmetrized = getattr(metadata, "edge_was_symmetrized", False)
+
+        if isinstance(edge_was_symmetrized, dict):
+            return bool(edge_was_symmetrized.get(edge_type, False))
+        if isinstance(edge_was_symmetrized, bool):
+            return edge_was_symmetrized
+
+        # Backward compatibility: fall back to is_directed if edge_was_symmetrized
+        # is not present (old metadata). Default to True (directed) to avoid
+        # accidentally deduplicating old directed-looking edge tables.
+        if not hasattr(metadata, "edge_was_symmetrized"):
+            is_directed_flag = getattr(metadata, "is_directed", True)
+            if isinstance(is_directed_flag, dict) and edge_type is not None:
+                is_directed_flag = is_directed_flag.get(edge_type, True)
+
+            is_same_type = True
+            if is_hetero and isinstance(edge_type, tuple) and len(edge_type) == 3:
+                is_same_type = edge_type[0] == edge_type[2]
+            return not is_directed_flag and is_same_type
+
+        return False
 
     def _extract_tensor_columns(
         self,
@@ -1639,7 +2012,18 @@ class PyGConverter(BaseGraphConverter):
                 )
 
         if edges and metadata.edge_types:
-            for edge_type in metadata.edge_types:
+            # Determine which edge types to reconstruct: only original user-supplied
+            # edge types. Generated reverse edge stores are message-passing
+            # artefacts and should be skipped during reconstruction.
+            gen_reverse = getattr(metadata, "generated_reverse_edge_types", {})
+            original_ets = getattr(metadata, "original_edge_types", None)
+            reconstruct_ets = original_ets or metadata.edge_types
+
+            for edge_type in reconstruct_ets:
+                # Skip any edge type that is a generated reverse
+                if edge_type in gen_reverse:
+                    continue
+
                 add_cols = None
                 if additional_edge_cols and isinstance(additional_edge_cols, dict):
                     # Try to match edge type tuple
@@ -1864,7 +2248,10 @@ def gdf_to_pyg(
     device: str | torch.device | None = None,
     dtype: torch.dtype | None = None,
     keep_geom: bool = True,
-    directed: bool = False,
+    directed: bool | dict[tuple[str, str, str], bool] = False,
+    reverse_edge_types: (
+        Literal["auto"] | dict[tuple[str, str, str], tuple[str, str, str]] | None
+    ) = "auto",
 ) -> Data | HeteroData:
     """
     Convert GeoDataFrames (nodes/edges) to a PyTorch Geometric object.
@@ -1913,12 +2300,21 @@ def gdf_to_pyg(
         exact reconstruction. If False, geometries are reconstructed from node
         positions during conversion back to GeoDataFrames (creating straight-line
         edges between nodes).
-    directed : bool, default False
+    directed : bool or dict[tuple[str, str, str], bool], default False
         Whether to treat edges as directed. If False (default), each edge
         ``(u, v)`` in the input GeoDataFrame is symmetrized by adding the
         reverse edge ``(v, u)`` so that PyTorch Geometric receives a proper
         undirected graph. Self-loops are not duplicated. Edge attributes are
         duplicated for reverse edges. If True, edges are kept as-is.
+        For heterogeneous graphs, can be a complete dictionary mapping each
+        edge type to its directionality flag so that different relations can
+        independently be directed or undirected.
+    reverse_edge_types : ``"auto"``, dict, or None, default ``"auto"``
+        Controls how undirected cross-type heterogeneous edges are handled.
+        ``"auto"`` generates ``(dst_type, "rev_<relation>", src_type)``
+        automatically. A dict provides explicit mappings from original to
+        reverse edge types. ``None`` raises ``ValueError`` for any undirected
+        cross-type edge (strict mode).
 
     Returns
     -------
@@ -1995,6 +2391,7 @@ def gdf_to_pyg(
         dtype=dtype,
         keep_geom=keep_geom,
         directed=directed,
+        reverse_edge_types=reverse_edge_types,
     )
     return converter.gdf_to_pyg(nodes, edges)
 
@@ -2275,7 +2672,9 @@ def nx_to_pyg(
     # Get nodes and edges GeoDataFrames
     nodes_gdf, edges_gdf = nx_to_gdf(graph, nodes=True, edges=True)
 
-    # Convert to PyG using existing function
+    # Convert to PyG using existing function.
+    # Preserve NetworkX graph semantics: nx.DiGraph / nx.MultiDiGraph stay
+    # directed in PyG; nx.Graph / nx.MultiGraph become bidirectional.
     return gdf_to_pyg(
         nodes=nodes_gdf,
         edges=edges_gdf,
@@ -2285,6 +2684,7 @@ def nx_to_pyg(
         device=device,
         dtype=dtype,
         keep_geom=keep_geom,
+        directed=graph.is_directed(),
     )
 
 
@@ -2525,6 +2925,9 @@ def _validate_hetero_structure(data: HeteroData, metadata: GraphMetadata) -> Non
     if metadata.edge_types:
         actual_edge_types = set(data.edge_types)
         expected_edge_types = set(metadata.edge_types)
+        # Include generated reverse edge types in the expected set
+        gen_reverse = getattr(metadata, "generated_reverse_edge_types", {})
+        expected_edge_types |= set(gen_reverse.keys())
         if actual_edge_types != expected_edge_types:
             msg = (
                 f"Edge types mismatch: metadata expects {expected_edge_types}, "

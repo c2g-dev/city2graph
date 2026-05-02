@@ -113,6 +113,24 @@ class GraphMetadata:
         # When False (default), gdf_to_pyg symmetrizes edges and pyg_to_gdf deduplicates.
         self.is_directed: bool | dict[tuple[str, str, str], bool] = False
 
+        # Per-edge-type symmetrization tracking.
+        # Records what city2graph actually symmetrized during conversion.
+        # Reconstruction uses this (not just is_directed) to decide deduplication,
+        # because a hetero graph can mix directed and undirected edge types.
+        self.edge_was_symmetrized: bool | dict[tuple[str, str, str], bool] = False
+
+        # Cross-type reverse edge type mappings.
+        # Maps original cross-type edge types to generated reverse edge types.
+        self.reverse_edge_types: dict[tuple[str, str, str], tuple[str, str, str]] = {}
+        # Maps generated reverse edge types back to their original edge types.
+        self.generated_reverse_edge_types: dict[tuple[str, str, str], tuple[str, str, str]] = {}
+
+        # Edge types supplied by the user before city2graph added any generated
+        # reverse stores. Generated reverse edge stores are implementation
+        # artefacts for PyG message passing and should be skipped by default
+        # during pyg_to_gdf reconstruction.
+        self.original_edge_types: list[tuple[str, str, str]] = []
+
     def to_dict(self) -> dict[str, object]:
         """
         Convert to dictionary for NetworkX graph metadata.

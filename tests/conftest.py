@@ -425,12 +425,11 @@ def sample_hetero_edges_dict(
     )
 
     road_links_data = {
-        "source_road_id": ["r1", "r2"],
-        "target_road_id": ["r2", "r1"],
-        "link_feat1": [0.7, 0.7],
+        "source_road_id": ["r1"],
+        "target_road_id": ["r2"],
+        "link_feat1": [0.7],
         "geometry": [
             LineString([(10, 12), (12, 12)]),
-            LineString([(12, 12), (10, 12)]),
         ],
     }
     road_links_gdf = _edge_gdf(
