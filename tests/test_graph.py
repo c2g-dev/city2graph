@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 from typing import cast
 
@@ -12,11 +13,13 @@ import pytest
 import torch
 from shapely.geometry import LineString
 from shapely.geometry import Point
+from shapely.geometry import Polygon
 from torch_geometric.data import Data
 from torch_geometric.data import HeteroData
 
 from city2graph import graph as graph_module
 from city2graph.base import GraphMetadata
+from city2graph.proximity import contiguity_graph
 
 # Import torch-related modules conditionally
 try:
@@ -1148,6 +1151,42 @@ class TestUndirectedEdgeHandling:
         """directed=True keeps edges as-is (no doubling)."""
         data = gdf_to_pyg(simple_nodes, simple_edges, directed=True)
         assert data.num_edges == 2
+        assert data.graph_metadata.is_directed is True
+        assert data.graph_metadata.edge_was_symmetrized is False
+
+    def test_issue_156_queen_grid_neighbors_are_bidirectional(self) -> None:
+        """4x4 queen contiguity around id22 has every neighbor in both directions."""
+        records = [
+            {
+                "node_id": f"id{row}{col}",
+                "geometry": Polygon(
+                    [
+                        (col, row),
+                        (col + 1, row),
+                        (col + 1, row + 1),
+                        (col, row + 1),
+                    ]
+                ),
+            }
+            for row in range(4)
+            for col in range(4)
+        ]
+        polygons = gpd.GeoDataFrame(records, crs="EPSG:27700").set_index("node_id")
+        nodes, edges = contiguity_graph(polygons, contiguity="queen")
+
+        data = gdf_to_pyg(nodes, edges)
+        mapping = data.graph_metadata.node_mappings["default"]["mapping"]
+        focal = mapping["id22"]
+        expected_neighbors = {"id11", "id12", "id13", "id21", "id23", "id31", "id32", "id33"}
+        expected_edges = {(focal, mapping[neighbor]) for neighbor in expected_neighbors} | {
+            (mapping[neighbor], focal) for neighbor in expected_neighbors
+        }
+        observed_edges = {
+            (int(data.edge_index[0, i]), int(data.edge_index[1, i]))
+            for i in range(data.edge_index.size(1))
+        }
+
+        assert expected_edges <= observed_edges
 
     def test_round_trip_restores_original_edges(
         self, simple_nodes: gpd.GeoDataFrame, simple_edges: gpd.GeoDataFrame
@@ -1194,6 +1233,22 @@ class TestUndirectedEdgeHandling:
         data = gdf_to_pyg(nodes, edges)
         # 1→2 gets reversed (adds 2→1), 1→1 stays as is: total 3
         assert data.num_edges == 3
+
+    def test_only_self_loops_do_not_trigger_parallel_validation(self) -> None:
+        """Self-loop-only undirected tables skip unordered-pair validation."""
+        nodes = gpd.GeoDataFrame(
+            {"node_id": [1], "geometry": [Point(0, 0)]},
+            crs="EPSG:27700",
+        ).set_index("node_id")
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (0, 0)])]},
+            index=pd.MultiIndex.from_arrays([[1], [1]], names=["source_id", "target_id"]),
+            crs="EPSG:27700",
+        )
+
+        data = gdf_to_pyg(nodes, edges)
+
+        assert data.num_edges == 1
 
     def test_hetero_same_type_symmetrized(
         self,
@@ -1842,6 +1897,27 @@ class TestUndirectedEdgeHandling:
 
         assert data.num_edges == len(edges)
 
+    def test_three_level_parallel_undirected_edges_rejected(
+        self, simple_nodes: gpd.GeoDataFrame
+    ) -> None:
+        """Three-level MultiGraph-style parallel rows still need directed=True."""
+        edges = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(0, 0), (1, 0)]),
+                ],
+            },
+            index=pd.MultiIndex.from_arrays(
+                [[1, 1], [2, 2], [0, 1]],
+                names=["source_id", "target_id", "edge_key"],
+            ),
+            crs="EPSG:27700",
+        )
+
+        with pytest.raises(ValueError, match="Parallel undirected edges"):
+            gdf_to_pyg(simple_nodes, edges)
+
     def test_empty_edge_features_resized_on_symmetrization(
         self, simple_nodes: gpd.GeoDataFrame, simple_edges: gpd.GeoDataFrame
     ) -> None:
@@ -1883,6 +1959,86 @@ class TestUndirectedEdgeHandling:
         assert data[reverse_type].edge_attr.shape == data[edge_type].edge_attr.shape
         assert torch.equal(data[reverse_type].edge_attr, data[edge_type].edge_attr)
         assert data[reverse_type].edge_attr is not data[edge_type].edge_attr
+
+    def test_large_undirected_validation_smoke(self) -> None:
+        """Large unique undirected edge tables validate and round-trip."""
+        edge_count = 10_000
+        node_ids = list(range(edge_count + 1))
+        nodes = gpd.GeoDataFrame(
+            {"geometry": [Point(float(i), 0.0) for i in node_ids]},
+            index=pd.Index(node_ids, name="node_id"),
+            crs="EPSG:27700",
+        )
+        src = list(range(edge_count))
+        dst = list(range(1, edge_count + 1))
+        edges = gpd.GeoDataFrame(
+            {
+                "geometry": [LineString([(float(i), 0.0), (float(i + 1), 0.0)]) for i in src],
+            },
+            index=pd.MultiIndex.from_arrays([src, dst], names=["source_id", "target_id"]),
+            crs="EPSG:27700",
+        )
+
+        start = time.perf_counter()
+        data = gdf_to_pyg(nodes, edges)
+        _, restored_edges = pyg_to_gdf(data)
+        elapsed = time.perf_counter() - start
+
+        assert data.num_edges == edge_count * 2
+        assert isinstance(restored_edges, gpd.GeoDataFrame)
+        assert len(restored_edges) == edge_count
+        assert elapsed < 20.0
+
+    def test_categorical_node_ids_round_trip_undirected(self) -> None:
+        """Categorical node IDs do not require ordering for deduplication."""
+        node_ids = pd.CategoricalIndex(["b", "a", "c"], name="node_id")
+        nodes = gpd.GeoDataFrame(
+            {"geometry": [Point(0, 0), Point(1, 0), Point(2, 0)]},
+            index=node_ids,
+            crs="EPSG:27700",
+        )
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (1, 0)]), LineString([(1, 0), (2, 0)])]},
+            index=pd.MultiIndex.from_arrays(
+                [
+                    pd.Categorical(["b", "a"]),
+                    pd.Categorical(["a", "c"]),
+                ],
+                names=["source_id", "target_id"],
+            ),
+            crs="EPSG:27700",
+        )
+
+        _, restored_edges = pyg_to_gdf(gdf_to_pyg(nodes, edges))
+
+        assert isinstance(restored_edges, gpd.GeoDataFrame)
+        assert len(restored_edges) == len(edges)
+
+    def test_uuid_string_node_ids_round_trip_undirected(self) -> None:
+        """UUID string node IDs round-trip after undirected symmetrization."""
+        ids = [
+            "7f4e2c0e-d9d7-4a90-b9f2-5a03e2d86a01",
+            "3103f18b-3552-46be-a6d0-763f25de52c4",
+            "f24207d2-c43c-419a-a37a-b602094a8eb2",
+        ]
+        nodes = gpd.GeoDataFrame(
+            {"geometry": [Point(0, 0), Point(1, 0), Point(2, 0)]},
+            index=pd.Index(ids, name="node_id"),
+            crs="EPSG:27700",
+        )
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (1, 0)]), LineString([(1, 0), (2, 0)])]},
+            index=pd.MultiIndex.from_arrays(
+                [[ids[1], ids[2]], [ids[0], ids[1]]],
+                names=["source_id", "target_id"],
+            ),
+            crs="EPSG:27700",
+        )
+
+        _, restored_edges = pyg_to_gdf(gdf_to_pyg(nodes, edges))
+
+        assert isinstance(restored_edges, gpd.GeoDataFrame)
+        assert len(restored_edges) == len(edges)
 
     def test_nx_multigraph_symmetrized(self) -> None:
         """nx.MultiGraph edges are symmetrised in PyG."""
@@ -2032,6 +2188,48 @@ class TestUndirectedEdgeHandling:
         assert set(edges_restored) == set(edges_dict)
         assert len(edges_restored[conn_type]) == len(conn_gdf)
         assert ("road", "rev_connects_to", "building") not in edges_restored
+
+    def test_pyg_to_nx_warns_on_mixed_hetero_directedness(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Mixed hetero direction metadata warns before collapsing to one NX graph."""
+        road_type = ("road", "links_to", "road")
+        conn_type = ("building", "connects_to", "road")
+        road_gdf = gpd.GeoDataFrame(
+            {
+                "source_road_id": ["r1"],
+                "target_road_id": ["r2"],
+                "geometry": [LineString([(10, 12), (12, 12)])],
+            },
+            index=pd.MultiIndex.from_arrays(
+                [["r1"], ["r2"]],
+                names=["source_road_id", "target_road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        conn_gdf = gpd.GeoDataFrame(
+            {
+                "building_id": ["b1"],
+                "road_id": ["r1"],
+                "geometry": [LineString([(10, 10), (10, 12)])],
+            },
+            index=pd.MultiIndex.from_arrays(
+                [["b1"], ["r1"]],
+                names=["building_id", "road_id"],
+            ),
+            crs="EPSG:27700",
+        )
+        data = gdf_to_pyg(
+            sample_hetero_nodes_dict,
+            {road_type: road_gdf, conn_type: conn_gdf},
+            directed={road_type: False, conn_type: True},
+        )
+
+        with pytest.warns(UserWarning, match="collapses mixed heterogeneous edge directedness"):
+            graph = pyg_to_nx(data)
+
+        assert graph.is_directed() is False
 
     def test_metadata_reverse_edge_types_populated(
         self,
