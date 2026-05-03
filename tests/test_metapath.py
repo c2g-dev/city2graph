@@ -121,9 +121,13 @@ class TestMetapaths:
         sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
     ) -> None:
         """Exercise aggregation choices: sum, mean, callable, and all-NaN callable path."""
+        # NOTE: travel_time arrays must match the row count of the corresponding
+        # fixture GeoDataFrames. The road->road edge fixture only has a single
+        # row because the new undirected-edge validation in gdf_to_pyg rejects
+        # bidirectional pairs like (r1, r2) + (r2, r1).
         travel_time_values = {
             ("building", "connects_to", "road"): [10.0, 20.0, 30.0],
-            ("road", "links_to", "road"): [5.0, 15.0],
+            ("road", "links_to", "road"): [5.0],
         }
         edges_with_attr = {k: v.copy() for k, v in sample_hetero_edges_dict.items()}
         for ek, vals in travel_time_values.items():
@@ -459,9 +463,10 @@ class TestMetapaths:
         elif join_case == "disjoint":
             edges_disjoint = {k: v.copy() for k, v in sample_hetero_edges_dict.items()}
             rl = edges_disjoint[("road", "links_to", "road")].copy()
-            rl.index = pd.MultiIndex.from_tuples(
-                [("r10", "r11"), ("r11", "r10")], names=rl.index.names
-            )
+            # The road->road fixture has a single row; replace its index with a
+            # disjoint pair whose endpoints do not appear in the road nodes
+            # fixture so the metapath join produces an empty result.
+            rl.index = pd.MultiIndex.from_tuples([("r10", "r11")], names=rl.index.names)
             edges_disjoint[("road", "links_to", "road")] = rl
             _, edges_out = add_metapaths(
                 (sample_hetero_nodes_dict, edges_disjoint), sequence=METAPATH
