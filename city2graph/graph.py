@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 # Third-party imports
 import geopandas as gpd
+import networkx as nx
 import numpy as np
 import pandas as pd
 from shapely import wkb
@@ -351,10 +352,11 @@ class PyGConverter(BaseGraphConverter):
         edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
         edge_attr = torch.empty((0, 0), dtype=self.dtype or torch.float32, device=device)
 
-        if edges is not None and not edges.empty:
+        if edges is not None:
             # Validate edge table
             self._validate_edge_gdf_for_pyg(edges, directed=directed_bool)
 
+        if edges is not None and not edges.empty:
             edge_pairs = self._create_edge_indices(
                 edges,
                 id_mapping,
@@ -1277,7 +1279,8 @@ class PyGConverter(BaseGraphConverter):
             Symmetrized geometry list.
         """
         rev_geoms = []
-        for i, (src, dst) in enumerate(edges.index):
+        for i, edge_key in enumerate(edges.index):
+            src, dst = edge_key[:2] if isinstance(edge_key, tuple) else (edge_key, edge_key)
             if src != dst:
                 rev_geoms.append(edge_geoms[i])
         return edge_geoms + rev_geoms
@@ -1514,13 +1517,6 @@ class PyGConverter(BaseGraphConverter):
         bool
             True if the edges should be deduplicated.
         """
-        edge_was_symmetrized = getattr(metadata, "edge_was_symmetrized", False)
-
-        if isinstance(edge_was_symmetrized, dict):
-            return bool(edge_was_symmetrized.get(edge_type, False))
-        if isinstance(edge_was_symmetrized, bool):
-            return edge_was_symmetrized
-
         # Backward compatibility: fall back to is_directed if edge_was_symmetrized
         # is not present (old metadata). Default to True (directed) to avoid
         # accidentally deduplicating old directed-looking edge tables.
@@ -1533,6 +1529,13 @@ class PyGConverter(BaseGraphConverter):
             if is_hetero and isinstance(edge_type, tuple) and len(edge_type) == 3:
                 is_same_type = edge_type[0] == edge_type[2]
             return not is_directed_flag and is_same_type
+
+        edge_was_symmetrized = getattr(metadata, "edge_was_symmetrized", False)
+
+        if isinstance(edge_was_symmetrized, dict):
+            return bool(edge_was_symmetrized.get(edge_type, False))
+        if isinstance(edge_was_symmetrized, bool):
+            return edge_was_symmetrized
 
         return False
 
@@ -2563,7 +2566,30 @@ def pyg_to_nx(
         additional_node_cols=additional_node_cols,
         additional_edge_cols=additional_edge_cols,
     )
-    return gdf_to_nx(nodes, edges)
+    metadata = getattr(data, "graph_metadata", None)
+    directed = False
+    if metadata is not None:
+        is_directed = getattr(metadata, "is_directed", False)
+        if isinstance(is_directed, bool):
+            directed = is_directed
+        elif isinstance(is_directed, dict):
+            directed = all(is_directed.values())
+
+    graph = gdf_to_nx(nodes, edges, directed=directed)
+    if (
+        metadata is not None
+        and getattr(metadata, "is_hetero", False) is False
+        and isinstance(nodes, gpd.GeoDataFrame)
+    ):
+        relabel = {
+            node: attrs["_original_index"]
+            for node, attrs in graph.nodes(data=True)
+            if "_original_index" in attrs
+        }
+        if len(relabel) == graph.number_of_nodes() and len(set(relabel.values())) == len(relabel):
+            graph = nx.relabel_nodes(graph, relabel, copy=True)
+
+    return graph
 
 
 def nx_to_pyg(
@@ -2574,6 +2600,7 @@ def nx_to_pyg(
     device: torch.device | str | None = None,
     dtype: torch.dtype | None = None,
     keep_geom: bool = True,
+    directed: bool | None = None,
 ) -> Data | HeteroData:
     """
     Convert NetworkX graph to PyTorch Geometric Data object.
@@ -2604,6 +2631,10 @@ def nx_to_pyg(
         If True, original geometries are serialized and stored in metadata for
         exact reconstruction. If False, geometries are reconstructed from node
         positions during conversion back to GeoDataFrames.
+    directed : bool, optional
+        Explicit directionality override. If omitted, the NetworkX graph type is
+        used: ``Graph`` and ``MultiGraph`` are undirected, while ``DiGraph`` and
+        ``MultiDiGraph`` are directed.
 
     Returns
     -------
@@ -2673,8 +2704,11 @@ def nx_to_pyg(
     nodes_gdf, edges_gdf = nx_to_gdf(graph, nodes=True, edges=True)
 
     # Convert to PyG using existing function.
-    # Preserve NetworkX graph semantics: nx.DiGraph / nx.MultiDiGraph stay
-    # directed in PyG; nx.Graph / nx.MultiGraph become bidirectional.
+    directed_flag = graph.is_directed() if directed is None else directed
+
+    # Preserve NetworkX graph semantics by default: nx.DiGraph /
+    # nx.MultiDiGraph stay directed in PyG; nx.Graph / nx.MultiGraph become
+    # bidirectional. The public directed override can force either behaviour.
     return gdf_to_pyg(
         nodes=nodes_gdf,
         edges=edges_gdf,
@@ -2684,7 +2718,7 @@ def nx_to_pyg(
         device=device,
         dtype=dtype,
         keep_geom=keep_geom,
-        directed=graph.is_directed(),
+        directed=directed_flag,
     )
 
 
