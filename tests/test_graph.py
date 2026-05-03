@@ -1,16 +1,4 @@
-"""
-Streamlined tests for the graph module.
-
-This module provides comprehensive test coverage for city2graph.graph with improved
-maintainability and clear organization. Tests are organized by core functionality
-with minimal redundancy.
-
-Key improvements:
-- Simplified test structure focused on core functionality
-- Reduced redundancy through better parameterization
-- Clear separation of concerns
-- Easier to maintain and extend
-"""
+"""Scenario-focused tests for the public graph conversion API."""
 
 from __future__ import annotations
 
@@ -124,94 +112,94 @@ class TestGraphConversion:
 
         return nodes, edges
 
-    @pytest.mark.parametrize("graph_type", ["homogeneous", "heterogeneous"])
-    def test_gdf_to_pyg_basic(
+    def test_homogeneous_gdf_to_pyg_basic(
         self,
-        graph_type: str,
         sample_nodes_gdf: gpd.GeoDataFrame,
         sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Homogeneous GeoDataFrames convert into a symmetrized Data graph."""
+        data = gdf_to_pyg(sample_nodes_gdf, sample_edges_gdf)
+        assert isinstance(data, Data)
+        assert data.num_nodes == len(sample_nodes_gdf)
+        assert data.num_edges == len(sample_edges_gdf) * 2
+        assert not data.graph_metadata.is_hetero
+
+    def test_heterogeneous_gdf_to_pyg_basic(
+        self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
         sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
     ) -> None:
-        """Test basic conversion from GeoDataFrames to PyG objects."""
-        if graph_type == "homogeneous":
-            data = gdf_to_pyg(sample_nodes_gdf, sample_edges_gdf)
-            assert isinstance(data, Data)
-            assert data.num_nodes == len(sample_nodes_gdf)
-            # Edges are symmetrized by default (directed=False), so doubled
-            assert data.num_edges == len(sample_edges_gdf) * 2
-            assert not data.graph_metadata.is_hetero
-        else:
-            data = gdf_to_pyg(sample_hetero_nodes_dict, sample_hetero_edges_dict)
-            assert isinstance(data, HeteroData)
-            assert data.graph_metadata.is_hetero
-            assert set(data.node_types) == set(sample_hetero_nodes_dict.keys())
-            # Original edge types should be present; generated reverse stores
-            # for cross-type undirected edges add extra edge types.
-            assert set(sample_hetero_edges_dict.keys()).issubset(set(data.edge_types))
+        """Heterogeneous GeoDataFrames retain original and generated edge stores."""
+        data = gdf_to_pyg(sample_hetero_nodes_dict, sample_hetero_edges_dict)
+        assert isinstance(data, HeteroData)
+        assert data.graph_metadata.is_hetero
+        assert set(data.node_types) == set(sample_hetero_nodes_dict.keys())
+        assert set(sample_hetero_edges_dict.keys()).issubset(set(data.edge_types))
 
-    @pytest.mark.parametrize("graph_type", ["homogeneous", "heterogeneous"])
-    def test_gdf_to_pyg_with_features(
+    def test_homogeneous_gdf_to_pyg_with_features(
         self,
-        graph_type: str,
         sample_nodes_gdf: gpd.GeoDataFrame,
         sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Homogeneous feature, label, and edge tensors are column-driven."""
+        data = gdf_to_pyg(
+            sample_nodes_gdf,
+            sample_edges_gdf,
+            node_feature_cols=["feature1"],
+            node_label_cols=["label1"],
+            edge_feature_cols=["edge_feature1"],
+        )
+        assert data.x.shape[1] == 1
+        assert data.y.shape[1] == 1
+        assert data.edge_attr.shape[1] == 1
+
+    def test_heterogeneous_gdf_to_pyg_with_features(
+        self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
         sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
     ) -> None:
-        """Test conversion with node and edge features."""
-        if graph_type == "homogeneous":
-            data = gdf_to_pyg(
-                sample_nodes_gdf,
-                sample_edges_gdf,
-                node_feature_cols=["feature1"],
-                node_label_cols=["label1"],
-                edge_feature_cols=["edge_feature1"],
-            )
-            assert data.x.shape[1] == 1
-            assert data.y.shape[1] == 1
-            assert data.edge_attr.shape[1] == 1
-        else:
-            data = gdf_to_pyg(
-                sample_hetero_nodes_dict,
-                sample_hetero_edges_dict,
-                node_feature_cols={"building": ["b_feat1"], "road": ["length"]},
-                node_label_cols={"building": ["b_label"]},
-                edge_feature_cols={
-                    ("building", "connects_to", "road"): ["conn_feat1"],
-                    ("road", "links_to", "road"): ["link_feat1"],
-                },
-            )
-            assert data["building"].x.shape[1] == 1
-            assert data["road"].x.shape[1] == 1
-            assert data["building"].y.shape[1] == 1
+        """Heterogeneous feature and label tensors use per-type column specs."""
+        data = gdf_to_pyg(
+            sample_hetero_nodes_dict,
+            sample_hetero_edges_dict,
+            node_feature_cols={"building": ["b_feat1"], "road": ["length"]},
+            node_label_cols={"building": ["b_label"]},
+            edge_feature_cols={
+                ("building", "connects_to", "road"): ["conn_feat1"],
+                ("road", "links_to", "road"): ["link_feat1"],
+            },
+        )
+        assert data["building"].x.shape[1] == 1
+        assert data["road"].x.shape[1] == 1
+        assert data["building"].y.shape[1] == 1
 
-    @pytest.mark.parametrize("graph_type", ["homogeneous", "heterogeneous"])
-    def test_round_trip_conversion(
+    def test_homogeneous_round_trip_conversion(
         self,
-        graph_type: str,
         sample_nodes_gdf: gpd.GeoDataFrame,
         sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Homogeneous GDF data survives GDF -> PyG -> GDF conversion."""
+        data = gdf_to_pyg(sample_nodes_gdf, sample_edges_gdf)
+        nodes_restored, edges_restored = pyg_to_gdf(data)
+
+        assert isinstance(nodes_restored, gpd.GeoDataFrame)
+        assert isinstance(edges_restored, gpd.GeoDataFrame)
+        assert len(nodes_restored) == len(sample_nodes_gdf)
+        assert len(edges_restored) == len(sample_edges_gdf)
+
+    def test_heterogeneous_round_trip_conversion(
+        self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
         sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
     ) -> None:
-        """Test that data survives round-trip conversion (GDF -> PyG -> GDF)."""
-        if graph_type == "homogeneous":
-            data = gdf_to_pyg(sample_nodes_gdf, sample_edges_gdf)
-            nodes_restored, edges_restored = pyg_to_gdf(data)
+        """Heterogeneous GDF data survives GDF -> PyG -> GDF conversion."""
+        data = gdf_to_pyg(sample_hetero_nodes_dict, sample_hetero_edges_dict)
+        nodes_restored, edges_restored = pyg_to_gdf(data)
 
-            assert isinstance(nodes_restored, gpd.GeoDataFrame)
-            assert isinstance(edges_restored, gpd.GeoDataFrame)
-            assert len(nodes_restored) == len(sample_nodes_gdf)
-            assert len(edges_restored) == len(sample_edges_gdf)
-        else:
-            data = gdf_to_pyg(sample_hetero_nodes_dict, sample_hetero_edges_dict)
-            nodes_restored, edges_restored = pyg_to_gdf(data)
-
-            assert isinstance(nodes_restored, dict)
-            assert isinstance(edges_restored, dict)
-            assert set(nodes_restored.keys()) == set(sample_hetero_nodes_dict.keys())
-            assert set(edges_restored.keys()) == set(sample_hetero_edges_dict.keys())
+        assert isinstance(nodes_restored, dict)
+        assert isinstance(edges_restored, dict)
+        assert set(nodes_restored.keys()) == set(sample_hetero_nodes_dict.keys())
+        assert set(edges_restored.keys()) == set(sample_hetero_edges_dict.keys())
 
     def test_nx_conversions(self, sample_nx_graph: nx.Graph) -> None:
         """Test NetworkX conversions."""
@@ -309,35 +297,33 @@ class TestGraphConversion:
         with pytest.raises(ValueError, match="Graph has no nodes"):
             nx_to_pyg(empty_graph)
 
-    @pytest.mark.parametrize(
-        ("feature_type", "graph_type"),
-        [
-            ("node_feature_cols", "homogeneous"),
-            ("node_label_cols", "homogeneous"),
-            ("edge_feature_cols", "homogeneous"),
-            ("node_feature_cols", "heterogeneous"),
-            ("node_label_cols", "heterogeneous"),
-            ("edge_feature_cols", "heterogeneous"),
-        ],
-    )
-    def test_invalid_feature_types(
+    def test_homogeneous_feature_specs_must_be_lists(
         self,
-        feature_type: str,
-        graph_type: str,
         sample_nodes_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Homogeneous conversion rejects dictionary column specs."""
+        with pytest.raises(TypeError, match="node_feature_cols must be a list"):
+            gdf_to_pyg(sample_nodes_gdf, node_feature_cols={"invalid": ["cols"]})
+
+        with pytest.raises(TypeError, match="node_label_cols must be a list"):
+            gdf_to_pyg(sample_nodes_gdf, node_label_cols={"invalid": ["cols"]})
+
+        with pytest.raises(TypeError, match="edge_feature_cols must be a list"):
+            gdf_to_pyg(sample_nodes_gdf, edge_feature_cols={("a", "b", "c"): ["cols"]})
+
+    def test_heterogeneous_feature_specs_must_be_dicts(
+        self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
     ) -> None:
-        """Test invalid feature column types."""
-        if graph_type == "homogeneous":
-            kwargs: dict[str, Any] = {feature_type: {"invalid": "cols"}}
-            expected_msg = f"{feature_type} must be a list"
-            with pytest.raises(TypeError, match=expected_msg):
-                gdf_to_pyg(sample_nodes_gdf, **kwargs)
-        else:
-            kwargs = {feature_type: ["invalid"]}
-            expected_msg = f"{feature_type} must be a dict"
-            with pytest.raises(TypeError, match=expected_msg):
-                gdf_to_pyg(sample_hetero_nodes_dict, **kwargs)
+        """Heterogeneous conversion rejects list column specs."""
+        with pytest.raises(TypeError, match="node_feature_cols must be a dict"):
+            gdf_to_pyg(sample_hetero_nodes_dict, node_feature_cols=["invalid"])
+
+        with pytest.raises(TypeError, match="node_label_cols must be a dict"):
+            gdf_to_pyg(sample_hetero_nodes_dict, node_label_cols=["invalid"])
+
+        with pytest.raises(TypeError, match="edge_feature_cols must be a dict"):
+            gdf_to_pyg(sample_hetero_nodes_dict, edge_feature_cols=["invalid"])
 
     def test_geometry_handling(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:
         """Test geometry handling edge cases."""
@@ -498,16 +484,18 @@ class TestGraphConversion:
             gdf_to_pyg("invalid_nodes")
 
     def test_convert_none_nodes(self) -> None:
-        """Test None nodes in conversion methods."""
+        """Public converter dispatch reports missing homogeneous and hetero nodes."""
         converter = graph_module.PyGConverter()
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (1, 1)])]},
+            index=pd.MultiIndex.from_tuples([(1, 2)], names=["source_id", "target_id"]),
+        )
 
-        # Homogeneous
         with pytest.raises(ValueError, match="Nodes GeoDataFrame is required"):
-            converter._convert_homogeneous(None, None)
+            converter.convert(None, edges)
 
-        # Heterogeneous
         with pytest.raises(ValueError, match="Nodes dictionary is required"):
-            converter._convert_heterogeneous(None, None)
+            converter.convert(None, {("node", "to", "node"): edges})
 
     def test_reconstruct_missing_geometry_data(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:
         """Test reconstruction when features exist but geometry/pos is missing."""
@@ -530,26 +518,28 @@ class TestGraphConversion:
         # Remove pos to prevent reconstruction from pos
         data.pos = None
 
-        # This will trigger the fallback to empty geometry in _reconstruct_edge_gdf
         _, edges_rec = pyg_to_gdf(data)
         assert isinstance(edges_rec, gpd.GeoDataFrame)
         assert edges_rec.geometry.isna().all()
 
     def test_reconstruct_hetero_edge_errors(self, sample_pyg_hetero_data: HeteroData) -> None:
-        """Test heterogeneous edge reconstruction errors."""
-        converter = graph_module.PyGConverter()
-        metadata = sample_pyg_hetero_data.graph_metadata
+        """Invalid hetero edge metadata is rejected during public reconstruction."""
+        sample_pyg_hetero_data.graph_metadata.original_edge_types = ["invalid"]
 
         with pytest.raises(TypeError, match="Edge type must be a tuple"):
-            converter._reconstruct_edge_gdf(sample_pyg_hetero_data, metadata, edge_type="invalid")  # type: ignore[arg-type]
+            pyg_to_gdf(sample_pyg_hetero_data)
 
-    def test_create_geometry_missing_pos(self, sample_pyg_data: Data) -> None:
-        """Test geometry creation with missing pos."""
-        converter = graph_module.PyGConverter()
+    def test_nodes_reconstruct_with_null_geometry_when_positions_removed(
+        self, sample_pyg_data: Data
+    ) -> None:
+        """Node reconstruction falls back to null geometries when positions are missing."""
         sample_pyg_data.pos = None
-        assert converter._create_geometry_from_positions(sample_pyg_data) is None
+        sample_pyg_data.graph_metadata.node_geometries = None
+        nodes_restored, _ = pyg_to_gdf(sample_pyg_data)
+        assert isinstance(nodes_restored, gpd.GeoDataFrame)
+        assert nodes_restored.geometry.isna().all()
 
-    def test_create_edge_geometries_hetero_no_stored(
+    def test_heterogeneous_edges_rebuild_straight_geometry_without_stored_wkb(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
         sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
@@ -567,34 +557,37 @@ class TestGraphConversion:
             assert not gdf.geometry.isna().all()
             assert all(isinstance(g, LineString) for g in gdf.geometry)
 
-    def test_create_features_no_numeric(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:
-        """Test feature creation with no numeric columns."""
-        # Create GDF with only string columns
+    def test_non_numeric_requested_features_are_ignored(
+        self, sample_nodes_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """Non-numeric requested feature columns produce an empty tensor."""
         gdf = sample_nodes_gdf.copy()
         gdf["str_col"] = "a"
         gdf = gdf[["str_col", "geometry"]]
 
-        converter = graph_module.PyGConverter()
-        features = converter._create_features(gdf, feature_cols=None)
-        assert features.shape[1] == 0
+        data = gdf_to_pyg(gdf, node_feature_cols=["str_col"])
+        assert data.x.shape[1] == 0
 
-    def test_create_node_positions_no_geom(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:
-        """Test node position creation with no geometry."""
-        gdf = sample_nodes_gdf.copy()
-        # Remove geometry column to trigger the None return
-        del gdf["geometry"]
+    def test_geometryless_nodes_have_no_position_tensor(
+        self, sample_nodes_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """GeoDataFrames without an active geometry column create no positions."""
+        gdf = gpd.GeoDataFrame(sample_nodes_gdf.drop(columns="geometry"))
 
-        converter = graph_module.PyGConverter()
-        assert converter._create_node_positions(gdf) is None
+        data = gdf_to_pyg(gdf)
+        assert data.pos is None
 
-    def test_serialize_geometries_no_geom(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:
-        """Test geometry serialization with no geometry."""
-        gdf = sample_nodes_gdf.copy()
-        # Remove geometry column to trigger the None return
-        del gdf["geometry"]
+    def test_geometryless_nodes_store_no_wkb_and_reconstruct_null_geometry(
+        self, sample_nodes_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """Geometry-less inputs reconstruct with null geometry under keep_geom."""
+        gdf = gpd.GeoDataFrame(sample_nodes_gdf.drop(columns="geometry"))
 
-        converter = graph_module.PyGConverter()
-        assert converter._serialize_geometries(gdf) is None
+        data = gdf_to_pyg(gdf, keep_geom=True)
+        assert data.graph_metadata.node_geometries is None
+        nodes_restored, _ = pyg_to_gdf(data)
+        assert isinstance(nodes_restored, gpd.GeoDataFrame)
+        assert nodes_restored.geometry.isna().all()
 
 
 class TestGraphValidation:
@@ -630,29 +623,32 @@ class TestGraphValidation:
         with pytest.raises(TypeError, match="PyG object has 'graph_metadata' of incorrect type"):
             validate_pyg(data)
 
-    @pytest.mark.parametrize(
-        ("graph_type", "inconsistency"),
-        [
-            ("homo_marked_as_hetero", "is Data but metadata.is_hetero is True"),
-            ("hetero_marked_as_homo", "HeteroData but metadata.is_hetero is False"),
-        ],
-    )
-    def test_inconsistent_metadata(
+    def test_homogeneous_data_marked_as_heterogeneous_is_rejected(
         self,
-        graph_type: str,
-        inconsistency: str,
         sample_nodes_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Data objects cannot claim heterogeneous metadata."""
+        data = gdf_to_pyg(sample_nodes_gdf)
+        data.graph_metadata.is_hetero = True
+
+        with pytest.raises(
+            ValueError,
+            match=r"Inconsistency detected.*is Data but metadata.is_hetero is True",
+        ):
+            validate_pyg(data)
+
+    def test_heterogeneous_data_marked_as_homogeneous_is_rejected(
+        self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
     ) -> None:
-        """Test validation with inconsistent metadata."""
-        if graph_type == "homo_marked_as_hetero":
-            data = gdf_to_pyg(sample_nodes_gdf)
-            data.graph_metadata.is_hetero = True
-        else:
-            data = gdf_to_pyg(sample_hetero_nodes_dict)
-            data.graph_metadata.is_hetero = False
+        """HeteroData objects cannot claim homogeneous metadata."""
+        data = gdf_to_pyg(sample_hetero_nodes_dict)
+        data.graph_metadata.is_hetero = False
 
-        with pytest.raises(ValueError, match=f"Inconsistency detected.*{inconsistency}"):
+        with pytest.raises(
+            ValueError,
+            match=r"Inconsistency detected.*HeteroData but metadata.is_hetero is False",
+        ):
             validate_pyg(data)
 
     def test_tensor_validation_errors(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:
@@ -822,8 +818,6 @@ class TestGraphFeatures:
             node_label_cols=["label1"],
         )
 
-        # Test the homogeneous branch in _extract_node_features_and_labels
-        # by calling pyg_to_gdf which uses this function
         nodes_restored, _ = pyg_to_gdf(data)
 
         # Verify features and labels are extracted correctly
@@ -1086,15 +1080,16 @@ class TestOptionalTensorConversion:
         assert isinstance(edges_dict, dict)
         assert "w" in edges_dict[edge_type].columns
 
-    def test_get_device_no_torch(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test _get_device raises ImportError when torch is not available."""
-        # Check if _get_device is available in graph_module
-        if hasattr(graph_module, "_get_device"):
-            monkeypatch.setattr(graph_module, "TORCH_AVAILABLE", False)
-            with pytest.raises(ImportError, match="PyTorch and PyTorch Geometric required"):
-                graph_module._get_device(None)
-        else:
-            pytest.skip("_get_device not accessible")
+    def test_converter_reports_missing_torch_during_device_resolution(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Converter device resolution reports missing torch through the public method."""
+        monkeypatch.setattr(graph_module, "TORCH_AVAILABLE", False)
+        nodes = gpd.GeoDataFrame({"geometry": [Point(0, 0)]}, index=[1])
+        converter = graph_module.PyGConverter()
+
+        with pytest.raises(ImportError, match="PyTorch and PyTorch Geometric required"):
+            converter.gdf_to_pyg(nodes)
 
 
 class TestUndirectedEdgeHandling:
