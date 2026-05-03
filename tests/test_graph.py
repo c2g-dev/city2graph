@@ -8,6 +8,7 @@ from typing import cast
 
 import geopandas as gpd
 import networkx as nx
+import osmnx as ox
 import pandas as pd
 import pytest
 import torch
@@ -1897,26 +1898,65 @@ class TestUndirectedEdgeHandling:
 
         assert data.num_edges == len(edges)
 
-    def test_three_level_parallel_undirected_edges_rejected(
+    def test_three_level_parallel_undirected_edges_round_trip(
         self, simple_nodes: gpd.GeoDataFrame
     ) -> None:
-        """Three-level MultiGraph-style parallel rows still need directed=True."""
+        """Three-level MultiGraph-style parallel rows round-trip with keys."""
         edges = gpd.GeoDataFrame(
             {
+                "weight": [1.0, 2.0, 3.0],
                 "geometry": [
                     LineString([(0, 0), (1, 0)]),
-                    LineString([(0, 0), (1, 0)]),
+                    LineString([(0, 0), (0.5, 0.2), (1, 0)]),
+                    LineString([(0, 0), (0, 0)]),
                 ],
             },
             index=pd.MultiIndex.from_arrays(
-                [[1, 1], [2, 2], [0, 1]],
+                [[1, 1, 1], [2, 2, 1], ["road", "rail", "loop"]],
                 names=["source_id", "target_id", "edge_key"],
             ),
             crs="EPSG:27700",
         )
 
-        with pytest.raises(ValueError, match="Parallel undirected edges"):
-            gdf_to_pyg(simple_nodes, edges)
+        data = gdf_to_pyg(simple_nodes, edges, edge_feature_cols=["weight"])
+        _, restored_edges = pyg_to_gdf(data)
+
+        assert data.num_edges == 5
+        assert isinstance(restored_edges, gpd.GeoDataFrame)
+        pd.testing.assert_index_equal(restored_edges.index, edges.index)
+        assert restored_edges["weight"].tolist() == [1.0, 2.0, 3.0]
+        assert restored_edges.geometry.equals(edges.geometry)
+
+    def test_opt_in_multigraph_generates_key_level(self, simple_nodes: gpd.GeoDataFrame) -> None:
+        """multigraph=True preserves parallel two-level rows with generated keys."""
+        edges = gpd.GeoDataFrame(
+            {
+                "weight": [1.0, 2.0],
+                "geometry": [
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(0, 0), (0.5, 0.2), (1, 0)]),
+                ],
+            },
+            index=pd.MultiIndex.from_arrays(
+                [[1, 1], [2, 2]],
+                names=["source_id", "target_id"],
+            ),
+            crs="EPSG:27700",
+        )
+
+        data = gdf_to_pyg(
+            simple_nodes,
+            edges,
+            edge_feature_cols=["weight"],
+            multigraph=True,
+        )
+        _, restored_edges = pyg_to_gdf(data)
+
+        assert data.num_edges == 4
+        assert isinstance(restored_edges, gpd.GeoDataFrame)
+        assert restored_edges.index.names == ["source_id", "target_id", "key"]
+        assert restored_edges.index.get_level_values("key").tolist() == [0, 1]
+        assert restored_edges["weight"].tolist() == [1.0, 2.0]
 
     def test_empty_edge_features_resized_on_symmetrization(
         self, simple_nodes: gpd.GeoDataFrame, simple_edges: gpd.GeoDataFrame
@@ -2054,6 +2094,232 @@ class TestUndirectedEdgeHandling:
         assert data.num_edges == 2
         assert data.graph_metadata.is_directed is False
 
+    def test_nx_multigraph_round_trip_preserves_parallel_keys(self) -> None:
+        """nx.MultiGraph round-trips as a MultiGraph with edge keys."""
+        graph = nx.MultiGraph()
+        graph.add_node("a", pos=(0, 0), geometry=Point(0, 0))
+        graph.add_node("b", pos=(1, 0), geometry=Point(1, 0))
+        graph.add_edge(
+            "a",
+            "b",
+            key="road",
+            weight=1.0,
+            geometry=LineString([(0, 0), (1, 0)]),
+        )
+        graph.add_edge(
+            "a",
+            "b",
+            key="rail",
+            weight=2.0,
+            geometry=LineString([(0, 0), (0.5, 0.2), (1, 0)]),
+        )
+        graph.graph["crs"] = "EPSG:27700"
+        graph.graph["is_hetero"] = False
+
+        data = nx_to_pyg(graph, edge_feature_cols=["weight"])
+        restored = pyg_to_nx(data)
+
+        assert isinstance(restored, nx.MultiGraph)
+        assert restored.is_directed() is False
+        assert restored.number_of_edges("a", "b") == 2
+        assert {key for _, _, key in restored.edges(keys=True)} == {"road", "rail"}
+
+    def test_osmnx_shaped_multidigraph_gdfs_round_trip_preserve_edge_keys(self) -> None:
+        """OSMnx-shaped MultiDiGraph GeoDataFrames keep keyed edge identity."""
+        nodes = gpd.GeoDataFrame(
+            {
+                "x": [0.0, 1.0, 2.0],
+                "y": [0.0, 0.0, 0.0],
+                "geometry": [Point(0, 0), Point(1, 0), Point(2, 0)],
+            },
+            index=pd.Index([101, 202, 303], name="osmid"),
+            crs="EPSG:4326",
+        )
+        edges = gpd.GeoDataFrame(
+            {
+                "osmid": [10, 11, 12],
+                "length": [100.0, 110.0, 125.0],
+                "geometry": [
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(0, 0), (0.5, 0.1), (1, 0)]),
+                    LineString([(1, 0), (2, 0)]),
+                ],
+            },
+            index=pd.MultiIndex.from_tuples(
+                [(101, 202, 0), (101, 202, 1), (202, 303, 0)],
+                names=["u", "v", "key"],
+            ),
+            crs="EPSG:4326",
+        )
+
+        data = gdf_to_pyg(nodes, edges, edge_feature_cols=["length"], directed=True)
+        restored_nodes, restored_edges = pyg_to_gdf(data)
+
+        assert data.num_edges == len(edges)
+        assert isinstance(restored_nodes, gpd.GeoDataFrame)
+        assert isinstance(restored_edges, gpd.GeoDataFrame)
+        assert len(restored_nodes) == len(nodes)
+        assert len(restored_edges) == len(edges)
+        assert restored_edges.index.nlevels == 3
+        assert restored_edges.index.names == ["u", "v", "key"]
+        assert set(restored_edges.index) == set(edges.index)
+        pd.testing.assert_series_equal(
+            restored_edges.sort_index()["length"],
+            edges.sort_index()["length"],
+            check_names=False,
+            check_dtype=False,
+        )
+
+    def test_osmnx_shaped_multigraph_gdfs_round_trip_deduplicates_symmetrized_edges(
+        self,
+    ) -> None:
+        """Undirected OSMnx-shaped MultiGraph GeoDataFrames dedupe by pair plus key."""
+        nodes = gpd.GeoDataFrame(
+            {
+                "x": [0.0, 1.0, 2.0],
+                "y": [0.0, 0.0, 0.0],
+                "geometry": [Point(0, 0), Point(1, 0), Point(2, 0)],
+            },
+            index=pd.Index([101, 202, 303], name="osmid"),
+            crs="EPSG:4326",
+        )
+        edges = gpd.GeoDataFrame(
+            {
+                "osmid": [10, 11, 12],
+                "length": [100.0, 110.0, 125.0],
+                "geometry": [
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(0, 0), (0.5, 0.1), (1, 0)]),
+                    LineString([(1, 0), (2, 0)]),
+                ],
+            },
+            index=pd.MultiIndex.from_tuples(
+                [(101, 202, 0), (101, 202, 1), (202, 303, 0)],
+                names=["u", "v", "key"],
+            ),
+            crs="EPSG:4326",
+        )
+
+        data = gdf_to_pyg(nodes, edges, edge_feature_cols=["length"], directed=False)
+        _, restored_edges = pyg_to_gdf(data)
+
+        assert data.num_edges == len(edges) * 2
+        assert data.graph_metadata.is_multigraph is True
+        assert data.graph_metadata.edge_was_symmetrized is True
+        assert isinstance(restored_edges, gpd.GeoDataFrame)
+        assert len(restored_edges) == len(edges)
+        assert restored_edges.index.names == ["u", "v", "key"]
+        assert set(restored_edges.index) == set(edges.index)
+        pd.testing.assert_series_equal(
+            restored_edges.sort_index()["length"],
+            edges.sort_index()["length"],
+            check_names=False,
+            check_dtype=False,
+        )
+
+    def test_osmnx_downloaded_multidigraph_smoke(self) -> None:
+        """Downloaded OSMnx MultiDiGraph round-trips through PyG with keyed edges."""
+        graph = ox.graph_from_bbox(
+            (-0.128, 51.501, -0.124, 51.503),
+            network_type="drive",
+            simplify=True,
+            retain_all=False,
+        )
+        nodes, edges = ox.graph_to_gdfs(graph)
+
+        data = gdf_to_pyg(
+            nodes,
+            edges,
+            edge_feature_cols=["length"],
+            directed=graph.is_directed(),
+            multigraph=graph.is_multigraph(),
+        )
+        restored_nodes, restored_edges = pyg_to_gdf(data)
+
+        assert isinstance(graph, nx.MultiDiGraph)
+        assert isinstance(restored_nodes, gpd.GeoDataFrame)
+        assert isinstance(restored_edges, gpd.GeoDataFrame)
+        assert len(restored_nodes) == len(nodes)
+        assert len(restored_edges) == len(edges)
+        assert restored_edges.index.nlevels == 3
+        assert set(restored_edges.index) == set(edges.index)
+
+        undirected_graph = ox.convert.to_undirected(graph)
+        undirected_nodes, undirected_edges = ox.graph_to_gdfs(undirected_graph)
+        undirected_data = gdf_to_pyg(
+            undirected_nodes,
+            undirected_edges,
+            edge_feature_cols=["length"],
+            directed=False,
+            multigraph=undirected_graph.is_multigraph(),
+        )
+        _, undirected_restored_edges = pyg_to_gdf(undirected_data)
+
+        assert isinstance(undirected_graph, nx.MultiGraph)
+        assert undirected_data.num_edges == len(undirected_edges) * 2
+        assert undirected_data.graph_metadata.is_multigraph is True
+        assert undirected_data.graph_metadata.edge_was_symmetrized is True
+        assert isinstance(undirected_restored_edges, gpd.GeoDataFrame)
+        assert len(undirected_restored_edges) == len(undirected_edges)
+        assert undirected_restored_edges.index.nlevels == 3
+        assert set(undirected_restored_edges.index) == set(undirected_edges.index)
+
+    def test_nx_multidigraph_round_trip_preserves_parallel_direction(self) -> None:
+        """nx.MultiDiGraph round-trips as directed with parallel keys."""
+        graph = nx.MultiDiGraph()
+        graph.add_node("a", pos=(0, 0), geometry=Point(0, 0))
+        graph.add_node("b", pos=(1, 0), geometry=Point(1, 0))
+        graph.add_edge(
+            "a",
+            "b",
+            key="ab",
+            weight=1.0,
+            geometry=LineString([(0, 0), (1, 0)]),
+        )
+        graph.add_edge(
+            "b",
+            "a",
+            key="ba",
+            weight=2.0,
+            geometry=LineString([(1, 0), (0, 0)]),
+        )
+        graph.graph["crs"] = "EPSG:27700"
+        graph.graph["is_hetero"] = False
+
+        restored = pyg_to_nx(nx_to_pyg(graph, edge_feature_cols=["weight"]))
+
+        assert isinstance(restored, nx.MultiDiGraph)
+        assert restored.is_directed() is True
+        assert set(restored.edges(keys=True)) == {("a", "b", "ab"), ("b", "a", "ba")}
+
+    def test_old_metadata_missing_multigraph_attrs_still_round_trips(
+        self, simple_nodes: gpd.GeoDataFrame
+    ) -> None:
+        """Older PyG metadata without new multigraph attrs still reconstructs."""
+        edges = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(0, 0), (0.5, 0.2), (1, 0)]),
+                ],
+            },
+            index=pd.MultiIndex.from_arrays(
+                [[1, 1], [2, 2], ["road", "rail"]],
+                names=["source_id", "target_id", "edge_key"],
+            ),
+            crs="EPSG:27700",
+        )
+        data = gdf_to_pyg(simple_nodes, edges)
+        delattr(data.graph_metadata, "edge_index_keys")
+        delattr(data.graph_metadata, "is_multigraph")
+
+        _, restored_edges = pyg_to_gdf(data)
+        restored_graph = pyg_to_nx(data)
+
+        assert isinstance(restored_edges, gpd.GeoDataFrame)
+        pd.testing.assert_index_equal(restored_edges.index, edges.index)
+        assert isinstance(restored_graph, nx.MultiGraph)
+
     def test_nx_to_pyg_directed_override(self) -> None:
         """The directed override takes precedence over nx.Graph semantics."""
         graph = nx.Graph()
@@ -2140,6 +2406,75 @@ class TestUndirectedEdgeHandling:
         assert set(edges_restored) == set(edges_dict)
         assert len(edges_restored[road_type]) == len(road_gdf)
         assert len(edges_restored[conn_type]) == len(conn_gdf)
+
+    def test_hetero_same_type_parallel_keys_round_trip(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Same-type hetero edges preserve parallel key-level rows."""
+        edge_type = ("road", "links_to", "road")
+        road_gdf = gpd.GeoDataFrame(
+            {
+                "weight": [1.0, 2.0],
+                "geometry": [
+                    LineString([(10, 12), (12, 12)]),
+                    LineString([(10, 12), (11, 12.5), (12, 12)]),
+                ],
+            },
+            index=pd.MultiIndex.from_arrays(
+                [["r1", "r1"], ["r2", "r2"], ["road", "rail"]],
+                names=["source_road_id", "target_road_id", "edge_key"],
+            ),
+            crs="EPSG:27700",
+        )
+
+        data = gdf_to_pyg(
+            sample_hetero_nodes_dict,
+            {edge_type: road_gdf},
+            edge_feature_cols={edge_type: ["weight"]},
+        )
+        _, edges_restored = pyg_to_gdf(data)
+
+        assert data[edge_type].edge_index.size(1) == 4
+        assert isinstance(edges_restored, dict)
+        pd.testing.assert_index_equal(edges_restored[edge_type].index, road_gdf.index)
+        assert edges_restored[edge_type]["weight"].tolist() == [1.0, 2.0]
+
+    def test_hetero_cross_type_parallel_keys_skip_reverse_leakage(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Cross-type parallel keyed edges mirror for PyG without leaking back."""
+        edge_type = ("building", "connects_to", "road")
+        reverse_type = ("road", "rev_connects_to", "building")
+        conn_gdf = gpd.GeoDataFrame(
+            {
+                "weight": [1.0, 2.0],
+                "geometry": [
+                    LineString([(10, 10), (10, 12)]),
+                    LineString([(10, 10), (10.2, 11), (10, 12)]),
+                ],
+            },
+            index=pd.MultiIndex.from_arrays(
+                [["b1", "b1"], ["r1", "r1"], ["walk", "service"]],
+                names=["building_id", "road_id", "edge_key"],
+            ),
+            crs="EPSG:27700",
+        )
+
+        data = gdf_to_pyg(
+            sample_hetero_nodes_dict,
+            {edge_type: conn_gdf},
+            edge_feature_cols={edge_type: ["weight"]},
+        )
+        _, edges_restored = pyg_to_gdf(data)
+
+        assert data[edge_type].edge_index.size(1) == 2
+        assert data[reverse_type].edge_index.size(1) == 2
+        assert torch.equal(data[reverse_type].edge_attr, data[edge_type].edge_attr)
+        assert isinstance(edges_restored, dict)
+        assert set(edges_restored) == {edge_type}
+        pd.testing.assert_index_equal(edges_restored[edge_type].index, conn_gdf.index)
 
     def test_hetero_directed_dict_round_trip(
         self,

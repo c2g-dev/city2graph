@@ -87,10 +87,10 @@ class GraphMetadata:
         self.edge_types: list[tuple[str, str, str]] = []
 
         # Index management
-        self.node_index_names: dict[str, list[str] | None] | list[str] | None = None
-        self.edge_index_names: dict[tuple[str, str, str], list[str] | None] | list[str] | None = (
-            None
-        )
+        self.node_index_names: dict[str, list[str | None] | None] | list[str | None] | None = None
+        self.edge_index_names: (
+            dict[tuple[str, str, str], list[str | None] | None] | list[str | None] | None
+        ) = None
 
         # Geometry column tracking
         self.node_geom_cols: list[str] = []
@@ -103,6 +103,9 @@ class GraphMetadata:
         self.edge_feature_cols: dict[tuple[str, str, str], list[str]] | list[str] | None = None
         self.edge_index_values: (
             dict[tuple[str, str, str], list[list[str | int]]] | list[list[str | int]] | None
+        ) = None
+        self.edge_index_keys: (
+            dict[tuple[str, str, str], list[str | int]] | list[str | int] | None
         ) = None
 
         # Geometry storage for exact reconstruction (WKB hexadecimal format)
@@ -118,6 +121,10 @@ class GraphMetadata:
         # Reconstruction uses this (not just is_directed) to decide deduplication,
         # because a hetero graph can mix directed and undirected edge types.
         self.edge_was_symmetrized: bool | dict[tuple[str, str, str], bool] = False
+
+        # Multigraph flag: true when edge identity includes an explicit key level
+        # or when conversion generated keys for opt-in multigraph handling.
+        self.is_multigraph: bool | dict[tuple[str, str, str], bool] = False
 
         # Cross-type reverse edge type mappings.
         # Maps original cross-type edge types to generated reverse edge types.

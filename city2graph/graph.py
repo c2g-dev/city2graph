@@ -129,6 +129,10 @@ class PyGConverter(BaseGraphConverter):
         automatically. A dict provides explicit mappings from original to
         reverse edge types. ``None`` raises ``ValueError`` for any undirected
         cross-type edge (strict mode).
+    multigraph : bool, default False
+        Whether two-level edge indexes should be treated as multigraph inputs
+        by generating a key level. Three-level ``(source, target, key)`` edge
+        indexes are always treated as multigraph inputs.
     """
 
     def __init__(
@@ -143,6 +147,7 @@ class PyGConverter(BaseGraphConverter):
         reverse_edge_types: (
             Literal["auto"] | dict[tuple[str, str, str], tuple[str, str, str]] | None
         ) = "auto",
+        multigraph: bool = False,
     ) -> None:
         """
         Initialize PyGConverter.
@@ -177,11 +182,14 @@ class PyGConverter(BaseGraphConverter):
             ``"auto"`` generates ``(dst_type, "rev_<relation>", src_type)``
             automatically. A dict provides explicit mappings. ``None`` raises
             ``ValueError`` for any undirected cross-type edge (strict mode).
+        multigraph : bool, default False
+            Whether two-level edge indexes should be promoted to keyed
+            multigraph indexes. Three-level indexes keep their original keys.
         """
         # BaseGraphConverter expects a bool; pass True if any dict form is used,
         # since per-edge-type resolution happens later in the PyG-specific code.
         directed_bool = directed if isinstance(directed, bool) else False
-        super().__init__(keep_geom=keep_geom, directed=directed_bool)
+        super().__init__(keep_geom=keep_geom, directed=directed_bool, multigraph=multigraph)
         # Store the full directed spec (bool or dict) for per-edge-type use.
         self.directed: bool | dict[tuple[str, str, str], bool] = directed  # type: ignore[assignment]
         self.reverse_edge_types_spec = reverse_edge_types
@@ -450,21 +458,18 @@ class PyGConverter(BaseGraphConverter):
         # Store index names and values for preservation
         metadata.node_index_names = nodes.index.names if hasattr(nodes.index, "names") else None
         if edges is not None and hasattr(edges.index, "names"):
-            metadata.edge_index_names = edges.index.names
-
-            # Store original edge index values for reconstruction
-            edge_idx_vals = [
-                edges.index.get_level_values(i).tolist() for i in range(edges.index.nlevels)
-            ]
-
-            # Symmetrize edge index values for undirected graphs
-            if self.directed is False and len(edge_idx_vals) == 2:
-                edge_idx_vals = self._symmetrize_edge_index_values(edge_idx_vals)
-
+            edge_index_names, edge_idx_vals, edge_keys, is_multigraph = self._edge_index_metadata(
+                edges, symmetrize=self.directed is False
+            )
+            metadata.edge_index_names = edge_index_names
             metadata.edge_index_values = edge_idx_vals
+            metadata.edge_index_keys = edge_keys
+            metadata.is_multigraph = is_multigraph
         else:
             metadata.edge_index_names = None
             metadata.edge_index_values = None
+            metadata.edge_index_keys = None
+            metadata.is_multigraph = False
 
         # Set CRS
         if hasattr(nodes, "crs") and nodes.crs:
@@ -795,22 +800,21 @@ class PyGConverter(BaseGraphConverter):
         # Store edge index names and values for reconstruction
         metadata.edge_index_names = {}
         metadata.edge_index_values = {}
+        metadata.edge_index_keys = {}
+        multigraph_by_et: dict[tuple[str, str, str], bool] = {}
         for edge_type, edge_gdf in edges_dict.items():
             if edge_gdf is not None and hasattr(edge_gdf.index, "names"):
-                # Store edge index names
-                metadata.edge_index_names[edge_type] = edge_gdf.index.names
-
-                # Store original edge index values for reconstruction
-                edge_idx_vals = [
-                    edge_gdf.index.get_level_values(i).tolist()
-                    for i in range(edge_gdf.index.nlevels)
-                ]
-
-                # Symmetrize edge index values only for edges that were symmetrized
-                if symmetrized_by_et.get(edge_type, False) and len(edge_idx_vals) == 2:
-                    edge_idx_vals = self._symmetrize_edge_index_values(edge_idx_vals)
-
+                edge_index_names, edge_idx_vals, edge_keys, is_multigraph = (
+                    self._edge_index_metadata(
+                        edge_gdf,
+                        symmetrize=symmetrized_by_et.get(edge_type, False),
+                    )
+                )
+                metadata.edge_index_names[edge_type] = edge_index_names
                 metadata.edge_index_values[edge_type] = edge_idx_vals
+                if edge_keys is not None:
+                    metadata.edge_index_keys[edge_type] = edge_keys
+                multigraph_by_et[edge_type] = is_multigraph
 
         # Set CRS
         crs_values = [gdf.crs for gdf in nodes_dict.values() if hasattr(gdf, "crs") and gdf.crs]
@@ -839,6 +843,7 @@ class PyGConverter(BaseGraphConverter):
         # Per-edge-type directionality and provenance metadata
         metadata.is_directed = directed_by_et
         metadata.edge_was_symmetrized = symmetrized_by_et
+        metadata.is_multigraph = multigraph_by_et
         metadata.original_edge_types = list(edges_dict.keys())
         metadata.reverse_edge_types = reverse_et_map
         metadata.generated_reverse_edge_types = gen_reverse_et_map
@@ -938,6 +943,49 @@ class PyGConverter(BaseGraphConverter):
         result: list[list[int]] = combined_array.tolist()
         return result
 
+    def _edge_index_metadata(
+        self,
+        edges: gpd.GeoDataFrame,
+        *,
+        symmetrize: bool,
+    ) -> tuple[list[str | None] | None, list[list[str | int]], list[str | int] | None, bool]:
+        """
+        Build edge index metadata, promoting opt-in multigraphs to keyed indexes.
+
+        The first two index levels always represent source and target IDs.
+        Three-level inputs keep their supplied edge keys, while opt-in
+        two-level multigraph inputs receive generated integer keys.
+
+        Parameters
+        ----------
+        edges : gpd.GeoDataFrame
+            Edge GeoDataFrame with a two- or three-level MultiIndex.
+        symmetrize : bool
+            Whether to append reverse non-self-loop index values.
+
+        Returns
+        -------
+        tuple
+            ``(index_names, index_values, key_values, is_multigraph)``.
+        """
+        index_names = list(edges.index.names) if hasattr(edges.index, "names") else None
+        edge_idx_vals = [
+            edges.index.get_level_values(i).tolist() for i in range(edges.index.nlevels)
+        ]
+
+        is_multigraph = edges.index.nlevels >= 3
+        if self.multigraph and len(edge_idx_vals) == 2:
+            edge_idx_vals.append(list(range(len(edges))))
+            if index_names is not None:
+                index_names.append("key")
+            is_multigraph = True
+
+        if symmetrize:
+            edge_idx_vals = self._symmetrize_edge_index_values(edge_idx_vals)
+
+        edge_keys = edge_idx_vals[2] if len(edge_idx_vals) >= 3 else None
+        return index_names, edge_idx_vals, edge_keys, is_multigraph
+
     # ------------------------------------------------------------------
     # Edge validation and directedness resolution helpers (Steps 3 & 4)
     # ------------------------------------------------------------------
@@ -984,22 +1032,30 @@ class PyGConverter(BaseGraphConverter):
         if directed:
             return  # No further validation needed for directed edges
 
-        srcs = edges.index.get_level_values(0)
-        dsts = edges.index.get_level_values(1)
-        pairs = pd.DataFrame(
-            {
-                "src": pd.Series(srcs, dtype=object),
-                "dst": pd.Series(dsts, dtype=object),
-            }
+        srcs = pd.Series(edges.index.get_level_values(0), dtype=object)
+        dsts = pd.Series(edges.index.get_level_values(1), dtype=object)
+        has_key_level = edges.index.nlevels >= 3
+        key_values = (
+            pd.Series(edges.index.get_level_values(2), dtype=object)
+            if has_key_level
+            else pd.Series(np.arange(len(edges)), dtype=object)
         )
+        pairs_data: dict[str, pd.Series] = {
+            "src": srcs,
+            "dst": dsts,
+        }
+        if has_key_level or self.multigraph:
+            pairs_data["key"] = key_values
+        pairs = pd.DataFrame(pairs_data)
         non_loop_pairs = pairs[pairs["src"] != pairs["dst"]]
 
         # 2. Reject already-bidirectional pairs when directed=False.
+        merge_cols = ["src", "dst", "key"] if "key" in pairs else ["src", "dst"]
         # Drop exact duplicate rows first so repeated same-direction rows are
         # reported by the parallel-edge branch below.
         unique_pairs = non_loop_pairs.drop_duplicates(ignore_index=True)
         reverse_pairs = unique_pairs.rename(columns={"src": "dst", "dst": "src"})
-        bidirectional = unique_pairs.merge(reverse_pairs, on=["src", "dst"], how="inner")
+        bidirectional = unique_pairs.merge(reverse_pairs, on=merge_cols, how="inner")
         if not bidirectional.empty:
             s = bidirectional.iloc[0]["src"]
             d = bidirectional.iloc[0]["dst"]
@@ -1011,7 +1067,9 @@ class PyGConverter(BaseGraphConverter):
             )
             raise ValueError(msg)
 
-        # 3. Reject parallel undirected rows (duplicate unordered keys)
+        # 3. Reject duplicate unordered keys. In simple graphs the key is the
+        # unordered pair. In multigraph inputs it is (unordered pair, edge key),
+        # so distinct parallel keys are first-class edges.
         if not non_loop_pairs.empty:
             id_codes = pd.factorize(
                 pd.concat([pairs["src"], pairs["dst"]], ignore_index=True),
@@ -1026,6 +1084,8 @@ class PyGConverter(BaseGraphConverter):
                     "key_1": np.maximum(src_codes, dst_codes)[non_loop_mask],
                 }
             )
+            if "key" in pairs:
+                canonical["key_2"] = pairs.loc[non_loop_mask, "key"].to_numpy()
             has_parallel = bool(canonical.duplicated(keep=False).any())
         else:
             has_parallel = False
@@ -1036,8 +1096,10 @@ class PyGConverter(BaseGraphConverter):
                 f"Parallel undirected edges detected{et_label}. "
                 f"Round-trip reconstruction cannot safely preserve multiple "
                 f"geometries/attributes for the same unordered pair without "
-                f"explicit multigraph support. Pass directed=True to keep "
-                f"parallel edges as directed rows."
+                f"explicit multigraph support. Provide a three-level "
+                f"(source, target, key) index, pass multigraph=True to "
+                f"generate keys, or pass directed=True to keep parallel edges "
+                f"as directed rows."
             )
             raise ValueError(msg)
 
@@ -1271,14 +1333,20 @@ class PyGConverter(BaseGraphConverter):
         list[list[str | int]]
             Symmetrized edge index values.
         """
-        srcs, dsts = edge_idx_vals[0], edge_idx_vals[1]
-        rev_srcs = []
-        rev_dsts = []
-        for s, d in zip(srcs, dsts, strict=True):
-            if s != d:
-                rev_srcs.append(d)
-                rev_dsts.append(s)
-        return [srcs + rev_srcs, dsts + rev_dsts]
+        if len(edge_idx_vals) < 2:
+            return edge_idx_vals
+
+        srcs = np.asarray(edge_idx_vals[0], dtype=object)
+        dsts = np.asarray(edge_idx_vals[1], dtype=object)
+        non_self_loop_mask = srcs != dsts
+
+        symmetrized = [list(values) for values in edge_idx_vals]
+        symmetrized[0].extend(dsts[non_self_loop_mask].tolist())
+        symmetrized[1].extend(srcs[non_self_loop_mask].tolist())
+        for level_idx in range(2, len(edge_idx_vals)):
+            level_values = np.asarray(edge_idx_vals[level_idx], dtype=object)
+            symmetrized[level_idx].extend(level_values[non_self_loop_mask].tolist())
+        return symmetrized
 
     @staticmethod
     def _symmetrize_edge_geometries(
@@ -1302,12 +1370,12 @@ class PyGConverter(BaseGraphConverter):
         list[str]
             Symmetrized geometry list.
         """
-        rev_geoms = []
-        for i, edge_key in enumerate(edges.index):
-            src, dst = edge_key[:2] if isinstance(edge_key, tuple) else (edge_key, edge_key)
-            if src != dst:
-                rev_geoms.append(edge_geoms[i])
-        return edge_geoms + rev_geoms
+        srcs = np.asarray(edges.index.get_level_values(0), dtype=object)
+        dsts = np.asarray(edges.index.get_level_values(1), dtype=object)
+        non_self_loop_mask = srcs != dsts
+        geoms_array = np.asarray(edge_geoms, dtype=object)
+        reverse_geoms = cast("list[str]", geoms_array[non_self_loop_mask].tolist())
+        return edge_geoms + reverse_geoms
 
     @staticmethod
     def _deduplicate_undirected_edges(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -1340,11 +1408,15 @@ class PyGConverter(BaseGraphConverter):
         )[0]
         src_codes = id_codes[: len(gdf)]
         dst_codes = id_codes[len(gdf) :]
+        canonical_data = {
+            "key_0": np.minimum(src_codes, dst_codes),
+            "key_1": np.maximum(src_codes, dst_codes),
+        }
+        if gdf.index.nlevels >= 3:
+            canonical_data["key_2"] = gdf.index.get_level_values(2).to_numpy()
+
         canonical = pd.DataFrame(
-            {
-                "key_0": np.minimum(src_codes, dst_codes),
-                "key_1": np.maximum(src_codes, dst_codes),
-            },
+            canonical_data,
             index=gdf.index,
         )
 
@@ -1513,7 +1585,7 @@ class PyGConverter(BaseGraphConverter):
         if (
             self._should_deduplicate_edges(metadata, edge_type, is_hetero)
             and isinstance(gdf.index, pd.MultiIndex)
-            and gdf.index.nlevels == 2
+            and gdf.index.nlevels >= 2
             and not gdf.empty
         ):
             gdf = self._deduplicate_undirected_edges(gdf)
@@ -1776,7 +1848,7 @@ class PyGConverter(BaseGraphConverter):
         """
         # Set index names
         if metadata.node_index_names:
-            index_names: list[str] | None = None
+            index_names: list[str | None] | None = None
             # Get index names based on heterogeneity and node type
             if metadata.is_hetero and node_type and isinstance(metadata.node_index_names, dict):
                 index_names = metadata.node_index_names.get(node_type)
@@ -1912,7 +1984,7 @@ class PyGConverter(BaseGraphConverter):
         metadata : GraphMetadata
             Graph metadata containing edge index name information.
         """
-        index_names: list[str] | None = None
+        index_names: list[str | None] | None = None
         if is_hetero and edge_type and isinstance(metadata.edge_index_names, dict):
             if isinstance(edge_type, tuple):
                 index_names = metadata.edge_index_names.get(edge_type)
@@ -2286,6 +2358,7 @@ def gdf_to_pyg(
     reverse_edge_types: (
         Literal["auto"] | dict[tuple[str, str, str], tuple[str, str, str]] | None
     ) = "auto",
+    multigraph: bool = False,
 ) -> Data | HeteroData:
     """
     Convert GeoDataFrames (nodes/edges) to a PyTorch Geometric object.
@@ -2352,6 +2425,11 @@ def gdf_to_pyg(
         automatically. A dict provides explicit mappings from original to
         reverse edge types. ``None`` raises ``ValueError`` for any undirected
         cross-type edge (strict mode).
+    multigraph : bool, default False
+        If True, two-level edge indexes are promoted to a generated
+        ``(source, target, key)`` contract so parallel rows can be preserved.
+        Edge GeoDataFrames that already use a three-level MultiIndex always
+        preserve their supplied key level.
 
     Returns
     -------
@@ -2381,9 +2459,11 @@ def gdf_to_pyg(
     This function automatically detects the graph type based on input structure.
     For heterogeneous graphs, provide dictionaries mapping types to GeoDataFrames.
     Node positions are automatically extracted from geometry centroids when available.
-    Undirected conversion accepts unique unordered edge pairs only. This also
-    applies to three-level MultiGraph-style edge indexes: parallel undirected
-    rows for the same unordered pair must use ``directed=True``.
+    Undirected conversion accepts unique unordered edge pairs for two-level
+    edge indexes. Three-level MultiGraph-style indexes deduplicate by
+    ``(min(source, target), max(source, target), key)``, so parallel rows with
+    distinct keys are preserved. Passing ``multigraph=True`` promotes two-level
+    edge indexes to this keyed contract with generated integer keys.
     - Preserves original coordinate reference systems (CRS)
     - Maintains index structure for bidirectional conversion
     - Handles both Point and non-Point geometries (using centroids)
@@ -2432,6 +2512,7 @@ def gdf_to_pyg(
         keep_geom=keep_geom,
         directed=directed,
         reverse_edge_types=reverse_edge_types,
+        multigraph=multigraph,
     )
     return converter.gdf_to_pyg(nodes, edges)
 
@@ -2503,6 +2584,8 @@ def pyg_to_gdf(
     - Converts feature tensors back to named DataFrame columns
     - Handles both homogeneous and heterogeneous graph structures
     - Deduplicates only edges that city2graph symmetrized during conversion
+    - Preserves three-level ``(source, target, key)`` edge indexes for
+      multigraph round trips
 
     Examples
     --------
@@ -2565,6 +2648,8 @@ def pyg_to_nx(
     networkx.Graph
         The converted NetworkX graph with node and edge attributes.
         For heterogeneous graphs, node and edge types are stored as attributes.
+        If the PyG metadata or reconstructed edge indexes include edge keys,
+        returns a ``MultiGraph`` or ``MultiDiGraph`` as appropriate.
 
     Raises
     ------
@@ -2582,6 +2667,7 @@ def pyg_to_nx(
     - Edge features are stored as edge attributes
     - For heterogeneous graphs, type information is preserved
     - Geometry information is converted from tensor positions
+    - MultiGraph and MultiDiGraph edge keys are preserved when present
     - Maintains compatibility with NetworkX analysis algorithms
 
     Examples
@@ -2606,6 +2692,7 @@ def pyg_to_nx(
     )
     metadata = getattr(data, "graph_metadata", None)
     directed = False
+    multigraph = False
     if metadata is not None:
         is_directed = getattr(metadata, "is_directed", False)
         if isinstance(is_directed, bool):
@@ -2620,8 +2707,22 @@ def pyg_to_nx(
                     UserWarning,
                     stacklevel=2,
                 )
+        is_multigraph = getattr(metadata, "is_multigraph", False)
+        if isinstance(is_multigraph, bool):
+            multigraph = is_multigraph
+        elif isinstance(is_multigraph, dict):
+            multigraph = any(is_multigraph.values())
 
-    graph = gdf_to_nx(nodes, edges, directed=directed)
+    if not multigraph:
+        if isinstance(edges, gpd.GeoDataFrame) and isinstance(edges.index, pd.MultiIndex):
+            multigraph = edges.index.nlevels >= 3
+        elif isinstance(edges, dict):
+            multigraph = any(
+                isinstance(edge_gdf.index, pd.MultiIndex) and edge_gdf.index.nlevels >= 3
+                for edge_gdf in edges.values()
+            )
+
+    graph = gdf_to_nx(nodes, edges, directed=directed, multigraph=multigraph)
     if (
         metadata is not None
         and getattr(metadata, "is_hetero", False) is False
@@ -2680,7 +2781,8 @@ def nx_to_pyg(
     directed : bool, optional
         Explicit directionality override. If omitted, the NetworkX graph type is
         used: ``Graph`` and ``MultiGraph`` are undirected, while ``DiGraph`` and
-        ``MultiDiGraph`` are directed.
+        ``MultiDiGraph`` are directed. MultiGraph and MultiDiGraph edge keys are
+        preserved through the GeoDataFrame edge index.
 
     Returns
     -------
@@ -2765,6 +2867,7 @@ def nx_to_pyg(
         dtype=dtype,
         keep_geom=keep_geom,
         directed=directed_flag,
+        multigraph=graph.is_multigraph(),
     )
 
 

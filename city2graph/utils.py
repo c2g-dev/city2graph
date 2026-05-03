@@ -288,15 +288,13 @@ class NxConverter(BaseGraphConverter):
             self._add_homogeneous_nodes(graph, nodes)
             metadata.node_geom_cols = list(nodes.select_dtypes(include=["geometry"]).columns)
             metadata.node_index_names = typing.cast(
-                "list[str] | None", self._get_node_index_names(nodes)
+                "list[str | None] | None", self._get_node_index_names(nodes)
             )
 
         # Add edges
         self._add_homogeneous_edges(graph, edges, nodes)
         metadata.edge_geom_cols = list(edges.select_dtypes(include=["geometry"]).columns)
-        metadata.edge_index_names = typing.cast(
-            "list[str] | None", _coerce_name_sequence(edges.index.names)
-        )
+        metadata.edge_index_names = _coerce_name_sequence(edges.index.names)
 
         # Store metadata
         graph.graph.update(metadata.to_dict())
