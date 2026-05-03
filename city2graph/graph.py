@@ -18,6 +18,7 @@ from __future__ import annotations
 
 # Standard library imports
 import logging
+import warnings
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
@@ -457,7 +458,7 @@ class PyGConverter(BaseGraphConverter):
             ]
 
             # Symmetrize edge index values for undirected graphs
-            if not self.directed and len(edge_idx_vals) == 2:
+            if self.directed is False and len(edge_idx_vals) == 2:
                 edge_idx_vals = self._symmetrize_edge_index_values(edge_idx_vals)
 
             metadata.edge_index_values = edge_idx_vals
@@ -476,7 +477,7 @@ class PyGConverter(BaseGraphConverter):
                 edge_geoms = self._serialize_geometries(edges)
 
                 # Symmetrize edge geometries for undirected graphs
-                if not self.directed and edge_geoms is not None:
+                if self.directed is False and edge_geoms is not None:
                     edge_geoms = self._symmetrize_edge_geometries(edges, edge_geoms)
 
                 metadata.edge_geometries = edge_geoms
@@ -983,30 +984,53 @@ class PyGConverter(BaseGraphConverter):
         if directed:
             return  # No further validation needed for directed edges
 
-        # 2. Reject already-bidirectional pairs when directed=False
         srcs = edges.index.get_level_values(0)
         dsts = edges.index.get_level_values(1)
-        # Build sets of ordered edges; check for reverse presence
-        edge_set: set[tuple[object, object]] = set()
-        for s, d in zip(srcs, dsts, strict=True):
-            if s == d:
-                continue  # self-loops are fine
-            if (d, s) in edge_set:
-                et_label = f" for edge type {edge_type}" if edge_type else ""
-                msg = (
-                    f"Ambiguous undirected input{et_label}: both ({s}, {d}) and "
-                    f"({d}, {s}) are present. Pass directed=True for directed edges, "
-                    f"or provide only one row per undirected edge."
-                )
-                raise ValueError(msg)
-            edge_set.add((s, d))
+        pairs = pd.DataFrame(
+            {
+                "src": pd.Series(srcs, dtype=object),
+                "dst": pd.Series(dsts, dtype=object),
+            }
+        )
+        non_loop_pairs = pairs[pairs["src"] != pairs["dst"]]
+
+        # 2. Reject already-bidirectional pairs when directed=False.
+        # Drop exact duplicate rows first so repeated same-direction rows are
+        # reported by the parallel-edge branch below.
+        unique_pairs = non_loop_pairs.drop_duplicates(ignore_index=True)
+        reverse_pairs = unique_pairs.rename(columns={"src": "dst", "dst": "src"})
+        bidirectional = unique_pairs.merge(reverse_pairs, on=["src", "dst"], how="inner")
+        if not bidirectional.empty:
+            s = bidirectional.iloc[0]["src"]
+            d = bidirectional.iloc[0]["dst"]
+            et_label = f" for edge type {edge_type}" if edge_type else ""
+            msg = (
+                f"Ambiguous undirected input{et_label}: both ({s}, {d}) and "
+                f"({d}, {s}) are present. Pass directed=True for directed edges, "
+                f"or provide only one row per undirected edge."
+            )
+            raise ValueError(msg)
 
         # 3. Reject parallel undirected rows (duplicate unordered keys)
-        canonical_keys: list[tuple[object, object]] = []
-        for s, d in zip(srcs, dsts, strict=True):
-            key = (min(s, d), max(s, d)) if s != d else (s, d)
-            canonical_keys.append(key)
-        if len(canonical_keys) != len(set(canonical_keys)):
+        if not non_loop_pairs.empty:
+            id_codes = pd.factorize(
+                pd.concat([pairs["src"], pairs["dst"]], ignore_index=True),
+                sort=False,
+            )[0]
+            src_codes = id_codes[: len(pairs)]
+            dst_codes = id_codes[len(pairs) :]
+            non_loop_mask = (pairs["src"] != pairs["dst"]).to_numpy()
+            canonical = pd.DataFrame(
+                {
+                    "key_0": np.minimum(src_codes, dst_codes)[non_loop_mask],
+                    "key_1": np.maximum(src_codes, dst_codes)[non_loop_mask],
+                }
+            )
+            has_parallel = bool(canonical.duplicated(keep=False).any())
+        else:
+            has_parallel = False
+
+        if has_parallel:
             et_label = f" for edge type {edge_type}" if edge_type else ""
             msg = (
                 f"Parallel undirected edges detected{et_label}. "
@@ -1307,18 +1331,25 @@ class PyGConverter(BaseGraphConverter):
         level_0 = gdf.index.get_level_values(0)
         level_1 = gdf.index.get_level_values(1)
 
-        # Create canonical keys: sort each pair so (u,v) and (v,u) map to same key
+        id_codes = pd.factorize(
+            pd.concat(
+                [pd.Series(level_0, copy=False), pd.Series(level_1, copy=False)],
+                ignore_index=True,
+            ),
+            sort=False,
+        )[0]
+        src_codes = id_codes[: len(gdf)]
+        dst_codes = id_codes[len(gdf) :]
         canonical = pd.DataFrame(
-            {"a": level_0, "b": level_1},
+            {
+                "key_0": np.minimum(src_codes, dst_codes),
+                "key_1": np.maximum(src_codes, dst_codes),
+            },
             index=gdf.index,
         )
-        # For comparable types, use element-wise min/max
-        canonical["key_0"] = canonical[["a", "b"]].min(axis=1)
-        canonical["key_1"] = canonical[["a", "b"]].max(axis=1)
-        canonical["canonical_key"] = list(zip(canonical["key_0"], canonical["key_1"], strict=True))
 
         # Keep first occurrence of each canonical pair
-        mask = ~canonical["canonical_key"].duplicated(keep="first")
+        mask = ~canonical.duplicated(keep="first")
         return gdf[mask]
 
     def _reconstruct_node_gdf(
@@ -2309,6 +2340,9 @@ def gdf_to_pyg(
         reverse edge ``(v, u)`` so that PyTorch Geometric receives a proper
         undirected graph. Self-loops are not duplicated. Edge attributes are
         duplicated for reverse edges. If True, edges are kept as-is.
+        With the undirected default, already-bidirectional inputs and parallel
+        rows for the same unordered pair are rejected because they cannot be
+        safely deduplicated during ``pyg_to_gdf`` reconstruction.
         For heterogeneous graphs, can be a complete dictionary mapping each
         edge type to its directionality flag so that different relations can
         independently be directed or undirected.
@@ -2347,6 +2381,9 @@ def gdf_to_pyg(
     This function automatically detects the graph type based on input structure.
     For heterogeneous graphs, provide dictionaries mapping types to GeoDataFrames.
     Node positions are automatically extracted from geometry centroids when available.
+    Undirected conversion accepts unique unordered edge pairs only. This also
+    applies to three-level MultiGraph-style edge indexes: parallel undirected
+    rows for the same unordered pair must use ``directed=True``.
     - Preserves original coordinate reference systems (CRS)
     - Maintains index structure for bidirectional conversion
     - Handles both Point and non-Point geometries (using centroids)
@@ -2465,6 +2502,7 @@ def pyg_to_gdf(
     - Maintains coordinate reference system (CRS) information
     - Converts feature tensors back to named DataFrame columns
     - Handles both homogeneous and heterogeneous graph structures
+    - Deduplicates only edges that city2graph symmetrized during conversion
 
     Examples
     --------
@@ -2574,6 +2612,14 @@ def pyg_to_nx(
             directed = is_directed
         elif isinstance(is_directed, dict):
             directed = all(is_directed.values())
+            if len(set(is_directed.values())) > 1:
+                warnings.warn(
+                    "pyg_to_nx collapses mixed heterogeneous edge directedness to a "
+                    "single NetworkX graph direction; mixed metadata is converted "
+                    "to an undirected graph.",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
     graph = gdf_to_nx(nodes, edges, directed=directed)
     if (
