@@ -681,6 +681,87 @@ class TestGraphStructures(BaseGraphTest):
         edge_keys = edges_gdf.index.get_level_values("edge_key")
         assert list(edge_keys) == [0, 1]
 
+    def test_segments_to_graph_default_is_multigraph(
+        self,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """The default output carries a three-level multigraph index."""
+        _, edges_gdf = morphology.segments_to_graph(sample_segments_gdf)
+        assert edges_gdf.index.names == ["from_node_id", "to_node_id", "edge_key"]
+
+    def test_segments_to_graph_multigraph_false_duplicates_raise(
+        self,
+        duplicate_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """multigraph=False raises on duplicate node pairs instead of passing silently."""
+        with pytest.raises(ValueError, match=r"1 duplicate node pair\(s\)"):
+            morphology.segments_to_graph(duplicate_segments_gdf, multigraph=False)
+
+    def test_segments_to_graph_directed_default_preserves_draw_order(
+        self,
+        sample_crs: str,
+    ) -> None:
+        """Default directed=True keeps reverse-drawn segments as reciprocal pairs."""
+        segments = gpd.GeoDataFrame(
+            {"name": ["fwd", "rev"]},
+            geometry=[
+                LineString([(0, 0), (1, 1)]),
+                LineString([(1, 1), (0, 0)]),
+            ],
+            crs=sample_crs,
+        )
+        _, edges_gdf = morphology.segments_to_graph(segments)
+
+        pairs = list(
+            zip(
+                edges_gdf.index.get_level_values("from_node_id"),
+                edges_gdf.index.get_level_values("to_node_id"),
+                strict=True,
+            )
+        )
+        assert pairs == [(0, 1), (1, 0)]
+
+    def test_segments_to_graph_undirected_canonicalizes_reverse_segments(
+        self,
+        sample_crs: str,
+    ) -> None:
+        """directed=False folds reverse-drawn segments into one unordered pair."""
+        segments = gpd.GeoDataFrame(
+            {"name": ["fwd", "rev"]},
+            geometry=[
+                LineString([(0, 0), (1, 1)]),
+                LineString([(1, 1), (0, 0)]),
+            ],
+            crs=sample_crs,
+        )
+        _, edges_gdf = morphology.segments_to_graph(segments, directed=False)
+
+        assert edges_gdf.index.tolist() == [(0, 1, 0), (0, 1, 1)]
+        # Geometries are left unchanged; only the index order is normalized.
+        assert list(edges_gdf.geometry) == list(segments.geometry)
+
+    def test_segments_to_graph_empty_as_nx(
+        self,
+        empty_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Empty input honors as_nx=True instead of returning a tuple."""
+        result = morphology.segments_to_graph(empty_gdf, as_nx=True)
+        assert isinstance(result, nx.MultiGraph)
+        assert result.number_of_nodes() == 0
+
+        simple = morphology.segments_to_graph(empty_gdf, multigraph=False, as_nx=True)
+        assert isinstance(simple, nx.Graph)
+        assert not isinstance(simple, nx.MultiGraph)
+
+    def test_segments_to_graph_as_nx_keeps_parallel_edges(
+        self,
+        duplicate_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """as_nx=True with the multigraph default preserves parallel edges."""
+        graph = morphology.segments_to_graph(duplicate_segments_gdf, as_nx=True)
+        assert isinstance(graph, nx.MultiGraph)
+        assert graph.number_of_edges() == 2
+
     def test_dual_graph_empty_result_with_edge_id_col(
         self, sample_nodes_gdf: gpd.GeoDataFrame, sample_crs: str
     ) -> None:
@@ -714,6 +795,124 @@ class TestGraphStructures(BaseGraphTest):
         """Test _canonical_edge_pair with self-loop (line 1370)."""
         assert utils._canonical_edge_pair(1, 1) == (1, 1)
         assert utils._canonical_edge_pair("a", "a") == ("a", "a")
+
+
+# ============================================================================
+# EDGE CANONICALIZATION TESTS
+# ============================================================================
+
+
+class TestCanonicalizeEdges(BaseGraphTest):
+    """Test canonicalize_edges collapsing of reciprocal and parallel rows."""
+
+    @staticmethod
+    def _make_edges(
+        tuples: list[tuple[Any, ...]],
+        names: list[str] | None = None,
+    ) -> gpd.GeoDataFrame:
+        """Build an edge GeoDataFrame with one distinct row per index tuple."""
+        if names is None:
+            names = ["u", "v"] if len(tuples[0]) == 2 else ["u", "v", "k"]
+        return gpd.GeoDataFrame(
+            {"name": [f"e{i}" for i in range(len(tuples))]},
+            geometry=[LineString([(i, 0), (i + 1, 1)]) for i in range(len(tuples))],
+            index=pd.MultiIndex.from_tuples(tuples, names=names),
+            crs="EPSG:27700",
+        )
+
+    def test_first_keeps_first_row_per_unordered_pair(self) -> None:
+        """duplicates='first' keeps the first reciprocal row verbatim."""
+        edges = self._make_edges([(0, 1), (1, 0), (1, 2)])
+        result = utils.canonicalize_edges(edges)
+
+        assert result.index.tolist() == [(0, 1), (1, 2)]
+        assert result.index.names == ["u", "v"]
+        assert list(result["name"]) == ["e0", "e2"]
+        assert result.geometry.iloc[0] == edges.geometry.iloc[0]
+        assert result.crs == edges.crs
+
+    def test_key_keeps_all_rows_as_multigraph(self) -> None:
+        """duplicates='key' keeps reciprocal rows under distinct keys."""
+        edges = self._make_edges([(0, 1), (1, 0), (1, 2)])
+        result = utils.canonicalize_edges(edges, duplicates="key")
+
+        assert result.index.tolist() == [(0, 1, 0), (0, 1, 1), (1, 2, 0)]
+        assert result.index.names == ["u", "v", "key"]
+        assert list(result["name"]) == ["e0", "e1", "e2"]
+
+    def test_error_reports_offending_pairs(self) -> None:
+        """duplicates='error' raises with row and pair counts."""
+        edges = self._make_edges([(0, 1), (1, 0)])
+        with pytest.raises(ValueError, match=r"2 row\(s\) across 1 unordered pair\(s\)"):
+            utils.canonicalize_edges(edges, duplicates="error")
+
+    def test_error_passes_when_no_duplicates(self) -> None:
+        """duplicates='error' returns canonicalized edges when keys are unique."""
+        edges = self._make_edges([(1, 0), (2, 1)])
+        result = utils.canonicalize_edges(edges, duplicates="error")
+        assert result.index.tolist() == [(0, 1), (1, 2)]
+
+    def test_three_level_input_preserves_distinct_keys(self) -> None:
+        """Three-level input keeps distinct parallel keys under 'first'."""
+        edges = self._make_edges([(1, 0, 0), (0, 1, 1), (1, 0, 1)])
+        result = utils.canonicalize_edges(edges)
+
+        # (1, 0, 1) duplicates (0, 1, 1) after canonicalization and is dropped.
+        assert result.index.tolist() == [(0, 1, 0), (0, 1, 1)]
+        assert result.index.names == ["u", "v", "k"]
+
+    def test_three_level_input_regenerates_keys(self) -> None:
+        """duplicates='key' regenerates keys per unordered pair."""
+        edges = self._make_edges([(1, 0, 0), (0, 1, 0)])
+        result = utils.canonicalize_edges(edges, duplicates="key")
+        assert result.index.tolist() == [(0, 1, 0), (0, 1, 1)]
+        assert result.index.names == ["u", "v", "k"]
+
+    def test_self_loops_unchanged(self) -> None:
+        """Self-loops keep their index values."""
+        edges = self._make_edges([(2, 2), (1, 0)])
+        result = utils.canonicalize_edges(edges)
+        assert result.index.tolist() == [(2, 2), (0, 1)]
+
+    def test_string_ids_sorted(self) -> None:
+        """String identifiers are ordered lexicographically."""
+        edges = self._make_edges([("b", "a")])
+        result = utils.canonicalize_edges(edges)
+        assert result.index.tolist() == [("a", "b")]
+
+    def test_mixed_type_ids_use_factorize_fallback(self) -> None:
+        """Non-comparable mixed-type identifiers fall back to appearance order."""
+        edges = self._make_edges([("a", 1), (1, "a")])
+        result = utils.canonicalize_edges(edges)
+        assert result.index.tolist() == [("a", 1)]
+
+    def test_empty_input_returns_copy(self) -> None:
+        """An empty edge GeoDataFrame is returned unchanged."""
+        edges = gpd.GeoDataFrame(
+            {"name": []},
+            geometry=[],
+            index=pd.MultiIndex.from_arrays([[], []], names=["u", "v"]),
+            crs="EPSG:27700",
+        )
+        result = utils.canonicalize_edges(edges)
+        assert result.empty
+        assert result is not edges
+
+    def test_non_multiindex_raises(self) -> None:
+        """A flat index is rejected."""
+        edges = gpd.GeoDataFrame(
+            {"name": ["e0"]},
+            geometry=[LineString([(0, 0), (1, 1)])],
+            crs="EPSG:27700",
+        )
+        with pytest.raises(ValueError, match="MultiIndex with at least"):
+            utils.canonicalize_edges(edges)
+
+    def test_invalid_duplicates_option_raises(self) -> None:
+        """Unknown duplicates options are rejected."""
+        edges = self._make_edges([(0, 1)])
+        with pytest.raises(ValueError, match="duplicates must be one of"):
+            utils.canonicalize_edges(edges, duplicates="drop")  # type: ignore[arg-type]
 
 
 # ============================================================================

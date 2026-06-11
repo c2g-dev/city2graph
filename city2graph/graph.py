@@ -84,6 +84,58 @@ DEVICE_ERROR_MSG = "Device must be 'cuda', 'cpu', a torch.device object, or None
 GRAPH_NO_NODES_MSG = "Graph has no nodes"
 
 
+def _unique_unordered_pairs(srcs: list[Any], dsts: list[Any]) -> list[tuple[Any, Any]]:
+    """
+    Collect unique unordered node pairs from parallel source/target lists.
+
+    Pairs differing only in orientation (``(u, v)`` vs ``(v, u)``) are reported
+    once, in the orientation of their first appearance.
+
+    Parameters
+    ----------
+    srcs : list[Any]
+        Source node identifiers.
+    dsts : list[Any]
+        Target node identifiers.
+
+    Returns
+    -------
+    list[tuple[Any, Any]]
+        Unique unordered pairs in first-appearance order.
+    """
+    seen: set[tuple[str, str]] = set()
+    unique: list[tuple[Any, Any]] = []
+    for u, v in zip(srcs, dsts, strict=True):
+        key = (str(u), str(v)) if str(u) <= str(v) else (str(v), str(u))
+        if key not in seen:
+            seen.add(key)
+            unique.append((u, v))
+    return unique
+
+
+def _format_pair_examples(pairs: list[tuple[Any, Any]], limit: int = 3) -> str:
+    """
+    Format up to ``limit`` node pairs for use in validation error messages.
+
+    Renders each pair as ``(u, v)`` and joins them with commas, appending an
+    ellipsis when more pairs exist than the limit allows.
+
+    Parameters
+    ----------
+    pairs : list[tuple[Any, Any]]
+        Unordered node pairs to format.
+    limit : int, default 3
+        Maximum number of pairs to include.
+
+    Returns
+    -------
+    str
+        Comma-separated pair examples, with an ellipsis when truncated.
+    """
+    examples = ", ".join(f"({u}, {v})" for u, v in pairs[:limit])
+    return f"{examples}, ..." if len(pairs) > limit else examples
+
+
 # ============================================================================
 # GRAPH CONVERSION FUNCTIONS
 # ============================================================================
@@ -1057,13 +1109,20 @@ class PyGConverter(BaseGraphConverter):
         reverse_pairs = unique_pairs.rename(columns={"src": "dst", "dst": "src"})
         bidirectional = unique_pairs.merge(reverse_pairs, on=merge_cols, how="inner")
         if not bidirectional.empty:
-            s = bidirectional.iloc[0]["src"]
-            d = bidirectional.iloc[0]["dst"]
+            unordered = _unique_unordered_pairs(
+                bidirectional["src"].tolist(), bidirectional["dst"].tolist()
+            )
             et_label = f" for edge type {edge_type}" if edge_type else ""
             msg = (
-                f"Ambiguous undirected input{et_label}: both ({s}, {d}) and "
-                f"({d}, {s}) are present. Pass directed=True for directed edges, "
-                f"or provide only one row per undirected edge."
+                f"Ambiguous undirected input{et_label}: {len(unordered)} node "
+                f"pair(s) appear in both directions, e.g. "
+                f"{_format_pair_examples(unordered)}. This typically happens "
+                f"when edges come from a directed source such as an OSMnx "
+                f"MultiDiGraph, where two-way streets are stored as reciprocal "
+                f"(u, v) and (v, u) rows. Pass directed=True to keep them as "
+                f"directed edges, or collapse them to one row per undirected "
+                f"edge with city2graph.canonicalize_edges(edges) before "
+                f"conversion."
             )
             raise ValueError(msg)
 
@@ -1071,10 +1130,10 @@ class PyGConverter(BaseGraphConverter):
         # unordered pair. In multigraph inputs it is (unordered pair, edge key),
         # so distinct parallel keys are first-class edges.
         if not non_loop_pairs.empty:
-            id_codes = pd.factorize(
+            id_codes, id_values = pd.factorize(
                 pd.concat([pairs["src"], pairs["dst"]], ignore_index=True),
                 sort=False,
-            )[0]
+            )
             src_codes = id_codes[: len(pairs)]
             dst_codes = id_codes[len(pairs) :]
             non_loop_mask = (pairs["src"] != pairs["dst"]).to_numpy()
@@ -1086,20 +1145,27 @@ class PyGConverter(BaseGraphConverter):
             )
             if "key" in pairs:
                 canonical["key_2"] = pairs.loc[non_loop_mask, "key"].to_numpy()
-            has_parallel = bool(canonical.duplicated(keep=False).any())
+            duplicated_mask = canonical.duplicated(keep=False)
         else:
-            has_parallel = False
+            duplicated_mask = pd.Series(dtype=bool)
 
-        if has_parallel:
+        if duplicated_mask.any():
+            dup_rows = canonical[duplicated_mask]
+            dup_pairs = _unique_unordered_pairs(
+                id_values.take(dup_rows["key_0"].to_numpy()).tolist(),
+                id_values.take(dup_rows["key_1"].to_numpy()).tolist(),
+            )
             et_label = f" for edge type {edge_type}" if edge_type else ""
             msg = (
-                f"Parallel undirected edges detected{et_label}. "
-                f"Round-trip reconstruction cannot safely preserve multiple "
-                f"geometries/attributes for the same unordered pair without "
-                f"explicit multigraph support. Provide a three-level "
-                f"(source, target, key) index, pass multigraph=True to "
-                f"generate keys, or pass directed=True to keep parallel edges "
-                f"as directed rows."
+                f"Parallel undirected edges detected{et_label}: "
+                f"{len(dup_rows)} row(s) across {len(dup_pairs)} unordered "
+                f"node pair(s) share the same key, e.g. "
+                f"{_format_pair_examples(dup_pairs)}. Round-trip "
+                f"reconstruction cannot preserve multiple geometries/attributes "
+                f"per pair. Provide a three-level (source, target, key) index "
+                f"or pass multigraph=True to keep parallel edges, pass "
+                f"directed=True to treat rows as directed, or deduplicate with "
+                f"city2graph.canonicalize_edges(edges, duplicates='first')."
             )
             raise ValueError(msg)
 

@@ -17,6 +17,7 @@ The utils module provides core utility functions for graph conversion, validatio
         - rx_to_nx
         - validate_gdf
         - validate_nx
+        - canonicalize_edges
         - dual_graph
         - filter_graph_by_distance
         - create_tessellation

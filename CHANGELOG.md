@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## Unreleased
+
+### Added
+- Added `canonicalize_edges()` to collapse reciprocal `(u, v)` / `(v, u)` rows and parallel duplicates in edge GeoDataFrames, with `duplicates="first" | "key" | "error"` handling.
+- Added a `directed` parameter to `segments_to_graph()`; `directed=False` canonicalizes each edge to an unordered `(min, max)` node-id order so reverse-drawn duplicate segments become parallel edges of one unordered pair.
+
+### Changed
+- **Breaking:** `segments_to_graph()` now defaults to `multigraph=True`, returning a three-level `(from_node_id, to_node_id, edge_key)` MultiIndex (and an `nx.MultiGraph` when `as_nx=True`). With `multigraph=False`, duplicate node pairs now raise a `ValueError` instead of silently returning a duplicated MultiIndex.
+- Improved the undirected validation errors in `gdf_to_pyg()`: they now report the total number of affected node pairs with examples, explain the typical cause (reciprocal rows from directed sources such as OSMnx), and point to `canonicalize_edges()` as a remedy.
+
+### Fixed
+- Fixed `segments_to_graph()` ignoring `as_nx=True` for empty inputs; it now returns an empty NetworkX graph instead of a tuple, and empty outputs carry properly named indexes.
+- Fixed `segments_to_graph(multigraph=True, as_nx=True)` silently collapsing parallel edges by returning an `nx.Graph`; it now returns an `nx.MultiGraph`.
+
+
 ## 0.3.1 (2026-03-21)
 
 ### Added

@@ -21,6 +21,7 @@ from torch_geometric.data import HeteroData
 from city2graph import graph as graph_module
 from city2graph.base import GraphMetadata
 from city2graph.proximity import contiguity_graph
+from city2graph.utils import canonicalize_edges
 
 # Import torch-related modules conditionally
 try:
@@ -1399,6 +1400,89 @@ class TestUndirectedEdgeHandling:
 
         with pytest.raises(ValueError, match="Parallel undirected edges"):
             gdf_to_pyg(simple_nodes, edges, directed=False)
+
+    def test_bidirectional_error_reports_pair_count_and_helper(
+        self, simple_nodes: gpd.GeoDataFrame
+    ) -> None:
+        """The ambiguous-input error reports all affected pairs and the helper."""
+        source_ids = [1, 2, 2, 3]
+        target_ids = [2, 1, 3, 2]
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (i, 1)]) for i in range(4)]},
+            index=pd.MultiIndex.from_arrays(
+                [source_ids, target_ids], names=["source_id", "target_id"]
+            ),
+            crs="EPSG:27700",
+        )
+
+        with pytest.raises(ValueError, match=r"2 node pair\(s\).*canonicalize_edges"):
+            gdf_to_pyg(simple_nodes, edges, directed=False)
+
+    def test_parallel_error_reports_counts_and_helper(self, simple_nodes: gpd.GeoDataFrame) -> None:
+        """The parallel-edge error reports row/pair counts and the helper."""
+        source_ids = [1, 1]
+        target_ids = [2, 2]
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (1, 0)])] * 2},
+            index=pd.MultiIndex.from_arrays(
+                [source_ids, target_ids], names=["source_id", "target_id"]
+            ),
+            crs="EPSG:27700",
+        )
+
+        with pytest.raises(
+            ValueError,
+            match=r"2 row\(s\) across 1 unordered node pair\(s\).*canonicalize_edges",
+        ):
+            gdf_to_pyg(simple_nodes, edges, directed=False)
+
+    def test_bidirectional_error_includes_edge_type_label(
+        self, sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame]
+    ) -> None:
+        """Hetero validation errors still name the offending edge type."""
+        source_ids = ["b1", "b2"]
+        target_ids = ["b2", "b1"]
+        edges = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    LineString([(10, 10), (11, 11)]),
+                    LineString([(11, 11), (10, 10)]),
+                ]
+            },
+            index=pd.MultiIndex.from_arrays(
+                [source_ids, target_ids], names=["building_id", "building_id_to"]
+            ),
+            crs="EPSG:27700",
+        )
+        edges_dict = {("building", "adjacent_to", "building"): edges}
+
+        with pytest.raises(ValueError, match=r"Ambiguous undirected input for edge type"):
+            gdf_to_pyg(sample_hetero_nodes_dict, edges_dict, directed=False)
+
+    def test_canonicalize_edges_unblocks_undirected_conversion(
+        self, simple_nodes: gpd.GeoDataFrame
+    ) -> None:
+        """canonicalize_edges output passes where the raw reciprocal input raised."""
+        source_ids = [1, 2]
+        target_ids = [2, 1]
+        edges = gpd.GeoDataFrame(
+            {"weight": [0.5, 0.5]},
+            geometry=[
+                LineString([(0, 0), (1, 0)]),
+                LineString([(1, 0), (0, 0)]),
+            ],
+            index=pd.MultiIndex.from_arrays(
+                [source_ids, target_ids], names=["source_id", "target_id"]
+            ),
+            crs="EPSG:27700",
+        )
+
+        with pytest.raises(ValueError, match="Ambiguous undirected input"):
+            gdf_to_pyg(simple_nodes, edges, directed=False)
+
+        data = gdf_to_pyg(simple_nodes, canonicalize_edges(edges), directed=False)
+        # One undirected edge, symmetrized into both directions.
+        assert data.num_edges == 2
 
     def test_cross_type_auto_reverse_store(
         self,

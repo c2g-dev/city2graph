@@ -773,7 +773,8 @@ def public_to_public_graph(
 
 def segments_to_graph(
     segments_gdf: gpd.GeoDataFrame,
-    multigraph: bool = False,
+    multigraph: bool = True,
+    directed: bool = True,
     as_nx: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph:
     r"""
@@ -787,19 +788,34 @@ def segments_to_graph(
     and end points of the input line segments. The edges GeoDataFrame is a copy
     of the input, but with a new MultiIndex (`from_node_id`, `to_node_id`) that
     references the IDs in the new nodes GeoDataFrame. If `multigraph` is True
-    and there are multiple edges between the same pair of nodes, an additional
-    index level (`edge_key`) is added to distinguish them.
+    (the default), an additional index level (`edge_key`) distinguishes multiple
+    edges between the same pair of nodes.
 
     Parameters
     ----------
     segments_gdf : geopandas.GeoDataFrame
         A GeoDataFrame where each row represents a line segment, and the
         'geometry' column contains LineString objects.
-    multigraph : bool, default False
+    multigraph : bool, default True
         If True, supports multiple edges between the same pair of nodes by
-        adding an `edge_key` level to the MultiIndex. This is useful when
-        the input contains duplicate node-to-node connections that should
-        be preserved as separate edges.
+        adding an `edge_key` level to the MultiIndex. Real-world segment data
+        (e.g. from OSMnx) commonly contains parallel edges, so this is the
+        default. If False, duplicate node pairs raise a ``ValueError``.
+
+        .. versionchanged:: 0.4
+            The default changed from ``False`` to ``True``, and
+            ``multigraph=False`` now raises on duplicate node pairs instead
+            of silently returning a duplicated MultiIndex.
+    directed : bool, default True
+        If True, edge orientation follows the LineString draw order: the
+        first coordinate becomes `from_node_id` and the last becomes
+        `to_node_id`. If False, each non-self-loop edge is canonicalized to
+        an unordered ``(min, max)`` node-id order, so the same road drawn in
+        opposite directions yields parallel edges of one unordered pair
+        instead of reciprocal ``(u, v)`` / ``(v, u)`` rows. Geometries are
+        left unchanged; only the index order is normalized. Use
+        ``directed=False`` when the output feeds an undirected pipeline such
+        as ``gdf_to_pyg(..., directed=False)``.
     as_nx : bool, default False
         If True, returns a NetworkX graph instead of a tuple of GeoDataFrames.
 
@@ -812,6 +828,16 @@ def segments_to_graph(
         - edges_gdf: A GeoDataFrame of edges (LineStrings), with a MultiIndex
           mapping to the `node_id` in `nodes_gdf`. If `multigraph` is True,
           the index includes a third level (`edge_key`) for duplicate connections.
+
+    Raises
+    ------
+    ValueError
+        If ``multigraph=False`` and the segments contain duplicate node pairs
+        (after canonicalization when ``directed=False``).
+
+    See Also
+    --------
+    city2graph.canonicalize_edges : Collapse reciprocal/parallel edge rows.
 
     Examples
     --------
@@ -831,12 +857,12 @@ def segments_to_graph(
     0        POINT (0 0)
     1        POINT (1 1)
     2        POINT (1 0)
-                                    road_name   geometry
-    from_node_id to_node_id
-    0            1                  A           LINESTRING (0 0, 1 1)
-    1            2                  B           LINESTRING (1 1, 1 0)
+                                             road_name   geometry
+    from_node_id to_node_id edge_key
+    0            1          0                A           LINESTRING (0 0, 1 1)
+    1            2          0                B           LINESTRING (1 1, 1 0)
 
-    >>> # Example with duplicate connections (multigraph)
+    >>> # Duplicate connections become parallel edges with distinct keys
     >>> segments_with_duplicates = gpd.GeoDataFrame(
     ...     {"road_name": ["A", "B", "C"]},
     ...     geometry=[LineString([(0, 0), (1, 1)]),
@@ -844,7 +870,7 @@ def segments_to_graph(
     ...               LineString([(1, 1), (1, 0)])],
     ...     crs="EPSG:32633"
     ... )
-    >>> nodes_gdf, edges_gdf = segments_to_graph(segments_with_duplicates, multigraph=True)
+    >>> nodes_gdf, edges_gdf = segments_to_graph(segments_with_duplicates)
     >>> print(edges_gdf.index.names)
     ['from_node_id', 'to_node_id', 'edge_key']
     """
@@ -855,7 +881,14 @@ def segments_to_graph(
 
     if segments_clean is None or segments_clean.empty:
         empty_nodes = gpd.GeoDataFrame(columns=["geometry"], crs=segments_gdf.crs)
-        empty_edges = gpd.GeoDataFrame(columns=["geometry"], crs=segments_gdf.crs)
+        empty_nodes.index.name = "node_id"
+        empty_edges = gpd.GeoDataFrame(
+            columns=["geometry"],
+            crs=segments_gdf.crs,
+            index=pd.MultiIndex.from_arrays([[], []], names=["from_node_id", "to_node_id"]),
+        )
+        if as_nx:
+            return gdf_to_nx(nodes=empty_nodes, edges=empty_edges, multigraph=multigraph)
         return empty_nodes, empty_edges
 
     # Extract coordinates
@@ -884,6 +917,15 @@ def segments_to_graph(
     from_ids = start_coords.map(coord_to_id)
     to_ids = end_coords.map(coord_to_id)
 
+    if not directed:
+        # Canonicalize each edge to an unordered (min, max) node-id order so
+        # reverse-drawn duplicate segments share one unordered pair. The
+        # geometries themselves are left unchanged.
+        from_arr = from_ids.to_numpy()
+        to_arr = to_ids.to_numpy()
+        from_ids = pd.Series(np.minimum(from_arr, to_arr), index=from_ids.index)
+        to_ids = pd.Series(np.maximum(from_arr, to_arr), index=to_ids.index)
+
     edges_gdf = segments_clean.copy()
 
     if multigraph:
@@ -896,12 +938,22 @@ def segments_to_graph(
             names=["from_node_id", "to_node_id", "edge_key"],
         )
     else:
+        duplicated = pd.DataFrame({"from_id": from_ids, "to_id": to_ids}).duplicated()
+        if duplicated.any():
+            msg = (
+                f"Found {int(duplicated.sum())} duplicate node pair(s) with "
+                f"multigraph=False. Pass multigraph=True (the default) to keep "
+                f"them as parallel edges, or deduplicate the segments first."
+            )
+            raise ValueError(msg)
         edges_gdf.index = pd.MultiIndex.from_arrays(
             [from_ids, to_ids],
             names=["from_node_id", "to_node_id"],
         )
 
-    return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf) if as_nx else (nodes_gdf, edges_gdf)
+    if as_nx:
+        return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf, multigraph=multigraph)
+    return nodes_gdf, edges_gdf
 
 
 # ============================================================================
