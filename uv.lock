@@ -568,6 +568,9 @@ cu130 = [
     { name = "torch-geometric" },
     { name = "torchvision" },
 ]
+sumo = [
+    { name = "sumolib" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -627,6 +630,7 @@ requires-dist = [
     { name = "rustworkx", specifier = ">=0.17.1" },
     { name = "scipy", specifier = ">=1.10.0" },
     { name = "shapely", specifier = ">=2.1.0" },
+    { name = "sumolib", marker = "extra == 'sumo'", specifier = ">=1.20.0" },
     { name = "torch", marker = "(sys_platform == 'linux' and extra == 'cu126') or (sys_platform == 'win32' and extra == 'cu126')", specifier = ">=2.8.0", index = "https://download.pytorch.org/whl/cu126", conflict = { package = "city2graph", extra = "cu126" } },
     { name = "torch", marker = "(sys_platform == 'linux' and extra == 'cu128') or (sys_platform == 'win32' and extra == 'cu128')", specifier = ">=2.9.0", index = "https://download.pytorch.org/whl/cu128", conflict = { package = "city2graph", extra = "cu128" } },
     { name = "torch", marker = "(sys_platform == 'linux' and extra == 'cu130') or (sys_platform == 'win32' and extra == 'cu130')", specifier = ">=2.9.0", index = "https://download.pytorch.org/whl/cu130", conflict = { package = "city2graph", extra = "cu130" } },
@@ -643,7 +647,7 @@ requires-dist = [
     { name = "torchvision", marker = "extra == 'cu128'", specifier = ">=0.24.0" },
     { name = "torchvision", marker = "extra == 'cu130'", specifier = ">=0.24.0" },
 ]
-provides-extras = ["cpu", "cu126", "cu128", "cu130"]
+provides-extras = ["sumo", "cpu", "cu126", "cu128", "cu130"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -4963,6 +4967,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/28/e3/55dcc2cfbc3ca9c29519eb6884dd1415ecb53b0e934862d3559ddcb7e20b/stack_data-0.6.3.tar.gz", hash = "sha256:836a778de4fec4dcd1dcd89ed8abff8a221f58308462e1c4aa2a3cf30148f0b9", size = 44707, upload-time = "2023-09-30T13:58:05.479Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/7b/ce1eafaf1a76852e2ec9b22edecf1daa58175c090266e9f6c64afcd81d91/stack_data-0.6.3-py3-none-any.whl", hash = "sha256:d5558e0c25a4cb0853cddad3d77da9891a08cb85dd9f9f91b9f8cd66e511e695", size = 24521, upload-time = "2023-09-30T13:58:03.53Z" },
+]
+
+[[package]]
+name = "sumolib"
+version = "1.26.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/cf/03/36bbd7b9f6120e39d9e4f6865186ab8195f7b5a3833c37fc8c24df1d23fe/sumolib-1.26.0.tar.gz", hash = "sha256:eedf9cbcea46ac9db6a2a46ee74f85edbf4384de1f6b73bf73550642ba6044c1", size = 138920, upload-time = "2026-01-29T14:54:37.312Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/2d/44832bb6dec541d7d0d79ce6cf50f4213dcb862f4a7e192c9828841f7d84/sumolib-1.26.0-py2.py3-none-any.whl", hash = "sha256:189011b50db451b44f0ffa3a49e7cefd6250573f0e239fba540e1883ad910eaf", size = 233486, upload-time = "2026-01-29T14:54:35.577Z" },
 ]
 
 [[package]]

@@ -39,6 +39,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+sumo = [
+    "sumolib>=1.20.0",
+]
 cpu = [
     "torch>=2.9.0",
     "torchvision>=0.24.0",
