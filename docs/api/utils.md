@@ -1,6 +1,6 @@
 ---
 description: API reference for the Utils module. Utility functions for graph conversion between GeoDataFrame, NetworkX and rustworkx, validation, tessellation, isochrone creation, and plotting.
-keywords: gdf_to_nx, nx_to_gdf, rustworkx, tessellation, isochrone, dual_graph, plot_graph, graph validation, spatial utilities
+keywords: gdf_to_nx, nx_to_gdf, rustworkx, tessellation, isochrone, dual_graph, plot_graph, graph validation, spatial utilities, canonicalize_edges, symmetrize_edges
 ---
 
 # Utils Module
@@ -18,6 +18,7 @@ The utils module provides core utility functions for graph conversion, validatio
         - validate_gdf
         - validate_nx
         - canonicalize_edges
+        - symmetrize_edges
         - dual_graph
         - filter_graph_by_distance
         - create_tessellation

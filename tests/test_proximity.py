@@ -116,6 +116,9 @@ def test_mst_and_waxman(small_points: gpd.GeoDataFrame) -> None:
     """MST has n-1 edges and Waxman returns expected schema."""
     _, mst_edges = euclidean_minimum_spanning_tree(small_points)
     assert len(mst_edges) == max(len(small_points) - 1, 0)
+    mst_nx = euclidean_minimum_spanning_tree(small_points, as_nx=True)
+    assert isinstance(mst_nx, nx.Graph)
+    assert mst_nx.number_of_edges() == len(mst_edges)
     _, wax_edges = waxman_graph(small_points, beta=0.8, r0=2.0, seed=7)
     # Probabilistic: just ensure schema
     assert {"weight", "geometry"}.issubset(wax_edges.columns)
@@ -262,6 +265,76 @@ def test_contiguity_empty_input() -> None:
 def test_contiguity_network_requires_network_gdf() -> None:
     """Network metric without network_gdf raises ValueError."""
     assert_network_metric_requires_network_gdf(contiguity_graph, make_square_polygons())
+
+
+# ---------------------------------------------------------------------------
+# duplicate_edges public API coverage
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda gdf, **kw: knn_graph(gdf, k=2, **kw),
+        delaunay_graph,
+        gabriel_graph,
+        relative_neighborhood_graph,
+        euclidean_minimum_spanning_tree,
+        lambda gdf, **kw: fixed_radius_graph(gdf, radius=1.5, **kw),
+        lambda gdf, **kw: waxman_graph(gdf, beta=0.9, r0=2.0, seed=42, **kw),
+    ],
+    ids=["knn", "delaunay", "gabriel", "rng", "emst", "fixed_radius", "waxman"],
+)
+def test_duplicate_edges_adds_reverse_rows(
+    small_points: gpd.GeoDataFrame,
+    build: Callable[..., tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]],
+) -> None:
+    """duplicate_edges=True adds the reverse row of every undirected edge."""
+    _, base_edges = build(small_points)
+    _, dup_edges = build(small_points, duplicate_edges=True)
+
+    pairs = set(base_edges.index)
+    assert len(dup_edges) == 2 * len(base_edges)
+    assert set(dup_edges.index) == pairs | {(v, u) for u, v in pairs}
+
+
+def test_contiguity_duplicate_edges_completes_neighbor_queries() -> None:
+    """duplicate_edges=True makes MultiIndex neighbour queries complete (issue #156)."""
+    gdf = make_square_polygons()
+    _, base_edges = contiguity_graph(gdf, contiguity="queen")
+    _, dup_edges = contiguity_graph(gdf, contiguity="queen", duplicate_edges=True)
+
+    assert len(dup_edges) == 2 * len(base_edges)
+    srcs = base_edges.index.get_level_values(0)
+    dsts = base_edges.index.get_level_values(1)
+    for node in gdf.index:
+        forward = set(base_edges.xs(node, level=0).index) if node in srcs else set()
+        backward = set(base_edges.xs(node, level=1).index) if node in dsts else set()
+        neighbors = set(dup_edges.xs(node, level=0).index)
+        assert neighbors == forward | backward
+
+
+def test_duplicate_edges_rejects_as_nx() -> None:
+    """duplicate_edges=True with as_nx=True raises ValueError."""
+    gdf = make_square_polygons()
+    with pytest.raises(ValueError, match="not supported with as_nx=True"):
+        contiguity_graph(gdf, duplicate_edges=True, as_nx=True)
+
+
+def test_duplicate_edges_rejects_target_gdf(small_points: gpd.GeoDataFrame) -> None:
+    """duplicate_edges=True with target_gdf (directed variant) raises ValueError."""
+    with pytest.raises(ValueError, match="not supported with target_gdf"):
+        knn_graph(small_points, k=2, target_gdf=small_points, duplicate_edges=True)
+    with pytest.raises(ValueError, match="not supported with target_gdf"):
+        fixed_radius_graph(small_points, radius=1.5, target_gdf=small_points, duplicate_edges=True)
+
+
+def test_contiguity_duplicate_edges_empty_input() -> None:
+    """Empty input with duplicate_edges=True returns empty GeoDataFrames."""
+    empty = gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs="EPSG:3857")
+    nodes, edges = contiguity_graph(empty, duplicate_edges=True)
+    assert nodes.empty
+    assert edges.empty
 
 
 # ---------------------------------------------------------------------------

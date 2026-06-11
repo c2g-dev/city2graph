@@ -40,6 +40,7 @@ from sklearn.neighbors import NearestNeighbors
 # Local imports
 from .utils import gdf_to_nx
 from .utils import nx_to_gdf
+from .utils import symmetrize_edges
 from .utils import validate_gdf
 
 # Module logger configuration
@@ -615,7 +616,9 @@ class GraphBuilder:
 
         return weights, geoms
 
-    def to_output(self, as_nx: bool) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
+    def to_output(
+        self, as_nx: bool, *, duplicate_edges: bool = False
+    ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
         """
         Return graph in requested format.
 
@@ -626,13 +629,65 @@ class GraphBuilder:
         ----------
         as_nx : bool
             If True, return a NetworkX graph. Otherwise, return GeoDataFrames.
+        duplicate_edges : bool, default False
+            If True, add the reverse (v, u) row of every undirected edge to
+            the edges GeoDataFrame. Only valid when ``as_nx`` is False.
 
         Returns
         -------
         tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph
             The generated graph.
         """
-        return self.G if as_nx else nx_to_gdf(self.G, nodes=True, edges=True)
+        if as_nx:
+            return self.G
+        nodes, edges = nx_to_gdf(self.G, nodes=True, edges=True)
+        if duplicate_edges:
+            edges = symmetrize_edges(edges)
+        return nodes, edges
+
+
+def _validate_duplicate_edges(
+    duplicate_edges: bool,
+    as_nx: bool,
+    target_gdf: gpd.GeoDataFrame | None = None,
+) -> None:
+    """
+    Validate ``duplicate_edges`` against incompatible output options.
+
+    Reciprocal (u, v) / (v, u) rows can only be represented in GeoDataFrame
+    output of undirected graphs, so conflicting combinations are rejected
+    before any computation happens.
+
+    Parameters
+    ----------
+    duplicate_edges : bool
+        Whether the caller requested reciprocal edge rows.
+    as_nx : bool
+        Whether the caller requested NetworkX output.
+    target_gdf : geopandas.GeoDataFrame, optional
+        Target GeoDataFrame triggering the directed graph variant, if any.
+
+    Raises
+    ------
+    ValueError
+        If ``duplicate_edges`` is combined with ``as_nx=True`` or with a
+        directed graph variant.
+    """
+    if not duplicate_edges:
+        return
+    if as_nx:
+        msg = (
+            "duplicate_edges=True is not supported with as_nx=True: an "
+            "undirected nx.Graph cannot hold reciprocal (u, v) and (v, u) "
+            "edges. Use as_nx=False to get a symmetrized edge GeoDataFrame."
+        )
+        raise ValueError(msg)
+    if target_gdf is not None:
+        msg = (
+            "duplicate_edges=True is not supported with target_gdf: the "
+            "resulting graph is directed, so its edges are not symmetrized."
+        )
+        raise ValueError(msg)
 
 
 # ============================================================================
@@ -649,6 +704,7 @@ def knn_graph(
     *,
     target_gdf: gpd.GeoDataFrame | None = None,
     as_nx: bool = False,
+    duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
     Generate a k-nearest neighbour graph from a GeoDataFrame of points.
@@ -684,6 +740,11 @@ def knn_graph(
     as_nx : bool, default False
         If True, returns a NetworkX graph object. Otherwise, returns a tuple of
         GeoDataFrames (nodes, edges).
+    duplicate_edges : bool, default False
+        If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
+        for every undirected edge (roughly doubling the row count), so
+        neighbourhood queries on the MultiIndex are complete. Incompatible
+        with ``as_nx=True`` and with ``target_gdf`` (directed variant).
 
     Returns
     -------
@@ -698,7 +759,10 @@ def knn_graph(
     ValueError
         If `distance_metric` is "network" but `network_gdf` is not provided.
         If `k` is greater than or equal to the number of available nodes.
+        If `duplicate_edges` is True together with `as_nx=True` or `target_gdf`.
     """
+    _validate_duplicate_edges(duplicate_edges, as_nx, target_gdf)
+
     # Handle directed variant
     if target_gdf is not None:
         return _directed_graph(
@@ -719,7 +783,7 @@ def knn_graph(
     assert builder.node_ids is not None
 
     if len(builder.coords) <= 1 or k <= 0:
-        return builder.to_output(as_nx)
+        return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
     if metric.name == "network":
         builder.compute_distance_matrix()
@@ -745,7 +809,7 @@ def knn_graph(
         ]
 
     builder.add_edges(edges)
-    return builder.to_output(as_nx)
+    return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
 
 def delaunay_graph(
@@ -755,6 +819,7 @@ def delaunay_graph(
     network_weight: str | None = None,
     *,
     as_nx: bool = False,
+    duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
     Generate a Delaunay triangulation graph from a GeoDataFrame of points.
@@ -780,6 +845,11 @@ def delaunay_graph(
     as_nx : bool, default False
         If True, returns a NetworkX graph object. Otherwise, returns a tuple of
         GeoDataFrames (nodes, edges).
+    duplicate_edges : bool, default False
+        If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
+        for every undirected edge (roughly doubling the row count), so
+        neighbourhood queries on the MultiIndex are complete. Incompatible
+        with ``as_nx=True``.
 
     Returns
     -------
@@ -793,6 +863,7 @@ def delaunay_graph(
     ------
     ValueError
         If `distance_metric` is "network" but `network_gdf` is not provided.
+        If `duplicate_edges` is True together with `as_nx=True`.
 
     See Also
     --------
@@ -814,6 +885,8 @@ def delaunay_graph(
        Delaunay triangulation. International Journal of Computer & Information Sciences, 9(3),
        219-242. https://doi.org/10.1007/BF00977785
     """
+    _validate_duplicate_edges(duplicate_edges, as_nx)
+
     metric = DistanceMetric(distance_metric, network_gdf, network_weight)
     builder = GraphBuilder(gdf, metric)
     builder.prepare_nodes()
@@ -821,7 +894,7 @@ def delaunay_graph(
     assert builder.node_ids is not None
 
     if len(builder.coords) < 3:
-        return builder.to_output(as_nx)
+        return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
     tri = Delaunay(builder.coords)
     edges = {
@@ -831,7 +904,7 @@ def delaunay_graph(
     }
 
     builder.add_edges(edges)
-    return builder.to_output(as_nx)
+    return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
 
 def gabriel_graph(
@@ -841,6 +914,7 @@ def gabriel_graph(
     network_weight: str | None = None,
     *,
     as_nx: bool = False,
+    duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
     Generate a Gabriel graph from a GeoDataFrame of points.
@@ -862,6 +936,11 @@ def gabriel_graph(
     as_nx : bool, default False
         If True return a NetworkX graph, otherwise return two GeoDataFrames (nodes, edges)
         via `nx_to_gdf`.
+    duplicate_edges : bool, default False
+        If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
+        for every undirected edge (roughly doubling the row count), so
+        neighbourhood queries on the MultiIndex are complete. Incompatible
+        with ``as_nx=True``.
 
     Returns
     -------
@@ -870,6 +949,11 @@ def gabriel_graph(
         - nodes_gdf: GeoDataFrame of nodes with spatial and attribute information
         - edges_gdf: GeoDataFrame of edges with 'weight' and 'geometry' attributes
         If `as_nx` is True, returns a NetworkX graph object with spatial attributes.
+
+    Raises
+    ------
+    ValueError
+        If `duplicate_edges` is True together with `as_nx=True`.
 
     Notes
     -----
@@ -886,6 +970,8 @@ def gabriel_graph(
        variation analysis. Systematic zoology, 18(3), 259-278.
        https://doi.org/10.2307/2412323
     """
+    _validate_duplicate_edges(duplicate_edges, as_nx)
+
     metric = DistanceMetric(distance_metric, network_gdf, network_weight)
     builder = GraphBuilder(gdf, metric)
     builder.prepare_nodes()
@@ -894,7 +980,7 @@ def gabriel_graph(
 
     n_points = len(builder.coords)
     if n_points < 2:
-        return builder.to_output(as_nx)
+        return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
     # Candidate edges
     if n_points == 2:
@@ -920,7 +1006,7 @@ def gabriel_graph(
             kept_edges.add((builder.node_ids[i], builder.node_ids[j]))
 
     builder.add_edges(kept_edges)
-    return builder.to_output(as_nx)
+    return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
 
 def relative_neighborhood_graph(
@@ -930,6 +1016,7 @@ def relative_neighborhood_graph(
     network_weight: str | None = None,
     *,
     as_nx: bool = False,
+    duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
     Generate a Relative-Neighbourhood Graph (RNG) from a GeoDataFrame.
@@ -952,6 +1039,11 @@ def relative_neighborhood_graph(
     as_nx : bool, default False
         If True return a NetworkX graph, otherwise return two GeoDataFrames (nodes, edges)
         via `nx_to_gdf`.
+    duplicate_edges : bool, default False
+        If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
+        for every undirected edge (roughly doubling the row count), so
+        neighbourhood queries on the MultiIndex are complete. Incompatible
+        with ``as_nx=True``.
 
     Returns
     -------
@@ -960,6 +1052,11 @@ def relative_neighborhood_graph(
         - nodes_gdf: GeoDataFrame of nodes with spatial and attribute information
         - edges_gdf: GeoDataFrame of edges with 'weight' and 'geometry' attributes
         If `as_nx` is True, returns a NetworkX graph object with spatial attributes.
+
+    Raises
+    ------
+    ValueError
+        If `duplicate_edges` is True together with `as_nx=True`.
 
     Notes
     -----
@@ -975,6 +1072,8 @@ def relative_neighborhood_graph(
        set. Pattern recognition, 12(4), 261-268.
        https://doi.org/10.1016/0031-3203(80)90066-7
     """
+    _validate_duplicate_edges(duplicate_edges, as_nx)
+
     metric = DistanceMetric(distance_metric, network_gdf, network_weight)
     builder = GraphBuilder(gdf, metric)
     builder.prepare_nodes()
@@ -983,7 +1082,7 @@ def relative_neighborhood_graph(
 
     n_points = len(builder.coords)
     if n_points < 2:
-        return builder.to_output(as_nx)
+        return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
     if n_points == 2:
         cand_edges = {(0, 1)}
@@ -1006,7 +1105,7 @@ def relative_neighborhood_graph(
             kept_edges.add((builder.node_ids[i], builder.node_ids[j]))
 
     builder.add_edges(kept_edges)
-    return builder.to_output(as_nx)
+    return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
 
 def euclidean_minimum_spanning_tree(
@@ -1016,6 +1115,7 @@ def euclidean_minimum_spanning_tree(
     network_weight: str | None = None,
     *,
     as_nx: bool = False,
+    duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
     Generate a (generalised) Euclidean Minimum Spanning Tree from a GeoDataFrame of points.
@@ -1044,6 +1144,11 @@ def euclidean_minimum_spanning_tree(
     as_nx : bool, default False
         If True return a NetworkX graph, otherwise return two GeoDataFrames (nodes, edges)
         via `nx_to_gdf`.
+    duplicate_edges : bool, default False
+        If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
+        for every undirected edge (roughly doubling the row count), so
+        neighbourhood queries on the MultiIndex are complete. Incompatible
+        with ``as_nx=True``.
 
     Returns
     -------
@@ -1052,6 +1157,11 @@ def euclidean_minimum_spanning_tree(
         - nodes_gdf: GeoDataFrame of nodes with spatial and attribute information
         - edges_gdf: GeoDataFrame of edges with 'weight' and 'geometry' attributes
         If `as_nx` is True, returns a NetworkX graph object with spatial attributes.
+
+    Raises
+    ------
+    ValueError
+        If `duplicate_edges` is True together with `as_nx=True`.
 
     See Also
     --------
@@ -1074,6 +1184,8 @@ def euclidean_minimum_spanning_tree(
        SIGKDD international conference on Knowledge discovery and data mining (pp.
        603-612). https://doi.org/10.1145/1835804.1835882
     """
+    _validate_duplicate_edges(duplicate_edges, as_nx)
+
     metric = DistanceMetric(distance_metric, network_gdf, network_weight)
     builder = GraphBuilder(gdf, metric)
     builder.prepare_nodes()
@@ -1082,7 +1194,7 @@ def euclidean_minimum_spanning_tree(
 
     n_points = len(builder.coords)
     if n_points < 2:
-        return builder.to_output(as_nx)
+        return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
     # Candidate edges
     if metric.name == "euclidean" and n_points >= 3:
@@ -1102,7 +1214,12 @@ def euclidean_minimum_spanning_tree(
 
     # Compute MST
     mst_G = nx.minimum_spanning_tree(builder.G, weight="weight", algorithm="kruskal")
-    return mst_G if as_nx else nx_to_gdf(mst_G, nodes=True, edges=True)
+    if as_nx:
+        return mst_G
+    nodes, edges = nx_to_gdf(mst_G, nodes=True, edges=True)
+    if duplicate_edges:
+        edges = symmetrize_edges(edges)
+    return nodes, edges
 
 
 def fixed_radius_graph(
@@ -1114,6 +1231,7 @@ def fixed_radius_graph(
     *,
     target_gdf: gpd.GeoDataFrame | None = None,
     as_nx: bool = False,
+    duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
     Generate a fixed-radius graph from a GeoDataFrame of points.
@@ -1149,6 +1267,11 @@ def fixed_radius_graph(
     as_nx : bool, default False
         If True, returns a NetworkX graph object. Otherwise, returns a tuple of
         GeoDataFrames (nodes, edges).
+    duplicate_edges : bool, default False
+        If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
+        for every undirected edge (roughly doubling the row count), so
+        neighbourhood queries on the MultiIndex are complete. Incompatible
+        with ``as_nx=True`` and with ``target_gdf`` (directed variant).
 
     Returns
     -------
@@ -1163,6 +1286,7 @@ def fixed_radius_graph(
     ValueError
         If `distance_metric` is "network" but `network_gdf` is not provided.
         If `radius` is not positive.
+        If `duplicate_edges` is True together with `as_nx=True` or `target_gdf`.
 
     See Also
     --------
@@ -1184,6 +1308,8 @@ def fixed_radius_graph(
        finding fixed-radius near neighbors. Information processing letters, 6(6),
        209-212. https://doi.org/10.1016/0020-0190(77)90070-9
     """
+    _validate_duplicate_edges(duplicate_edges, as_nx, target_gdf)
+
     if target_gdf is not None:
         return _directed_graph(
             src_gdf=gdf,
@@ -1203,7 +1329,7 @@ def fixed_radius_graph(
     assert builder.node_ids is not None
 
     if len(builder.coords) < 2:
-        return builder.to_output(as_nx)
+        return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
     if metric.name == "network":
         builder.compute_distance_matrix()
@@ -1228,7 +1354,7 @@ def fixed_radius_graph(
 
     builder.add_edges(edges)
     builder.G.graph["radius"] = radius
-    return builder.to_output(as_nx)
+    return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
 
 def waxman_graph(
@@ -1241,6 +1367,7 @@ def waxman_graph(
     network_weight: str | None = None,
     *,
     as_nx: bool = False,
+    duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
     Generate a probabilistic Waxman graph from a GeoDataFrame of points.
@@ -1285,6 +1412,11 @@ def waxman_graph(
     as_nx : bool, default False
         If True, returns a NetworkX graph object. Otherwise, returns a tuple of
         GeoDataFrames (nodes, edges).
+    duplicate_edges : bool, default False
+        If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
+        for every undirected edge (roughly doubling the row count), so
+        neighbourhood queries on the MultiIndex are complete. Incompatible
+        with ``as_nx=True``.
 
     Returns
     -------
@@ -1299,6 +1431,7 @@ def waxman_graph(
     ValueError
         If `distance_metric` is "network" but `network_gdf` is not provided.
         If `beta` is not between 0 and 1, or if `r0` is not positive.
+        If `duplicate_edges` is True together with `as_nx=True`.
 
     See Also
     --------
@@ -1321,6 +1454,8 @@ def waxman_graph(
        selected areas in communications, 6(9), 1617-1622.
        https://doi.org/10.1109/49.12889
     """
+    _validate_duplicate_edges(duplicate_edges, as_nx)
+
     rng = np.random.default_rng(seed)
     metric = DistanceMetric(distance_metric, network_gdf, network_weight)
     builder = GraphBuilder(gdf, metric)
@@ -1329,7 +1464,7 @@ def waxman_graph(
     assert builder.node_ids is not None
 
     if len(builder.coords) < 2:
-        return builder.to_output(as_nx)
+        return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
     builder.compute_distance_matrix()
     assert builder.dm is not None
@@ -1345,7 +1480,7 @@ def waxman_graph(
 
     builder.add_edges(edges)
     builder.G.graph.update({"beta": beta, "r0": r0})
-    return builder.to_output(as_nx)
+    return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
 
 def _normalize_layer_types(
@@ -1704,6 +1839,7 @@ def contiguity_graph(
     node_geom_col: str | None = None,
     set_point_nodes: bool = False,
     as_nx: bool = False,
+    duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
     Generate a contiguity-based spatial graph from polygon geometries.
@@ -1759,6 +1895,12 @@ def contiguity_graph(
         Output format control. If True, returns a NetworkX Graph object with spatial
         attributes. If False, returns a tuple of GeoDataFrames for nodes and edges,
         compatible with other city2graph functions.
+    duplicate_edges : bool, default False
+        If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
+        for every undirected edge (roughly doubling the row count), so
+        neighbourhood queries on the MultiIndex are complete, e.g.
+        ``edges_gdf.xs(node_id, level=0)`` returns every contiguity neighbour.
+        Incompatible with ``as_nx=True``.
 
     Returns
     -------
@@ -1775,6 +1917,7 @@ def contiguity_graph(
         If `gdf` contains geometries that are not polygons (Point, LineString, etc.).
         If `gdf` contains invalid or corrupt polygon geometries.
         If libpysal fails to create spatial weights matrix.
+        If `duplicate_edges` is True together with `as_nx=True`.
 
     See Also
     --------
@@ -1787,6 +1930,7 @@ def contiguity_graph(
     relative_neighborhood_graph : Generate relative neighborhood graphs.
     waxman_graph : Generate probabilistic Waxman graphs.
     """
+    _validate_duplicate_edges(duplicate_edges, as_nx)
     _validate_contiguity_input(gdf, contiguity)
     metric = DistanceMetric(distance_metric, network_gdf, network_weight)
     metric.validate(gdf.crs)
@@ -1825,7 +1969,7 @@ def contiguity_graph(
     builder.G.graph["contiguity"] = contiguity
     builder.G.graph["distance_metric"] = metric.name
 
-    return builder.to_output(as_nx)
+    return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
 
 # ============================================================================

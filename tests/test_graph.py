@@ -22,6 +22,7 @@ from city2graph import graph as graph_module
 from city2graph.base import GraphMetadata
 from city2graph.proximity import contiguity_graph
 from city2graph.utils import canonicalize_edges
+from city2graph.utils import symmetrize_edges
 
 # Import torch-related modules conditionally
 try:
@@ -1483,6 +1484,18 @@ class TestUndirectedEdgeHandling:
         data = gdf_to_pyg(simple_nodes, canonicalize_edges(edges), directed=False)
         # One undirected edge, symmetrized into both directions.
         assert data.num_edges == 2
+
+    def test_symmetrize_edges_output_requires_directed_true(
+        self, simple_nodes: gpd.GeoDataFrame, simple_edges: gpd.GeoDataFrame
+    ) -> None:
+        """symmetrize_edges output converts with directed=True but not directed=False."""
+        symmetrized = symmetrize_edges(simple_edges)
+
+        with pytest.raises(ValueError, match="Ambiguous undirected input"):
+            gdf_to_pyg(simple_nodes, symmetrized, directed=False)
+
+        data = gdf_to_pyg(simple_nodes, symmetrized, directed=True)
+        assert data.num_edges == 4
 
     def test_cross_type_auto_reverse_store(
         self,
