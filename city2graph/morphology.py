@@ -40,6 +40,7 @@ from .utils import dual_graph
 from .utils import filter_graph_by_distance
 from .utils import gdf_to_nx
 from .utils import nx_to_gdf
+from .utils import symmetrize_edges
 
 if typing.TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
@@ -56,6 +57,65 @@ __all__ = [
 # Module logger configuration
 logger = logging.getLogger(__name__)
 _SOURCE_BUILDING_INDEX_COL = "_source_building_index"
+
+
+def _validate_duplicate_edges(duplicate_edges: bool, as_nx: bool) -> None:
+    """
+    Reject ``duplicate_edges`` combined with NetworkX output.
+
+    Reciprocal (u, v) / (v, u) rows can only be represented in GeoDataFrame
+    output, so the conflicting combination is rejected before any computation.
+
+    Parameters
+    ----------
+    duplicate_edges : bool
+        Whether the caller requested reciprocal edge rows.
+    as_nx : bool
+        Whether the caller requested NetworkX output.
+
+    Raises
+    ------
+    ValueError
+        If ``duplicate_edges`` is combined with ``as_nx=True``.
+    """
+    if duplicate_edges and as_nx:
+        msg = (
+            "duplicate_edges=True is not supported with as_nx=True: an "
+            "undirected nx.Graph cannot hold reciprocal (u, v) and (v, u) "
+            "edges. Use as_nx=False to get a symmetrized edge GeoDataFrame."
+        )
+        raise ValueError(msg)
+
+
+def _symmetrize_edge_columns(
+    edges: gpd.GeoDataFrame, from_col: str, to_col: str
+) -> gpd.GeoDataFrame:
+    """
+    Symmetrize a column-based edge table by adding reverse rows.
+
+    The morphology sub-functions return edge tables whose endpoints live in id
+    columns rather than a MultiIndex, so the table is round-tripped through a
+    (source, target) MultiIndex to reuse :func:`symmetrize_edges`.
+
+    Parameters
+    ----------
+    edges : geopandas.GeoDataFrame
+        Edge GeoDataFrame with source and target id columns.
+    from_col : str
+        Name of the source id column.
+    to_col : str
+        Name of the target id column.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        The symmetrized edge GeoDataFrame with the same column layout.
+    """
+    if edges.empty:
+        return edges
+    column_order = list(edges.columns)
+    symmetrized = symmetrize_edges(edges.set_index([from_col, to_col])).reset_index()
+    return symmetrized[column_order]
 
 
 # ============================================================================
@@ -83,6 +143,7 @@ def morphological_graph(  # noqa: PLR0913
     tolerance: float = 1e-6,
     include_unenclosed_buildings: bool = False,
     as_nx: bool = False,
+    duplicate_edges: bool = False,
 ) -> tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]] | nx.Graph:
     """
     Create a morphological graph from buildings and street segments.
@@ -145,6 +206,15 @@ def morphological_graph(  # noqa: PLR0913
         barrier-free tessellation before distance filters are applied.
     as_nx : bool, default=False
         If True, convert the output to a NetworkX graph.
+    duplicate_edges : bool, default=False
+        If True, the undirected same-type edge GeoDataFrames —
+        ("private", "touched_to", "private") and
+        ("public", "connected_to", "public") — contain both (u, v) and (v, u)
+        rows (roughly doubling their row count), so neighbourhood queries on
+        the MultiIndex are complete. The heterogeneous
+        ("private", "faced_to", "public") edges are left unchanged because a
+        reverse row would mix public ids into the private index level.
+        Incompatible with ``as_nx=True``.
 
     Returns
     -------
@@ -169,6 +239,7 @@ def morphological_graph(  # noqa: PLR0913
     ValueError
         If contiguity parameter is not "queen" or "rook".
         If clipping_buffer is negative.
+        If `duplicate_edges` is True together with `as_nx=True`.
 
     See Also
     --------
@@ -202,6 +273,7 @@ def morphological_graph(  # noqa: PLR0913
     private_id_col = "private_id"
     public_id_col = "public_id"
 
+    _validate_duplicate_edges(duplicate_edges, as_nx)
     _validate_input_gdfs(buildings_gdf, segments_gdf)
 
     # Validate contiguity parameter
@@ -278,6 +350,15 @@ def morphological_graph(  # noqa: PLR0913
         extent_buffer=extent_buffer,
     )
 
+    if duplicate_edges:
+        # Only same-node-type undirected edges can hold reverse rows; the
+        # heterogeneous faced_to edges would mix id spaces across index levels.
+        for edge_type in (
+            ("private", "touched_to", "private"),
+            ("public", "connected_to", "public"),
+        ):
+            edges[edge_type] = symmetrize_edges(edges[edge_type])
+
     return (nodes, edges) if not as_nx else gdf_to_nx(nodes, edges)
 
 
@@ -291,6 +372,7 @@ def private_to_private_graph(
     group_col: str | None = None,
     contiguity: str = "queen",
     as_nx: bool = False,
+    duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     """
     Create edges between contiguous private polygons based on spatial adjacency.
@@ -312,6 +394,11 @@ def private_to_private_graph(
         Queen contiguity includes vertex neighbors, Rook includes only edge neighbors.
     as_nx : bool, default=False
         If True, convert the output to a NetworkX graph.
+    duplicate_edges : bool, default=False
+        If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
+        for every undirected edge (roughly doubling the row count), with the
+        'from_private_id' and 'to_private_id' values swapped on reverse rows.
+        Incompatible with ``as_nx=True``.
 
     Returns
     -------
@@ -329,6 +416,7 @@ def private_to_private_graph(
         If private_gdf is not a GeoDataFrame.
     ValueError
         If contiguity not in {"queen", "rook"}, or if group_col doesn't exist.
+        If `duplicate_edges` is True together with `as_nx=True`.
 
     See Also
     --------
@@ -351,6 +439,7 @@ def private_to_private_graph(
     >>> nodes, edges = private_to_private_graph(tessellation_gdf, group_col='enclosure_id')
     """
     # Input validation
+    _validate_duplicate_edges(duplicate_edges, as_nx)
     _validate_single_gdf_input(private_gdf, "private_gdf")
 
     private_id_col = "private_id"
@@ -420,6 +509,9 @@ def private_to_private_graph(
     if as_nx:
         return gdf_to_nx(nodes=gdf_unique, edges=edges_gdf)
 
+    if duplicate_edges:
+        edges_gdf = _symmetrize_edge_columns(edges_gdf, "from_private_id", "to_private_id")
+
     return gdf_unique, edges_gdf
 
 
@@ -435,6 +527,7 @@ def private_to_public_graph(
     tolerance: float = 1e-6,
     as_nx: bool = False,
     max_connection_distance: float = math.inf,
+    duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     """
     Create edges between private polygons and nearby public geometries.
@@ -464,6 +557,11 @@ def private_to_public_graph(
         connected only by the fallback are dropped when their nearest public
         geometry lies farther than this distance, preventing long star-shaped
         edges to distant streets.
+    duplicate_edges : bool, default=False
+        If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
+        for every edge (roughly doubling the row count). Note that on reverse
+        rows the 'private_id' column holds a public id and vice versa, because
+        the endpoints are swapped. Incompatible with ``as_nx=True``.
 
     Returns
     -------
@@ -481,6 +579,7 @@ def private_to_public_graph(
         If private_gdf or public_gdf are not GeoDataFrames.
     ValueError
         If 'private_id' or 'public_id' columns are missing from input GDFs.
+        If `duplicate_edges` is True together with `as_nx=True`.
 
     See Also
     --------
@@ -503,6 +602,7 @@ def private_to_public_graph(
     >>> nodes, edges = private_to_public_graph(tessellation_gdf, segments_gdf, tolerance=2.0)
     """
     # Input validation
+    _validate_duplicate_edges(duplicate_edges, as_nx)
     _validate_single_gdf_input(private_gdf, "private_gdf")
     _validate_single_gdf_input(public_gdf, "public_gdf")
 
@@ -576,7 +676,13 @@ def private_to_public_graph(
 
     nodes_gdf = pd.concat([private_gdf, public_gdf], ignore_index=True)
 
-    return (nodes_gdf, edges_gdf) if not as_nx else gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf)
+    if as_nx:
+        return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf)
+
+    if duplicate_edges:
+        edges_gdf = _symmetrize_edge_columns(edges_gdf, "private_id", "public_id")
+
+    return nodes_gdf, edges_gdf
 
 
 def _connect_unmatched_private_to_nearest_public(
@@ -673,6 +779,7 @@ def _connect_unmatched_private_to_nearest_public(
 def public_to_public_graph(
     public_gdf: gpd.GeoDataFrame,
     as_nx: bool = False,
+    duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     """
     Create edges between connected public segments based on topological connectivity.
@@ -688,6 +795,11 @@ def public_to_public_graph(
         GeoDataFrame containing public space geometries (typically LineString).
     as_nx : bool, default=False
         If True, convert the output to a NetworkX graph.
+    duplicate_edges : bool, default=False
+        If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
+        for every undirected edge (roughly doubling the row count), with the
+        'from_public_id' and 'to_public_id' values swapped on reverse rows.
+        Incompatible with ``as_nx=True``.
 
     Returns
     -------
@@ -703,6 +815,8 @@ def public_to_public_graph(
     ------
     TypeError
         If public_gdf is not a GeoDataFrame.
+    ValueError
+        If `duplicate_edges` is True together with `as_nx=True`.
 
     See Also
     --------
@@ -724,6 +838,7 @@ def public_to_public_graph(
     >>> graph = public_to_public_graph(segments_gdf, as_nx=True)
     """
     # Input validation
+    _validate_duplicate_edges(duplicate_edges, as_nx)
     _validate_single_gdf_input(public_gdf, "public_gdf")
 
     # Handle empty or insufficient data: return empty edges GeoDataFrame
@@ -763,7 +878,13 @@ def public_to_public_graph(
     # Reset index to ensure it is a regular DataFrame
     dual_edges = dual_edges.reset_index()
 
-    return (public_gdf, dual_edges) if not as_nx else gdf_to_nx(nodes=public_gdf, edges=dual_edges)
+    if as_nx:
+        return gdf_to_nx(nodes=public_gdf, edges=dual_edges)
+
+    if duplicate_edges:
+        dual_edges = _symmetrize_edge_columns(dual_edges, "from_public_id", "to_public_id")
+
+    return public_gdf, dual_edges
 
 
 # ============================================================================

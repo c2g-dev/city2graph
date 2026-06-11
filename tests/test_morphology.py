@@ -103,6 +103,41 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         for edge_type in expected_edges:
             assert edge_type in edges
 
+    def test_duplicate_edges_symmetrizes_same_type_edges(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """duplicate_edges=True doubles same-type edges and keeps faced_to as-is."""
+        _, base_edges = morphological_graph(sample_buildings_gdf, sample_segments_gdf)
+        _, dup_edges = morphological_graph(
+            sample_buildings_gdf, sample_segments_gdf, duplicate_edges=True
+        )
+
+        for edge_type in [
+            ("private", "touched_to", "private"),
+            ("public", "connected_to", "public"),
+        ]:
+            base = base_edges[edge_type]
+            dup = dup_edges[edge_type]
+            assert len(dup) == 2 * len(base)
+            pairs = set(base.index)
+            assert set(dup.index) == pairs | {(v, u) for u, v in pairs}
+
+        faced_to = ("private", "faced_to", "public")
+        assert dup_edges[faced_to].index.tolist() == base_edges[faced_to].index.tolist()
+
+    def test_duplicate_edges_rejects_as_nx(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """duplicate_edges=True with as_nx=True raises ValueError."""
+        with pytest.raises(ValueError, match="not supported with as_nx=True"):
+            morphological_graph(
+                sample_buildings_gdf, sample_segments_gdf, as_nx=True, duplicate_edges=True
+            )
+
     def test_missing_enclosure_index_warning(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -1092,6 +1127,69 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
 
         nodes, edges = public_to_public_graph(segments_gdf)
         self.validate_basic_output(nodes, edges)
+
+    # duplicate_edges Tests
+    def test_private_to_private_duplicate_edges(
+        self, sample_tessellation_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """duplicate_edges=True doubles rows with swapped private id columns."""
+        _, base_edges = private_to_private_graph(sample_tessellation_gdf)
+        _, dup_edges = private_to_private_graph(sample_tessellation_gdf, duplicate_edges=True)
+
+        assert len(dup_edges) == 2 * len(base_edges)
+        pairs = set(zip(base_edges["from_private_id"], base_edges["to_private_id"], strict=True))
+        dup_pairs = set(zip(dup_edges["from_private_id"], dup_edges["to_private_id"], strict=True))
+        assert dup_pairs == pairs | {(v, u) for u, v in pairs}
+
+    def test_private_to_public_duplicate_edges(
+        self,
+        sample_tessellation_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """duplicate_edges=True doubles rows with swapped endpoint columns."""
+        _, base_edges = private_to_public_graph(sample_tessellation_gdf, sample_segments_gdf)
+        _, dup_edges = private_to_public_graph(
+            sample_tessellation_gdf, sample_segments_gdf, duplicate_edges=True
+        )
+
+        # private and public ids share the same integer space in the fixtures,
+        # so a base pair's reverse may already exist as another connection and
+        # the idempotent symmetrization adds no duplicate row for it.
+        pairs = set(zip(base_edges["private_id"], base_edges["public_id"], strict=True))
+        expected_pairs = pairs | {(v, u) for u, v in pairs}
+        dup_pairs = set(zip(dup_edges["private_id"], dup_edges["public_id"], strict=True))
+        assert dup_pairs == expected_pairs
+        assert len(dup_edges) == len(expected_pairs)
+        assert len(dup_edges) > len(base_edges)
+
+    def test_public_to_public_duplicate_edges(self, sample_segments_gdf: gpd.GeoDataFrame) -> None:
+        """duplicate_edges=True doubles rows with swapped public id columns."""
+        _, base_edges = public_to_public_graph(sample_segments_gdf)
+        _, dup_edges = public_to_public_graph(sample_segments_gdf, duplicate_edges=True)
+
+        assert len(dup_edges) == 2 * len(base_edges)
+        pairs = set(zip(base_edges["from_public_id"], base_edges["to_public_id"], strict=True))
+        dup_pairs = set(zip(dup_edges["from_public_id"], dup_edges["to_public_id"], strict=True))
+        assert dup_pairs == pairs | {(v, u) for u, v in pairs}
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda tess, _segs, **kw: private_to_private_graph(tess, **kw),
+            private_to_public_graph,
+            lambda _tess, segs, **kw: public_to_public_graph(segs, **kw),
+        ],
+        ids=["private_to_private", "private_to_public", "public_to_public"],
+    )
+    def test_duplicate_edges_rejects_as_nx(
+        self,
+        sample_tessellation_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        call: Callable[..., object],
+    ) -> None:
+        """duplicate_edges=True with as_nx=True raises ValueError."""
+        with pytest.raises(ValueError, match="not supported with as_nx=True"):
+            call(sample_tessellation_gdf, sample_segments_gdf, as_nx=True, duplicate_edges=True)
 
 
 class TestInputValidationAndErrors(TestMorphologyBase):

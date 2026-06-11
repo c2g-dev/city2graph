@@ -70,6 +70,7 @@ __all__ = [
     "plot_graph",
     "remove_isolated_components",
     "rx_to_nx",
+    "symmetrize_edges",
     "validate_gdf",
     "validate_nx",
 ]
@@ -1932,6 +1933,7 @@ def canonicalize_edges(
 
     See Also
     --------
+    symmetrize_edges : Inverse operation adding the reverse row of each edge.
     gdf_to_pyg : Convert GeoDataFrames to PyTorch Geometric objects.
     segments_to_graph : Convert LineString segments to a graph structure.
 
@@ -2023,6 +2025,103 @@ def canonicalize_edges(
         keep_mask = ~pairs.duplicated(keep="first").to_numpy()
         result = result[keep_mask]
     return result
+
+
+def symmetrize_edges(edges: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Symmetrize an edge GeoDataFrame by adding the reverse row of each edge.
+
+    For every non-self-loop edge ``(u, v)`` whose reverse ``(v, u)`` is not
+    already present, appends a row indexed ``(v, u)`` with the same attributes
+    and a reversed geometry, so that each row's geometry starts at its source
+    node. This makes neighbourhood queries on the MultiIndex complete (e.g.
+    ``edges.xs(node, level=0)`` returns every neighbour of ``node``), at the
+    cost of duplicating edge attributes and geometries. Self-loops and edges
+    whose reverse already exists are left untouched, so the operation is
+    idempotent. Three-level (source, target, key) multigraph indexes keep the
+    key of the original row on the reverse row.
+
+    This is the inverse operation of :func:`canonicalize_edges`.
+
+    Parameters
+    ----------
+    edges : geopandas.GeoDataFrame
+        Edge GeoDataFrame with a two-level (source, target) or three-level
+        (source, target, key) MultiIndex. For heterogeneous graphs, call this
+        function separately on each edge type's GeoDataFrame.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        The symmetrized edge GeoDataFrame. Original rows come first with
+        columns, attributes, and CRS preserved; reverse rows are appended in
+        the order of the rows they mirror. Index level names are kept
+        positionally.
+
+    Raises
+    ------
+    ValueError
+        If the index is not a MultiIndex with at least two levels.
+
+    See Also
+    --------
+    canonicalize_edges : Inverse operation collapsing reciprocal rows.
+    gdf_to_pyg : Convert GeoDataFrames to PyTorch Geometric objects.
+
+    Notes
+    -----
+    ``gdf_to_pyg(..., directed=False)`` rejects edge tables containing both
+    ``(u, v)`` and ``(v, u)`` rows as ambiguous. Collapse a symmetrized table
+    with :func:`canonicalize_edges` first, or pass ``directed=True`` to keep
+    the reciprocal rows as directed edges.
+
+    Examples
+    --------
+    >>> import geopandas as gpd
+    >>> import pandas as pd
+    >>> from shapely.geometry import LineString
+    >>> index = pd.MultiIndex.from_tuples([(0, 1)], names=["u", "v"])
+    >>> edges = gpd.GeoDataFrame(
+    ...     {"name": ["ab"]},
+    ...     geometry=[LineString([(0, 0), (1, 1)])],
+    ...     index=index,
+    ...     crs="EPSG:32633",
+    ... )
+    >>> symmetrize_edges(edges).index.tolist()
+    [(0, 1), (1, 0)]
+    """
+    if not isinstance(edges.index, pd.MultiIndex) or edges.index.nlevels < 2:
+        msg = (
+            "Edge GeoDataFrame index must be a MultiIndex with at least "
+            "two levels (source, target)."
+        )
+        raise ValueError(msg)
+
+    if edges.empty:
+        return edges.copy()
+
+    src = np.asarray(edges.index.get_level_values(0), dtype=object)
+    dst = np.asarray(edges.index.get_level_values(1), dtype=object)
+    names = list(edges.index.names)
+
+    reversed_arrays = [dst, src]
+    reversed_arrays.extend(
+        np.asarray(edges.index.get_level_values(level), dtype=object)
+        for level in range(2, edges.index.nlevels)
+    )
+    reversed_index = pd.MultiIndex.from_arrays(reversed_arrays, names=names)
+
+    # Self-loops reverse onto themselves, so the membership test alone keeps
+    # them out of the appended rows.
+    missing = (src != dst) & ~reversed_index.isin(edges.index)
+    if not missing.any():
+        return edges.copy()
+
+    reverse_rows = edges[missing].copy()
+    reverse_rows.index = reversed_index[missing]
+    reverse_rows.geometry = reverse_rows.geometry.reverse()
+
+    return gpd.GeoDataFrame(pd.concat([edges, reverse_rows]))
 
 
 def _validate_dual_graph_input(

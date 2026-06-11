@@ -915,6 +915,105 @@ class TestCanonicalizeEdges(BaseGraphTest):
             utils.canonicalize_edges(edges, duplicates="drop")  # type: ignore[arg-type]
 
 
+class TestSymmetrizeEdges(BaseGraphTest):
+    """Test symmetrize_edges adding reverse rows of undirected edges."""
+
+    @staticmethod
+    def _make_edges(
+        tuples: list[tuple[Any, ...]],
+        names: list[str] | None = None,
+    ) -> gpd.GeoDataFrame:
+        """Build an edge GeoDataFrame with one distinct row per index tuple."""
+        if names is None:
+            names = ["u", "v"] if len(tuples[0]) == 2 else ["u", "v", "k"]
+        return gpd.GeoDataFrame(
+            {"name": [f"e{i}" for i in range(len(tuples))]},
+            geometry=[LineString([(i, 0), (i + 1, 1)]) for i in range(len(tuples))],
+            index=pd.MultiIndex.from_tuples(tuples, names=names),
+            crs="EPSG:27700",
+        )
+
+    def test_adds_reverse_rows(self) -> None:
+        """Each canonical edge gains a reverse row with copied attributes."""
+        edges = self._make_edges([(0, 1), (1, 2)])
+        result = utils.symmetrize_edges(edges)
+
+        assert result.index.tolist() == [(0, 1), (1, 2), (1, 0), (2, 1)]
+        assert result.index.names == ["u", "v"]
+        assert list(result["name"]) == ["e0", "e1", "e0", "e1"]
+        assert result.crs == edges.crs
+
+    def test_reverse_rows_have_reversed_geometry(self) -> None:
+        """Reverse rows reverse the LineString so it starts at the source node."""
+        edges = self._make_edges([(0, 1)])
+        result = utils.symmetrize_edges(edges)
+
+        forward = list(result.geometry.loc[(0, 1)].coords)
+        backward = list(result.geometry.loc[(1, 0)].coords)
+        assert backward == forward[::-1]
+
+    def test_self_loops_not_duplicated(self) -> None:
+        """Self-loops appear only once in the output."""
+        edges = self._make_edges([(2, 2), (0, 1)])
+        result = utils.symmetrize_edges(edges)
+        assert result.index.tolist() == [(2, 2), (0, 1), (1, 0)]
+
+    def test_idempotent(self) -> None:
+        """Applying symmetrize_edges twice equals applying it once."""
+        edges = self._make_edges([(0, 1), (1, 2)])
+        once = utils.symmetrize_edges(edges)
+        twice = utils.symmetrize_edges(once)
+        assert twice.equals(once)
+
+    def test_already_bidirectional_input_unchanged(self) -> None:
+        """Inputs already holding both directions gain no extra rows."""
+        edges = self._make_edges([(0, 1), (1, 0)])
+        result = utils.symmetrize_edges(edges)
+        assert result.index.tolist() == [(0, 1), (1, 0)]
+        assert list(result["name"]) == ["e0", "e1"]
+
+    def test_three_level_index_keeps_keys(self) -> None:
+        """Multigraph keys are preserved on reverse rows."""
+        edges = self._make_edges([(0, 1, 0), (0, 1, 1)])
+        result = utils.symmetrize_edges(edges)
+        assert result.index.tolist() == [(0, 1, 0), (0, 1, 1), (1, 0, 0), (1, 0, 1)]
+        assert result.index.names == ["u", "v", "k"]
+
+    def test_round_trip_with_canonicalize(self) -> None:
+        """canonicalize_edges collapses symmetrized output back to the input."""
+        edges = self._make_edges([(0, 1), (1, 2)])
+        result = utils.canonicalize_edges(utils.symmetrize_edges(edges))
+        assert result.equals(edges)
+
+    def test_mixed_type_ids_supported(self) -> None:
+        """Mixed, non-comparable identifier types are symmetrized verbatim."""
+        edges = self._make_edges([("a", 1)])
+        result = utils.symmetrize_edges(edges)
+        assert result.index.tolist() == [("a", 1), (1, "a")]
+
+    def test_empty_input_returns_copy(self) -> None:
+        """An empty edge GeoDataFrame is returned unchanged."""
+        edges = gpd.GeoDataFrame(
+            {"name": []},
+            geometry=[],
+            index=pd.MultiIndex.from_arrays([[], []], names=["u", "v"]),
+            crs="EPSG:27700",
+        )
+        result = utils.symmetrize_edges(edges)
+        assert result.empty
+        assert result is not edges
+
+    def test_non_multiindex_raises(self) -> None:
+        """A flat index is rejected."""
+        edges = gpd.GeoDataFrame(
+            {"name": ["e0"]},
+            geometry=[LineString([(0, 0), (1, 1)])],
+            crs="EPSG:27700",
+        )
+        with pytest.raises(ValueError, match="MultiIndex with at least"):
+            utils.symmetrize_edges(edges)
+
+
 # ============================================================================
 # GRAPH ANALYSIS TESTS
 # ============================================================================
