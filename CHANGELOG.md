@@ -13,8 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a `directed` parameter to `segments_to_graph()`; `directed=False` canonicalizes each edge to an unordered `(min, max)` node-id order so reverse-drawn duplicate segments become parallel edges of one unordered pair.
 
 ### Changed
+- **Breaking:** Renamed the morphology terminology from "private"/"public" to "place"/"movement". Node keys are now `"place"` and `"movement"`; edge types are `("place", "touched_to", "place")`, `("movement", "connected_to", "movement")`, and `("place", "faced_to", "movement")`; identifier columns are `place_id`, `movement_id`, `from_place_id`/`to_place_id`, and `from_movement_id`/`to_movement_id`.
 - **Breaking:** `segments_to_graph()` now defaults to `multigraph=True`, returning a three-level `(from_node_id, to_node_id, edge_key)` MultiIndex (and an `nx.MultiGraph` when `as_nx=True`). With `multigraph=False`, duplicate node pairs now raise a `ValueError` instead of silently returning a duplicated MultiIndex.
 - Improved the undirected validation errors in `gdf_to_pyg()`: they now report the total number of affected node pairs with examples, explain the typical cause (reciprocal rows from directed sources such as OSMnx), and point to `canonicalize_edges()` as a remedy.
+
+### Deprecated
+- Deprecated `private_to_private_graph()`, `private_to_public_graph()`, and `public_to_public_graph()` in favor of `place_to_place_graph()`, `place_to_movement_graph()`, and `movement_to_movement_graph()`. The old names emit a `DeprecationWarning` and will be removed in a future major release.
 
 ### Fixed
 - Fixed `segments_to_graph()` ignoring `as_nx=True` for empty inputs; it now returns an empty NetworkX graph instead of a tuple, and empty outputs carry properly named indexes.

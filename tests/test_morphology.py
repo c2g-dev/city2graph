@@ -21,6 +21,9 @@ from city2graph.morphology import _filter_tessellation_by_network_distance
 from city2graph.morphology import _include_unenclosed_building_tessellation
 from city2graph.morphology import _segments_within_network_distance
 from city2graph.morphology import morphological_graph
+from city2graph.morphology import movement_to_movement_graph
+from city2graph.morphology import place_to_movement_graph
+from city2graph.morphology import place_to_place_graph
 from city2graph.morphology import private_to_private_graph
 from city2graph.morphology import private_to_public_graph
 from city2graph.morphology import public_to_public_graph
@@ -92,13 +95,13 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         """Test basic morphological graph creation."""
         nodes, edges = morphological_graph(sample_buildings_gdf, sample_segments_gdf)
 
-        self.validate_basic_output(nodes, edges, ["private", "public"])
+        self.validate_basic_output(nodes, edges, ["place", "movement"])
 
         # Validate expected edge types
         expected_edges = [
-            ("private", "touched_to", "private"),
-            ("public", "connected_to", "public"),
-            ("private", "faced_to", "public"),
+            ("place", "touched_to", "place"),
+            ("movement", "connected_to", "movement"),
+            ("place", "faced_to", "movement"),
         ]
         for edge_type in expected_edges:
             assert edge_type in edges
@@ -115,8 +118,8 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         )
 
         for edge_type in [
-            ("private", "touched_to", "private"),
-            ("public", "connected_to", "public"),
+            ("place", "touched_to", "place"),
+            ("movement", "connected_to", "movement"),
         ]:
             base = base_edges[edge_type]
             dup = dup_edges[edge_type]
@@ -124,7 +127,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             pairs = set(base.index)
             assert set(dup.index) == pairs | {(v, u) for u, v in pairs}
 
-        faced_to = ("private", "faced_to", "public")
+        faced_to = ("place", "faced_to", "movement")
         assert dup_edges[faced_to].index.tolist() == base_edges[faced_to].index.tolist()
 
     def test_duplicate_edges_rejects_as_nx(
@@ -166,7 +169,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             # We expect a warning about missing enclosure_index
             assert len(enclosure_warnings) > 0
 
-        self.validate_basic_output(nodes, edges, ["private", "public"])
+        self.validate_basic_output(nodes, edges, ["place", "movement"])
 
     def test_keep_buildings_handles_join_without_index_right(
         self,
@@ -195,7 +198,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             keep_buildings=True,
         )
 
-        assert "building_geometry" in nodes["private"].columns
+        assert "building_geometry" in nodes["place"].columns
 
     def test_include_unenclosed_buildings_is_opt_in(
         self,
@@ -251,9 +254,9 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             include_unenclosed_buildings=True,
         )
 
-        assert len(default_nodes["private"]) == 1
-        assert len(opt_in_nodes["private"]) == 2
-        assert "fallback_1" in opt_in_nodes["private"].index
+        assert len(default_nodes["place"]) == 1
+        assert len(opt_in_nodes["place"]) == 2
+        assert "fallback_1" in opt_in_nodes["place"].index
 
     def test_morphological_graph_passes_tessellation_limit(
         self,
@@ -307,7 +310,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             crs=sample_crs,
         )
         tessellation = gpd.GeoDataFrame(
-            {"private_id": ["enclosed"], "enclosure_index": [0]},
+            {"place_id": ["enclosed"], "enclosure_index": [0]},
             geometry=[buildings.geometry.iloc[0]],
             crs=sample_crs,
         )
@@ -325,10 +328,10 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         result = _include_unenclosed_building_tessellation(
             tessellation,
             buildings.iloc[:2],
-            "private_id",
+            "place_id",
         )
 
-        assert list(result["private_id"]) == ["enclosed", "fallback_1"]
+        assert list(result["place_id"]) == ["enclosed", "fallback_1"]
 
     def test_keep_buildings_excludes_distance_filtered_buildings_from_fallback_cells(
         self,
@@ -393,7 +396,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             include_unenclosed_buildings=True,
         )
 
-        attached_ids = set(nodes["private"]["building_id"].dropna())
+        attached_ids = set(nodes["place"]["building_id"].dropna())
         assert attached_ids == {"enclosed", "near_missing"}
         assert "far_outside" not in attached_ids
 
@@ -401,9 +404,9 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         self,
         sample_crs: str,
     ) -> None:
-        """Private cells should not make distant cells reachable through centroid-to-centroid edges."""
+        """Place cells should not make distant cells reachable through centroid-to-centroid edges."""
         tessellation = gpd.GeoDataFrame(
-            {"private_id": ["near", "far"]},
+            {"place_id": ["near", "far"]},
             geometry=[
                 Polygon([(0.9, -0.1), (1.1, -0.1), (1.1, 0.1), (0.9, 0.1)]),
                 Polygon([(2.9, -0.1), (3.1, -0.1), (3.1, 0.1), (2.9, 0.1)]),
@@ -426,15 +429,15 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             extent_buffer=1.0,
         )
 
-        assert list(filtered["private_id"]) == ["near"]
+        assert list(filtered["place_id"]) == ["near"]
 
-    def test_network_distance_projects_center_and_private_cells_to_segments(
+    def test_network_distance_projects_center_and_place_cells_to_segments(
         self,
         sample_crs: str,
     ) -> None:
-        """A center and private cell near the middle of a long segment should use the segment."""
+        """A center and place cell near the middle of a long segment should use the segment."""
         tessellation = gpd.GeoDataFrame(
-            {"private_id": ["near_midpoint", "too_far"]},
+            {"place_id": ["near_midpoint", "too_far"]},
             geometry=[
                 Polygon([(59, 0), (61, 0), (61, 2), (59, 2)]),
                 Polygon([(89, 0), (91, 0), (91, 2), (89, 2)]),
@@ -453,7 +456,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             12.0,
         )
 
-        assert list(filtered["private_id"]) == ["near_midpoint"]
+        assert list(filtered["place_id"]) == ["near_midpoint"]
 
     def test_building_network_distance_uses_segment_projection(
         self,
@@ -524,12 +527,12 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             math.inf,
             Point(50, 0),
             keep_buildings=True,
-            private_id_col="private_id",
+            place_id_col="place_id",
             include_unenclosed_buildings=True,
         )
 
         assert set(tessellation["building_id"].dropna()) == {"enclosed", "near_missing"}
-        assert "fallback_1" in set(tessellation["private_id"])
+        assert "fallback_1" in set(tessellation["place_id"])
 
     def test_distance_filter_handles_missing_center_node(
         self,
@@ -538,7 +541,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         sample_crs: str,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Distance filtering should degrade to an empty private layer if the center node is absent."""
+        """Distance filtering should degrade to an empty place layer if the center node is absent."""
         center_point = gpd.GeoSeries([Point(0.5, 0.5)], crs=sample_crs)
 
         def fake_create_tessellation(
@@ -588,7 +591,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             distance=10.0,
         )
 
-        assert nodes["private"].empty
+        assert nodes["place"].empty
 
     def test_segments_use_same_reachability_field_as_cells(
         self,
@@ -600,7 +603,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             crs=sample_crs,
         )
         tessellation = gpd.GeoDataFrame(
-            {"private_id": ["near", "far"]},
+            {"place_id": ["near", "far"]},
             geometry=[
                 Polygon([(9, -1), (11, -1), (11, 1), (9, 1)]),
                 Polygon([(69, -1), (71, -1), (71, 1), (69, 1)]),
@@ -620,7 +623,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         # cost 50) is dropped. The near cell (cost ~10) is kept while the far cell
         # (cost ~70) is dropped, all from the single reachability metric.
         assert len(kept_segments) == 1
-        assert list(kept_cells["private_id"]) == ["near"]
+        assert list(kept_cells["place_id"]) == ["near"]
 
     def test_segments_within_distance_keeps_boundary_straddling_segment(
         self,
@@ -628,7 +631,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
     ) -> None:
         """A segment whose near endpoint is within budget is kept whole, not dropped."""
         segments = gpd.GeoDataFrame(
-            {"public_id": ["straddle", "beyond"]},
+            {"movement_id": ["straddle", "beyond"]},
             geometry=[LineString([(0, 0), (50, 0)]), LineString([(50, 0), (100, 0)])],
             crs=sample_crs,
         )
@@ -637,14 +640,14 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
 
         # "straddle" spans x=0..50 and crosses the 20 budget boundary yet is kept
         # whole because its reachable portion is within budget; "beyond" is dropped.
-        assert list(kept["public_id"]) == ["straddle"]
+        assert list(kept["movement_id"]) == ["straddle"]
 
-    def test_morphological_graph_has_no_isolated_private_nodes(
+    def test_morphological_graph_has_no_isolated_place_nodes(
         self,
         sample_crs: str,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Reachability-budgeted output never contains a private cell without a faced_to edge."""
+        """Reachability-budgeted output never contains a place cell without a faced_to edge."""
         near = Polygon([(4, -1), (6, -1), (6, 0), (4, 0)])
         isolated = Polygon([(4, 29), (6, 29), (6, 31), (4, 31)])
         buildings = gpd.GeoDataFrame(geometry=[near, isolated], crs=sample_crs)
@@ -673,15 +676,15 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             distance=50.0,
         )
 
-        faced = edges[("private", "faced_to", "public")]
-        private_ids = set(nodes["private"].index)
-        faced_private_ids = set(faced.index.get_level_values(0)) if not faced.empty else set()
+        faced = edges[("place", "faced_to", "movement")]
+        place_ids = set(nodes["place"].index)
+        faced_place_ids = set(faced.index.get_level_values(0)) if not faced.empty else set()
 
         # The "isolated" cell sits 30 m from the street, within the default
-        # extent_buffer (50 m), so it receives a nearest public fallback
+        # extent_buffer (50 m), so it receives a nearest movement fallback
         # faced_to edge and is kept rather than pruned.
-        assert private_ids == {"near", "isolated"}
-        assert private_ids <= faced_private_ids
+        assert place_ids == {"near", "isolated"}
+        assert place_ids <= faced_place_ids
 
     def test_extent_buffer_drops_cells_beyond_access_cap(
         self,
@@ -727,12 +730,12 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             extent_buffer=50.0,
         )
 
-        private_ids = set(nodes["private"].index)
-        faced = edges[("private", "faced_to", "public")]
-        faced_private_ids = set(faced.index.get_level_values(0)) if not faced.empty else set()
+        place_ids = set(nodes["place"].index)
+        faced = edges[("place", "faced_to", "movement")]
+        faced_place_ids = set(faced.index.get_level_values(0)) if not faced.empty else set()
 
-        assert private_ids == {"near"}
-        assert "far" not in faced_private_ids
+        assert place_ids == {"near"}
+        assert "far" not in faced_place_ids
 
     def test_extent_buffer_validation(
         self,
@@ -754,32 +757,32 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
                 extent_buffer=-1.0,
             )
 
-    def test_private_to_public_respects_max_connection_distance(
+    def test_place_to_movement_respects_max_connection_distance(
         self,
         sample_crs: str,
     ) -> None:
         """Fallback connections farther than max_connection_distance are not created."""
-        private_gdf = gpd.GeoDataFrame(
-            {"private_id": ["near", "far"]},
+        place_gdf = gpd.GeoDataFrame(
+            {"place_id": ["near", "far"]},
             geometry=[
                 Polygon([(0, 1), (2, 1), (2, 3), (0, 3)]),  # 1 m from the segment
                 Polygon([(0, 100), (2, 100), (2, 102), (0, 102)]),  # 100 m from the segment
             ],
             crs=sample_crs,
         )
-        public_gdf = gpd.GeoDataFrame(
-            {"public_id": [0]},
+        movement_gdf = gpd.GeoDataFrame(
+            {"movement_id": [0]},
             geometry=[LineString([(0, 0), (50, 0)])],
             crs=sample_crs,
         )
 
-        _, edges = private_to_public_graph(
-            private_gdf,
-            public_gdf,
+        _, edges = place_to_movement_graph(
+            place_gdf,
+            movement_gdf,
             max_connection_distance=10.0,
         )
 
-        connected = set(edges["private_id"]) if not edges.empty else set()
+        connected = set(edges["place_id"]) if not edges.empty else set()
         assert "near" in connected
         assert "far" not in connected
 
@@ -805,7 +808,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             sample_segments_gdf,
             contiguity=contiguity,
         )
-        self.validate_basic_output(nodes, edges, ["private", "public"])
+        self.validate_basic_output(nodes, edges, ["place", "movement"])
 
     @pytest.mark.parametrize(
         ("distance", "clipping_buffer"),
@@ -836,7 +839,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         else:
             nodes, edges = morphological_graph(sample_buildings_gdf, sample_segments_gdf)
 
-        self.validate_basic_output(nodes, edges, ["private", "public"])
+        self.validate_basic_output(nodes, edges, ["place", "movement"])
 
     def test_comprehensive_parameters(
         self,
@@ -857,7 +860,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             tolerance=0.01,
             as_nx=False,
         )
-        self.validate_basic_output(nodes, edges, ["private", "public"])
+        self.validate_basic_output(nodes, edges, ["place", "movement"])
 
 
 class TestMorphologicalGraphEdgeCases(TestMorphologyBase):
@@ -876,7 +879,7 @@ class TestMorphologicalGraphEdgeCases(TestMorphologyBase):
     ) -> None:
         """Test with single building and segment."""
         nodes, edges = morphological_graph(single_building_gdf, single_segment_gdf)
-        self.validate_basic_output(nodes, edges, ["private", "public"])
+        self.validate_basic_output(nodes, edges, ["place", "movement"])
 
     @pytest.mark.parametrize("invalid_contiguity", ["invalid", "diagonal", 123])
     def test_invalid_contiguity(
@@ -923,193 +926,195 @@ class TestMorphologicalGraphEdgeCases(TestMorphologyBase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             nodes, edges = morphological_graph(sample_buildings_gdf, segments_diff_crs)
-            self.validate_basic_output(nodes, edges, ["private", "public"])
+            self.validate_basic_output(nodes, edges, ["place", "movement"])
 
 
 class TestIndividualGraphFunctions(TestMorphologyBase):
     """Tests for individual graph creation functions."""
 
-    # Private-to-Private Tests
-    def test_private_to_private_basic(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
-        """Test basic private-to-private graph creation."""
-        nodes, edges = private_to_private_graph(sample_tessellation_gdf)
+    # Place-to-Place Tests
+    def test_place_to_place_basic(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
+        """Test basic place-to-place graph creation."""
+        nodes, edges = place_to_place_graph(sample_tessellation_gdf)
         self.validate_basic_output(nodes, edges)
         assert nodes.equals(sample_tessellation_gdf)
 
-    def test_private_to_private_networkx(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
-        """Test private-to-private NetworkX conversion."""
-        graph = private_to_private_graph(sample_tessellation_gdf, as_nx=True)
+    def test_place_to_place_networkx(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
+        """Test place-to-place NetworkX conversion."""
+        graph = place_to_place_graph(sample_tessellation_gdf, as_nx=True)
         self.validate_networkx_output(graph)
 
     @pytest.mark.parametrize("contiguity", ["queen", "rook"])
-    def test_private_to_private_contiguity(
+    def test_place_to_place_contiguity(
         self,
         sample_tessellation_gdf: gpd.GeoDataFrame,
         contiguity: str,
     ) -> None:
-        """Test private-to-private with different contiguity types."""
-        nodes, edges = private_to_private_graph(sample_tessellation_gdf, contiguity=contiguity)
+        """Test place-to-place with different contiguity types."""
+        nodes, edges = place_to_place_graph(sample_tessellation_gdf, contiguity=contiguity)
         self.validate_basic_output(nodes, edges)
-        self.validate_edge_columns(edges, ["from_private_id", "to_private_id"])
+        self.validate_edge_columns(edges, ["from_place_id", "to_place_id"])
 
-    def test_private_to_private_duplicate_index(
+    def test_place_to_place_duplicate_index(
         self, sample_tessellation_gdf: gpd.GeoDataFrame
     ) -> None:
-        """Test private-to-private graph with duplicate indices in input GDF."""
+        """Test place-to-place graph with duplicate indices in input GDF."""
         # Create a GDF with duplicate indices
         gdf_duplicate = sample_tessellation_gdf.copy()
         # Set index to be all 0s (or any duplicate values)
         gdf_duplicate.index = [0] * len(gdf_duplicate)
 
         # This should not raise ValueError: The argument to the ids parameter contains duplicate entries
-        nodes, edges = private_to_private_graph(gdf_duplicate)
+        nodes, edges = place_to_place_graph(gdf_duplicate)
 
         self.validate_basic_output(nodes, edges)
         assert not edges.empty
-        # Ensure the from/to columns contain the actual private_ids, not the duplicate index values
-        assert edges["from_private_id"].isin(sample_tessellation_gdf["private_id"]).all()
-        assert edges["to_private_id"].isin(sample_tessellation_gdf["private_id"]).all()
+        # Ensure the from/to columns contain the actual place_ids, not the duplicate index values
+        assert edges["from_place_id"].isin(sample_tessellation_gdf["place_id"]).all()
+        assert edges["to_place_id"].isin(sample_tessellation_gdf["place_id"]).all()
 
-    def test_private_to_private_invalid_contiguity(
+    def test_place_to_place_invalid_contiguity(
         self,
         sample_tessellation_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test invalid contiguity parameter."""
         with pytest.raises(ValueError, match="contiguity must be either 'queen' or 'rook'"):
-            private_to_private_graph(sample_tessellation_gdf, contiguity="invalid")
+            place_to_place_graph(sample_tessellation_gdf, contiguity="invalid")
 
-    def test_private_to_private_missing_group_column(
+    def test_place_to_place_missing_group_column(
         self,
         sample_tessellation_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test error when specified group column doesn't exist."""
         with pytest.raises(ValueError, match="group_col 'nonexistent_col' not found"):
-            private_to_private_graph(sample_tessellation_gdf, group_col="nonexistent_col")
+            place_to_place_graph(sample_tessellation_gdf, group_col="nonexistent_col")
 
-    def test_private_to_private_single_polygon(self, sample_crs: str) -> None:
+    def test_place_to_place_single_polygon(self, sample_crs: str) -> None:
         """Test with single polygon (insufficient for adjacency)."""
         # Single square polygon tessellation
         single_poly = make_grid_polygons_gdf(1, 1, crs=sample_crs)
-        single_poly = single_poly.reset_index().rename(columns={"id": "private_id"})
-        nodes, edges = private_to_private_graph(single_poly)
+        single_poly = single_poly.reset_index().rename(columns={"id": "place_id"})
+        nodes, edges = place_to_place_graph(single_poly)
         # Should return empty edges since we need at least 2 polygons for adjacency
         assert edges.empty
         assert len(nodes) == 1
 
-    def test_private_to_private_empty_input(self, sample_crs: str) -> None:
+    def test_place_to_place_empty_input(self, sample_crs: str) -> None:
         """Test with empty tessellation."""
         empty_tess = gpd.GeoDataFrame(geometry=[], crs=sample_crs)
-        nodes, edges = private_to_private_graph(empty_tess)
+        nodes, edges = place_to_place_graph(empty_tess)
         self.validate_empty_output(nodes, edges)
 
-    # Private-to-Public Tests
-    def test_private_to_public_basic(
+    # Place-to-Movement Tests
+    def test_place_to_movement_basic(
         self,
         sample_tessellation_gdf: gpd.GeoDataFrame,
         sample_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
-        """Test basic private-to-public graph creation."""
-        nodes, edges = private_to_public_graph(sample_tessellation_gdf, sample_segments_gdf)
+        """Test basic place-to-movement graph creation."""
+        nodes, edges = place_to_movement_graph(sample_tessellation_gdf, sample_segments_gdf)
         self.validate_basic_output(nodes, edges)
-        self.validate_edge_columns(edges, ["private_id", "public_id"])
+        self.validate_edge_columns(edges, ["place_id", "movement_id"])
 
-    def test_private_to_public_networkx(
+    def test_place_to_movement_networkx(
         self,
         sample_tessellation_gdf: gpd.GeoDataFrame,
         sample_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
-        """Test private-to-public NetworkX conversion."""
-        graph = private_to_public_graph(sample_tessellation_gdf, sample_segments_gdf, as_nx=True)
+        """Test place-to-movement NetworkX conversion."""
+        graph = place_to_movement_graph(sample_tessellation_gdf, sample_segments_gdf, as_nx=True)
         self.validate_networkx_output(graph)
 
     @pytest.mark.parametrize("tolerance", [1e-6, 1e-3, 0.1, 1.0])
-    def test_private_to_public_tolerance(
+    def test_place_to_movement_tolerance(
         self,
         sample_tessellation_gdf: gpd.GeoDataFrame,
         sample_segments_gdf: gpd.GeoDataFrame,
         tolerance: float,
     ) -> None:
-        """Test private-to-public with different tolerance values."""
-        nodes, edges = private_to_public_graph(
+        """Test place-to-movement with different tolerance values."""
+        nodes, edges = place_to_movement_graph(
             sample_tessellation_gdf,
             sample_segments_gdf,
             tolerance=tolerance,
         )
         self.validate_basic_output(nodes, edges)
 
-    def test_private_to_public_missing_id_columns(self, sample_crs: str) -> None:
+    def test_place_to_movement_missing_id_columns(self, sample_crs: str) -> None:
         """Test error when required ID columns are missing."""
         # Create GeoDataFrames without required ID columns
-        private_no_id = gpd.GeoDataFrame(
+        place_no_id = gpd.GeoDataFrame(
             geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
             crs=sample_crs,
         )
-        public_no_id = gpd.GeoDataFrame(
+        movement_no_id = gpd.GeoDataFrame(
             geometry=[LineString([(0, 0), (2, 0)])],
             crs=sample_crs,
         )
 
-        # Test missing private_id
-        with pytest.raises(ValueError, match="Expected ID column 'private_id' not found"):
-            private_to_public_graph(private_no_id, public_no_id)
+        # Test missing place_id
+        with pytest.raises(ValueError, match="Expected ID column 'place_id' not found"):
+            place_to_movement_graph(place_no_id, movement_no_id)
 
-        # Test missing public_id (add private_id but not public_id)
-        private_with_id = private_no_id.copy()
-        private_with_id["private_id"] = [1]
+        # Test missing movement_id (add place_id but not movement_id)
+        place_with_id = place_no_id.copy()
+        place_with_id["place_id"] = [1]
 
-        with pytest.raises(ValueError, match="Expected ID column 'public_id' not found"):
-            private_to_public_graph(private_with_id, public_no_id)
+        with pytest.raises(ValueError, match="Expected ID column 'movement_id' not found"):
+            place_to_movement_graph(place_with_id, movement_no_id)
 
-    def test_private_to_public_nearest_fallback_for_empty_join_result(
+    def test_place_to_movement_nearest_fallback_for_empty_join_result(
         self,
         sample_crs: str,
     ) -> None:
-        """Private spaces missed by dwithin should connect to the nearest public segment."""
+        """Place spaces missed by dwithin should connect to the nearest movement segment."""
         # Create non-overlapping geometries that won't intersect
-        private_gdf = make_grid_polygons_gdf(1, 1, crs=sample_crs)
-        private_gdf = private_gdf.reset_index().rename(columns={"id": "private_id"})
-        public_gdf = gpd.GeoDataFrame(
-            {"public_id": [1]},
-            geometry=[LineString([(10, 10), (20, 20)])],  # Far away from private geometry
+        place_gdf = make_grid_polygons_gdf(1, 1, crs=sample_crs)
+        place_gdf = place_gdf.reset_index().rename(columns={"id": "place_id"})
+        movement_gdf = gpd.GeoDataFrame(
+            {"movement_id": [1]},
+            geometry=[LineString([(10, 10), (20, 20)])],  # Far away from place geometry
             crs=sample_crs,
         )
 
-        nodes, edges = private_to_public_graph(private_gdf, public_gdf, tolerance=0.1)
+        nodes, edges = place_to_movement_graph(place_gdf, movement_gdf, tolerance=0.1)
         assert not edges.empty
-        assert set(edges["private_id"]) == set(private_gdf["private_id"])
-        assert set(edges["public_id"]) == {1}
-        assert len(nodes) == 2  # Both private and public nodes combined
+        assert set(edges["place_id"]) == set(place_gdf["place_id"])
+        assert set(edges["movement_id"]) == {1}
+        assert len(nodes) == 2  # Both place and movement nodes combined
 
-    def test_private_to_public_empty_public_stays_empty(self, sample_crs: str) -> None:
-        """Nearest fallback should not change empty-public behavior."""
-        private_gdf = make_grid_polygons_gdf(1, 1, crs=sample_crs)
-        private_gdf = private_gdf.reset_index().rename(columns={"id": "private_id"})
-        public_gdf = gpd.GeoDataFrame({"public_id": []}, geometry=[], crs=sample_crs)
+    def test_place_to_movement_empty_movement_stays_empty(self, sample_crs: str) -> None:
+        """Nearest fallback should not change empty-movement behavior."""
+        place_gdf = make_grid_polygons_gdf(1, 1, crs=sample_crs)
+        place_gdf = place_gdf.reset_index().rename(columns={"id": "place_id"})
+        movement_gdf = gpd.GeoDataFrame({"movement_id": []}, geometry=[], crs=sample_crs)
 
-        nodes, edges = private_to_public_graph(private_gdf, public_gdf, tolerance=0.1)
+        nodes, edges = place_to_movement_graph(place_gdf, movement_gdf, tolerance=0.1)
 
         assert edges.empty
         assert len(nodes) == 1
 
-    # Public-to-Public Tests
-    def test_public_to_public_basic(self, sample_segments_gdf: gpd.GeoDataFrame) -> None:
-        """Test basic public-to-public graph creation."""
-        nodes, edges = public_to_public_graph(sample_segments_gdf)
+    # Movement-to-Movement Tests
+    def test_movement_to_movement_basic(self, sample_segments_gdf: gpd.GeoDataFrame) -> None:
+        """Test basic movement-to-movement graph creation."""
+        nodes, edges = movement_to_movement_graph(sample_segments_gdf)
         self.validate_basic_output(nodes, edges)
         assert nodes.equals(sample_segments_gdf)
 
-    def test_public_to_public_networkx(self, sample_segments_gdf: gpd.GeoDataFrame) -> None:
-        """Test public-to-public NetworkX conversion."""
-        graph = public_to_public_graph(sample_segments_gdf, as_nx=True)
+    def test_movement_to_movement_networkx(self, sample_segments_gdf: gpd.GeoDataFrame) -> None:
+        """Test movement-to-movement NetworkX conversion."""
+        graph = movement_to_movement_graph(sample_segments_gdf, as_nx=True)
         self.validate_networkx_output(graph)
 
-    def test_public_to_public_edge_structure(self, sample_segments_gdf: gpd.GeoDataFrame) -> None:
-        """Test public-to-public edge structure."""
-        _nodes, edges = public_to_public_graph(sample_segments_gdf)
-        self.validate_edge_columns(edges, ["from_public_id", "to_public_id"])
+    def test_movement_to_movement_edge_structure(
+        self, sample_segments_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """Test movement-to-movement edge structure."""
+        _nodes, edges = movement_to_movement_graph(sample_segments_gdf)
+        self.validate_edge_columns(edges, ["from_movement_id", "to_movement_id"])
 
-    def test_public_to_public_multiindex_handling(self, sample_crs: str) -> None:
-        """Test public-to-public graph with MultiIndex scenarios."""
+    def test_movement_to_movement_multiindex_handling(self, sample_crs: str) -> None:
+        """Test movement-to-movement graph with MultiIndex scenarios."""
         # Create segments with MultiIndex to test line 702-708
         segments_data = []
         for i in range(3):
@@ -1125,61 +1130,65 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
         # Set a MultiIndex to trigger the MultiIndex handling code
         segments_gdf = segments_gdf.set_index([segments_gdf.index, "segment_id"])
 
-        nodes, edges = public_to_public_graph(segments_gdf)
+        nodes, edges = movement_to_movement_graph(segments_gdf)
         self.validate_basic_output(nodes, edges)
 
     # duplicate_edges Tests
-    def test_private_to_private_duplicate_edges(
+    def test_place_to_place_duplicate_edges(
         self, sample_tessellation_gdf: gpd.GeoDataFrame
     ) -> None:
-        """duplicate_edges=True doubles rows with swapped private id columns."""
-        _, base_edges = private_to_private_graph(sample_tessellation_gdf)
-        _, dup_edges = private_to_private_graph(sample_tessellation_gdf, duplicate_edges=True)
+        """duplicate_edges=True doubles rows with swapped place id columns."""
+        _, base_edges = place_to_place_graph(sample_tessellation_gdf)
+        _, dup_edges = place_to_place_graph(sample_tessellation_gdf, duplicate_edges=True)
 
         assert len(dup_edges) == 2 * len(base_edges)
-        pairs = set(zip(base_edges["from_private_id"], base_edges["to_private_id"], strict=True))
-        dup_pairs = set(zip(dup_edges["from_private_id"], dup_edges["to_private_id"], strict=True))
+        pairs = set(zip(base_edges["from_place_id"], base_edges["to_place_id"], strict=True))
+        dup_pairs = set(zip(dup_edges["from_place_id"], dup_edges["to_place_id"], strict=True))
         assert dup_pairs == pairs | {(v, u) for u, v in pairs}
 
-    def test_private_to_public_duplicate_edges(
+    def test_place_to_movement_duplicate_edges(
         self,
         sample_tessellation_gdf: gpd.GeoDataFrame,
         sample_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
         """duplicate_edges=True doubles rows with swapped endpoint columns."""
-        _, base_edges = private_to_public_graph(sample_tessellation_gdf, sample_segments_gdf)
-        _, dup_edges = private_to_public_graph(
+        _, base_edges = place_to_movement_graph(sample_tessellation_gdf, sample_segments_gdf)
+        _, dup_edges = place_to_movement_graph(
             sample_tessellation_gdf, sample_segments_gdf, duplicate_edges=True
         )
 
-        # private and public ids share the same integer space in the fixtures,
+        # place and movement ids share the same integer space in the fixtures,
         # so a base pair's reverse may already exist as another connection and
         # the idempotent symmetrization adds no duplicate row for it.
-        pairs = set(zip(base_edges["private_id"], base_edges["public_id"], strict=True))
+        pairs = set(zip(base_edges["place_id"], base_edges["movement_id"], strict=True))
         expected_pairs = pairs | {(v, u) for u, v in pairs}
-        dup_pairs = set(zip(dup_edges["private_id"], dup_edges["public_id"], strict=True))
+        dup_pairs = set(zip(dup_edges["place_id"], dup_edges["movement_id"], strict=True))
         assert dup_pairs == expected_pairs
         assert len(dup_edges) == len(expected_pairs)
         assert len(dup_edges) > len(base_edges)
 
-    def test_public_to_public_duplicate_edges(self, sample_segments_gdf: gpd.GeoDataFrame) -> None:
-        """duplicate_edges=True doubles rows with swapped public id columns."""
-        _, base_edges = public_to_public_graph(sample_segments_gdf)
-        _, dup_edges = public_to_public_graph(sample_segments_gdf, duplicate_edges=True)
+    def test_movement_to_movement_duplicate_edges(
+        self, sample_segments_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """duplicate_edges=True doubles rows with swapped movement id columns."""
+        _, base_edges = movement_to_movement_graph(sample_segments_gdf)
+        _, dup_edges = movement_to_movement_graph(sample_segments_gdf, duplicate_edges=True)
 
         assert len(dup_edges) == 2 * len(base_edges)
-        pairs = set(zip(base_edges["from_public_id"], base_edges["to_public_id"], strict=True))
-        dup_pairs = set(zip(dup_edges["from_public_id"], dup_edges["to_public_id"], strict=True))
+        pairs = set(zip(base_edges["from_movement_id"], base_edges["to_movement_id"], strict=True))
+        dup_pairs = set(
+            zip(dup_edges["from_movement_id"], dup_edges["to_movement_id"], strict=True)
+        )
         assert dup_pairs == pairs | {(v, u) for u, v in pairs}
 
     @pytest.mark.parametrize(
         "call",
         [
-            lambda tess, _segs, **kw: private_to_private_graph(tess, **kw),
-            private_to_public_graph,
-            lambda _tess, segs, **kw: public_to_public_graph(segs, **kw),
+            lambda tess, _segs, **kw: place_to_place_graph(tess, **kw),
+            place_to_movement_graph,
+            lambda _tess, segs, **kw: movement_to_movement_graph(segs, **kw),
         ],
-        ids=["private_to_private", "private_to_public", "public_to_public"],
+        ids=["place_to_place", "place_to_movement", "movement_to_movement"],
     )
     def test_duplicate_edges_rejects_as_nx(
         self,
@@ -1243,11 +1252,11 @@ class TestInputValidationAndErrors(TestMorphologyBase):
 
         # This should work and return results based only on segments
         nodes, edges = morphological_graph(empty_buildings, sample_segments_gdf)
-        self.validate_basic_output(nodes, edges, ["private", "public"])
+        self.validate_basic_output(nodes, edges, ["place", "movement"])
 
-        # Private nodes should be empty, public nodes should match segments
-        assert nodes["private"].empty
-        assert len(nodes["public"]) == len(sample_segments_gdf)
+        # Place nodes should be empty, movement nodes should match segments
+        assert nodes["place"].empty
+        assert len(nodes["movement"]) == len(sample_segments_gdf)
 
     def test_network_distance_edge_cases(
         self,
@@ -1283,7 +1292,7 @@ class TestInputValidationAndErrors(TestMorphologyBase):
             assert len(distance_warnings) == 0
 
         # Should still return valid (possibly empty) results
-        self.validate_basic_output(nodes, edges, ["private", "public"])
+        self.validate_basic_output(nodes, edges, ["place", "movement"])
 
     def test_successful_network_distance_filtering(
         self,
@@ -1310,10 +1319,10 @@ class TestInputValidationAndErrors(TestMorphologyBase):
         )
 
         # Should successfully execute and return filtered results
-        self.validate_basic_output(nodes, edges, ["private", "public"])
+        self.validate_basic_output(nodes, edges, ["place", "movement"])
 
         # Should have some nodes
-        assert len(nodes["public"]) > 0
+        assert len(nodes["movement"]) > 0
 
         # Test with a smaller distance to ensure filtering logic is executed
         nodes_small, edges_small = morphological_graph(
@@ -1323,7 +1332,7 @@ class TestInputValidationAndErrors(TestMorphologyBase):
             distance=100,  # Smaller distance
         )
 
-        self.validate_basic_output(nodes_small, edges_small, ["private", "public"])
+        self.validate_basic_output(nodes_small, edges_small, ["place", "movement"])
         # The key is that this executes the filtering code path without errors
 
     @pytest.mark.parametrize(
@@ -1331,10 +1340,10 @@ class TestInputValidationAndErrors(TestMorphologyBase):
         [
             (morphological_graph, ("not_gdf", "sample_segments_gdf")),
             (morphological_graph, ("sample_buildings_gdf", "not_gdf")),
-            (private_to_private_graph, ("not_gdf",)),
-            (private_to_public_graph, ("not_gdf", "sample_segments_gdf")),
-            (private_to_public_graph, ("sample_tessellation_gdf", "not_gdf")),
-            (public_to_public_graph, ("not_gdf",)),
+            (place_to_place_graph, ("not_gdf",)),
+            (place_to_movement_graph, ("not_gdf", "sample_segments_gdf")),
+            (place_to_movement_graph, ("sample_tessellation_gdf", "not_gdf")),
+            (movement_to_movement_graph, ("not_gdf",)),
         ],
     )
     def test_invalid_input_types(
@@ -1359,9 +1368,9 @@ class TestInputValidationAndErrors(TestMorphologyBase):
         """Test all functions handle empty inputs gracefully."""
         # Test each function with appropriate empty inputs
         functions_and_args: list[tuple[Callable[..., Any], tuple[gpd.GeoDataFrame, ...]]] = [
-            (private_to_private_graph, (empty_gdf,)),
-            (private_to_public_graph, (empty_gdf, empty_gdf)),
-            (public_to_public_graph, (empty_gdf,)),
+            (place_to_place_graph, (empty_gdf,)),
+            (place_to_movement_graph, (empty_gdf, empty_gdf)),
+            (movement_to_movement_graph, (empty_gdf,)),
             (morphological_graph, (empty_gdf, empty_gdf)),
         ]
 
@@ -1372,10 +1381,10 @@ class TestInputValidationAndErrors(TestMorphologyBase):
     def test_missing_required_columns(self, sample_buildings_gdf: gpd.GeoDataFrame) -> None:
         """Test handling of missing required columns."""
         # Remove required column
-        gdf_no_private_id = sample_buildings_gdf.drop(columns=["private_id"], errors="ignore")
+        gdf_no_place_id = sample_buildings_gdf.drop(columns=["place_id"], errors="ignore")
 
         with pytest.raises((KeyError, ValueError)):
-            private_to_private_graph(gdf_no_private_id)
+            place_to_place_graph(gdf_no_place_id)
 
 
 class TestIntegrationAndStress(TestMorphologyBase):
@@ -1420,17 +1429,17 @@ class TestIntegrationAndStress(TestMorphologyBase):
 
         # Test morphological graph creation
         nodes, edges = morphological_graph(buildings_gdf, segments_gdf)
-        self.validate_basic_output(nodes, edges, ["private", "public"])
+        self.validate_basic_output(nodes, edges, ["place", "movement"])
 
         # Verify that we get some output (tessellation might filter some buildings)
-        assert len(nodes["public"]) == len(segments_gdf)
-        assert len(nodes["private"]) >= 0  # Some buildings might be filtered out
+        assert len(nodes["movement"]) == len(segments_gdf)
+        assert len(nodes["place"]) >= 0  # Some buildings might be filtered out
 
     def test_function_consistency(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
         """Test consistency between different function calls."""
-        # Test that private_to_private_graph produces consistent results
-        nodes1, edges1 = private_to_private_graph(sample_tessellation_gdf)
-        nodes2, edges2 = private_to_private_graph(sample_tessellation_gdf)
+        # Test that place_to_place_graph produces consistent results
+        nodes1, edges1 = place_to_place_graph(sample_tessellation_gdf)
+        nodes2, edges2 = place_to_place_graph(sample_tessellation_gdf)
 
         assert nodes1.equals(nodes2)
         assert edges1.equals(edges2)
@@ -1460,7 +1469,7 @@ class TestSpecialScenarios(TestMorphologyBase):
         segments_gdf_alt_geom: gpd.GeoDataFrame,
     ) -> None:
         """Test handling of alternative barrier columns."""
-        nodes, edges = private_to_public_graph(
+        nodes, edges = place_to_movement_graph(
             sample_tessellation_gdf,
             segments_gdf_alt_geom,
             primary_barrier_col="barrier_geometry",
@@ -1468,8 +1477,8 @@ class TestSpecialScenarios(TestMorphologyBase):
         self.validate_basic_output(nodes, edges)
 
     def test_group_column_functionality(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
-        """Test group column functionality in private-to-private graphs."""
-        nodes, edges = private_to_private_graph(
+        """Test group column functionality in place-to-place graphs."""
+        nodes, edges = place_to_place_graph(
             sample_tessellation_gdf,
             group_col="enclosure_index",
         )
@@ -1491,7 +1500,7 @@ class TestSpecialScenarios(TestMorphologyBase):
             center_point=center_point,
             distance=1000,
         )
-        self.validate_basic_output(nodes, edges, ["private", "public"])
+        self.validate_basic_output(nodes, edges, ["place", "movement"])
 
         # Test with GeoDataFrame containing single point (simplified test)
         # Just verify that the function accepts GeoDataFrame input without error
@@ -1507,17 +1516,17 @@ class TestSpecialScenarios(TestMorphologyBase):
                 distance=1000,
             )
             # If it doesn't raise an error, that's sufficient for this test
-            self.validate_basic_output(nodes, edges, ["private", "public"])
+            self.validate_basic_output(nodes, edges, ["place", "movement"])
         except (AttributeError, ValueError):
             # Some center point formats might not be fully supported
             # This is acceptable for this test
             pass
 
     def test_empty_adjacency_data_handling(self, sample_crs: str) -> None:
-        """Test handling of empty adjacency data in private-to-private graphs."""
+        """Test handling of empty adjacency data in place-to-place graphs."""
         # Create two non-adjacent polygons to test empty adjacency scenario
         non_adjacent_polys = gpd.GeoDataFrame(
-            {"private_id": [1, 2], "enclosure_index": [1, 2]},
+            {"place_id": [1, 2], "enclosure_index": [1, 2]},
             geometry=[
                 Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),  # First polygon
                 Polygon([(10, 10), (11, 10), (11, 11), (10, 11)]),  # Far away polygon
@@ -1525,7 +1534,7 @@ class TestSpecialScenarios(TestMorphologyBase):
             crs=sample_crs,
         )
 
-        nodes, edges = private_to_private_graph(non_adjacent_polys, group_col="enclosure_index")
+        nodes, edges = place_to_place_graph(non_adjacent_polys, group_col="enclosure_index")
         # Should handle empty adjacency data gracefully
         self.validate_basic_output(nodes, edges)
         # Edges might be empty if polygons are not adjacent
@@ -1535,7 +1544,7 @@ class TestSpecialScenarios(TestMorphologyBase):
         """Test MultiIndex edge cases in graph processing."""
         # Create a simple tessellation that will test MultiIndex handling
         simple_polys = gpd.GeoDataFrame(
-            {"private_id": [1, 2]},
+            {"place_id": [1, 2]},
             geometry=[
                 Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
                 Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),  # Adjacent polygon
@@ -1544,8 +1553,8 @@ class TestSpecialScenarios(TestMorphologyBase):
         )
 
         # Test with and without group column to cover different MultiIndex scenarios
-        nodes1, edges1 = private_to_private_graph(simple_polys)
-        nodes2, edges2 = private_to_private_graph(simple_polys, group_col=None)
+        nodes1, edges1 = place_to_place_graph(simple_polys)
+        nodes2, edges2 = place_to_place_graph(simple_polys, group_col=None)
 
         self.validate_basic_output(nodes1, edges1)
         self.validate_basic_output(nodes2, edges2)
@@ -1667,37 +1676,37 @@ class TestReachabilityFieldRefactor(TestMorphologyBase):
     def test_geographic_crs_emits_warning(self) -> None:
         """Distance params are metric, so a geographic CRS input must warn the user.
 
-        Exercised through ``private_to_public_graph`` because it shares the CRS
+        Exercised through ``place_to_movement_graph`` because it shares the CRS
         chokepoint (``_ensure_crs_consistency``) with ``morphological_graph`` but
         does not invoke tessellation, which momepy refuses to run on a geographic
         CRS.
         """
-        private_gdf = gpd.GeoDataFrame(
-            {"private_id": [0]},
+        place_gdf = gpd.GeoDataFrame(
+            {"place_id": [0]},
             geometry=[Polygon([(0, 0), (0, 0.001), (0.001, 0.001), (0.001, 0)])],
             crs="EPSG:4326",
         )
-        public_gdf = gpd.GeoDataFrame(
-            {"public_id": [10]},
+        movement_gdf = gpd.GeoDataFrame(
+            {"movement_id": [10]},
             geometry=[LineString([(0, 0), (0.001, 0.001)])],
             crs="EPSG:4326",
         )
 
         with pytest.warns(UserWarning, match="geographic CRS"):
-            private_to_public_graph(private_gdf, public_gdf)
+            place_to_movement_graph(place_gdf, movement_gdf)
 
     def test_projected_crs_does_not_emit_geographic_warning(
         self,
         sample_crs: str,
     ) -> None:
         """A projected CRS input must not raise the geographic-CRS warning."""
-        private_gdf = gpd.GeoDataFrame(
-            {"private_id": [0]},
+        place_gdf = gpd.GeoDataFrame(
+            {"place_id": [0]},
             geometry=[Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])],
             crs=sample_crs,
         )
-        public_gdf = gpd.GeoDataFrame(
-            {"public_id": [10]},
+        movement_gdf = gpd.GeoDataFrame(
+            {"movement_id": [10]},
             geometry=[LineString([(0, 0), (1, 1)])],
             crs=sample_crs,
         )
@@ -1705,4 +1714,45 @@ class TestReachabilityFieldRefactor(TestMorphologyBase):
         with warnings.catch_warnings():
             warnings.simplefilter("error", UserWarning)
             # Should not raise: inputs are in EPSG:27700 (projected).
-            private_to_public_graph(private_gdf, public_gdf)
+            place_to_movement_graph(place_gdf, movement_gdf)
+
+
+class TestDeprecatedAliases:
+    """Deprecated function names warn and delegate to the renamed functions."""
+
+    def test_private_to_private_graph_deprecated(
+        self,
+        sample_tessellation_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """private_to_private_graph warns and matches place_to_place_graph."""
+        with pytest.warns(DeprecationWarning, match="place_to_place_graph"):
+            nodes, edges = private_to_private_graph(sample_tessellation_gdf)
+        expected_nodes, expected_edges = place_to_place_graph(sample_tessellation_gdf)
+        pd.testing.assert_frame_equal(nodes, expected_nodes)
+        pd.testing.assert_frame_equal(edges, expected_edges)
+
+    def test_private_to_public_graph_deprecated(
+        self,
+        sample_tessellation_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """private_to_public_graph warns and matches place_to_movement_graph."""
+        with pytest.warns(DeprecationWarning, match="place_to_movement_graph"):
+            nodes, edges = private_to_public_graph(sample_tessellation_gdf, sample_segments_gdf)
+        expected_nodes, expected_edges = place_to_movement_graph(
+            sample_tessellation_gdf,
+            sample_segments_gdf,
+        )
+        pd.testing.assert_frame_equal(nodes, expected_nodes)
+        pd.testing.assert_frame_equal(edges, expected_edges)
+
+    def test_public_to_public_graph_deprecated(
+        self,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """public_to_public_graph warns and matches movement_to_movement_graph."""
+        with pytest.warns(DeprecationWarning, match="movement_to_movement_graph"):
+            nodes, edges = public_to_public_graph(sample_segments_gdf)
+        expected_nodes, expected_edges = movement_to_movement_graph(sample_segments_gdf)
+        pd.testing.assert_frame_equal(nodes, expected_nodes)
+        pd.testing.assert_frame_equal(edges, expected_edges)

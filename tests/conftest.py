@@ -658,8 +658,8 @@ def sample_buildings_gdf(
     gdf = _load_test_geojson(geojson_data_path / "sample_buildings.geojson", target_crs=sample_crs)
     if "bldg_id" not in gdf.columns:
         gdf["bldg_id"] = gdf.index.astype(str) + "_bldg"
-    if "private_id" in gdf.columns:
-        gdf = gdf.drop(columns=["private_id"])
+    if "place_id" in gdf.columns:
+        gdf = gdf.drop(columns=["place_id"])
     return gdf
 
 
@@ -672,7 +672,7 @@ def sample_segments_gdf(
     gdf = _load_test_geojson(geojson_data_path / "sample_segments.geojson", target_crs=sample_crs)
     if "seg_id" not in gdf.columns:
         gdf["seg_id"] = gdf.index.astype(str) + "_seg"
-    gdf["public_id"] = gdf.index
+    gdf["movement_id"] = gdf.index
     return gdf
 
 
@@ -681,15 +681,15 @@ def sample_tessellation_gdf(
     sample_buildings_gdf: gpd.GeoDataFrame,
     sample_crs: str,
 ) -> gpd.GeoDataFrame:
-    """Return a simple tessellation-like GDF from sample_buildings_gdf for testing p2p and p2pub.
+    """Return a simple tessellation-like GDF from sample_buildings_gdf for testing p2p and p2m.
 
     This is a placeholder for actual tessellation output.
-    It assigns 'private_id' and a dummy 'enclosure_index'.
+    It assigns 'place_id' and a dummy 'enclosure_index'.
     """
     if sample_buildings_gdf.empty:
         return _create_gdf(
             [],
-            [{"private_id": None, "enclosure_index": None}],
+            [{"place_id": None, "enclosure_index": None}],
             crs=sample_crs,
         )
 
@@ -697,7 +697,7 @@ def sample_tessellation_gdf(
     # In reality, tessellation is more complex.
     tess_polys = sample_buildings_gdf.geometry.tolist()
     attrs = [
-        {"private_id": i, "enclosure_index": 0}  # Dummy enclosure index
+        {"place_id": i, "enclosure_index": 0}  # Dummy enclosure index
         for i in range(len(sample_buildings_gdf))
     ]
     return _create_gdf(tess_polys, attrs, crs=sample_crs)
@@ -743,10 +743,10 @@ def single_tessellation_cell_gdf(
 
 # --- Fixtures for Error/Edge Cases ---
 @pytest.fixture
-def private_gdf_no_private_id(
+def place_gdf_no_place_id(
     sample_crs: str,
 ) -> gpd.GeoDataFrame:  # Represents a tessellation-like input
-    """Synthetic private polygons GDF (like tessellation) lacking 'private_id'."""
+    """Synthetic place polygons GDF (like tessellation) lacking 'place_id'."""
     return _create_gdf(
         [Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])],
         [{"some_other_id": 100}],
@@ -755,8 +755,8 @@ def private_gdf_no_private_id(
 
 
 @pytest.fixture
-def segments_no_public_id_gdf(sample_crs: str) -> gpd.GeoDataFrame:
-    """Synthetic segments GDF lacking 'public_id'."""
+def segments_no_movement_id_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Synthetic segments GDF lacking 'movement_id'."""
     return _create_gdf(
         [LineString([(0, 0), (1, 1)])],
         [{"other_id": 10}],
@@ -1109,34 +1109,34 @@ def invalid_input_list() -> list[int]:
 
 
 @pytest.fixture
-def p2pub_private_single_cell(sample_crs: str) -> gpd.GeoDataFrame:
-    """Return a single private cell for private_to_public tests."""
+def p2m_place_single_cell(sample_crs: str) -> gpd.GeoDataFrame:
+    """Return a single place cell for place_to_movement tests."""
     poly = Polygon([(0.4, 0.4), (0.4, 0.6), (0.6, 0.6), (0.6, 0.4)])
-    return _create_gdf([poly], [{"private_id": 0}], crs=sample_crs)
+    return _create_gdf([poly], [{"place_id": 0}], crs=sample_crs)
 
 
 @pytest.fixture
-def p2pub_public_single_segment(sample_crs: str) -> gpd.GeoDataFrame:
-    """Return a single public segment for private_to_public tests."""
+def p2m_movement_single_segment(sample_crs: str) -> gpd.GeoDataFrame:
+    """Return a single movement segment for place_to_movement tests."""
     line = LineString([(0.5, 0.3), (0.5, 0.7)])
-    return _create_gdf([line], [{"public_id": 10}], crs=sample_crs)
+    return _create_gdf([line], [{"movement_id": 10}], crs=sample_crs)
 
 
 @pytest.fixture
 def p2p_isolated_polys_gdf(sample_crs: str) -> gpd.GeoDataFrame:
-    """Return a GDF with polygons that are not contiguous, for testing private_to_private_graph."""
+    """Return a GDF with polygons that are not contiguous, for testing place_to_place_graph."""
     polys = [
         Polygon([(0, 0), (0, 1), (1, 1), (1, 0)]),
         Polygon([(10, 10), (10, 11), (11, 11), (11, 10)]),
         Polygon([(20, 20), (20, 21), (21, 21), (21, 20)]),
     ]
-    attrs = [{"private_id": i} for i in range(len(polys))]
+    attrs = [{"place_id": i} for i in range(len(polys))]
     return _create_gdf(polys, attrs, crs=sample_crs)
 
 
 @pytest.fixture
-def segments_gdf_with_multiindex_public_id(sample_crs: str) -> gpd.GeoDataFrame:
-    """Return a GDF with segments and a MultiIndex for public_id, for public_to_public_graph."""
+def segments_gdf_with_multiindex_movement_id(sample_crs: str) -> gpd.GeoDataFrame:
+    """Return a GDF with segments and a MultiIndex for movement_id, for movement_to_movement_graph."""
     data = {
         "seg_id": ["s1", "s2", "s3"],
         "geometry": [
@@ -1146,8 +1146,8 @@ def segments_gdf_with_multiindex_public_id(sample_crs: str) -> gpd.GeoDataFrame:
         ],
     }
     gdf = gpd.GeoDataFrame(data, crs=sample_crs)
-    # Create a dummy MultiIndex for public_id
-    gdf["public_id"] = pd.MultiIndex.from_tuples(
+    # Create a dummy MultiIndex for movement_id
+    gdf["movement_id"] = pd.MultiIndex.from_tuples(
         [("A", 1), ("B", 2), ("C", 3)],
         names=["type", "idx"],
     )
