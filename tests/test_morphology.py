@@ -1,5 +1,6 @@
 """Refactored test module for morphology.py with improved maintainability and reduced redundancy."""
 
+import inspect
 import logging
 import math
 import warnings
@@ -681,7 +682,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         faced_place_ids = set(faced.index.get_level_values(0)) if not faced.empty else set()
 
         # The "isolated" cell sits 30 m from the street, within the default
-        # extent_buffer (50 m), so it receives a nearest movement fallback
+        # extent_buffer (100 m), so it receives a nearest movement fallback
         # faced_to edge and is kept rather than pruned.
         assert place_ids == {"near", "isolated"}
         assert place_ids <= faced_place_ids
@@ -743,6 +744,9 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         sample_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
         """extent_buffer must be non-negative and not exceed clipping_buffer."""
+        sig = inspect.signature(morphological_graph)
+        assert sig.parameters["extent_buffer"].default == 100.0
+
         with pytest.raises(ValueError, match="clipping_buffer must be greater"):
             morphological_graph(
                 sample_buildings_gdf,

@@ -137,7 +137,7 @@ def morphological_graph(  # noqa: PLR0913
     center_point: gpd.GeoSeries | gpd.GeoDataFrame | None = None,
     distance: float | None = None,
     clipping_buffer: float = math.inf,
-    extent_buffer: float = 50.0,
+    extent_buffer: float = 100.0,
     limit: gpd.GeoDataFrame | gpd.GeoSeries | BaseGeometry | None = None,
     primary_barrier_col: str | None = "barrier_geometry",
     contiguity: str = "queen",
@@ -177,7 +177,7 @@ def morphological_graph(  # noqa: PLR0913
     clipping_buffer : float, default=math.inf
         Buffer distance to ensure adequate context for generating tessellation.
         Must be non-negative and not smaller than ``extent_buffer``.
-    extent_buffer : float, default=50.0
+    extent_buffer : float, default=100.0
         Maximum perpendicular access distance (a bounded catchment cap) from a
         street to a building/cell for it to be retained, and the maximum length
         of a ``faced_to`` connection. Unlike ``distance`` this access term is
