@@ -11,12 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 ### Changed
+- Updated optional graph neural network dependencies to PyTorch 2.12, torchvision 0.27, and PyTorch Geometric 2.7 for CPU, CUDA 12.6, and CUDA 13.0 installs. CUDA 12.8 remains on PyTorch 2.11 because PyTorch 2.12 no longer publishes CUDA 12.8 wheels.
 
 ### Deprecated
 
 ### Fixed
 
 ### Documentation
+- Updated installation and security guidance for the current PyTorch and PyTorch Geometric support matrix.
 
 
 ## 0.4.0 (2026-06-11)

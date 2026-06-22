@@ -19,11 +19,12 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Scientific/Engineering :: GIS",
 ]
 keywords = ["GeoAI", "Graph Neural Networks", "GNNs", "PyTorch Geometric", "Geospatial Analysis", "Urban Analytics", "Spatial Data Science", "Urban Mobility", "Transportation Networks", "Spatial Knowledge Graphs", "Spatiotemporal Analysis", "Geospatial Foundation Models", "Digital Twin", "Urban Informatics", "Geographic Data Science", "Graph Representation Learning", "Urban Planning and Design"]
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 dependencies = [
     "networkx >=2.8",
     "duckdb >=1.1.0",
@@ -40,24 +41,24 @@ dependencies = [
 
 [project.optional-dependencies]
 cpu = [
-    "torch>=2.9.0",
-    "torchvision>=0.24.0",
-    "torch_geometric>=2.6.1",
+    "torch>=2.12.0",
+    "torchvision>=0.27.0",
+    "torch_geometric>=2.7.0",
 ]
 cu126 = [
-    "torch>=2.8.0",
-    "torchvision>=0.23.0",
-    "torch_geometric>=2.6.1",
+    "torch>=2.12.0",
+    "torchvision>=0.27.0",
+    "torch_geometric>=2.7.0",
 ]
 cu128 = [
-    "torch>=2.9.0",
-    "torchvision>=0.24.0",
-    "torch_geometric>=2.6.1",
+    "torch>=2.11.0",
+    "torchvision>=0.26.0",
+    "torch_geometric>=2.7.0",
 ]
 cu130 = [
-    "torch>=2.9.0",
-    "torchvision>=0.24.0",
-    "torch_geometric>=2.6.1",
+    "torch>=2.12.0",
+    "torchvision>=0.27.0",
+    "torch_geometric>=2.7.0",
 ]
 
 [tool.uv]

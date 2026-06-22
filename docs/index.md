@@ -55,6 +55,10 @@ pip install "city2graph[cu130]"  # For CUDA 13.0 (GPU)
 
 Supported CUDA options: cu126, cu128, cu130
 
+The CPU, cu126, and cu130 options use PyTorch 2.12 or newer. The cu128 option
+uses PyTorch 2.11 because CUDA 12.8 wheels are no longer published for
+PyTorch 2.12.
+
 Or install with conda (core functionality only):
 
 ```bash
@@ -70,7 +74,7 @@ conda install -c conda-forge pytorch pytorch_geometric
 For CUDA-enabled PyTorch (conda):
 
 ```bash
-conda install -c conda-forge pytorch=2.9.0=*cuda128*
+conda install -c conda-forge pytorch=2.12.0=*cuda130*
 conda install -c conda-forge pytorch_geometric
 ```
 
