@@ -46,3 +46,7 @@ thumbnail.png
 generate_thumbnail.py
 gtfs_old.ipynb
 city2graph_overture.ipynb
+
+# Others
+AGENTS.md
+CLAUDE.md
