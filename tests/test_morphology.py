@@ -5,6 +5,7 @@ import logging
 import math
 import warnings
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 import geopandas as gpd
@@ -30,6 +31,205 @@ from city2graph.morphology import private_to_public_graph
 from city2graph.morphology import public_to_public_graph
 from tests.helpers import assert_valid_nx_graph
 from tests.helpers import make_grid_polygons_gdf
+
+# ---------------------------------------------------------------------------
+# Module-level monkeypatch stubs.
+#
+# These replace the production callables that tests patch out. They live at
+# module scope (never nested inside a test) and receive any per-test state via
+# ``functools.partial`` rather than closures.
+# ---------------------------------------------------------------------------
+
+
+def _fake_sjoin_without_index_right(
+    tessellation: gpd.GeoDataFrame,
+    _buildings: gpd.GeoDataFrame,
+    *,
+    how: str,
+    predicate: str,
+) -> gpd.GeoDataFrame:
+    """Stub for ``sjoin`` that returns the tessellation without an ``index_right`` column."""
+    assert how == "left"
+    assert predicate == "contains"
+    return tessellation.copy()
+
+
+def _single_enclosed_cell_tessellation(
+    geometry: gpd.GeoDataFrame,
+    primary_barriers: gpd.GeoDataFrame | None = None,
+) -> gpd.GeoDataFrame:
+    """Return a single enclosed cell over the first input geometry."""
+    _ = primary_barriers
+    return gpd.GeoDataFrame(
+        {"tess_id": ["enclosed"], "enclosure_index": [0]},
+        geometry=[geometry.geometry.iloc[0]],
+        crs=geometry.crs,
+    )
+
+
+def _enclosed_cell_or_fail_on_fallback(
+    geometry: gpd.GeoDataFrame,
+    primary_barriers: gpd.GeoDataFrame | None = None,
+) -> gpd.GeoDataFrame:
+    """Enclosed cell for barrier input; fail if a non-local fallback is requested."""
+    if primary_barriers is not None:
+        return gpd.GeoDataFrame(
+            {"tess_id": ["enclosed"], "enclosure_index": [0]},
+            geometry=[geometry.geometry.iloc[0]],
+            crs=geometry.crs,
+        )
+    msg = "fallback should not create a non-local tessellation"
+    raise AssertionError(msg)
+
+
+def _enclosed_or_clip_fallback_tessellation(
+    geometry: gpd.GeoDataFrame,
+    primary_barriers: gpd.GeoDataFrame | None = None,
+) -> gpd.GeoDataFrame:
+    """Enclosed cell for barriers; a single large overlapping cell otherwise."""
+    if primary_barriers is not None:
+        return gpd.GeoDataFrame(
+            {"tess_id": ["enclosed"], "enclosure_index": [0]},
+            geometry=[geometry.geometry.iloc[0]],
+            crs=geometry.crs,
+        )
+    return gpd.GeoDataFrame(
+        {"tess_id": geometry.index.to_list()},
+        geometry=[Polygon([(0.75, -1), (5, -1), (5, 2), (0.75, 2)])],
+        crs=geometry.crs,
+    )
+
+
+def _fail_if_tessellation_called(
+    geometry: gpd.GeoDataFrame,
+    primary_barriers: gpd.GeoDataFrame | None = None,
+) -> gpd.GeoDataFrame:
+    """Guard stub asserting ``create_tessellation`` is never invoked."""
+    _ = (geometry, primary_barriers)
+    msg = "fallback should not create a non-local tessellation"
+    raise AssertionError(msg)
+
+
+def _unit_square_tessellation(
+    geometry: gpd.GeoDataFrame,
+    primary_barriers: gpd.GeoDataFrame | None = None,
+) -> gpd.GeoDataFrame:
+    """Single unit-square tessellation cell."""
+    _ = primary_barriers
+    return gpd.GeoDataFrame(
+        {"tess_id": ["t1"]},
+        geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+        crs=geometry.crs,
+    )
+
+
+def _two_cell_tessellation(
+    cell_ids: list[str],
+    cell_geometries: list[Polygon],
+    geometry: gpd.GeoDataFrame,
+    primary_barriers: gpd.GeoDataFrame | None = None,
+) -> gpd.GeoDataFrame:
+    """Return a fixed two-cell enclosed tessellation."""
+    _ = primary_barriers
+    return gpd.GeoDataFrame(
+        {"tess_id": cell_ids, "enclosure_index": [0] * len(cell_ids)},
+        geometry=cell_geometries,
+        crs=geometry.crs,
+    )
+
+
+def _key_recording_tessellation(
+    captured: dict[str, object],
+    key: str,
+    default: object,
+    geometry: gpd.GeoDataFrame,
+    primary_barriers: gpd.GeoDataFrame | None = None,
+    **kwargs: object,
+) -> gpd.GeoDataFrame:
+    """Record one ``create_tessellation`` kwarg, then return a single cell."""
+    _ = primary_barriers
+    captured[key] = kwargs.get(key, default)
+    return gpd.GeoDataFrame(
+        {"tess_id": ["cell"], "enclosure_index": [0]},
+        geometry=[geometry.geometry.iloc[0]],
+        crs=geometry.crs,
+    )
+
+
+def _raise_no_objects_tessellation(
+    geometry: gpd.GeoDataFrame,
+    primary_barriers: gpd.GeoDataFrame | None = None,
+    **kwargs: object,
+) -> gpd.GeoDataFrame:
+    """create_tessellation stub raising momepy's empty-concat error."""
+    _ = (geometry, primary_barriers, kwargs)
+    msg = "No objects to concatenate"
+    raise ValueError(msg)
+
+
+def _empty_tessellation(
+    geometry: gpd.GeoDataFrame,
+    primary_barriers: gpd.GeoDataFrame | None = None,
+    **kwargs: object,
+) -> gpd.GeoDataFrame:
+    """create_tessellation stub returning an empty enclosed tessellation."""
+    _ = (primary_barriers, kwargs)
+    return gpd.GeoDataFrame(
+        {"tess_id": [], "enclosure_index": []},
+        geometry=[],
+        crs=geometry.crs,
+    )
+
+
+def _passthrough_adjacent_filter(
+    tessellation: gpd.GeoDataFrame,
+    _segments: gpd.GeoDataFrame,
+    max_distance: float = float("inf"),
+) -> gpd.GeoDataFrame:
+    """Adjacent-tessellation filter stub that returns the input unchanged."""
+    _ = max_distance
+    return tessellation
+
+
+def _return_input_tessellation(
+    tessellation: gpd.GeoDataFrame,
+    *_args: object,
+    **_kwargs: object,
+) -> gpd.GeoDataFrame:
+    """Network-distance filter stub that returns the tessellation unchanged."""
+    return tessellation
+
+
+def _connect_to_first_edge(
+    _graph: nx.Graph,
+    _point_node_id: str,
+    _point: Point,
+    edge_records: list[tuple[Any, Any, LineString, float]],
+) -> tuple[tuple[Any, Any, LineString, float], float, float]:
+    """Connect a point to the first candidate edge with zero-length legs."""
+    return edge_records[0], 0.0, 0.0
+
+
+def _counting_wrapper(
+    state: dict[str, int],
+    wrapped: Callable[..., Any],
+    *args: Any,  # noqa: ANN401
+    **kwargs: Any,  # noqa: ANN401
+) -> Any:  # noqa: ANN401
+    """Count invocations while delegating to the wrapped callable."""
+    state["n"] += 1
+    return wrapped(*args, **kwargs)
+
+
+def _field_recording_wrapper(
+    seen_fields: list[object],
+    wrapped: Callable[..., Any],
+    *args: Any,  # noqa: ANN401
+    **kwargs: Any,  # noqa: ANN401
+) -> Any:  # noqa: ANN401
+    """Record the ``field`` kwarg while delegating to the wrapped callable."""
+    seen_fields.append(kwargs.get("field"))
+    return wrapped(*args, **kwargs)
 
 
 class TestMorphologyBase:
@@ -179,19 +379,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """keep_buildings should still allocate building_geometry when sjoin omits index_right."""
-
-        def fake_sjoin(
-            tessellation: gpd.GeoDataFrame,
-            _buildings: gpd.GeoDataFrame,
-            *,
-            how: str,
-            predicate: str,
-        ) -> gpd.GeoDataFrame:
-            assert how == "left"
-            assert predicate == "contains"
-            return tessellation.copy()
-
-        monkeypatch.setattr("city2graph.morphology.gpd.sjoin", fake_sjoin)
+        monkeypatch.setattr("city2graph.morphology.gpd.sjoin", _fake_sjoin_without_index_right)
 
         nodes, _edges = morphological_graph(
             sample_buildings_gdf,
@@ -220,31 +408,13 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             crs=sample_crs,
         )
 
-        def fake_create_tessellation(
-            geometry: gpd.GeoDataFrame,
-            primary_barriers: gpd.GeoDataFrame | None = None,
-        ) -> gpd.GeoDataFrame:
-            if primary_barriers is not None:
-                return gpd.GeoDataFrame(
-                    {"tess_id": ["enclosed"], "enclosure_index": [0]},
-                    geometry=[geometry.geometry.iloc[0]],
-                    crs=sample_crs,
-                )
-            msg = "fallback should not create a non-local tessellation"
-            raise AssertionError(msg)
-
-        def passthrough_filter(
-            tessellation: gpd.GeoDataFrame,
-            _segments: gpd.GeoDataFrame,
-            max_distance: float = float("inf"),
-        ) -> gpd.GeoDataFrame:
-            _ = max_distance
-            return tessellation
-
-        monkeypatch.setattr("city2graph.morphology.create_tessellation", fake_create_tessellation)
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            _enclosed_cell_or_fail_on_fallback,
+        )
         monkeypatch.setattr(
             "city2graph.morphology._filter_adjacent_tessellation",
-            passthrough_filter,
+            _passthrough_adjacent_filter,
         )
 
         default_nodes, _ = morphological_graph(buildings, segments, keep_buildings=True)
@@ -276,20 +446,10 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         )
         captured: dict[str, object] = {}
 
-        def fake_create_tessellation(
-            geometry: gpd.GeoDataFrame,
-            primary_barriers: gpd.GeoDataFrame | None = None,
-            **kwargs: object,
-        ) -> gpd.GeoDataFrame:
-            _ = (geometry, primary_barriers)
-            captured["limit"] = kwargs.get("limit")
-            return gpd.GeoDataFrame(
-                {"tess_id": ["cell"], "enclosure_index": [0]},
-                geometry=[buildings.geometry.iloc[0]],
-                crs=sample_crs,
-            )
-
-        monkeypatch.setattr("city2graph.morphology.create_tessellation", fake_create_tessellation)
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            partial(_key_recording_tessellation, captured, "limit", None),
+        )
 
         morphological_graph(buildings, segments, limit=custom_limit)
 
@@ -316,15 +476,10 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             crs=sample_crs,
         )
 
-        def fake_create_tessellation(
-            geometry: gpd.GeoDataFrame,
-            primary_barriers: gpd.GeoDataFrame | None = None,
-        ) -> gpd.GeoDataFrame:
-            _ = (geometry, primary_barriers)
-            msg = "fallback should not create a non-local tessellation"
-            raise AssertionError(msg)
-
-        monkeypatch.setattr("city2graph.morphology.create_tessellation", fake_create_tessellation)
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            _fail_if_tessellation_called,
+        )
 
         result = _include_unenclosed_building_tessellation(
             tessellation,
@@ -354,38 +509,17 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             crs=sample_crs,
         )
 
-        def fake_create_tessellation(
-            geometry: gpd.GeoDataFrame,
-            primary_barriers: gpd.GeoDataFrame | None = None,
-        ) -> gpd.GeoDataFrame:
-            if primary_barriers is not None:
-                return gpd.GeoDataFrame(
-                    {"tess_id": ["enclosed"], "enclosure_index": [0]},
-                    geometry=[geometry.geometry.iloc[0]],
-                    crs=sample_crs,
-                )
-            return gpd.GeoDataFrame(
-                {"tess_id": geometry.index.to_list()},
-                geometry=[Polygon([(0.75, -1), (5, -1), (5, 2), (0.75, 2)])],
-                crs=sample_crs,
-            )
-
-        def passthrough_filter(
-            tessellation: gpd.GeoDataFrame,
-            _segments: gpd.GeoDataFrame,
-            max_distance: float = float("inf"),
-        ) -> gpd.GeoDataFrame:
-            _ = max_distance
-            return tessellation
-
-        monkeypatch.setattr("city2graph.morphology.create_tessellation", fake_create_tessellation)
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            _enclosed_or_clip_fallback_tessellation,
+        )
         monkeypatch.setattr(
             "city2graph.morphology._filter_adjacent_tessellation",
-            passthrough_filter,
+            _passthrough_adjacent_filter,
         )
         monkeypatch.setattr(
             "city2graph.morphology._filter_tessellation_by_network_distance",
-            lambda tessellation, *_args, **_kwargs: tessellation,
+            _return_input_tessellation,
         )
 
         nodes, _ = morphological_graph(
@@ -506,18 +640,10 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             crs=sample_crs,
         )
 
-        def fake_create_tessellation(
-            geometry: gpd.GeoDataFrame,
-            primary_barriers: gpd.GeoDataFrame | None = None,
-        ) -> gpd.GeoDataFrame:
-            _ = primary_barriers
-            return gpd.GeoDataFrame(
-                {"tess_id": ["enclosed"], "enclosure_index": [0]},
-                geometry=[geometry.geometry.iloc[0]],
-                crs=sample_crs,
-            )
-
-        monkeypatch.setattr("city2graph.morphology.create_tessellation", fake_create_tessellation)
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            _single_enclosed_cell_tessellation,
+        )
 
         tessellation = _create_and_filter_tessellation(
             buildings,
@@ -545,44 +671,17 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         """Distance filtering should degrade to an empty place layer if the center node is absent."""
         center_point = gpd.GeoSeries([Point(0.5, 0.5)], crs=sample_crs)
 
-        def fake_create_tessellation(
-            buildings_gdf: gpd.GeoDataFrame,
-            primary_barriers: gpd.GeoDataFrame | None = None,
-        ) -> gpd.GeoDataFrame:
-            _ = (buildings_gdf, primary_barriers)
-            return gpd.GeoDataFrame(
-                {"tess_id": ["t1"]},
-                geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
-                crs=sample_crs,
-            )
-
-        def fake_filter_adjacent_tessellation(
-            tessellation: gpd.GeoDataFrame,
-            segments: gpd.GeoDataFrame,
-            max_distance: float = float("inf"),
-        ) -> gpd.GeoDataFrame:
-            _ = (segments, max_distance)
-            return tessellation
-
-        def fake_connect_point_to_nearest_edge(
-            _graph: nx.Graph,
-            _point_node_id: str,
-            _point: Point,
-            edge_records: list[tuple[Any, Any, LineString, float]],
-        ) -> tuple[tuple[Any, Any, LineString, float], float, float]:
-            return edge_records[0], 0.0, 0.0
-
         monkeypatch.setattr(
             "city2graph.morphology.create_tessellation",
-            fake_create_tessellation,
+            _unit_square_tessellation,
         )
         monkeypatch.setattr(
             "city2graph.morphology._filter_adjacent_tessellation",
-            fake_filter_adjacent_tessellation,
+            _passthrough_adjacent_filter,
         )
         monkeypatch.setattr(
             "city2graph.morphology._connect_point_to_nearest_edge",
-            fake_connect_point_to_nearest_edge,
+            _connect_to_first_edge,
         )
 
         nodes, _edges = morphological_graph(
@@ -657,18 +756,10 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             crs=sample_crs,
         )
 
-        def fake_create_tessellation(
-            geometry: gpd.GeoDataFrame,
-            primary_barriers: gpd.GeoDataFrame | None = None,
-        ) -> gpd.GeoDataFrame:
-            _ = (geometry, primary_barriers)
-            return gpd.GeoDataFrame(
-                {"tess_id": ["near", "isolated"], "enclosure_index": [0, 0]},
-                geometry=[near, isolated],
-                crs=sample_crs,
-            )
-
-        monkeypatch.setattr("city2graph.morphology.create_tessellation", fake_create_tessellation)
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            partial(_two_cell_tessellation, ["near", "isolated"], [near, isolated]),
+        )
 
         nodes, edges = morphological_graph(
             buildings,
@@ -707,18 +798,10 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             crs=sample_crs,
         )
 
-        def fake_create_tessellation(
-            geometry: gpd.GeoDataFrame,
-            primary_barriers: gpd.GeoDataFrame | None = None,
-        ) -> gpd.GeoDataFrame:
-            _ = (geometry, primary_barriers)
-            return gpd.GeoDataFrame(
-                {"tess_id": ["near", "far"], "enclosure_index": [0, 0]},
-                geometry=[near, far],
-                crs=sample_crs,
-            )
-
-        monkeypatch.setattr("city2graph.morphology.create_tessellation", fake_create_tessellation)
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            partial(_two_cell_tessellation, ["near", "far"], [near, far]),
+        )
 
         # distance budget (150) would admit "far" under a summed network+access
         # cost (50 + 60 = 110); the access cap (50) is what excludes it.
@@ -865,6 +948,133 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             as_nx=False,
         )
         self.validate_basic_output(nodes, edges, ["place", "movement"])
+
+
+class TestMorphologicalGraphBarrierAndFallback(TestMorphologyBase):
+    """Barrier-only segments, tessellation fallback and tessellation parallelism."""
+
+    def test_non_movement_barrier_col_excludes_barriers_from_movement(
+        self, sample_crs: str
+    ) -> None:
+        """Barrier-only segments shape barriers but never become movement nodes."""
+        buildings = gpd.GeoDataFrame(
+            geometry=[Polygon([(0.2, 0.2), (0.4, 0.2), (0.4, 0.4), (0.2, 0.4)])],
+            crs=sample_crs,
+        )
+        segments = gpd.GeoDataFrame(
+            {"is_barrier_only": [False, True]},
+            geometry=[
+                LineString([(0, 0), (1, 0)]),  # movement street
+                LineString([(0, 1), (1, 1)]),  # barrier-only (e.g. railway)
+            ],
+            crs=sample_crs,
+        )
+
+        nodes, edges = morphological_graph(
+            buildings,
+            segments,
+            non_movement_barrier_col="is_barrier_only",
+        )
+
+        # Only the movement street becomes a movement node.
+        assert len(nodes["movement"]) == 1
+        assert "is_barrier_only" in nodes["movement"].columns
+        assert not nodes["movement"]["is_barrier_only"].any()
+        assert set(edges) == {
+            ("place", "touched_to", "place"),
+            ("movement", "connected_to", "movement"),
+            ("place", "faced_to", "movement"),
+        }
+
+    def test_non_movement_barrier_col_missing_treats_all_as_movement(self, sample_crs: str) -> None:
+        """When the flag column is absent every segment stays a movement node."""
+        buildings = gpd.GeoDataFrame(
+            geometry=[Polygon([(0.2, 0.2), (0.4, 0.2), (0.4, 0.4), (0.2, 0.4)])],
+            crs=sample_crs,
+        )
+        segments = gpd.GeoDataFrame(
+            geometry=[LineString([(0, 0), (1, 0)]), LineString([(0, 1), (1, 1)])],
+            crs=sample_crs,
+        )
+
+        nodes, _ = morphological_graph(
+            buildings, segments, non_movement_barrier_col="is_barrier_only"
+        )
+
+        assert len(nodes["movement"]) == 2
+
+    def test_tessellation_fallback_on_enclosure_error(
+        self,
+        sample_crs: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A momepy enclosure failure falls back to building footprints when enabled."""
+        buildings = gpd.GeoDataFrame(
+            geometry=[Polygon([(0.2, 0.2), (0.4, 0.2), (0.4, 0.4), (0.2, 0.4)])],
+            crs=sample_crs,
+        )
+        segments = gpd.GeoDataFrame(geometry=[LineString([(0, 0), (1, 0)])], crs=sample_crs)
+
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            _raise_no_objects_tessellation,
+        )
+
+        # Without the fallback the error propagates.
+        with pytest.raises(ValueError, match="No objects to concatenate"):
+            morphological_graph(buildings, segments)
+
+        # With the fallback a footprint cell stands in for the missing tessellation.
+        nodes, _ = morphological_graph(buildings, segments, tessellation_fallback=True)
+        assert len(nodes["place"]) == 1
+        assert nodes["place"].index[0].startswith("fallback_")
+
+    def test_tessellation_fallback_on_empty_tessellation(
+        self,
+        sample_crs: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An empty enclosed tessellation falls back to footprints when enabled."""
+        buildings = gpd.GeoDataFrame(
+            geometry=[Polygon([(0.2, 0.2), (0.4, 0.2), (0.4, 0.4), (0.2, 0.4)])],
+            crs=sample_crs,
+        )
+        segments = gpd.GeoDataFrame(geometry=[LineString([(0, 0), (1, 0)])], crs=sample_crs)
+
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            _empty_tessellation,
+        )
+
+        default_nodes, _ = morphological_graph(buildings, segments)
+        fallback_nodes, _ = morphological_graph(buildings, segments, tessellation_fallback=True)
+
+        assert default_nodes["place"].empty
+        assert len(fallback_nodes["place"]) == 1
+
+    def test_tessellation_n_jobs_forwarded(
+        self,
+        sample_crs: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """tessellation_n_jobs is forwarded to create_tessellation only when not -1."""
+        buildings = gpd.GeoDataFrame(
+            geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+            crs=sample_crs,
+        )
+        segments = gpd.GeoDataFrame(geometry=[LineString([(-1, 0), (2, 0)])], crs=sample_crs)
+        captured: dict[str, object] = {}
+
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            partial(_key_recording_tessellation, captured, "n_jobs", "absent"),
+        )
+
+        morphological_graph(buildings, segments, tessellation_n_jobs=1)
+        assert captured["n_jobs"] == 1
+
+        morphological_graph(buildings, segments)
+        assert captured["n_jobs"] == "absent"
 
 
 class TestMorphologicalGraphEdgeCases(TestMorphologyBase):
@@ -1627,11 +1837,11 @@ class TestReachabilityFieldRefactor(TestMorphologyBase):
         original = morph._network_reachability_field
         calls = {"n": 0}
 
-        def counting(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-            calls["n"] += 1
-            return original(*args, **kwargs)
-
-        monkeypatch.setattr(morph, "_network_reachability_field", counting)
+        monkeypatch.setattr(
+            morph,
+            "_network_reachability_field",
+            partial(_counting_wrapper, calls, original),
+        )
 
         morphological_graph(
             sample_buildings_gdf,
@@ -1658,11 +1868,11 @@ class TestReachabilityFieldRefactor(TestMorphologyBase):
         original = morph._geometry_ilocs_within_network_distance
         seen_fields: list[object] = []
 
-        def recording(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-            seen_fields.append(kwargs.get("field"))
-            return original(*args, **kwargs)
-
-        monkeypatch.setattr(morph, "_geometry_ilocs_within_network_distance", recording)
+        monkeypatch.setattr(
+            morph,
+            "_geometry_ilocs_within_network_distance",
+            partial(_field_recording_wrapper, seen_fields, original),
+        )
 
         morphological_graph(
             sample_buildings_gdf,
