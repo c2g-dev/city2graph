@@ -21,8 +21,10 @@ from city2graph.morphology import _create_and_filter_tessellation
 from city2graph.morphology import _filter_buildings_by_network_distance
 from city2graph.morphology import _filter_tessellation_by_network_distance
 from city2graph.morphology import _include_unenclosed_building_tessellation
+from city2graph.morphology import _MorphologyContext
 from city2graph.morphology import _segments_within_network_distance
 from city2graph.morphology import morphological_graph
+from city2graph.morphology import morphological_graphs
 from city2graph.morphology import movement_to_movement_graph
 from city2graph.morphology import place_to_movement_graph
 from city2graph.morphology import place_to_place_graph
@@ -484,7 +486,6 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         result = _include_unenclosed_building_tessellation(
             tessellation,
             buildings.iloc[:2],
-            "place_id",
         )
 
         assert list(result["place_id"]) == ["enclosed", "fallback_1"]
@@ -645,17 +646,31 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             _single_enclosed_cell_tessellation,
         )
 
-        tessellation = _create_and_filter_tessellation(
-            buildings,
-            segments,
-            segments,
-            "geometry",
-            12.0,
-            math.inf,
-            Point(50, 0),
+        context = _MorphologyContext(
+            buildings=buildings,
+            segments=segments,
+            barrier_segments=None,
+            center_point=Point(50, 0),
+            clipping_buffer=math.inf,
+            extent_buffer=math.inf,
+            limit=None,
+            primary_barrier_col="geometry",
+            contiguity="queen",
             keep_buildings=True,
-            place_id_col="place_id",
+            keep_segments=True,
+            tolerance=1e-6,
             include_unenclosed_buildings=True,
+            as_nx=False,
+            duplicate_edges=False,
+            tessellation_fallback=False,
+            tessellation_n_jobs=-1,
+            field=None,
+        )
+        tessellation = _create_and_filter_tessellation(
+            context,
+            12.0,
+            segments_buffer=segments,
+            segments_filtered=segments,
         )
 
         assert set(tessellation["building_id"].dropna()) == {"enclosed", "near_missing"}
@@ -1929,6 +1944,76 @@ class TestReachabilityFieldRefactor(TestMorphologyBase):
             warnings.simplefilter("error", UserWarning)
             # Should not raise: inputs are in EPSG:27700 (projected).
             place_to_movement_graph(place_gdf, movement_gdf)
+
+
+class TestMorphologicalGraphMultiDistance(TestMorphologyBase):
+    """Multi-distance behaviour of morphological_graphs."""
+
+    def test_distance_list_returns_dict_per_distance(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        mg_center_point: gpd.GeoSeries,
+    ) -> None:
+        """A list of distances yields a dict of (nodes, edges) keyed by distance."""
+        distances = [50.0, 100.0]
+
+        result = morphological_graphs(
+            sample_buildings_gdf,
+            sample_segments_gdf,
+            distances,
+            center_point=mg_center_point,
+        )
+
+        assert isinstance(result, dict)
+        assert set(result) == set(distances)
+        for nodes, edges in result.values():
+            self.validate_basic_output(nodes, edges, ["place", "movement"])
+            for edge_type in [
+                ("place", "touched_to", "place"),
+                ("movement", "connected_to", "movement"),
+                ("place", "faced_to", "movement"),
+            ]:
+                assert edge_type in edges
+
+        # A smaller budget can never retain more movement segments than a larger one.
+        small_nodes, _ = result[50.0]
+        large_nodes, _ = result[100.0]
+        assert len(small_nodes["movement"]) <= len(large_nodes["movement"])
+
+    def test_distance_list_as_nx_returns_dict_of_graphs(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        mg_center_point: gpd.GeoSeries,
+    ) -> None:
+        """With as_nx=True each per-distance value is a NetworkX graph."""
+        result = morphological_graphs(
+            sample_buildings_gdf,
+            sample_segments_gdf,
+            [50.0, 100.0],
+            center_point=mg_center_point,
+            as_nx=True,
+        )
+
+        assert isinstance(result, dict)
+        for graph in result.values():
+            self.validate_networkx_output(graph)
+
+    def test_empty_distance_sequence_raises(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        mg_center_point: gpd.GeoSeries,
+    ) -> None:
+        """An empty distance sequence is rejected."""
+        with pytest.raises(ValueError, match="distances must contain at least one value"):
+            morphological_graphs(
+                sample_buildings_gdf,
+                sample_segments_gdf,
+                [],
+                center_point=mg_center_point,
+            )
 
 
 class TestDeprecatedAliases:

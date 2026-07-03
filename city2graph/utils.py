@@ -4280,6 +4280,49 @@ def create_tessellation(
     )
 
 
+def _polygonal_tessellation(tessellation: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Return only polygonal tessellation cells, salvaging GeometryCollections.
+
+    Degenerate or overlapping footprints can make momepy emit GeometryCollection
+    cells (especially on the ``simplify=False`` retry path). Downstream
+    consumers such as libpysal contiguity weights only accept (Multi)Polygon
+    geometries, so collections are replaced by the union of their polygonal
+    parts and any remaining non-polygonal or empty rows are dropped.
+
+    Parameters
+    ----------
+    tessellation : geopandas.GeoDataFrame
+        Raw tessellation returned by momepy.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        The polygonal subset of ``tessellation``.
+    """
+    collections = tessellation.geom_type == "GeometryCollection"
+    if collections.any():
+        logger.warning(
+            "Tessellation produced %d GeometryCollection cell(s); keeping only "
+            "their polygonal parts.",
+            int(collections.sum()),
+        )
+        tessellation = tessellation.copy()
+        tessellation.loc[collections, tessellation.geometry.name] = tessellation.loc[
+            collections
+        ].geometry.apply(
+            lambda geom: shapely.unary_union(
+                [part for part in geom.geoms if part.geom_type in ("Polygon", "MultiPolygon")],
+            ),
+        )
+
+    keep = tessellation.geometry.notna() & ~tessellation.geometry.is_empty
+    keep &= tessellation.geom_type.isin(["Polygon", "MultiPolygon"])
+    if not keep.all():
+        tessellation = tessellation.loc[keep].copy()
+    return tessellation
+
+
 def _create_enclosed_tessellation(
     geometry: gpd.GeoDataFrame | gpd.GeoSeries,
     primary_barriers: gpd.GeoDataFrame | gpd.GeoSeries,
@@ -4395,6 +4438,7 @@ def _create_enclosed_tessellation(
     else:
         tessellation = _create_empty_tessellation(geometry.crs, include_tess_id=False)
 
+    tessellation = _polygonal_tessellation(tessellation)
     if tessellation.empty:
         return _create_empty_tessellation(geometry.crs, include_tess_id=False)
 

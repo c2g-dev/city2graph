@@ -20,6 +20,7 @@ import pandas as pd
 import pytest
 import rustworkx as rx
 import shapely.errors
+from shapely.geometry import GeometryCollection
 from shapely.geometry import LineString
 from shapely.geometry import MultiLineString
 from shapely.geometry import Point
@@ -268,6 +269,51 @@ class TestTessellation(BaseGraphTest):
         assert "tess_id" in result.columns
         assert calls[-1] is False  # retried with simplify=False
         assert "retrying with simplify=False" in caplog.text
+
+    def test_enclosed_tessellation_salvages_geometry_collections(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """GeometryCollection cells should be reduced to their polygonal parts."""
+        monkeypatch.setattr(
+            momepy,
+            "enclosures",
+            lambda **_kwargs: gpd.GeoDataFrame(
+                {"eID": [1]},
+                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
+                crs=sample_buildings_gdf.crs,
+            ),
+        )
+
+        polygon_part = Polygon([(1, 1), (2, 1), (2, 2), (1, 2)])
+
+        def fake_enclosed_tessellation(**_kwargs: object) -> gpd.GeoDataFrame:
+            return gpd.GeoDataFrame(
+                {"enclosure_index": [1, 1, 1]},
+                geometry=[
+                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                    GeometryCollection([polygon_part, LineString([(0, 0), (1, 1)])]),
+                    GeometryCollection([LineString([(2, 2), (3, 3)])]),
+                ],
+                index=[0, 1, 2],
+                crs=sample_buildings_gdf.crs,
+            )
+
+        monkeypatch.setattr(momepy, "enclosed_tessellation", fake_enclosed_tessellation)
+
+        with caplog.at_level("WARNING"):
+            result = utils.create_tessellation(
+                sample_buildings_gdf,
+                primary_barriers=sample_segments_gdf,
+            )
+
+        assert len(result) == 2
+        assert set(result.geom_type) == {"Polygon"}
+        assert result.geometry.iloc[1].equals(polygon_part)
+        assert "GeometryCollection cell(s)" in caplog.text
 
     def test_enclosed_tessellation_reraises_unrelated_type_error(
         self,

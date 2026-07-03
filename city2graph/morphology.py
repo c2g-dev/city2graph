@@ -48,6 +48,7 @@ if typing.TYPE_CHECKING:
 # Public API definition
 __all__ = [
     "morphological_graph",
+    "morphological_graphs",
     "movement_to_movement_graph",
     "place_to_movement_graph",
     "place_to_place_graph",
@@ -60,6 +61,10 @@ __all__ = [
 # Module logger configuration
 logger = logging.getLogger(__name__)
 _SOURCE_BUILDING_INDEX_COL = "_source_building_index"
+
+# Fixed ID column names used across the morphological layers
+_PLACE_ID_COL = "place_id"
+_MOVEMENT_ID_COL = "movement_id"
 
 
 def _validate_duplicate_edges(duplicate_edges: bool, as_nx: bool) -> None:
@@ -122,11 +127,6 @@ def _symmetrize_edge_columns(
 
 
 # ============================================================================
-# MAIN MORPHOLOGICAL GRAPH FUNCTION
-# ============================================================================
-
-
-# ============================================================================
 # PUBLIC API - MAIN FUNCTIONS
 # ============================================================================
 
@@ -176,7 +176,8 @@ def morphological_graph(  # noqa: PLR0913
         Maximum distance from ``center_point`` for spatial filtering. When
         specified, street segments beyond this shortest-path distance are
         removed and tessellation cells are kept only if their own distance via
-        these segments does not exceed this value.
+        these segments does not exceed this value. To build graphs for several
+        distances in one shared pass, use :func:`morphological_graphs`.
     clipping_buffer : float, default=math.inf
         Buffer distance to ensure adequate context for generating tessellation.
         Must be non-negative and not smaller than ``extent_buffer``.
@@ -275,6 +276,7 @@ def morphological_graph(  # noqa: PLR0913
 
     See Also
     --------
+    morphological_graphs : Build graphs for several distances in one shared pass.
     place_to_place_graph : Create adjacency between place spaces.
     place_to_movement_graph : Create connections between place and movement spaces.
     movement_to_movement_graph : Create connectivity between movement spaces.
@@ -301,19 +303,291 @@ def morphological_graph(  # noqa: PLR0913
     >>> place_nodes = nodes['place']
     >>> movement_nodes = nodes['movement']
     """
-    # Define fixed ID column names
-    place_id_col = "place_id"
-    movement_id_col = "movement_id"
+    context = _prepare_morphology(
+        buildings_gdf,
+        segments_gdf,
+        center_point,
+        has_distance=distance is not None,
+        clipping_buffer=clipping_buffer,
+        extent_buffer=extent_buffer,
+        limit=limit,
+        primary_barrier_col=primary_barrier_col,
+        contiguity=contiguity,
+        keep_buildings=keep_buildings,
+        keep_segments=keep_segments,
+        tolerance=tolerance,
+        include_unenclosed_buildings=include_unenclosed_buildings,
+        as_nx=as_nx,
+        duplicate_edges=duplicate_edges,
+        non_movement_barrier_col=non_movement_barrier_col,
+        tessellation_fallback=tessellation_fallback,
+        tessellation_n_jobs=tessellation_n_jobs,
+    )
+    return _graph_for_distance(context, distance)
 
+
+def morphological_graphs(  # noqa: PLR0913
+    buildings_gdf: gpd.GeoDataFrame,
+    segments_gdf: gpd.GeoDataFrame,
+    distances: list[float] | tuple[float, ...],
+    center_point: gpd.GeoSeries | gpd.GeoDataFrame | None = None,
+    clipping_buffer: float = math.inf,
+    extent_buffer: float = 100.0,
+    limit: gpd.GeoDataFrame | gpd.GeoSeries | BaseGeometry | None = None,
+    primary_barrier_col: str | None = "barrier_geometry",
+    contiguity: str = "queen",
+    keep_buildings: bool = False,
+    keep_segments: bool = True,
+    tolerance: float = 1e-6,
+    include_unenclosed_buildings: bool = False,
+    as_nx: bool = False,
+    duplicate_edges: bool = False,
+    non_movement_barrier_col: str | None = None,
+    tessellation_fallback: bool = False,
+    tessellation_n_jobs: int = -1,
+) -> dict[
+    float,
+    tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]] | nx.Graph,
+]:
+    """
+    Create morphological graphs for several distances in one shared pass.
+
+    The expensive shared work — the reachability cost field and the enclosed
+    tessellation, built once from the context of the largest distance — is
+    reused across all distances, so requesting every distance costs roughly one
+    tessellation instead of one per distance. Because the tessellation context
+    corresponds to the largest distance, results for smaller distances can
+    differ slightly near the clipping boundary compared to calling
+    :func:`morphological_graph` once per distance.
+
+    Parameters
+    ----------
+    buildings_gdf : geopandas.GeoDataFrame
+        GeoDataFrame containing building polygons.
+    segments_gdf : geopandas.GeoDataFrame
+        GeoDataFrame containing street segments.
+    distances : list of float or tuple of float
+        The network distances to build graphs for. Must not be empty.
+    center_point : geopandas.GeoSeries or geopandas.GeoDataFrame, optional
+        See :func:`morphological_graph`.
+    clipping_buffer : float, default=math.inf
+        See :func:`morphological_graph`.
+    extent_buffer : float, default=100.0
+        See :func:`morphological_graph`.
+    limit : geopandas.GeoDataFrame, geopandas.GeoSeries, shapely geometry, or None, optional
+        See :func:`morphological_graph`.
+    primary_barrier_col : str, optional
+        See :func:`morphological_graph`.
+    contiguity : str, default="queen"
+        See :func:`morphological_graph`.
+    keep_buildings : bool, default=False
+        See :func:`morphological_graph`.
+    keep_segments : bool, default=True
+        See :func:`morphological_graph`.
+    tolerance : float, default=1e-6
+        See :func:`morphological_graph`.
+    include_unenclosed_buildings : bool, default=False
+        See :func:`morphological_graph`.
+    as_nx : bool, default=False
+        See :func:`morphological_graph`.
+    duplicate_edges : bool, default=False
+        See :func:`morphological_graph`.
+    non_movement_barrier_col : str, optional
+        See :func:`morphological_graph`.
+    tessellation_fallback : bool, default=False
+        See :func:`morphological_graph`.
+    tessellation_n_jobs : int, default=-1
+        See :func:`morphological_graph`.
+
+    Returns
+    -------
+    dict[float, tuple[dict[str, geopandas.GeoDataFrame], dict[tuple[str, str, str], geopandas.GeoDataFrame]] | networkx.Graph]
+        A dictionary mapping each requested distance to the corresponding
+        ``(nodes, edges)`` tuple, or to a NetworkX graph when ``as_nx=True``.
+
+    Raises
+    ------
+    TypeError
+        If buildings_gdf or segments_gdf are not GeoDataFrames.
+    ValueError
+        If `distances` is empty, or any option is invalid (see
+        :func:`morphological_graph`).
+
+    See Also
+    --------
+    morphological_graph : Full documentation of the shared parameters.
+
+    Examples
+    --------
+    >>> results = morphological_graphs(buildings_gdf, segments_gdf, [400.0, 800.0], center)
+    >>> nodes_400, edges_400 = results[400.0]
+    """
+    distance_values = [float(d) for d in distances]
+    if not distance_values:
+        msg = "distances must contain at least one value"
+        raise ValueError(msg)
+
+    context = _prepare_morphology(
+        buildings_gdf,
+        segments_gdf,
+        center_point,
+        has_distance=True,
+        clipping_buffer=clipping_buffer,
+        extent_buffer=extent_buffer,
+        limit=limit,
+        primary_barrier_col=primary_barrier_col,
+        contiguity=contiguity,
+        keep_buildings=keep_buildings,
+        keep_segments=keep_segments,
+        tolerance=tolerance,
+        include_unenclosed_buildings=include_unenclosed_buildings,
+        as_nx=as_nx,
+        duplicate_edges=duplicate_edges,
+        non_movement_barrier_col=non_movement_barrier_col,
+        tessellation_fallback=tessellation_fallback,
+        tessellation_n_jobs=tessellation_n_jobs,
+    )
+
+    # Build the expensive enclosed tessellation once from the context of the
+    # largest distance; each distance then only re-runs the cheap filters. When
+    # the barriers enclose no area the per-distance calls create (or fall back)
+    # on their own, preserving the single-distance behaviour.
+    _, context_segments = _segments_for_distance(context, max(distance_values))
+    base_tessellation = _create_enclosed_tessellation(
+        context.buildings,
+        _prepare_barriers(context_segments, context.primary_barrier_col),
+        limit=context.limit,
+        n_jobs=context.tessellation_n_jobs,
+        suppress_empty_error=True,
+    )
+    return {
+        d: _graph_for_distance(context, d, base_tessellation=base_tessellation)
+        for d in distance_values
+    }
+
+
+class _MorphologyContext(typing.NamedTuple):
+    """
+    Validated inputs and options shared by the per-distance pipeline.
+
+    Produced once by :func:`_prepare_morphology` and threaded through the
+    per-distance helpers, so the pipeline receives one object instead of a
+    long argument list. ``buildings`` and ``segments`` are the validated,
+    CRS-aligned layers (movement ids assigned, barrier-only rows split out
+    into ``barrier_segments``) and ``field`` is the shared single-source
+    reachability cost field, or ``None`` when no distance budget applies.
+    The remaining attributes mirror the options of
+    :func:`morphological_graph`.
+    """
+
+    buildings: gpd.GeoDataFrame
+    segments: gpd.GeoDataFrame
+    barrier_segments: gpd.GeoDataFrame | None
+    center_point: gpd.GeoSeries | gpd.GeoDataFrame | Point | None
+    clipping_buffer: float
+    extent_buffer: float
+    limit: gpd.GeoDataFrame | gpd.GeoSeries | BaseGeometry | None
+    primary_barrier_col: str | None
+    contiguity: str
+    keep_buildings: bool
+    keep_segments: bool
+    tolerance: float
+    include_unenclosed_buildings: bool
+    as_nx: bool
+    duplicate_edges: bool
+    tessellation_fallback: bool
+    tessellation_n_jobs: int
+    field: _ReachabilityField | None
+
+
+def _prepare_morphology(  # noqa: PLR0913
+    buildings_gdf: gpd.GeoDataFrame,
+    segments_gdf: gpd.GeoDataFrame,
+    center_point: gpd.GeoSeries | gpd.GeoDataFrame | None,
+    *,
+    has_distance: bool,
+    clipping_buffer: float,
+    extent_buffer: float,
+    limit: gpd.GeoDataFrame | gpd.GeoSeries | BaseGeometry | None,
+    primary_barrier_col: str | None,
+    contiguity: str,
+    keep_buildings: bool,
+    keep_segments: bool,
+    tolerance: float,
+    include_unenclosed_buildings: bool,
+    as_nx: bool,
+    duplicate_edges: bool,
+    non_movement_barrier_col: str | None,
+    tessellation_fallback: bool,
+    tessellation_n_jobs: int,
+) -> _MorphologyContext:
+    """
+    Validate the raw inputs and bundle them into a shared context.
+
+    Runs the input validation, aligns the CRS of the two layers, assigns the
+    movement ids, splits out barrier-only segments and computes the shared
+    reachability cost field, so that :func:`morphological_graph` and
+    :func:`morphological_graphs` build their per-distance graphs from one
+    identically prepared context.
+
+    Parameters
+    ----------
+    buildings_gdf : geopandas.GeoDataFrame
+        GeoDataFrame containing building polygons.
+    segments_gdf : geopandas.GeoDataFrame
+        GeoDataFrame containing street segments.
+    center_point : geopandas.GeoSeries or geopandas.GeoDataFrame or None
+        Center point(s) for spatial filtering.
+    has_distance : bool
+        Whether a network-distance budget will be applied; together with
+        ``center_point`` this decides if the reachability field is computed.
+    clipping_buffer : float
+        See :func:`morphological_graph`.
+    extent_buffer : float
+        See :func:`morphological_graph`.
+    limit : geopandas.GeoDataFrame, geopandas.GeoSeries, shapely geometry, or None
+        See :func:`morphological_graph`.
+    primary_barrier_col : str or None
+        See :func:`morphological_graph`.
+    contiguity : str
+        See :func:`morphological_graph`.
+    keep_buildings : bool
+        See :func:`morphological_graph`.
+    keep_segments : bool
+        See :func:`morphological_graph`.
+    tolerance : float
+        See :func:`morphological_graph`.
+    include_unenclosed_buildings : bool
+        See :func:`morphological_graph`.
+    as_nx : bool
+        See :func:`morphological_graph`.
+    duplicate_edges : bool
+        See :func:`morphological_graph`.
+    non_movement_barrier_col : str or None
+        See :func:`morphological_graph`.
+    tessellation_fallback : bool
+        See :func:`morphological_graph`.
+    tessellation_n_jobs : int
+        See :func:`morphological_graph`.
+
+    Returns
+    -------
+    _MorphologyContext
+        The validated, preprocessed context shared by the pipeline.
+
+    Raises
+    ------
+    TypeError
+        If buildings_gdf or segments_gdf are not GeoDataFrames.
+    ValueError
+        If any option is invalid (see :func:`morphological_graph`).
+    """
     _validate_duplicate_edges(duplicate_edges, as_nx)
     _validate_input_gdfs(buildings_gdf, segments_gdf)
 
-    # Validate contiguity parameter
     if contiguity not in {"queen", "rook"}:
         msg = "contiguity must be 'queen' or 'rook'"
         raise ValueError(msg)
-
-    # Validate clipping_buffer and extent_buffer
     if clipping_buffer < 0:
         msg = "clipping_buffer cannot be negative."
         raise ValueError(msg)
@@ -332,7 +606,7 @@ def morphological_graph(  # noqa: PLR0913
     segments_gdf = _ensure_crs_consistency(buildings_gdf, segments_gdf)
 
     segments_gdf = segments_gdf.copy()
-    segments_gdf[movement_id_col] = segments_gdf.index
+    segments_gdf[_MOVEMENT_ID_COL] = segments_gdf.index
 
     # Split out barrier-only segments so they shape the tessellation barriers
     # without ever becoming movement nodes or entering the reachability network.
@@ -345,66 +619,83 @@ def morphological_graph(  # noqa: PLR0913
     # Compute the single-source reachability cost field once on the movement network so
     # that streets, buildings and cells are all judged against the same metric on the
     # same network.
-    reachability_field: _ReachabilityField | None = None
-    if center_point is not None and distance is not None and not segments_gdf.empty:
+    field: _ReachabilityField | None = None
+    if center_point is not None and has_distance and not segments_gdf.empty:
         _, full_segment_edges = segments_to_graph(segments_gdf)
-        reachability_field = _network_reachability_field(full_segment_edges, center_point)
+        field = _network_reachability_field(full_segment_edges, center_point)
 
-    segments_filtered, segments_buffer = _process_segments(
-        segments_gdf,
-        center_point,
-        distance,
-        clipping_buffer,
-        field=reachability_field,
+    return _MorphologyContext(
+        buildings=buildings_gdf,
+        segments=segments_gdf,
+        barrier_segments=barrier_segments,
+        center_point=center_point,
+        clipping_buffer=clipping_buffer,
+        extent_buffer=extent_buffer,
+        limit=limit,
+        primary_barrier_col=primary_barrier_col,
+        contiguity=contiguity,
+        keep_buildings=keep_buildings,
+        keep_segments=keep_segments,
+        tolerance=tolerance,
+        include_unenclosed_buildings=include_unenclosed_buildings,
+        as_nx=as_nx,
+        duplicate_edges=duplicate_edges,
+        tessellation_fallback=tessellation_fallback,
+        tessellation_n_jobs=tessellation_n_jobs,
+        field=field,
     )
 
-    # Barrier-only segments enrich the tessellation context only; they never
-    # reach the movement layers built from ``segments_filtered``.
-    segments_buffer = _append_barrier_context_segments(
-        segments_buffer,
-        barrier_segments,
-        center_point,
-        distance,
-        clipping_buffer,
-        primary_barrier_col,
-    )
+
+def _graph_for_distance(
+    context: _MorphologyContext,
+    distance: float | None,
+    base_tessellation: gpd.GeoDataFrame | None = None,
+) -> tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]] | nx.Graph:
+    """
+    Build the morphological graph for a single distance from a prepared context.
+
+    All inputs arrive preprocessed in ``context``; this helper only runs the
+    per-distance pipeline (segment filtering, tessellation and layer
+    construction).
+
+    Parameters
+    ----------
+    context : _MorphologyContext
+        Validated inputs and options shared by the pipeline.
+    distance : float or None
+        Maximum network distance from the centre for this run.
+    base_tessellation : geopandas.GeoDataFrame or None, optional
+        A precomputed tessellation (raw `create_tessellation` output) to reuse
+        instead of creating one here.
+
+    Returns
+    -------
+    tuple[dict[str, geopandas.GeoDataFrame], dict[tuple[str, str, str], geopandas.GeoDataFrame]] | networkx.Graph
+        The ``(nodes, edges)`` dictionaries, or a NetworkX graph when
+        ``context.as_nx`` is True.
+    """
+    segments_filtered, segments_buffer = _segments_for_distance(context, distance)
 
     tessellation = _create_and_filter_tessellation(
-        buildings_gdf,
+        context,
+        distance,
         segments_buffer,
         segments_filtered,
-        primary_barrier_col,
-        distance,
-        clipping_buffer,
-        center_point,
-        keep_buildings,
-        place_id_col,
-        include_unenclosed_buildings,
-        extent_buffer,
-        limit=limit,
-        field=reachability_field,
-        tessellation_fallback=tessellation_fallback,
-        n_jobs=tessellation_n_jobs,
+        base_tessellation=base_tessellation,
     )
 
     # When a reachability budget is applied, prune place cells that face no
     # retained street so the induced subgraph contains no isolated place nodes.
-    drop_isolated_place = center_point is not None and distance is not None
+    drop_isolated_place = context.center_point is not None and distance is not None
 
     nodes, edges = _build_morphological_layers(
+        context,
         tessellation,
         segments_filtered,
-        primary_barrier_col,
-        contiguity,
-        tolerance,
-        place_id_col,
-        movement_id_col,
-        keep_segments,
         drop_isolated_place=drop_isolated_place,
-        extent_buffer=extent_buffer,
     )
 
-    if duplicate_edges:
+    if context.duplicate_edges:
         # Only same-node-type undirected edges can hold reverse rows; the
         # heterogeneous faced_to edges would mix id spaces across index levels.
         for edge_type in (
@@ -413,7 +704,124 @@ def morphological_graph(  # noqa: PLR0913
         ):
             edges[edge_type] = symmetrize_edges(edges[edge_type])
 
-    return (nodes, edges) if not as_nx else gdf_to_nx(nodes, edges)
+    return (nodes, edges) if not context.as_nx else gdf_to_nx(nodes, edges)
+
+
+def _segments_for_distance(
+    context: _MorphologyContext,
+    distance: float | None,
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """
+    Return the filtered movement segments and buffered context for a distance.
+
+    The movement segments are filtered against the shared reachability cost
+    field, while a wider buffered set (radius ``distance + clipping_buffer``)
+    provides tessellation context only. Barrier-only segments enrich that
+    context; they never reach the movement layers built from the filtered
+    segments.
+
+    Parameters
+    ----------
+    context : _MorphologyContext
+        Validated inputs and options shared by the pipeline.
+    distance : float or None
+        Maximum network distance from the centre. When ``None`` (or when no
+        centre is given) the segments are returned unfiltered.
+
+    Returns
+    -------
+    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame]
+        ``(segments_filtered, segments_buffer)`` where the buffer already
+        includes the barrier-only context segments.
+    """
+    segment_nodes, segment_edges = segments_to_graph(context.segments)
+
+    if context.center_point is None or distance is None or context.segments.empty:
+        segments_filtered = segment_edges
+        segments_buffer = segment_edges
+    else:
+        # The same reachability cost field is reused for tessellation cells and
+        # buildings, so every node type is judged against a single distance
+        # metric on the same network.
+        segments_filtered = _segments_within_network_distance(
+            segment_edges,
+            context.center_point,
+            distance,
+            field=context.field,
+        )
+        buffer_radius = (
+            distance if math.isinf(context.clipping_buffer) else distance + context.clipping_buffer
+        )
+        segments_buffer_graph = filter_graph_by_distance(
+            gdf_to_nx(nodes=segment_nodes, edges=segment_edges),
+            context.center_point,
+            buffer_radius,
+        )
+        segments_buffer = nx_to_gdf(segments_buffer_graph, nodes=False, edges=True)
+
+    segments_buffer = _append_barrier_context_segments(
+        segments_buffer,
+        context.barrier_segments,
+        context.center_point,
+        distance,
+        context.clipping_buffer,
+        context.primary_barrier_col,
+    )
+    return segments_filtered, segments_buffer
+
+
+def _create_enclosed_tessellation(
+    buildings_gdf: gpd.GeoDataFrame,
+    barriers: gpd.GeoDataFrame,
+    *,
+    limit: gpd.GeoDataFrame | gpd.GeoSeries | BaseGeometry | None,
+    n_jobs: int,
+    suppress_empty_error: bool,
+) -> gpd.GeoDataFrame | None:
+    """
+    Create the enclosed tessellation from buildings and prepared barriers.
+
+    Shared by the single-distance path (via `_create_and_filter_tessellation`)
+    and the multi-distance path (:func:`morphological_graphs`) so both
+    construct the tessellation with identical arguments and error handling.
+
+    Parameters
+    ----------
+    buildings_gdf : geopandas.GeoDataFrame
+        GeoDataFrame containing building polygons.
+    barriers : geopandas.GeoDataFrame
+        Prepared barrier geometries; ignored when empty.
+    limit : geopandas.GeoDataFrame, geopandas.GeoSeries, shapely geometry, or None
+        Boundary passed to `create_tessellation` for enclosed tessellation.
+    n_jobs : int
+        Number of parallel jobs, forwarded to `create_tessellation` only when
+        not ``-1`` (the default is left implicit).
+    suppress_empty_error : bool
+        When True, the ``momepy`` error raised when the barriers enclose no
+        area ("No objects to concatenate") is converted into a ``None``
+        return; any other error always propagates.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame or None
+        The enclosed tessellation, or ``None`` when the enclosures contain no
+        area and ``suppress_empty_error`` is True.
+    """
+    tessellation_kwargs = {}
+    if limit is not None:
+        tessellation_kwargs["limit"] = limit
+    if n_jobs != -1:
+        tessellation_kwargs["n_jobs"] = n_jobs
+    try:
+        return create_tessellation(
+            buildings_gdf,
+            primary_barriers=None if barriers.empty else barriers,  # Use barriers if available
+            **tessellation_kwargs,
+        )
+    except ValueError as exc:
+        if suppress_empty_error and str(exc) == "No objects to concatenate":
+            return None
+        raise
 
 
 # ============================================================================
@@ -496,7 +904,7 @@ def place_to_place_graph(
     _validate_duplicate_edges(duplicate_edges, as_nx)
     _validate_single_gdf_input(place_gdf, "place_gdf")
 
-    place_id_col = "place_id"
+    place_id_col = _PLACE_ID_COL
 
     # If not empty, require the ID column
     if not place_gdf.empty and place_id_col not in place_gdf.columns:
@@ -660,8 +1068,8 @@ def place_to_movement_graph(
     _validate_single_gdf_input(place_gdf, "place_gdf")
     _validate_single_gdf_input(movement_gdf, "movement_gdf")
 
-    place_id_col = "place_id"
-    movement_id_col = "movement_id"
+    place_id_col = _PLACE_ID_COL
+    movement_id_col = _MOVEMENT_ID_COL
 
     # Handle empty data: return empty edges GeoDataFrame
     if place_gdf.empty or movement_gdf.empty:
@@ -1283,107 +1691,12 @@ def _ensure_crs_consistency(
 # ============================================================================
 
 
-def _process_segments(
-    segments_gdf: gpd.GeoDataFrame,
-    center_point: gpd.GeoSeries | gpd.GeoDataFrame | None,
+def _create_and_filter_tessellation(
+    context: _MorphologyContext,
     distance: float | None,
-    clipping_buffer: float,
-    field: _ReachabilityField | None = None,
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
-    """
-    Process segments: create graph, filter by distance, and create buffer context.
-
-    This function converts the input segments GeoDataFrame to a graph representation,
-    filters it by network distance if a center point and distance are provided,
-    and creates a buffered version of the segments for tessellation context.
-
-    Parameters
-    ----------
-    segments_gdf : geopandas.GeoDataFrame
-        GeoDataFrame containing street segments.
-    center_point : geopandas.GeoSeries or geopandas.GeoDataFrame or None
-        Center point(s) for spatial filtering.
-    distance : float or None
-        Maximum distance from ``center_point`` for spatial filtering.
-    clipping_buffer : float
-        Buffer distance to ensure adequate context for generating tessellation.
-    field : _ReachabilityField or None, optional
-        A precomputed cost field shared across node types. When supplied it is
-        reused for the segment filter so the field is computed only once on the
-        full network; when ``None`` the field is computed here from the segments.
-
-    Returns
-    -------
-    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame]
-        A tuple containing:
-        - segments_filtered: Segments filtered by distance (or all segments if no filter).
-        - segments_buffer: Segments used for tessellation context (buffered filter).
-    """
-    # Convert segments to a graph representation for efficient filtering.
-    if not segments_gdf.empty:
-        segment_nodes, segment_edges = segments_to_graph(segments_gdf)
-        segments_graph = gdf_to_nx(nodes=segment_nodes, edges=segment_edges)
-    else:
-        segment_nodes, segment_edges = segments_to_graph(segments_gdf)
-        segments_graph = nx.Graph()
-
-    # Filter segments by network distance for the final graph if center_point and distance are
-    # provided. The same reachability cost field is reused for tessellation cells and buildings,
-    # so every node type is judged against a single distance metric on the same network.
-    if center_point is not None and distance is not None and not segments_gdf.empty:
-        seg_field = (
-            field if field is not None else _network_reachability_field(segment_edges, center_point)
-        )
-        segments_filtered = _segments_within_network_distance(
-            segment_edges,
-            center_point,
-            distance,
-            field=seg_field,
-        )
-    else:
-        segments_filtered = segment_edges
-
-    if center_point is not None and distance is not None and not segments_gdf.empty:
-        if not math.isinf(clipping_buffer):
-            # Finite clipping_buffer: use distance + clipping_buffer for segments_buffer radius
-            buffer_radius = distance + clipping_buffer
-            segments_buffer_graph = filter_graph_by_distance(
-                segments_graph,
-                center_point,
-                buffer_radius,
-            )
-            segments_buffer = nx_to_gdf(segments_buffer_graph, nodes=False, edges=True)
-        else:  # clipping_buffer is math.inf
-            # Fallback to 'distance' as radius for segments_buffer
-            segments_buffer_graph = filter_graph_by_distance(
-                segments_graph,
-                center_point,
-                distance,
-            )
-            segments_buffer = nx_to_gdf(segments_buffer_graph, nodes=False, edges=True)
-    else:
-        # No center_point or no distance, so segments_buffer is not filtered by distance
-        segments_buffer = segment_edges
-
-    return segments_filtered, segments_buffer
-
-
-def _create_and_filter_tessellation(  # noqa: PLR0913
-    buildings_gdf: gpd.GeoDataFrame,
     segments_buffer: gpd.GeoDataFrame,
     segments_filtered: gpd.GeoDataFrame,
-    primary_barrier_col: str | None,
-    distance: float | None,
-    clipping_buffer: float,
-    center_point: gpd.GeoSeries | gpd.GeoDataFrame | None,
-    keep_buildings: bool,
-    place_id_col: str,
-    include_unenclosed_buildings: bool = False,
-    extent_buffer: float = math.inf,
-    limit: gpd.GeoDataFrame | gpd.GeoSeries | BaseGeometry | None = None,
-    field: _ReachabilityField | None = None,
-    tessellation_fallback: bool = False,
-    n_jobs: int = -1,
+    base_tessellation: gpd.GeoDataFrame | None = None,
 ) -> gpd.GeoDataFrame:
     """
     Create tessellation and apply spatial filters.
@@ -1398,112 +1711,71 @@ def _create_and_filter_tessellation(  # noqa: PLR0913
 
     Parameters
     ----------
-    buildings_gdf : geopandas.GeoDataFrame
-        GeoDataFrame containing building polygons.
+    context : _MorphologyContext
+        Validated inputs and options shared by the pipeline.
+    distance : float or None
+        Maximum network distance from the centre for spatial filtering.
     segments_buffer : geopandas.GeoDataFrame
         Buffered segments used for tessellation context (barriers and adjacency).
     segments_filtered : geopandas.GeoDataFrame
         Reachable isochrone segments used for adjacency and all retention checks.
-    primary_barrier_col : str or None
-        Column name containing alternative geometry for movement spaces.
-    distance : float or None
-        Maximum distance from ``center_point`` for spatial filtering.
-    clipping_buffer : float
-        Buffer distance to ensure adequate context for generating tessellation.
-    center_point : geopandas.GeoSeries or geopandas.GeoDataFrame or None
-        Center point(s) for spatial filtering.
-    keep_buildings : bool
-        If True, preserves building information in the tessellation output.
-    place_id_col : str
-        Name of the place ID column.
-    include_unenclosed_buildings : bool, default=False
-        If True, buildings excluded by enclosed tessellation are added using
-        barrier-free tessellation before distance filters are applied.
-    extent_buffer : float, default ``math.inf``
-        Maximum perpendicular access distance from a street to a building/cell
-        centroid for it to be retained by the network-distance filters.
-    limit : geopandas.GeoDataFrame, geopandas.GeoSeries, shapely geometry, or None, optional
-        Boundary passed to `create_tessellation` for enclosed tessellation.
-    field : _ReachabilityField or None, optional
-        Shared reachability cost field computed once on the full network. When
-        provided it is reused for both the building and tessellation network
-        filters so they share a single metric; when ``None`` each filter computes
-        its own field from the segments it is given.
-    tessellation_fallback : bool, default False
-        If True, fall back to reachable building footprints as place cells when
-        the enclosed tessellation encloses no area (``momepy`` raises
-        ``"No objects to concatenate"``) or yields no cells while buildings and
-        reachable segments exist. When False the enclosed tessellation result is
-        returned unchanged and any underlying error is propagated.
-    n_jobs : int, default -1
-        Number of parallel jobs forwarded to `create_tessellation` (and in turn
-        `momepy.enclosed_tessellation`). Use ``1`` to run serially, which avoids
-        oversubscription when this function is itself called inside an outer
-        parallel loop.
+    base_tessellation : geopandas.GeoDataFrame or None, optional
+        A precomputed tessellation (raw `create_tessellation` output) to reuse
+        instead of creating one here. Used by the multi-distance path so the
+        enclosed tessellation is built only once per call.
 
     Returns
     -------
     geopandas.GeoDataFrame
         The created and filtered tessellation GeoDataFrame.
     """
-    barriers = _prepare_barriers(segments_buffer, primary_barrier_col)
-    # Create tessellation based on buildings and prepared barriers
-    tessellation_kwargs = {}
-    if limit is not None:
-        tessellation_kwargs["limit"] = limit
-    if n_jobs != -1:
-        tessellation_kwargs["n_jobs"] = n_jobs
-    try:
-        tessellation = create_tessellation(
-            buildings_gdf,
-            primary_barriers=None if barriers.empty else barriers,  # Use barriers if available
-            **tessellation_kwargs,
+    barriers = _prepare_barriers(segments_buffer, context.primary_barrier_col)
+    if base_tessellation is not None:
+        tessellation = base_tessellation.copy()
+    else:
+        tessellation = _create_enclosed_tessellation(
+            context.buildings,
+            barriers,
+            limit=context.limit,
+            n_jobs=context.tessellation_n_jobs,
+            suppress_empty_error=context.tessellation_fallback,
         )
-    except ValueError as exc:
-        # momepy raises "No objects to concatenate" when the barriers enclose no
-        # area. With the fallback enabled, use building footprints as cells
-        # instead of propagating the error.
-        if not (tessellation_fallback and str(exc) == "No objects to concatenate"):
-            raise
-        return _fallback_tessellation_without_enclosures(
-            buildings_gdf,
-            segments_filtered,
-            center_point,
-            distance,
-            place_id_col,
-            extent_buffer,
-            keep_buildings,
-            field=field,
-        )
+        if tessellation is None:
+            # The barriers enclose no area; with the fallback enabled, use
+            # building footprints as cells instead of propagating the error.
+            return _fallback_tessellation_without_enclosures(
+                context,
+                distance,
+                segments_filtered,
+            )
 
-    tessellation = tessellation.rename(columns={"tess_id": place_id_col})
+    tessellation = tessellation.rename(columns={"tess_id": _PLACE_ID_COL})
 
     # Ensure the fixed place ID column exists, creating a sequential ID if necessary
-    if place_id_col not in tessellation.columns:
-        tessellation[place_id_col] = range(len(tessellation))  # Assign sequential place IDs
+    if _PLACE_ID_COL not in tessellation.columns:
+        tessellation[_PLACE_ID_COL] = range(len(tessellation))  # Assign sequential place IDs
 
     # Retention is judged solely against the reachable isochrone streets so that
     # cell/building acceptance and the faced_to edges share a single street set.
-    distance_segments = segments_filtered
-
     eligible_buildings = _filter_buildings_by_network_distance(
-        buildings_gdf,
-        distance_segments,
-        center_point,
+        context.buildings,
+        segments_filtered,
+        context.center_point,
         distance,
-        extent_buffer,
-        field=field,
+        context.extent_buffer,
+        field=context.field,
     )
 
-    if include_unenclosed_buildings and not barriers.empty:
+    if context.include_unenclosed_buildings and not barriers.empty:
         tessellation = _include_unenclosed_building_tessellation(
             tessellation,
             eligible_buildings,
-            place_id_col,
         )
 
     # Determine max_distance for filtering tessellation adjacent to segments
-    max_distance_for_adj_filter = distance + clipping_buffer if distance is not None else math.inf
+    max_distance_for_adj_filter = (
+        distance + context.clipping_buffer if distance is not None else math.inf
+    )
 
     tessellation = _filter_adjacent_tessellation(
         tessellation,
@@ -1512,37 +1784,32 @@ def _create_and_filter_tessellation(  # noqa: PLR0913
     )
 
     # Further filter tessellation by network distance if center_point and distance are specified
-    if center_point is not None and distance is not None:
+    if context.center_point is not None and distance is not None:
         tessellation = _filter_tessellation_by_network_distance(
             tessellation,
-            distance_segments,
-            center_point,
+            segments_filtered,
+            context.center_point,
             distance,  # Max network distance
-            extent_buffer,
-            field=field,
+            context.extent_buffer,
+            field=context.field,
         )
 
     # Optionally preserve building information by joining tessellation with buildings
-    if keep_buildings:
+    if context.keep_buildings:
         tessellation = _add_building_info(tessellation, eligible_buildings)
 
     # When the enclosed tessellation retained nothing despite usable inputs, fall
     # back to building footprints so the morphology graph still has place cells.
     if (
-        tessellation_fallback
+        context.tessellation_fallback
         and tessellation.empty
-        and not buildings_gdf.empty
+        and not context.buildings.empty
         and not segments_filtered.empty
     ):
         return _fallback_tessellation_without_enclosures(
-            buildings_gdf,
-            segments_filtered,
-            center_point,
+            context,
             distance,
-            place_id_col,
-            extent_buffer,
-            keep_buildings,
-            field=field,
+            segments_filtered,
         )
 
     return tessellation
@@ -1551,7 +1818,6 @@ def _create_and_filter_tessellation(  # noqa: PLR0913
 def _include_unenclosed_building_tessellation(
     tessellation: gpd.GeoDataFrame,
     buildings_gdf: gpd.GeoDataFrame,
-    place_id_col: str,
 ) -> gpd.GeoDataFrame:
     """
     Append fallback cells for buildings missed by the enclosed tessellation.
@@ -1566,8 +1832,6 @@ def _include_unenclosed_building_tessellation(
         The enclosed tessellation to augment.
     buildings_gdf : geopandas.GeoDataFrame
         Buildings eligible for inclusion, used to find the unenclosed ones.
-    place_id_col : str
-        Name of the place ID column.
 
     Returns
     -------
@@ -1584,12 +1848,12 @@ def _include_unenclosed_building_tessellation(
         tessellation["enclosure_index"] = tessellation["enclosure_index"].astype(str)
 
     fallback = gpd.GeoDataFrame(
-        {place_id_col: missing_buildings.index.astype(str)},
+        {_PLACE_ID_COL: missing_buildings.index.astype(str)},
         geometry=missing_buildings.geometry.to_numpy(),
         crs=missing_buildings.crs,
     )
     fallback[_SOURCE_BUILDING_INDEX_COL] = missing_buildings.index.to_numpy()
-    fallback[place_id_col] = "fallback_" + fallback[place_id_col].astype(str)
+    fallback[_PLACE_ID_COL] = "fallback_" + fallback[_PLACE_ID_COL].astype(str)
     fallback["enclosure_index"] = "fallback"
 
     return gpd.GeoDataFrame(
@@ -1685,14 +1949,9 @@ def _valid_polygon_gdf(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 
 def _fallback_tessellation_without_enclosures(
-    buildings_gdf: gpd.GeoDataFrame,
-    segments_filtered: gpd.GeoDataFrame,
-    center_point: gpd.GeoSeries | gpd.GeoDataFrame | Point | None,
+    context: _MorphologyContext,
     distance: float | None,
-    place_id_col: str,
-    extent_buffer: float,
-    keep_buildings: bool,
-    field: _ReachabilityField | None = None,
+    segments_filtered: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """
     Build place cells from building footprints when enclosed tessellation fails.
@@ -1705,29 +1964,19 @@ def _fallback_tessellation_without_enclosures(
 
     Parameters
     ----------
-    buildings_gdf : geopandas.GeoDataFrame
-        Building footprints used as fallback cells.
-    segments_filtered : geopandas.GeoDataFrame
-        Reachable movement segments used for the network-distance filters.
-    center_point : geopandas.GeoSeries or geopandas.GeoDataFrame or shapely.geometry.Point or None
-        Centre for the reachability budget. Distance filters are skipped when None.
+    context : _MorphologyContext
+        Validated inputs and options shared by the pipeline.
     distance : float or None
         Maximum network distance for a cell to be retained.
-    place_id_col : str
-        Name of the place ID column.
-    extent_buffer : float
-        Maximum perpendicular access distance from a street to a cell centroid.
-    keep_buildings : bool
-        If True, attach building information via ``building_geometry``.
-    field : _ReachabilityField or None, optional
-        Shared reachability cost field reused for the network-distance filters.
+    segments_filtered : geopandas.GeoDataFrame
+        Reachable movement segments used for the network-distance filters.
 
     Returns
     -------
     geopandas.GeoDataFrame
         Fallback tessellation cells, possibly empty when nothing is reachable.
     """
-    buildings = _valid_polygon_gdf(buildings_gdf)
+    buildings = _valid_polygon_gdf(context.buildings)
     if buildings.empty:
         return buildings.iloc[0:0].copy()
 
@@ -1736,32 +1985,32 @@ def _fallback_tessellation_without_enclosures(
     buildings = _filter_buildings_by_network_distance(
         buildings,
         segments_filtered,
-        center_point,
+        context.center_point,
         distance,
-        extent_buffer,
-        field=field,
+        context.extent_buffer,
+        field=context.field,
     )
     if buildings.empty:
         return buildings.iloc[0:0].copy()
 
     tessellation = gpd.GeoDataFrame(
         {
-            place_id_col: "fallback_" + buildings.index.astype(str),
+            _PLACE_ID_COL: "fallback_" + buildings.index.astype(str),
             "enclosure_index": "fallback",
         },
         geometry=buildings.geometry.to_numpy(),
         crs=buildings.crs,
     )
-    if center_point is not None and distance is not None:
+    if context.center_point is not None and distance is not None:
         tessellation = _filter_tessellation_by_network_distance(
             tessellation,
             segments_filtered,
-            center_point,
+            context.center_point,
             distance,
-            extent_buffer,
-            field=field,
+            context.extent_buffer,
+            field=context.field,
         )
-    if keep_buildings:
+    if context.keep_buildings:
         tessellation = _add_building_info(tessellation, buildings)
     return tessellation
 
@@ -1803,54 +2052,34 @@ def _buildings_without_tessellation(
 
 
 def _build_morphological_layers(
+    context: _MorphologyContext,
     tessellation: gpd.GeoDataFrame,
     segments_filtered: gpd.GeoDataFrame,
-    primary_barrier_col: str | None,
-    contiguity: str,
-    tolerance: float,
-    place_id_col: str,
-    movement_id_col: str,
-    keep_segments: bool = True,
+    *,
     drop_isolated_place: bool = False,
-    extent_buffer: float = math.inf,
 ) -> tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]:
     """
     Build the node and edge layers for the morphological graph.
 
     This function orchestrates the creation of place-to-place, movement-to-movement,
-    and place-to-movement graphs and organizes them into a heterogeneous graph structure.
+    and place-to-movement graphs and organizes them into a heterogeneous graph
+    structure, using the contiguity, tolerance, segment-preservation and
+    ``extent_buffer`` options carried by ``context``.
 
     Parameters
     ----------
+    context : _MorphologyContext
+        Validated inputs and options shared by the pipeline.
     tessellation : geopandas.GeoDataFrame
         GeoDataFrame containing tessellation cells (place nodes).
     segments_filtered : geopandas.GeoDataFrame
         GeoDataFrame containing filtered segments (movement nodes).
-    primary_barrier_col : str or None
-        Column name containing alternative geometry for movement spaces.
-    contiguity : str
-        Type of spatial contiguity for place-to-place connections.
-    tolerance : float
-        Buffer distance for movement geometries when creating place-to-movement connections.
-    place_id_col : str
-        Name of the place ID column.
-    movement_id_col : str
-        Name of the movement ID column.
-    keep_segments : bool, default True
-        If True, preserves the original segment LineString geometry in a column
-        named 'segment_geometry' in the movement nodes GeoDataFrame.
     drop_isolated_place : bool, default False
         If True, place cells with no place-to-movement (faced_to) connection
         are removed, along with the place-to-place edges that reference them.
         This guarantees an induced subgraph free of isolated place nodes and is
         enabled when a reachability budget (``center_point`` and ``distance``) is
         applied.
-    extent_buffer : float, default ``math.inf``
-        Maximum length of a nearest-movement fallback ``faced_to`` connection. A
-        place cell that touches no street within ``tolerance`` and whose
-        nearest street lies farther than ``extent_buffer`` receives no fallback
-        edge, so ``drop_isolated_place`` can remove it instead of forcing a
-        long star-shaped connection to a distant street.
 
     Returns
     -------
@@ -1873,19 +2102,22 @@ def _build_morphological_layers(
     _, place_to_place_edges = place_to_place_graph(
         tessellation,
         group_col=group_col_for_priv_priv,
-        contiguity=contiguity,
+        contiguity=context.contiguity,
     )
 
     _, movement_to_movement_edges = movement_to_movement_graph(
         segments_filtered,
     )
 
+    # extent_buffer caps the nearest-movement fallback faced_to connection: a
+    # place cell whose nearest street lies farther receives no fallback edge, so
+    # drop_isolated_place can remove it instead of forcing a long star edge.
     _, place_to_movement_edges = place_to_movement_graph(
         tessellation,
         segments_filtered,
-        primary_barrier_col=primary_barrier_col,
-        tolerance=tolerance,
-        max_connection_distance=extent_buffer,
+        primary_barrier_col=context.primary_barrier_col,
+        tolerance=context.tolerance,
+        max_connection_distance=context.extent_buffer,
     )
 
     # Log warning if no place-movement connections found
@@ -1897,11 +2129,11 @@ def _build_morphological_layers(
     # reference removed cells are pruned to keep the layers consistent.
     if drop_isolated_place and not tessellation.empty:
         connected_place_ids = (
-            set(place_to_movement_edges[place_id_col].unique())
+            set(place_to_movement_edges[_PLACE_ID_COL].unique())
             if not place_to_movement_edges.empty
             else set()
         )
-        keep_mask = tessellation[place_id_col].isin(connected_place_ids)
+        keep_mask = tessellation[_PLACE_ID_COL].isin(connected_place_ids)
         if not keep_mask.all():
             tessellation = tessellation.loc[keep_mask].copy()
             if not place_to_place_edges.empty:
@@ -1920,14 +2152,14 @@ def _build_morphological_layers(
     # Prepare movement nodes with Point geometry (centroids)
     # Optionally preserve original segment geometry in segment_geometry column
     movement_nodes = segments_filtered.copy()
-    if keep_segments:
+    if context.keep_segments:
         movement_nodes["segment_geometry"] = movement_nodes.geometry
     # Convert geometry to centroid for movement nodes
     movement_nodes["geometry"] = movement_nodes.geometry.centroid
 
     nodes = {
-        "place": _set_node_index(place_nodes, place_id_col),
-        "movement": _set_node_index(movement_nodes, movement_id_col),
+        "place": _set_node_index(place_nodes, _PLACE_ID_COL),
+        "movement": _set_node_index(movement_nodes, _MOVEMENT_ID_COL),
     }
 
     # Organize edges into a dictionary with relationship types as keys
