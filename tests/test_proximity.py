@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 import geopandas as gpd
 import networkx as nx
+import numpy as np
 import pandas as pd
 import pytest
 from shapely.geometry import LineString
@@ -110,6 +111,41 @@ def test_delaunay_and_subgraphs(small_points: gpd.GeoDataFrame) -> None:
     _, r_edges = relative_neighborhood_graph(small_points)
     assert len(g_edges) <= len(d_edges)
     assert len(r_edges) <= len(d_edges)
+
+
+def test_triangulation_hierarchy_matches_brute_force() -> None:
+    """MST ⊆ RNG ⊆ Gabriel ⊆ Delaunay, and Gabriel matches its brute-force definition.
+
+    Uses large projected-CRS-like coordinates to guard against floating-point
+    regressions in the disc-emptiness predicate (previously valid Gabriel
+    edges were dropped when coordinates were far from the origin).
+    """
+    rng = np.random.default_rng(42)
+    coords = rng.uniform(0.0, 5000.0, size=(150, 2)) + np.array([350_000.0, 5_700_000.0])
+    pts = make_points_simple([(float(x), float(y)) for x, y in coords], crs="EPSG:32633")
+
+    def edge_set(edges: gpd.GeoDataFrame) -> set[tuple[int, int]]:
+        return {(min(int(u), int(v)), max(int(u), int(v))) for u, v in edges.index}
+
+    _, d_edges = delaunay_graph(pts)
+    _, g_edges = gabriel_graph(pts)
+    _, r_edges = relative_neighborhood_graph(pts)
+    _, m_edges = euclidean_minimum_spanning_tree(pts)
+    delaunay, gabriel, rng_graph, mst = map(edge_set, (d_edges, g_edges, r_edges, m_edges))
+
+    # Brute-force Gabriel: keep a Delaunay edge iff no other point lies
+    # strictly inside the open disc having the edge as its diameter.
+    expected_gabriel = set()
+    for i, j in delaunay:
+        mid = 0.5 * (coords[i] + coords[j])
+        rad2 = np.sum((coords[i] - coords[j]) ** 2) * 0.25
+        d2 = np.sum((coords - mid) ** 2, axis=1)
+        d2[[i, j]] = np.inf
+        if not np.any(d2 < rad2):
+            expected_gabriel.add((i, j))
+
+    assert gabriel == expected_gabriel
+    assert mst <= rng_graph <= gabriel <= delaunay
 
 
 def test_mst_and_waxman(small_points: gpd.GeoDataFrame) -> None:

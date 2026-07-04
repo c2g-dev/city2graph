@@ -919,8 +919,9 @@ def gabriel_graph(
     r"""
     Generate a Gabriel graph from a GeoDataFrame of points.
 
-    In a Gabriel graph two nodes u and v are connected iff the closed disc that has
-    $uv$ as its diameter contains no other node of the set.
+    In a Gabriel graph two nodes u and v are connected iff the open disc that has
+    $uv$ as its diameter contains no other node of the set, i.e. no third node w
+    satisfies $d(u,w)^2 + d(v,w)^2 < d(u,v)^2$.
 
     Parameters
     ----------
@@ -994,15 +995,11 @@ def gabriel_graph(
 
     # Gabriel filtering
     kept_edges = set()
-    tol = 1e-12
     coords = builder.coords
 
     for i, j in delaunay_edges:
-        mid = 0.5 * (coords[i] + coords[j])
-        rad2 = np.sum((coords[i] - coords[j]) ** 2) * 0.25
-        d2 = np.sum((coords - mid) ** 2, axis=1)
-        mask = d2 <= rad2 + tol
-        if np.count_nonzero(mask) == 2:
+        dots = np.einsum("ij,ij->i", coords[i] - coords, coords[j] - coords)
+        if not np.any(dots < 0.0):
             kept_edges.add((builder.node_ids[i], builder.node_ids[j]))
 
     builder.add_edges(kept_edges)
