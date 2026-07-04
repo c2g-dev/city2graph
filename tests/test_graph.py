@@ -2315,12 +2315,38 @@ class TestUndirectedEdgeHandling:
         )
 
     def test_osmnx_downloaded_multidigraph_smoke(self) -> None:
-        """Downloaded OSMnx MultiDiGraph round-trips through PyG with keyed edges."""
-        graph = ox.graph_from_bbox(
-            (-0.128, 51.501, -0.124, 51.503),
-            network_type="drive",
-            simplify=True,
-            retain_all=False,
+        """OSMnx MultiDiGraph round-trips through PyG with keyed edges."""
+        graph = nx.MultiDiGraph()
+        graph.graph["crs"] = "EPSG:4326"
+        graph.add_node(101, x=-0.128, y=51.501)
+        graph.add_node(202, x=-0.126, y=51.502)
+        graph.add_node(303, x=-0.124, y=51.503)
+        graph.add_edge(
+            101,
+            202,
+            key=0,
+            osmid=10,
+            length=100.0,
+            geometry=LineString([(-0.128, 51.501), (-0.126, 51.502)]),
+            oneway=True,
+        )
+        graph.add_edge(
+            202,
+            303,
+            key=0,
+            osmid=11,
+            length=110.0,
+            geometry=LineString([(-0.126, 51.502), (-0.124, 51.503)]),
+            oneway=True,
+        )
+        graph.add_edge(
+            202,
+            101,
+            key=0,
+            osmid=12,
+            length=100.0,
+            geometry=LineString([(-0.126, 51.502), (-0.128, 51.501)]),
+            oneway=True,
         )
         nodes, edges = ox.graph_to_gdfs(graph)
 

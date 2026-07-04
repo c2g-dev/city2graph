@@ -2338,9 +2338,17 @@ def _add_building_info(
         joined["index_right"] = None
 
     if _SOURCE_BUILDING_INDEX_COL in joined.columns:
+        # Fallback cells are matched exactly to their source building, so extra
+        # sjoin matches only duplicate the cell's row and must be dropped. All
+        # operations are positional: the sjoin can duplicate index labels when a
+        # cell contains several building points, which breaks label alignment.
+        source_mask = joined[_SOURCE_BUILDING_INDEX_COL].notna().to_numpy()
+        redundant = source_mask & joined.index.duplicated(keep="first")
+        if redundant.any():
+            joined = joined.loc[~redundant]
+            source_mask = joined[_SOURCE_BUILDING_INDEX_COL].notna().to_numpy()
         source_index = joined[_SOURCE_BUILDING_INDEX_COL]
-        joined["index_right"] = source_index.combine_first(joined["index_right"])
-        source_mask = source_index.notna()
+        joined["index_right"] = np.where(source_mask, source_index, joined["index_right"])
         for column in building_columns:
             joined.loc[source_mask, column] = (
                 source_index.loc[source_mask]

@@ -4496,7 +4496,18 @@ def _repair_or_drop_degenerate_enclosures(
             "grid_size=1e-3.",
             len(broken),
         )
-        tessellation = run_tessellation(**{**overrides, "grid_size": 1e-3})
+        retry_overrides = {**overrides, "grid_size": 1e-3}
+        try:
+            tessellation = run_tessellation(**retry_overrides)
+        except TypeError as e:
+            if "incorrect geometry type" not in str(e) or "simplify" in kwargs:
+                raise
+            logger.warning(
+                "Tessellation retry failed boundary simplification (%s); retrying with "
+                "simplify=False.",
+                e,
+            )
+            tessellation = run_tessellation(**{**retry_overrides, "simplify": False})
         broken = _overfilled_enclosures(tessellation, enclosures)
     if broken:
         logger.warning(

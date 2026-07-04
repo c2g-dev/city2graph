@@ -363,6 +363,57 @@ class TestTessellation(BaseGraphTest):
         assert result.geometry.area.sum() == pytest.approx(enclosure.area)
         assert "overlapping cells" in caplog.text
 
+    def test_enclosed_tessellation_overlap_retry_falls_back_to_simplify_false(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A geometry-type error during the overlap retry should retry simplify=False."""
+        enclosure = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+        monkeypatch.setattr(
+            momepy,
+            "enclosures",
+            lambda **_kwargs: gpd.GeoDataFrame(
+                {"eID": [0]},
+                geometry=[enclosure],
+                crs=sample_buildings_gdf.crs,
+            ),
+        )
+
+        sane_cells = [
+            Polygon([(0, 0), (5, 0), (5, 10), (0, 10)]),
+            Polygon([(5, 0), (10, 0), (10, 10), (5, 10)]),
+        ]
+
+        def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
+            # The first run silently degenerates; the coarser grid_size retry
+            # snaps cells into non-polygonal geometry and blows up in
+            # coverage_simplify; only simplify=False succeeds.
+            if kwargs.get("grid_size") and kwargs.get("simplify") is not False:
+                msg = "One of the Geometry inputs is of incorrect geometry type."
+                raise TypeError(msg)
+            cells = sane_cells if kwargs.get("grid_size") else [enclosure, enclosure]
+            return gpd.GeoDataFrame(
+                {"enclosure_index": [0, 0]},
+                geometry=cells,
+                index=[0, 1],
+                crs=sample_buildings_gdf.crs,
+            )
+
+        monkeypatch.setattr(momepy, "enclosed_tessellation", fake_enclosed_tessellation)
+
+        with caplog.at_level("WARNING"):
+            result = utils.create_tessellation(
+                sample_buildings_gdf,
+                primary_barriers=sample_segments_gdf,
+            )
+
+        assert len(result) == 2
+        assert result.geometry.area.sum() == pytest.approx(enclosure.area)
+        assert "retrying with simplify=False" in caplog.text
+
     def test_enclosed_tessellation_drops_persistently_overlapping_enclosures(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,

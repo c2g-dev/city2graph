@@ -431,6 +431,48 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         assert len(opt_in_nodes["place"]) == 2
         assert "fallback_1" in opt_in_nodes["place"].index
 
+    def test_keep_buildings_with_fallback_and_multi_building_cell(
+        self,
+        sample_crs: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Fallback cells coexist with cells containing several buildings."""
+        buildings = gpd.GeoDataFrame(
+            {"building_id": ["outer", "nested", "unenclosed"]},
+            geometry=[
+                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                Polygon([(0.25, 0.25), (0.75, 0.25), (0.75, 0.75), (0.25, 0.75)]),
+                Polygon([(10, 0), (11, 0), (11, 1), (10, 1)]),
+            ],
+            crs=sample_crs,
+        )
+        segments = gpd.GeoDataFrame(
+            geometry=[LineString([(-1, -1), (2, -1)])],
+            crs=sample_crs,
+        )
+
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            _enclosed_cell_or_fail_on_fallback,
+        )
+        monkeypatch.setattr(
+            "city2graph.morphology._filter_adjacent_tessellation",
+            _passthrough_adjacent_filter,
+        )
+
+        nodes, _ = morphological_graph(
+            buildings,
+            segments,
+            keep_buildings=True,
+            include_unenclosed_buildings=True,
+        )
+
+        place_ids = list(nodes["place"].index)
+        # The enclosed cell holds both overlapping buildings; the fallback cell
+        # for the unenclosed building is matched exactly once to its source.
+        assert place_ids.count("fallback_2") == 1
+        assert place_ids.count("enclosed") == 2
+
     def test_morphological_graph_passes_tessellation_limit(
         self,
         sample_crs: str,
