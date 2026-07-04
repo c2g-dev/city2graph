@@ -4323,6 +4323,191 @@ def _polygonal_tessellation(tessellation: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return tessellation
 
 
+def _overfilled_enclosures(
+    tessellation: gpd.GeoDataFrame,
+    enclosures: gpd.GeoDataFrame,
+    tolerance: float = 1.05,
+) -> list[Any]:
+    """
+    Return enclosure indices whose cells' total area exceeds the enclosure area.
+
+    A valid enclosed tessellation partitions each enclosure, so the summed cell
+    area can never meaningfully exceed the enclosure's own area. A large excess
+    means ``shapely.voronoi_polygons`` degenerated and every cell spans (nearly)
+    the whole enclosure; such cells all contain the same building points and
+    would explode downstream spatial joins.
+
+    Parameters
+    ----------
+    tessellation : geopandas.GeoDataFrame
+        Raw ``momepy.enclosed_tessellation`` output with an ``enclosure_index``
+        column referring to ``enclosures`` index values.
+    enclosures : geopandas.GeoDataFrame
+        The enclosures the tessellation was generated from.
+    tolerance : float, default 1.05
+        Allowed ratio of summed cell area to enclosure area before an
+        enclosure is reported as degenerate.
+
+    Returns
+    -------
+    list[Any]
+        The ``enclosure_index`` values of degenerate enclosures.
+    """
+    if tessellation.empty or "enclosure_index" not in tessellation.columns:
+        return []
+    cell_areas = tessellation.geometry.area.groupby(tessellation["enclosure_index"]).sum()
+    enclosure_areas = enclosures.geometry.area.reindex(cell_areas.index)
+    # NaN enclosure areas (unmatched indices) compare as False and are kept.
+    broken = cell_areas > enclosure_areas * tolerance
+    return list(cell_areas.index[broken])
+
+
+def _run_tessellation_with_retries(
+    run_tessellation: typing.Callable[..., gpd.GeoDataFrame],
+    kwargs: dict[str, object],
+) -> tuple[gpd.GeoDataFrame | None, dict[str, object], bool]:
+    """
+    Run momepy enclosed tessellation through the known-failure retry ladder.
+
+    ``shapely.voronoi_polygons`` can fail numerically inside an enclosure at
+    momepy's default snapping precision; depending on the options this
+    surfaces as a ``TypeError`` from ``shapely.coverage_simplify``, a
+    ``GEOSException``, or as a silently degenerate partition (handled
+    separately by :func:`_repair_or_drop_degenerate_enclosures`). A coarser
+    ``grid_size`` repairs the underlying partition, so it is preferred over
+    ``simplify=False``, which would keep the degenerate cells. Caller-pinned
+    ``simplify``/``grid_size`` values are never overridden.
+
+    Parameters
+    ----------
+    run_tessellation : Callable[..., geopandas.GeoDataFrame]
+        Closure invoking ``momepy.enclosed_tessellation``; keyword arguments
+        are applied as retry overrides on top of the caller-supplied options.
+    kwargs : dict[str, object]
+        The caller-supplied momepy options (used to respect pinned values).
+
+    Returns
+    -------
+    tuple[geopandas.GeoDataFrame or None, dict[str, object], bool]
+        ``(tessellation, overrides, include_tess_id)`` where ``tessellation``
+        is ``None`` when momepy definitively failed and the caller should
+        return an empty tessellation (built with ``include_tess_id``), and
+        ``overrides`` records the retry options that produced the result.
+    """
+    overrides: dict[str, object] = {}
+    include_tess_id = True
+    tessellation: gpd.GeoDataFrame | None
+    try:
+        tessellation = run_tessellation()
+    except ValueError as e:
+        if "No objects to concatenate" not in str(e):
+            raise
+        logger.warning("Momepy could not generate tessellation, returning empty GeoDataFrame.")
+        tessellation = None
+    except TypeError as e:
+        if "incorrect geometry type" not in str(e) or "simplify" in kwargs:
+            raise
+        if "grid_size" in kwargs:
+            overrides = {"simplify": False}
+            logger.warning(
+                "Tessellation boundary simplification failed (%s); retrying with simplify=False.",
+                e,
+            )
+            tessellation = run_tessellation(**overrides)
+        else:
+            overrides = {"grid_size": 1e-3}
+            logger.warning(
+                "Tessellation boundary simplification failed (%s); retrying with grid_size=1e-3.",
+                e,
+            )
+            try:
+                tessellation = run_tessellation(**overrides)
+            except TypeError:
+                overrides["simplify"] = False
+                logger.warning(
+                    "Tessellation boundary simplification still failed; retrying with "
+                    "simplify=False.",
+                )
+                tessellation = run_tessellation(**overrides)
+    except shapely.errors.GEOSException as e:
+        # e.g. ``TopologyException: side location conflict`` on numerically
+        # fragile footprints; ``voronoi_frames`` snaps coordinates at
+        # ``grid_size`` (default 1e-5) and a single failing enclosure aborts
+        # the whole parallel run.
+        if "grid_size" in kwargs:
+            raise
+        logger.warning(
+            "Tessellation hit a GEOS topology error (%s); retrying with coarser grid_size=1e-3.",
+            e,
+        )
+        overrides = {"grid_size": 1e-3}
+        try:
+            tessellation = run_tessellation(**overrides)
+        except shapely.errors.GEOSException:
+            logger.warning(
+                "Tessellation still failed at coarser precision; returning empty "
+                "tessellation for this unit.",
+            )
+            tessellation = None
+            include_tess_id = False
+    return tessellation, overrides, include_tess_id
+
+
+def _repair_or_drop_degenerate_enclosures(
+    tessellation: gpd.GeoDataFrame,
+    enclosures: gpd.GeoDataFrame,
+    run_tessellation: typing.Callable[..., gpd.GeoDataFrame],
+    kwargs: dict[str, object],
+    overrides: dict[str, object],
+) -> gpd.GeoDataFrame:
+    """
+    Validate a tessellation and retry or drop degenerate enclosures.
+
+    A degenerate voronoi partition can come back without any error (notably
+    under ``simplify=False``), so the cells are validated against the
+    enclosure areas before they can poison downstream spatial joins. A broken
+    partition is retried once with a coarser ``grid_size`` (unless one is
+    already in effect); enclosures that stay degenerate have their cells
+    dropped with a warning.
+
+    Parameters
+    ----------
+    tessellation : geopandas.GeoDataFrame
+        Raw ``momepy.enclosed_tessellation`` output.
+    enclosures : geopandas.GeoDataFrame
+        The enclosures the tessellation was generated from.
+    run_tessellation : Callable[..., geopandas.GeoDataFrame]
+        Closure invoking ``momepy.enclosed_tessellation`` with overrides.
+    kwargs : dict[str, object]
+        The caller-supplied momepy options (used to respect pinned values).
+    overrides : dict[str, object]
+        Retry overrides already applied to produce ``tessellation``.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        The validated tessellation, with degenerate enclosures repaired or
+        removed.
+    """
+    broken = _overfilled_enclosures(tessellation, enclosures)
+    if broken and "grid_size" not in kwargs and "grid_size" not in overrides:
+        logger.warning(
+            "Tessellation produced overlapping cells in %d enclosure(s); retrying with "
+            "grid_size=1e-3.",
+            len(broken),
+        )
+        tessellation = run_tessellation(**{**overrides, "grid_size": 1e-3})
+        broken = _overfilled_enclosures(tessellation, enclosures)
+    if broken:
+        logger.warning(
+            "Dropping %d enclosure(s) whose tessellation cells overlap instead of "
+            "partitioning the enclosure.",
+            len(broken),
+        )
+        tessellation = tessellation.loc[~tessellation["enclosure_index"].isin(broken)]
+    return tessellation
+
+
 def _create_enclosed_tessellation(
     geometry: gpd.GeoDataFrame | gpd.GeoSeries,
     primary_barriers: gpd.GeoDataFrame | gpd.GeoSeries,
@@ -4391,50 +4576,19 @@ def _create_enclosed_tessellation(
                 **{**kwargs, **extra_kwargs},
             )
 
-        try:
-            tessellation = _run_enclosed_tessellation()
-        except ValueError as e:
-            if "No objects to concatenate" in str(e):
-                logger.warning(
-                    "Momepy could not generate tessellation, returning empty GeoDataFrame.",
-                )
-                return _create_empty_tessellation(geometry.crs)
-            raise
-        except TypeError as e:
-            # shapely.coverage_simplify rejects non-polygonal cells produced by
-            # degenerate/overlapping footprints in a single enclosure, which
-            # aborts the whole parallel run. Retry once without boundary
-            # simplification (the un-simplified result is still a valid
-            # tessellation) unless the caller explicitly chose ``simplify``.
-            if "incorrect geometry type" not in str(e) or "simplify" in kwargs:
-                raise
-            logger.warning(
-                "Tessellation boundary simplification failed (%s); retrying with simplify=False.",
-                e,
-            )
-            tessellation = _run_enclosed_tessellation(simplify=False)
-        except shapely.errors.GEOSException as e:
-            # ``shapely.voronoi_polygons`` can raise ``TopologyException: side
-            # location conflict`` on numerically fragile / near-degenerate
-            # footprints. ``voronoi_frames`` snaps coordinates at ``grid_size``
-            # (default 1e-5); a single failing enclosure aborts the whole parallel
-            # run. Retry once with a coarser precision to resolve the conflict,
-            # unless the caller already pinned ``grid_size``.
-            if "grid_size" in kwargs:
-                raise
-            logger.warning(
-                "Tessellation hit a GEOS topology error (%s); retrying with coarser "
-                "grid_size=1e-3.",
-                e,
-            )
-            try:
-                tessellation = _run_enclosed_tessellation(grid_size=1e-3)
-            except shapely.errors.GEOSException:
-                logger.warning(
-                    "Tessellation still failed at coarser precision; returning empty "
-                    "tessellation for this unit.",
-                )
-                return _create_empty_tessellation(geometry.crs, include_tess_id=False)
+        tessellation, overrides, include_tess_id = _run_tessellation_with_retries(
+            _run_enclosed_tessellation,
+            kwargs,
+        )
+        if tessellation is None:
+            return _create_empty_tessellation(geometry.crs, include_tess_id=include_tess_id)
+        tessellation = _repair_or_drop_degenerate_enclosures(
+            tessellation,
+            enclosures,
+            _run_enclosed_tessellation,
+            kwargs,
+            overrides,
+        )
     else:
         tessellation = _create_empty_tessellation(geometry.crs, include_tess_id=False)
 
