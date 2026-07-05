@@ -1797,6 +1797,10 @@ def _create_and_filter_tessellation(
     # Optionally preserve building information by joining tessellation with buildings
     if context.keep_buildings:
         tessellation = _add_building_info(tessellation, eligible_buildings)
+    else:
+        # _add_building_info consumes the fallback-cell source index; without
+        # it the internal column must not leak into the place nodes.
+        tessellation = tessellation.drop(columns=[_SOURCE_BUILDING_INDEX_COL], errors="ignore")
 
     # When the enclosed tessellation retained nothing despite usable inputs, fall
     # back to building footprints so the morphology graph still has place cells.
@@ -1847,20 +1851,47 @@ def _include_unenclosed_building_tessellation(
     if "enclosure_index" in tessellation.columns:
         tessellation["enclosure_index"] = tessellation["enclosure_index"].astype(str)
 
-    fallback = gpd.GeoDataFrame(
-        {_PLACE_ID_COL: missing_buildings.index.astype(str)},
-        geometry=missing_buildings.geometry.to_numpy(),
-        crs=missing_buildings.crs,
-    )
-    fallback[_SOURCE_BUILDING_INDEX_COL] = missing_buildings.index.to_numpy()
-    fallback[_PLACE_ID_COL] = "fallback_" + fallback[_PLACE_ID_COL].astype(str)
-    fallback["enclosure_index"] = "fallback"
+    fallback = _building_fallback_cells(missing_buildings)
 
     return gpd.GeoDataFrame(
         pd.concat([tessellation, fallback], ignore_index=True, sort=False),
         geometry=tessellation.geometry.name,
         crs=tessellation.crs,
     )
+
+
+def _building_fallback_cells(buildings: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Build fallback place cells from building footprints.
+
+    Each footprint becomes its own cell tagged with a synthetic
+    ``fallback_<index>`` place id, a single ``"fallback"`` enclosure and the
+    source building index recorded in ``_SOURCE_BUILDING_INDEX_COL``, so
+    :func:`_add_building_info` matches the cell to its building exactly
+    instead of relying on a spatial join. Shared by the whole-tessellation
+    fallback and the unenclosed-building fallback so both produce identical
+    cells.
+
+    Parameters
+    ----------
+    buildings : geopandas.GeoDataFrame
+        Building footprints to convert into cells; may be empty.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        One fallback cell per building.
+    """
+    cells = gpd.GeoDataFrame(
+        {
+            _PLACE_ID_COL: "fallback_" + buildings.index.astype(str),
+            "enclosure_index": "fallback",
+        },
+        geometry=buildings.geometry.to_numpy(),
+        crs=buildings.crs,
+    )
+    cells[_SOURCE_BUILDING_INDEX_COL] = buildings.index.to_numpy()
+    return cells
 
 
 def _filter_buildings_by_network_distance(
@@ -1957,10 +1988,10 @@ def _fallback_tessellation_without_enclosures(
     Build place cells from building footprints when enclosed tessellation fails.
 
     Used as a fallback when the enclosed tessellation encloses no area or yields
-    no cells. Each reachable building footprint becomes its own place cell, tagged
-    with a synthetic ``fallback_`` place id and a single ``"fallback"`` enclosure,
-    and is judged against the same reachability budget (network ``distance`` plus
-    ``extent_buffer`` access cap) as the primary path so retention rules match.
+    no cells. Each reachable building footprint becomes its own place cell (see
+    :func:`_building_fallback_cells`) and is judged against the same
+    reachability budget (network ``distance`` plus ``extent_buffer`` access
+    cap) as the primary path so retention rules match.
 
     Parameters
     ----------
@@ -1977,8 +2008,6 @@ def _fallback_tessellation_without_enclosures(
         Fallback tessellation cells, possibly empty when nothing is reachable.
     """
     buildings = _valid_polygon_gdf(context.buildings)
-    if buildings.empty:
-        return buildings.iloc[0:0].copy()
 
     # Retention uses the reachable isochrone streets and the bounded access cap,
     # matching the primary path so fallback cells obey the same acceptance rule.
@@ -1990,18 +2019,9 @@ def _fallback_tessellation_without_enclosures(
         context.extent_buffer,
         field=context.field,
     )
-    if buildings.empty:
-        return buildings.iloc[0:0].copy()
 
-    tessellation = gpd.GeoDataFrame(
-        {
-            _PLACE_ID_COL: "fallback_" + buildings.index.astype(str),
-            "enclosure_index": "fallback",
-        },
-        geometry=buildings.geometry.to_numpy(),
-        crs=buildings.crs,
-    )
-    if context.center_point is not None and distance is not None:
+    tessellation = _building_fallback_cells(buildings)
+    if not tessellation.empty and context.center_point is not None and distance is not None:
         tessellation = _filter_tessellation_by_network_distance(
             tessellation,
             segments_filtered,
@@ -2012,6 +2032,8 @@ def _fallback_tessellation_without_enclosures(
         )
     if context.keep_buildings:
         tessellation = _add_building_info(tessellation, buildings)
+    else:
+        tessellation = tessellation.drop(columns=[_SOURCE_BUILDING_INDEX_COL])
     return tessellation
 
 
