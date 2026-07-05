@@ -1060,6 +1060,56 @@ class TestMorphologicalGraphBarrierAndFallback(TestMorphologyBase):
 
         assert len(nodes["movement"]) == 2
 
+    def test_none_barrier_geometry_keeps_movement_but_not_barrier(self, sample_crs: str) -> None:
+        """A segment with a null barrier geometry stays a movement node but never cuts cells."""
+        buildings = gpd.GeoDataFrame(
+            geometry=[Polygon([(2, 2), (4, 2), (4, 4), (2, 4)])],
+            crs=sample_crs,
+        )
+        # A closed street loop enclosing the building, plus a "tunnel" segment
+        # crossing the enclosure that must not act as a tessellation barrier.
+        loop = [
+            LineString([(0, 0), (10, 0)]),
+            LineString([(10, 0), (10, 10)]),
+            LineString([(10, 10), (0, 10)]),
+            LineString([(0, 10), (0, 0)]),
+        ]
+        tunnel = LineString([(5, 0), (5, 10)])
+        segments = gpd.GeoDataFrame(
+            {"is_tunnel": [False] * 4 + [True]},
+            geometry=[*loop, tunnel],
+            crs=sample_crs,
+        )
+        segments["barrier_geometry"] = segments.geometry
+        segments.loc[segments["is_tunnel"], "barrier_geometry"] = None
+
+        nodes, edges = morphological_graph(
+            buildings,
+            segments,
+            primary_barrier_col="barrier_geometry",
+        )
+        reference_nodes, _ = morphological_graph(
+            buildings,
+            segments.loc[~segments["is_tunnel"]].copy(),
+            primary_barrier_col="barrier_geometry",
+        )
+
+        # The tunnel is still a movement node.
+        assert len(nodes["movement"]) == 5
+        assert nodes["movement"]["is_tunnel"].sum() == 1
+
+        # The tessellation matches the one built without the tunnel row: the
+        # enclosure is not cut at x=5, so the cells span the full loop.
+        assert len(nodes["place"]) == len(reference_nodes["place"])
+        assert nodes["place"].geometry.area.sum() == pytest.approx(
+            reference_nodes["place"].geometry.area.sum()
+        )
+
+        # The tunnel has no barrier geometry, so it receives no faced_to edges.
+        tunnel_ids = set(nodes["movement"].loc[nodes["movement"]["is_tunnel"]].index)
+        faced_to = edges[("place", "faced_to", "movement")]
+        assert not tunnel_ids & set(faced_to.index.get_level_values("movement_id"))
+
     def test_tessellation_fallback_on_enclosure_error(
         self,
         sample_crs: str,

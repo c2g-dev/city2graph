@@ -2199,7 +2199,10 @@ def _prepare_barriers(
     This function selects the appropriate geometry column from the segments
     GeoDataFrame to be used as barriers in the tessellation process. If an
     alternative geometry column is specified and exists, it is used; otherwise,
-    the default geometry column is used.
+    the default geometry column is used. Rows whose barrier geometry is missing
+    or empty are dropped: such segments stay in the movement network but never
+    act as tessellation barriers or as ``faced_to`` query geometries (e.g.
+    roads in tunnels or on bridges).
 
     Parameters
     ----------
@@ -2214,12 +2217,19 @@ def _prepare_barriers(
         A GeoDataFrame containing the prepared barrier geometries.
     """
     if geom_col and geom_col in segments.columns and geom_col != "geometry":
-        return gpd.GeoDataFrame(
+        # The alternative column may be object-dtype (e.g. after assigning
+        # None values or a parquet round trip), so coerce it to a GeoSeries.
+        barriers = gpd.GeoDataFrame(
             segments.drop(columns=["geometry"]),
-            geometry=segments[geom_col],
+            geometry=gpd.GeoSeries(segments[geom_col], index=segments.index, crs=segments.crs),
             crs=segments.crs,
         )
-    return segments.copy()
+    else:
+        barriers = segments.copy()
+    keep = barriers.geometry.notna() & ~barriers.geometry.is_empty
+    if not keep.all():
+        barriers = barriers.loc[keep].copy()
+    return barriers
 
 
 def _append_barrier_context_segments(
