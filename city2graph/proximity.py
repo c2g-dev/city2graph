@@ -1094,6 +1094,9 @@ def relative_neighborhood_graph(
     coords = builder.coords
 
     for i, j in cand_edges:
+        dots = np.einsum("ij,ij->i", coords[i] - coords, coords[j] - coords)
+        if np.any(dots < 0.0):
+            continue
         dij2 = np.dot(coords[i] - coords[j], coords[i] - coords[j])
         di2 = np.sum((coords - coords[i]) ** 2, axis=1) < dij2
         dj2 = np.sum((coords - coords[j]) ** 2, axis=1) < dij2
