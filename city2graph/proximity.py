@@ -1098,8 +1098,9 @@ def relative_neighborhood_graph(
         if np.any(dots < 0.0):
             continue
         dij2 = np.dot(coords[i] - coords[j], coords[i] - coords[j])
-        di2 = np.sum((coords - coords[i]) ** 2, axis=1) < dij2
-        dj2 = np.sum((coords - coords[j]) ** 2, axis=1) < dij2
+        threshold = dij2 - np.finfo(float).eps * max(dij2, 1.0) * 64.0
+        di2 = np.sum((coords - coords[i]) ** 2, axis=1) < threshold
+        dj2 = np.sum((coords - coords[j]) ** 2, axis=1) < threshold
         closer_both = np.where(di2 & dj2)[0]
         if len(closer_both) == 0:
             kept_edges.add((builder.node_ids[i], builder.node_ids[j]))
