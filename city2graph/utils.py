@@ -4358,9 +4358,14 @@ def _overfilled_enclosures(
     return list(cell_areas.index[broken])
 
 
-def _is_known_tessellation_error(error: Exception) -> bool:
+# Coarser snapping precision used by the tessellation retry ladder; momepy's
+# default (1e-5) can degenerate numerically inside fragile enclosures.
+_COARSE_GRID_SIZE: float = 1e-3
+
+
+def _classify_tessellation_failure(error: Exception) -> str | None:
     """
-    Report whether a tessellation failure belongs to the known retry ladder.
+    Classify a tessellation failure for the retry ladder.
 
     Known failures are the errors the retry ladder in
     :func:`_run_tessellation_with_retries` recovers from: the ``ValueError``
@@ -4375,14 +4380,91 @@ def _is_known_tessellation_error(error: Exception) -> bool:
 
     Returns
     -------
-    bool
-        True when the failure is a known, recoverable tessellation failure.
+    str or None
+        ``"empty"``, ``"simplify"`` or ``"geos"`` for known failures, or
+        ``None`` for unknown errors that must propagate.
     """
     if isinstance(error, ValueError):
-        return "No objects to concatenate" in str(error)
+        return "empty" if "No objects to concatenate" in str(error) else None
     if isinstance(error, TypeError):
-        return "incorrect geometry type" in str(error)
-    return isinstance(error, shapely.errors.GEOSException)
+        return "simplify" if "incorrect geometry type" in str(error) else None
+    return "geos" if isinstance(error, shapely.errors.GEOSException) else None
+
+
+def _next_retry_overrides(
+    kind: str,
+    overrides: dict[str, object],
+    kwargs: dict[str, object],
+) -> dict[str, object] | None:
+    """
+    Return the next retry overrides for a classified tessellation failure.
+
+    A coarser ``grid_size`` repairs the underlying voronoi partition, so it
+    is always tried before ``simplify=False``, which would keep degenerate
+    cells; the ``simplify=False`` rung only applies to ``coverage_simplify``
+    failures. Options pinned by the caller in ``kwargs`` (or already applied
+    via ``overrides``) are never overridden, and the momepy concat failure
+    has no remedy at all.
+
+    Parameters
+    ----------
+    kind : str
+        The failure kind from :func:`_classify_tessellation_failure`.
+    overrides : dict[str, object]
+        Retry overrides already in effect for the failed attempt.
+    kwargs : dict[str, object]
+        The caller-supplied momepy options (used to respect pinned values).
+
+    Returns
+    -------
+    dict[str, object] or None
+        The overrides for the next attempt, or ``None`` when the ladder is
+        exhausted and the unit must degrade to an empty tessellation.
+    """
+    if kind != "empty":
+        if "grid_size" not in kwargs and "grid_size" not in overrides:
+            return {**overrides, "grid_size": _COARSE_GRID_SIZE}
+        if kind == "simplify" and "simplify" not in kwargs and "simplify" not in overrides:
+            return {**overrides, "simplify": False}
+    return None
+
+
+def _log_tessellation_retry(
+    kind: str,
+    error: Exception,
+    adds_grid_size: bool,
+) -> None:
+    """
+    Log the retry decision for a known tessellation failure.
+
+    The wording mirrors the failure kind and the option added by the next
+    rung so operators can follow the ladder in the logs.
+
+    Parameters
+    ----------
+    kind : str
+        The failure kind from :func:`_classify_tessellation_failure`.
+    error : Exception
+        The failure that triggered the retry.
+    adds_grid_size : bool
+        Whether the next rung adds the coarser ``grid_size`` (as opposed to
+        disabling boundary simplification).
+    """
+    if adds_grid_size and kind == "geos":
+        logger.warning(
+            "Tessellation hit a GEOS topology error (%s); retrying with coarser grid_size=1e-3.",
+            error,
+        )
+    elif adds_grid_size:
+        logger.warning(
+            "Tessellation boundary simplification failed (%s); retrying with grid_size=1e-3.",
+            error,
+        )
+    else:
+        logger.warning(
+            "Tessellation boundary simplification failed (%s); retrying with simplify=False.",
+            error,
+        )
 
 
 def _log_tessellation_degradation(error: Exception) -> None:
@@ -4396,7 +4478,7 @@ def _log_tessellation_degradation(error: Exception) -> None:
     Parameters
     ----------
     error : Exception
-        The known failure (see :func:`_is_known_tessellation_error`) that
+        The known failure (see :func:`_classify_tessellation_failure`) that
         exhausted the retry ladder.
     """
     if isinstance(error, ValueError):
@@ -4408,89 +4490,30 @@ def _log_tessellation_degradation(error: Exception) -> None:
     )
 
 
-def _run_final_tessellation_attempt(
-    run_tessellation: typing.Callable[..., gpd.GeoDataFrame],
-    overrides: dict[str, object],
-) -> gpd.GeoDataFrame | None:
+def _log_repair_retry_failure(error: Exception) -> None:
     """
-    Run the last rung of the retry ladder, degrading known failures to empty.
+    Log an exhausted overlap-repair retry.
 
-    No further retry options remain at this point, so any known failure (see
-    :func:`_is_known_tessellation_error`) is logged and converted into an
-    empty result instead of aborting the run; unknown errors propagate.
+    Unlike the main ladder, a failed repair retry does not degrade the unit
+    to empty output: the original cells are kept and only the degenerate
+    enclosures are dropped by :func:`_repair_or_drop_degenerate_enclosures`.
 
     Parameters
     ----------
-    run_tessellation : Callable[..., geopandas.GeoDataFrame]
-        Closure invoking ``momepy.enclosed_tessellation``.
-    overrides : dict[str, object]
-        Retry overrides to apply on top of the caller-supplied options.
-
-    Returns
-    -------
-    geopandas.GeoDataFrame or None
-        The tessellation, or ``None`` when the attempt failed with another
-        known error.
+    error : Exception
+        The known failure that exhausted the repair retry.
     """
-    try:
-        return run_tessellation(**overrides)
-    except (ValueError, TypeError, shapely.errors.GEOSException) as error:
-        if not _is_known_tessellation_error(error):
-            raise
-        _log_tessellation_degradation(error)
-        return None
-
-
-def _retry_at_coarser_grid(
-    run_tessellation: typing.Callable[..., gpd.GeoDataFrame],
-    kwargs: dict[str, object],
-    overrides: dict[str, object],
-) -> tuple[gpd.GeoDataFrame | None, dict[str, object]]:
-    """
-    Run the coarser-grid retry rung, escalating to ``simplify=False`` if needed.
-
-    The coarser grid can snap cells non-polygonal and fail
-    ``shapely.coverage_simplify`` with a ``TypeError``, in which case the rung
-    escalates to ``simplify=False`` (unless pinned by the caller). Any other
-    known failure degrades the unit to an empty tessellation.
-
-    Parameters
-    ----------
-    run_tessellation : Callable[..., geopandas.GeoDataFrame]
-        Closure invoking ``momepy.enclosed_tessellation``.
-    kwargs : dict[str, object]
-        The caller-supplied momepy options (used to respect pinned values).
-    overrides : dict[str, object]
-        Retry overrides including the coarser ``grid_size``.
-
-    Returns
-    -------
-    tuple[geopandas.GeoDataFrame or None, dict[str, object]]
-        ``(tessellation, overrides)`` mirroring
-        :func:`_run_tessellation_with_retries`.
-    """
-    try:
-        return run_tessellation(**overrides), overrides
-    except (ValueError, TypeError, shapely.errors.GEOSException) as retry_error:
-        if not _is_known_tessellation_error(retry_error):
-            raise
-        if isinstance(retry_error, TypeError) and "simplify" not in kwargs:
-            overrides = {**overrides, "simplify": False}
-            logger.warning(
-                "Tessellation retry failed boundary simplification (%s); retrying with "
-                "simplify=False.",
-                retry_error,
-            )
-            tessellation = _run_final_tessellation_attempt(run_tessellation, overrides)
-        else:
-            _log_tessellation_degradation(retry_error)
-            tessellation = None
-        return tessellation, overrides
+    logger.warning(
+        "Tessellation retry at coarser precision failed (%s); keeping the original cells.",
+        error,
+    )
 
 
 def _run_tessellation_with_retries(
     run_tessellation: typing.Callable[..., gpd.GeoDataFrame],
     kwargs: dict[str, object],
+    overrides: dict[str, object] | None = None,
+    log_exhausted: typing.Callable[[Exception], None] = _log_tessellation_degradation,
 ) -> tuple[gpd.GeoDataFrame | None, dict[str, object]]:
     """
     Run momepy enclosed tessellation through the known-failure retry ladder.
@@ -4499,17 +4522,12 @@ def _run_tessellation_with_retries(
     momepy's default snapping precision; depending on the options this
     surfaces as a ``TypeError`` from ``shapely.coverage_simplify``, a
     ``GEOSException``, or as a silently degenerate partition (handled
-    separately by :func:`_repair_or_drop_degenerate_enclosures`). A coarser
-    ``grid_size`` repairs the underlying partition, so it is preferred over
-    ``simplify=False``, which would keep the degenerate cells. The coarser
-    grid can itself snap cells non-polygonal, so a ``GEOSException`` retry may
-    in turn hit the ``coverage_simplify`` ``TypeError`` and falls back to
-    ``simplify=False``. Caller-pinned ``simplify``/``grid_size`` values are
-    never overridden; when the remaining options are exhausted the unit
-    degrades to an empty tessellation. Any known failure (see
-    :func:`_is_known_tessellation_error`) at any rung ends in a warning and
-    an empty result instead of aborting the whole run; only unknown errors
-    propagate.
+    separately by :func:`_repair_or_drop_degenerate_enclosures`). Each known
+    failure escalates to the next rung chosen by
+    :func:`_next_retry_overrides` — the coarser grid first, then
+    ``simplify=False`` — until the options are exhausted and the unit
+    degrades to an empty tessellation. Caller-pinned ``simplify``/
+    ``grid_size`` values are never overridden; only unknown errors propagate.
 
     Parameters
     ----------
@@ -4518,6 +4536,13 @@ def _run_tessellation_with_retries(
         are applied as retry overrides on top of the caller-supplied options.
     kwargs : dict[str, object]
         The caller-supplied momepy options (used to respect pinned values).
+    overrides : dict[str, object], optional
+        Retry overrides to start the ladder from (e.g. the coarser
+        ``grid_size`` for the overlap repair); the first attempt runs with
+        them applied.
+    log_exhausted : Callable[[Exception], None], optional
+        Warning emitted when the ladder is exhausted, receiving the terminal
+        failure. Defaults to :func:`_log_tessellation_degradation`.
 
     Returns
     -------
@@ -4527,57 +4552,24 @@ def _run_tessellation_with_retries(
         tessellation, and ``overrides`` records the retry options that
         produced the result.
     """
-    overrides: dict[str, object] = {}
-    tessellation: gpd.GeoDataFrame | None
-    try:
-        tessellation = run_tessellation()
-    except ValueError as e:
-        if "No objects to concatenate" not in str(e):
-            raise
-        logger.warning("Momepy could not generate tessellation, returning empty GeoDataFrame.")
-        tessellation = None
-    except TypeError as e:
-        if "incorrect geometry type" not in str(e):
-            raise
-        if "grid_size" in kwargs:
-            if "simplify" in kwargs:
-                # Both retry options are pinned by the caller; nothing left.
-                _log_tessellation_degradation(e)
-                tessellation = None
-            else:
-                overrides = {"simplify": False}
-                logger.warning(
-                    "Tessellation boundary simplification failed (%s); retrying with "
-                    "simplify=False.",
-                    e,
-                )
-                tessellation = _run_final_tessellation_attempt(run_tessellation, overrides)
-        else:
-            overrides = {"grid_size": 1e-3}
-            logger.warning(
-                "Tessellation boundary simplification failed (%s); retrying with grid_size=1e-3.",
-                e,
+    overrides = dict(overrides or {})
+    while True:
+        try:
+            return run_tessellation(**overrides), overrides
+        except (ValueError, TypeError, shapely.errors.GEOSException) as error:
+            kind = _classify_tessellation_failure(error)
+            if kind is None:
+                raise
+            next_overrides = _next_retry_overrides(kind, overrides, kwargs)
+            if next_overrides is None:
+                log_exhausted(error)
+                return None, overrides
+            _log_tessellation_retry(
+                kind,
+                error,
+                adds_grid_size="grid_size" not in overrides and "grid_size" in next_overrides,
             )
-            tessellation, overrides = _retry_at_coarser_grid(run_tessellation, kwargs, overrides)
-    except shapely.errors.GEOSException as e:
-        # e.g. ``TopologyException: side location conflict`` on numerically
-        # fragile footprints; ``voronoi_frames`` snaps coordinates at
-        # ``grid_size`` (default 1e-5) and a single failing enclosure aborts
-        # the whole parallel run.
-        if "grid_size" in kwargs:
-            # The caller pinned the snapping precision; degrade instead of
-            # overriding it.
-            _log_tessellation_degradation(e)
-            tessellation = None
-        else:
-            logger.warning(
-                "Tessellation hit a GEOS topology error (%s); retrying with coarser "
-                "grid_size=1e-3.",
-                e,
-            )
-            overrides = {"grid_size": 1e-3}
-            tessellation, overrides = _retry_at_coarser_grid(run_tessellation, kwargs, overrides)
-    return tessellation, overrides
+            overrides = next_overrides
 
 
 def _repair_or_drop_degenerate_enclosures(
@@ -4624,28 +4616,12 @@ def _repair_or_drop_degenerate_enclosures(
             "grid_size=1e-3.",
             len(broken),
         )
-        retry_overrides = {**overrides, "grid_size": 1e-3}
-        retried: gpd.GeoDataFrame | None = None
-        try:
-            retried = run_tessellation(**retry_overrides)
-        except (ValueError, TypeError, shapely.errors.GEOSException) as error:
-            if not _is_known_tessellation_error(error):
-                raise
-            if isinstance(error, TypeError) and "simplify" not in kwargs:
-                logger.warning(
-                    "Tessellation retry failed boundary simplification (%s); retrying with "
-                    "simplify=False.",
-                    error,
-                )
-                try:
-                    retried = run_tessellation(**{**retry_overrides, "simplify": False})
-                except (ValueError, TypeError, shapely.errors.GEOSException) as final_error:
-                    if not _is_known_tessellation_error(final_error):
-                        raise
-            if retried is None:
-                logger.warning(
-                    "Tessellation retry at coarser precision failed; keeping the original cells.",
-                )
+        retried, _ = _run_tessellation_with_retries(
+            run_tessellation,
+            kwargs,
+            overrides={**overrides, "grid_size": _COARSE_GRID_SIZE},
+            log_exhausted=_log_repair_retry_failure,
+        )
         if retried is not None:
             tessellation = retried
             broken = _overfilled_enclosures(tessellation, enclosures)
