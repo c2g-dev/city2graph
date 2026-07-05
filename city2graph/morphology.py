@@ -797,15 +797,19 @@ def _create_enclosed_tessellation(
         Number of parallel jobs, forwarded to `create_tessellation` only when
         not ``-1`` (the default is left implicit).
     suppress_empty_error : bool
-        When True, the ``momepy`` error raised when the barriers enclose no
-        area ("No objects to concatenate") is converted into a ``None``
-        return; any other error always propagates.
+        When True, the ``momepy`` error raised when nothing can be
+        tessellated ("No objects to concatenate") is converted into a
+        ``None`` return; any other error always propagates. With barriers
+        present, `create_tessellation` already degrades this failure to an
+        empty tessellation internally, so the conversion applies to the
+        barrier-free morphological path (and the empty result is handled by
+        the caller's empty-tessellation fallback instead).
 
     Returns
     -------
     geopandas.GeoDataFrame or None
-        The enclosed tessellation, or ``None`` when the enclosures contain no
-        area and ``suppress_empty_error`` is True.
+        The enclosed tessellation, or ``None`` when nothing could be
+        tessellated and ``suppress_empty_error`` is True.
     """
     tessellation_kwargs = {}
     if limit is not None:
