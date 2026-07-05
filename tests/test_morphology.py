@@ -1159,6 +1159,119 @@ class TestMorphologicalGraphBarrierAndFallback(TestMorphologyBase):
         assert default_nodes["place"].empty
         assert len(fallback_nodes["place"]) == 1
 
+    def test_fallback_cells_match_source_buildings_exactly(
+        self,
+        sample_crs: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Whole-tessellation fallback cells join their own building, not sjoin matches."""
+        # The small building sits inside the large footprint, so the large
+        # fallback cell contains both representative points and the spatial
+        # join alone would duplicate its row and mis-assign the buildings.
+        buildings = gpd.GeoDataFrame(
+            {"name": ["large", "small"]},
+            geometry=[
+                Polygon([(0, 0), (4, 0), (4, 4), (0, 4)]),
+                Polygon([(1, 1), (2, 1), (2, 2), (1, 2)]),
+            ],
+            crs=sample_crs,
+        )
+        segments = gpd.GeoDataFrame(geometry=[LineString([(0, -1), (4, -1)])], crs=sample_crs)
+
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            _raise_no_objects_tessellation,
+        )
+
+        nodes, _ = morphological_graph(
+            buildings,
+            segments,
+            tessellation_fallback=True,
+            keep_buildings=True,
+        )
+
+        place = nodes["place"]
+        assert sorted(place.index) == ["fallback_0", "fallback_1"]
+        assert place.loc["fallback_0", "building_geometry"].equals(buildings.geometry.iloc[0])
+        assert place.loc["fallback_1", "building_geometry"].equals(buildings.geometry.iloc[1])
+        assert list(place["name"]) == ["large", "small"]
+        assert "_source_building_index" not in place.columns
+
+    def test_fallback_tessellation_empty_return_keeps_place_schema(
+        self,
+        sample_crs: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An empty whole-tessellation fallback still returns the place schema."""
+        # The building lies far beyond the network distance budget, so the
+        # fallback retains no cells at all.
+        buildings = gpd.GeoDataFrame(
+            geometry=[Polygon([(100, 100), (101, 100), (101, 101), (100, 101)])],
+            crs=sample_crs,
+        )
+        segments = gpd.GeoDataFrame(geometry=[LineString([(0, 0), (1, 0)])], crs=sample_crs)
+
+        monkeypatch.setattr(
+            "city2graph.morphology.create_tessellation",
+            _raise_no_objects_tessellation,
+        )
+
+        nodes, _ = morphological_graph(
+            buildings,
+            segments,
+            center_point=Point(0, 0),
+            distance=5.0,
+            extent_buffer=1.0,
+            tessellation_fallback=True,
+        )
+
+        place = nodes["place"]
+        assert place.empty
+        assert "place_id" in place.columns
+        assert "_source_building_index" not in place.columns
+
+    def test_unenclosed_fallback_does_not_leak_source_index_column(
+        self,
+        sample_crs: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Unenclosed-building fallback cells keep the source column internal."""
+        # The stub tessellation covers only the first building, so the second
+        # one is appended as an unenclosed fallback cell.
+        buildings = gpd.GeoDataFrame(
+            geometry=[
+                Polygon([(0.2, 0.2), (0.4, 0.2), (0.4, 0.4), (0.2, 0.4)]),
+                Polygon([(10, 0.2), (10.5, 0.2), (10.5, 0.7), (10, 0.7)]),
+            ],
+            crs=sample_crs,
+        )
+        segments = gpd.GeoDataFrame(geometry=[LineString([(0, 0), (11, 0)])], crs=sample_crs)
+
+        def one_cell_tessellation(
+            geometry: gpd.GeoDataFrame,
+            primary_barriers: gpd.GeoDataFrame | None = None,
+            **kwargs: object,
+        ) -> gpd.GeoDataFrame:
+            _ = (primary_barriers, kwargs)
+            return gpd.GeoDataFrame(
+                {"tess_id": ["cell"], "enclosure_index": [0]},
+                geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+                crs=geometry.crs,
+            )
+
+        monkeypatch.setattr("city2graph.morphology.create_tessellation", one_cell_tessellation)
+
+        nodes, _ = morphological_graph(
+            buildings,
+            segments,
+            include_unenclosed_buildings=True,
+            keep_buildings=False,
+        )
+
+        place = nodes["place"]
+        assert any(str(idx).startswith("fallback_") for idx in place.index)
+        assert "_source_building_index" not in place.columns
+
     def test_tessellation_n_jobs_forwarded(
         self,
         sample_crs: str,
