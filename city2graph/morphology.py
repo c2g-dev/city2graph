@@ -2326,6 +2326,49 @@ def _append_barrier_context_segments(
     return gpd.GeoDataFrame(merged, geometry=geometry_name, crs=segments_buffer.crs)
 
 
+def _match_fallback_cells_to_source_buildings(
+    joined: gpd.GeoDataFrame,
+    buildings: gpd.GeoDataFrame,
+    building_columns: list[str],
+) -> gpd.GeoDataFrame:
+    """
+    Overwrite fallback-cell spatial-join matches with their source building.
+
+    Fallback cells are matched exactly to their source building, so extra
+    sjoin matches only duplicate the cell's row and must be dropped. All
+    operations are positional: the sjoin can duplicate index labels when a
+    cell contains several building points, which breaks label alignment.
+
+    Parameters
+    ----------
+    joined : geopandas.GeoDataFrame
+        The tessellation joined against building representative points, with
+        the ``_SOURCE_BUILDING_INDEX_COL`` column present.
+    buildings : geopandas.GeoDataFrame
+        The buildings the source indices refer to.
+    building_columns : list[str]
+        Non-geometry building columns copied onto the fallback rows.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        ``joined`` with redundant fallback rows removed and their
+        ``index_right`` and building columns taken from the source building.
+    """
+    source_mask = joined[_SOURCE_BUILDING_INDEX_COL].notna().to_numpy()
+    redundant = source_mask & joined.index.duplicated(keep="first")
+    if redundant.any():
+        joined = joined.loc[~redundant]
+        source_mask = joined[_SOURCE_BUILDING_INDEX_COL].notna().to_numpy()
+    source_index = joined[_SOURCE_BUILDING_INDEX_COL]
+    joined["index_right"] = np.where(source_mask, source_index, joined["index_right"])
+    for column in building_columns:
+        joined.loc[source_mask, column] = (
+            source_index.loc[source_mask].map(buildings[column]).to_numpy()
+        )
+    return joined
+
+
 def _add_building_info(
     tessellation: gpd.GeoDataFrame,
     buildings: gpd.GeoDataFrame,
@@ -2370,25 +2413,7 @@ def _add_building_info(
         joined["index_right"] = None
 
     if _SOURCE_BUILDING_INDEX_COL in joined.columns:
-        # Fallback cells are matched exactly to their source building, so extra
-        # sjoin matches only duplicate the cell's row and must be dropped. All
-        # operations are positional: the sjoin can duplicate index labels when a
-        # cell contains several building points, which breaks label alignment.
-        source_mask = joined[_SOURCE_BUILDING_INDEX_COL].notna().to_numpy()
-        redundant = source_mask & joined.index.duplicated(keep="first")
-        if redundant.any():
-            joined = joined.loc[~redundant]
-            source_mask = joined[_SOURCE_BUILDING_INDEX_COL].notna().to_numpy()
-        source_index = joined[_SOURCE_BUILDING_INDEX_COL]
-        joined["index_right"] = np.where(source_mask, source_index, joined["index_right"])
-        for column in building_columns:
-            joined.loc[source_mask, column] = (
-                source_index.loc[source_mask]
-                .map(
-                    buildings[column],
-                )
-                .to_numpy()
-            )
+        joined = _match_fallback_cells_to_source_buildings(joined, buildings, building_columns)
 
     building_geom_map = buildings.geometry.to_dict()
     joined["building_geometry"] = gpd.GeoSeries(
