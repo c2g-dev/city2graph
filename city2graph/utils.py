@@ -4249,12 +4249,8 @@ def create_tessellation(
     """
     if geometry.empty:
         if primary_barriers is not None:
-            # Enclosed tessellation needs 'enclosure_index' column
-            return gpd.GeoDataFrame(
-                columns=["geometry", "enclosure_index"],
-                geometry="geometry",
-                crs=geometry.crs,
-            )
+            return _create_empty_tessellation(geometry.crs)
+        # Morphological tessellation has no enclosures.
         return gpd.GeoDataFrame(
             columns=["geometry", "tess_id"],
             geometry="geometry",
@@ -4362,28 +4358,6 @@ def _overfilled_enclosures(
     return list(cell_areas.index[broken])
 
 
-def _degrade_to_empty_tessellation() -> tuple[None, bool]:
-    """
-    Log the terminal retry failure and degrade the unit to an empty tessellation.
-
-    This is the terminal step of the retry ladder in
-    :func:`_run_tessellation_with_retries`: when momepy keeps failing at the
-    coarser precision, the unit degrades to an empty tessellation instead of
-    aborting the whole run.
-
-    Returns
-    -------
-    tuple[None, bool]
-        ``(tessellation, include_tess_id)`` values signalling
-        :func:`_run_tessellation_with_retries` to return an empty result.
-    """
-    logger.warning(
-        "Tessellation still failed at coarser precision; returning empty "
-        "tessellation for this unit.",
-    )
-    return None, False
-
-
 def _is_known_tessellation_error(error: Exception) -> bool:
     """
     Report whether a tessellation failure belongs to the known retry ladder.
@@ -4411,9 +4385,9 @@ def _is_known_tessellation_error(error: Exception) -> bool:
     return isinstance(error, shapely.errors.GEOSException)
 
 
-def _degraded_tessellation_result(error: Exception) -> tuple[None, bool]:
+def _log_tessellation_degradation(error: Exception) -> None:
     """
-    Log a known terminal failure and degrade the unit to an empty tessellation.
+    Log a known terminal failure before degrading the unit to an empty result.
 
     The warning message depends on the failure kind: the momepy concat
     ``ValueError`` keeps its historical wording, while simplification and GEOS
@@ -4424,23 +4398,20 @@ def _degraded_tessellation_result(error: Exception) -> tuple[None, bool]:
     error : Exception
         The known failure (see :func:`_is_known_tessellation_error`) that
         exhausted the retry ladder.
-
-    Returns
-    -------
-    tuple[None, bool]
-        ``(tessellation, include_tess_id)`` values signalling
-        :func:`_run_tessellation_with_retries` to return an empty result.
     """
     if isinstance(error, ValueError):
         logger.warning("Momepy could not generate tessellation, returning empty GeoDataFrame.")
-        return None, True
-    return _degrade_to_empty_tessellation()
+        return
+    logger.warning(
+        "Tessellation still failed at coarser precision; returning empty "
+        "tessellation for this unit.",
+    )
 
 
 def _run_final_tessellation_attempt(
     run_tessellation: typing.Callable[..., gpd.GeoDataFrame],
     overrides: dict[str, object],
-) -> tuple[gpd.GeoDataFrame | None, bool]:
+) -> gpd.GeoDataFrame | None:
     """
     Run the last rung of the retry ladder, degrading known failures to empty.
 
@@ -4457,23 +4428,24 @@ def _run_final_tessellation_attempt(
 
     Returns
     -------
-    tuple[geopandas.GeoDataFrame or None, bool]
-        ``(tessellation, include_tess_id)`` where ``tessellation`` is ``None``
-        when the attempt failed with another known error.
+    geopandas.GeoDataFrame or None
+        The tessellation, or ``None`` when the attempt failed with another
+        known error.
     """
     try:
-        return run_tessellation(**overrides), True
+        return run_tessellation(**overrides)
     except (ValueError, TypeError, shapely.errors.GEOSException) as error:
         if not _is_known_tessellation_error(error):
             raise
-        return _degraded_tessellation_result(error)
+        _log_tessellation_degradation(error)
+        return None
 
 
 def _retry_at_coarser_grid(
     run_tessellation: typing.Callable[..., gpd.GeoDataFrame],
     kwargs: dict[str, object],
     overrides: dict[str, object],
-) -> tuple[gpd.GeoDataFrame | None, dict[str, object], bool]:
+) -> tuple[gpd.GeoDataFrame | None, dict[str, object]]:
     """
     Run the coarser-grid retry rung, escalating to ``simplify=False`` if needed.
 
@@ -4493,12 +4465,12 @@ def _retry_at_coarser_grid(
 
     Returns
     -------
-    tuple[geopandas.GeoDataFrame or None, dict[str, object], bool]
-        ``(tessellation, overrides, include_tess_id)`` mirroring
+    tuple[geopandas.GeoDataFrame or None, dict[str, object]]
+        ``(tessellation, overrides)`` mirroring
         :func:`_run_tessellation_with_retries`.
     """
     try:
-        return run_tessellation(**overrides), overrides, True
+        return run_tessellation(**overrides), overrides
     except (ValueError, TypeError, shapely.errors.GEOSException) as retry_error:
         if not _is_known_tessellation_error(retry_error):
             raise
@@ -4509,19 +4481,17 @@ def _retry_at_coarser_grid(
                 "simplify=False.",
                 retry_error,
             )
-            tessellation, include_tess_id = _run_final_tessellation_attempt(
-                run_tessellation,
-                overrides,
-            )
+            tessellation = _run_final_tessellation_attempt(run_tessellation, overrides)
         else:
-            tessellation, include_tess_id = _degraded_tessellation_result(retry_error)
-        return tessellation, overrides, include_tess_id
+            _log_tessellation_degradation(retry_error)
+            tessellation = None
+        return tessellation, overrides
 
 
 def _run_tessellation_with_retries(
     run_tessellation: typing.Callable[..., gpd.GeoDataFrame],
     kwargs: dict[str, object],
-) -> tuple[gpd.GeoDataFrame | None, dict[str, object], bool]:
+) -> tuple[gpd.GeoDataFrame | None, dict[str, object]]:
     """
     Run momepy enclosed tessellation through the known-failure retry ladder.
 
@@ -4551,14 +4521,13 @@ def _run_tessellation_with_retries(
 
     Returns
     -------
-    tuple[geopandas.GeoDataFrame or None, dict[str, object], bool]
-        ``(tessellation, overrides, include_tess_id)`` where ``tessellation``
-        is ``None`` when momepy definitively failed and the caller should
-        return an empty tessellation (built with ``include_tess_id``), and
-        ``overrides`` records the retry options that produced the result.
+    tuple[geopandas.GeoDataFrame or None, dict[str, object]]
+        ``(tessellation, overrides)`` where ``tessellation`` is ``None`` when
+        momepy definitively failed and the caller should return an empty
+        tessellation, and ``overrides`` records the retry options that
+        produced the result.
     """
     overrides: dict[str, object] = {}
-    include_tess_id = True
     tessellation: gpd.GeoDataFrame | None
     try:
         tessellation = run_tessellation()
@@ -4573,7 +4542,8 @@ def _run_tessellation_with_retries(
         if "grid_size" in kwargs:
             if "simplify" in kwargs:
                 # Both retry options are pinned by the caller; nothing left.
-                tessellation, include_tess_id = _degrade_to_empty_tessellation()
+                _log_tessellation_degradation(e)
+                tessellation = None
             else:
                 overrides = {"simplify": False}
                 logger.warning(
@@ -4581,21 +4551,14 @@ def _run_tessellation_with_retries(
                     "simplify=False.",
                     e,
                 )
-                tessellation, include_tess_id = _run_final_tessellation_attempt(
-                    run_tessellation,
-                    overrides,
-                )
+                tessellation = _run_final_tessellation_attempt(run_tessellation, overrides)
         else:
             overrides = {"grid_size": 1e-3}
             logger.warning(
                 "Tessellation boundary simplification failed (%s); retrying with grid_size=1e-3.",
                 e,
             )
-            tessellation, overrides, include_tess_id = _retry_at_coarser_grid(
-                run_tessellation,
-                kwargs,
-                overrides,
-            )
+            tessellation, overrides = _retry_at_coarser_grid(run_tessellation, kwargs, overrides)
     except shapely.errors.GEOSException as e:
         # e.g. ``TopologyException: side location conflict`` on numerically
         # fragile footprints; ``voronoi_frames`` snaps coordinates at
@@ -4604,7 +4567,8 @@ def _run_tessellation_with_retries(
         if "grid_size" in kwargs:
             # The caller pinned the snapping precision; degrade instead of
             # overriding it.
-            tessellation, include_tess_id = _degrade_to_empty_tessellation()
+            _log_tessellation_degradation(e)
+            tessellation = None
         else:
             logger.warning(
                 "Tessellation hit a GEOS topology error (%s); retrying with coarser "
@@ -4612,12 +4576,8 @@ def _run_tessellation_with_retries(
                 e,
             )
             overrides = {"grid_size": 1e-3}
-            tessellation, overrides, include_tess_id = _retry_at_coarser_grid(
-                run_tessellation,
-                kwargs,
-                overrides,
-            )
-    return tessellation, overrides, include_tess_id
+            tessellation, overrides = _retry_at_coarser_grid(run_tessellation, kwargs, overrides)
+    return tessellation, overrides
 
 
 def _repair_or_drop_degenerate_enclosures(
@@ -4767,12 +4727,12 @@ def _create_enclosed_tessellation(
                 **{**kwargs, **extra_kwargs},
             )
 
-        tessellation, overrides, include_tess_id = _run_tessellation_with_retries(
+        tessellation, overrides = _run_tessellation_with_retries(
             _run_enclosed_tessellation,
             kwargs,
         )
         if tessellation is None:
-            return _create_empty_tessellation(geometry.crs, include_tess_id=include_tess_id)
+            return _create_empty_tessellation(geometry.crs)
         tessellation = _repair_or_drop_degenerate_enclosures(
             tessellation,
             enclosures,
@@ -4781,11 +4741,11 @@ def _create_enclosed_tessellation(
             overrides,
         )
     else:
-        tessellation = _create_empty_tessellation(geometry.crs, include_tess_id=False)
+        tessellation = _create_empty_tessellation(geometry.crs)
 
     tessellation = _polygonal_tessellation(tessellation)
     if tessellation.empty:
-        return _create_empty_tessellation(geometry.crs, include_tess_id=False)
+        return _create_empty_tessellation(geometry.crs)
 
     tessellation["tess_id"] = [
         f"{i}_{j}"
@@ -4832,32 +4792,30 @@ def _compute_enclosure_limit(
     return gpd.GeoSeries(geometries, crs=geometry.crs).union_all().convex_hull.buffer(buffer)
 
 
-def _create_empty_tessellation(
-    crs: Any,  # noqa: ANN401
-    include_tess_id: bool = True,
-) -> gpd.GeoDataFrame:
+def _create_empty_tessellation(crs: Any) -> gpd.GeoDataFrame:  # noqa: ANN401
     """
-    Create an empty tessellation GeoDataFrame.
+    Create an empty enclosed-tessellation GeoDataFrame.
 
-    This helper generates a properly structured but empty GeoDataFrame for tessellations,
-    ensuring consistent column names and types when no tessellation can be generated.
+    This helper generates a properly structured but empty GeoDataFrame when no
+    tessellation can be generated, matching the column schema of non-empty
+    enclosed tessellations so downstream consumers see a uniform shape.
 
     Parameters
     ----------
     crs : Any
         The Coordinate Reference System.
-    include_tess_id : bool, default True
-        Whether to include the 'tess_id' column.
 
     Returns
     -------
     geopandas.GeoDataFrame
-        An empty tessellation GeoDataFrame.
+        An empty tessellation GeoDataFrame with the columns ``geometry``,
+        ``enclosure_index`` and ``tess_id``.
     """
-    columns = ["geometry", "enclosure_index"]
-    if include_tess_id:
-        columns.append("tess_id")
-    return gpd.GeoDataFrame(columns=columns, geometry="geometry", crs=crs)
+    return gpd.GeoDataFrame(
+        columns=["geometry", "enclosure_index", "tess_id"],
+        geometry="geometry",
+        crs=crs,
+    )
 
 
 def _create_morphological_tessellation(
