@@ -607,6 +607,55 @@ class TestTessellation(BaseGraphTest):
         assert result.empty
         assert "returning empty" in caplog.text
 
+    def test_enclosed_tessellation_geos_retry_falls_back_to_simplify_false(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A coarser-grid retry after a GEOS error may fail simplification instead."""
+        monkeypatch.setattr(
+            momepy,
+            "enclosures",
+            lambda **_kwargs: gpd.GeoDataFrame(
+                {"eID": [1]},
+                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
+                crs=sample_buildings_gdf.crs,
+            ),
+        )
+
+        calls: list[tuple[object, object]] = []
+
+        def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
+            calls.append((kwargs.get("grid_size"), kwargs.get("simplify")))
+            if kwargs.get("grid_size") is None:
+                msg = "TopologyException: side location conflict at 0 0"
+                raise shapely.errors.GEOSException(msg)
+            if kwargs.get("simplify") is not False:
+                msg = "One of the Geometry inputs is of incorrect geometry type."
+                raise TypeError(msg)
+            return gpd.GeoDataFrame(
+                {"enclosure_index": [1]},
+                geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+                index=[0],
+                crs=sample_buildings_gdf.crs,
+            )
+
+        monkeypatch.setattr(momepy, "enclosed_tessellation", fake_enclosed_tessellation)
+
+        with caplog.at_level("WARNING"):
+            result = utils.create_tessellation(
+                sample_buildings_gdf,
+                primary_barriers=sample_segments_gdf,
+            )
+
+        assert not result.empty
+        assert "tess_id" in result.columns
+        assert calls[-1] == (1e-3, False)
+        assert "retrying with coarser" in caplog.text
+        assert "retrying with simplify=False" in caplog.text
+
     def test_enclosed_tessellation_reraises_geos_error_with_explicit_grid_size(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,

@@ -4362,6 +4362,28 @@ def _overfilled_enclosures(
     return list(cell_areas.index[broken])
 
 
+def _degrade_to_empty_tessellation() -> tuple[None, bool]:
+    """
+    Log the terminal retry failure and degrade the unit to an empty tessellation.
+
+    This is the terminal step of the retry ladder in
+    :func:`_run_tessellation_with_retries`: when momepy keeps failing at the
+    coarser precision, the unit degrades to an empty tessellation instead of
+    aborting the whole run.
+
+    Returns
+    -------
+    tuple[None, bool]
+        ``(tessellation, include_tess_id)`` values signalling
+        :func:`_run_tessellation_with_retries` to return an empty result.
+    """
+    logger.warning(
+        "Tessellation still failed at coarser precision; returning empty "
+        "tessellation for this unit.",
+    )
+    return None, False
+
+
 def _run_tessellation_with_retries(
     run_tessellation: typing.Callable[..., gpd.GeoDataFrame],
     kwargs: dict[str, object],
@@ -4375,8 +4397,11 @@ def _run_tessellation_with_retries(
     ``GEOSException``, or as a silently degenerate partition (handled
     separately by :func:`_repair_or_drop_degenerate_enclosures`). A coarser
     ``grid_size`` repairs the underlying partition, so it is preferred over
-    ``simplify=False``, which would keep the degenerate cells. Caller-pinned
-    ``simplify``/``grid_size`` values are never overridden.
+    ``simplify=False``, which would keep the degenerate cells. The coarser
+    grid can itself snap cells non-polygonal, so a ``GEOSException`` retry may
+    in turn hit the ``coverage_simplify`` ``TypeError`` and falls back to
+    ``simplify=False``. Caller-pinned ``simplify``/``grid_size`` values are
+    never overridden.
 
     Parameters
     ----------
@@ -4444,12 +4469,20 @@ def _run_tessellation_with_retries(
         try:
             tessellation = run_tessellation(**overrides)
         except shapely.errors.GEOSException:
+            tessellation, include_tess_id = _degrade_to_empty_tessellation()
+        except TypeError as te:
+            if "incorrect geometry type" not in str(te) or "simplify" in kwargs:
+                raise
+            overrides["simplify"] = False
             logger.warning(
-                "Tessellation still failed at coarser precision; returning empty "
-                "tessellation for this unit.",
+                "Tessellation retry failed boundary simplification (%s); retrying with "
+                "simplify=False.",
+                te,
             )
-            tessellation = None
-            include_tess_id = False
+            try:
+                tessellation = run_tessellation(**overrides)
+            except shapely.errors.GEOSException:
+                tessellation, include_tess_id = _degrade_to_empty_tessellation()
     return tessellation, overrides, include_tess_id
 
 
