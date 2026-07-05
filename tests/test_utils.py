@@ -150,15 +150,45 @@ class TestTessellation(BaseGraphTest):
         )
         result = utils.create_tessellation(empty_gdf, primary_barriers=barriers)
         self.assert_valid_gdf(result, expected_empty=True)
-        helpers.assert_has_columns(result, ["enclosure_index"])
+        assert list(result.columns) == ["geometry", "enclosure_index", "tess_id"]
 
-    def test_empty_tessellation_with_tess_id(self, sample_crs: str) -> None:
-        """Test _create_empty_tessellation with tess_id column (line 2422)."""
-        result = utils._create_empty_tessellation(sample_crs, include_tess_id=True)
-        assert isinstance(result, gpd.GeoDataFrame)
+    @pytest.mark.parametrize("failure_mode", ["geos_error", "concat_error", "no_enclosures"])
+    def test_empty_enclosed_tessellation_schema_is_uniform(
+        self,
+        failure_mode: str,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Every degrade path must produce the same empty enclosed-tessellation schema."""
+        enclosures = (
+            gpd.GeoDataFrame({"eID": []}, geometry=[], crs=sample_buildings_gdf.crs)
+            if failure_mode == "no_enclosures"
+            else gpd.GeoDataFrame(
+                {"eID": [1]},
+                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
+                crs=sample_buildings_gdf.crs,
+            )
+        )
+        monkeypatch.setattr(momepy, "enclosures", lambda **_kwargs: enclosures)
+
+        def raise_failure(**_kwargs: object) -> gpd.GeoDataFrame:
+            if failure_mode == "geos_error":
+                msg = "TopologyException: side location conflict at 0 0"
+                raise shapely.errors.GEOSException(msg)
+            msg = "No objects to concatenate"
+            raise ValueError(msg)
+
+        monkeypatch.setattr(momepy, "enclosed_tessellation", raise_failure)
+
+        result = utils.create_tessellation(
+            sample_buildings_gdf,
+            primary_barriers=sample_segments_gdf,
+        )
+
         assert result.empty
-        assert "tess_id" in result.columns
-        assert "enclosure_index" in result.columns
+        assert list(result.columns) == ["geometry", "enclosure_index", "tess_id"]
+        assert result.crs == sample_buildings_gdf.crs
 
     def test_tessellation_momepy_error_handling(self, sample_crs: str) -> None:
         """Test tessellation error handling for momepy ValueError (lines 2393-2399)."""
