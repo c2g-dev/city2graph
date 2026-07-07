@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from city2graph.transportation import _time_to_seconds
 from city2graph.transportation import _timestamp
 from city2graph.transportation import get_od_pairs
+from city2graph.transportation import load_gbfs
 from city2graph.transportation import load_gtfs
 from city2graph.transportation import travel_summary_graph
 
@@ -116,6 +117,50 @@ class TestLoadGtfs:
     def test_load_gtfs_nonexistent_file(self) -> None:
         con = load_gtfs("nonexistent.zip")
         assert len(con.execute("SHOW TABLES").fetchall()) == 0
+
+
+class TestLoadGbfs:
+    def test_load_gbfs_basic(self, tmp_path: Path) -> None:
+        gbfs_dir = tmp_path / "gbfs"
+        gbfs_dir.mkdir()
+        (gbfs_dir / "station_information.json").write_text(
+            """
+            {
+                "data": {
+                    "stations": [
+                        {
+                            "station_id": "1",
+                            "name": "Test Station",
+                            "lat": 51.5,
+                            "lon": -0.1,
+                            "capacity": 10
+                        }
+                    ]
+                }
+            }
+            """,
+            encoding="utf-8",
+        )
+        con = load_gbfs(gbfs_dir)
+        assert isinstance(con, duckdb.DuckDBPyConnection)
+        tables = [r[0] for r in con.execute("SHOW TABLES").fetchall()]
+        assert "station_information" in tables
+        rows = con.execute(
+            "SELECT station_id, name, lat, lon, capacity FROM station_information"
+        ).fetchall()
+        assert rows == [("1", "Test Station", 51.5, -0.1, 10)]
+
+    def test_load_gbfs_empty_directory(self, tmp_path: Path) -> None:
+        gbfs_dir = tmp_path / "empty_gbfs"
+        gbfs_dir.mkdir()
+        con = load_gbfs(gbfs_dir)
+        tables = [r[0] for r in con.execute("SHOW TABLES").fetchall()]
+        assert len(tables) == 0
+
+    def test_load_gbfs_nonexistent_directory(self) -> None:
+        con = load_gbfs("nonexistent_gbfs")
+        tables = [r[0] for r in con.execute("SHOW TABLES").fetchall()]
+        assert len(tables) == 0
 
 
 class TestGetOdPairs:

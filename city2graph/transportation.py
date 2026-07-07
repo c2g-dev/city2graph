@@ -8,6 +8,7 @@ graphs for downstream network analysis.
 
 from __future__ import annotations
 
+import json
 import logging
 import tempfile
 import zipfile
@@ -25,7 +26,7 @@ from shapely import wkt
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-__all__ = ["get_od_pairs", "load_gtfs", "travel_summary_graph"]
+__all__ = ["get_od_pairs", "load_gbfs", "load_gtfs", "travel_summary_graph"]
 
 _ACTIVE_DATES_TABLE_SQL = """
     CREATE OR REPLACE TEMP TABLE _active_dates (
@@ -563,6 +564,79 @@ def load_gtfs(path: str | Path) -> duckdb.DuckDBPyConnection:
     return con
 
 
+def load_gbfs(path: str | Path) -> duckdb.DuckDBPyConnection:
+    """
+    Load GBFS JSON feeds from a directory into an in-memory DuckDB database.
+
+    Parameters
+    ----------
+    path : str | Path
+        Path to a GBFS directory containing JSON files.
+
+    Returns
+    -------
+    duckdb.DuckDBPyConnection
+        In-memory DuckDB connection containing imported GBFS tables.
+    """
+    con = duckdb.connect(":memory:")
+    con.execute("INSTALL spatial; LOAD spatial;")
+    path = Path(path)
+    has_files = False
+    try:
+        for file_path in path.rglob("*.json"):
+            with file_path.open(encoding="utf-8") as f:
+                raw = json.load(f)
+            data = raw.get("data", {})
+            if "stations" in data:
+                rows = data["stations"]
+            elif "bikes" in data:
+                rows = data["bikes"]
+            elif "vehicles" in data:
+                rows = data["vehicles"]
+            elif "vehicle_types" in data:
+                rows = data["vehicle_types"]
+            elif "feeds" in data:
+                rows = data["feeds"]
+            else:
+                rows = [data]
+            if not rows:
+                continue
+            has_files = True
+            table_name = file_path.stem.replace("-", "_").lower()
+            df = pd.DataFrame(rows)
+            con.register("_gbfs_tmp", df)
+            con.execute(f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT *
+                FROM _gbfs_tmp
+            """) # noqa: S608
+            con.unregister("_gbfs_tmp")
+    except (OSError, json.JSONDecodeError, duckdb.Error):
+        logger.exception("Failed to read GBFS data at %s", path)
+        return con
+    if not has_files:
+        logger.warning("No GBFS JSON files found in %s", path)
+        return con
+
+    tables = sorted(_list_tables(con))
+    for table in tables:
+        columns = {
+            row[1]
+            for row in con.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if {"lat", "lon"}.issubset(columns):
+            con.execute(f"""
+                ALTER TABLE {table} ADD COLUMN geometry GEOMETRY;
+                UPDATE {table}
+                SET geometry = ST_Point(
+                    CAST(lon AS DOUBLE),
+                    CAST(lat AS DOUBLE)
+                )
+                WHERE try_cast(lon AS DOUBLE) IS NOT NULL
+                  AND try_cast(lat AS DOUBLE) IS NOT NULL
+            """) # noqa: S608
+    logger.info("GBFS loaded: %s", ", ".join(tables))
+    return con
 def _build_frequency_multipliers(
     con: duckdb.DuckDBPyConnection,
     *,
