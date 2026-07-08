@@ -568,6 +568,10 @@ def load_gbfs(path: str | Path) -> duckdb.DuckDBPyConnection:
     """
     Load GBFS JSON feeds from a directory into an in-memory DuckDB database.
 
+    The function reads GBFS JSON files from a local directory, flattens common
+    feed structures into DuckDB tables, and materializes geometry columns from
+    ``lon``/``lat`` fields when available.
+
     Parameters
     ----------
     path : str | Path
@@ -609,7 +613,7 @@ def load_gbfs(path: str | Path) -> duckdb.DuckDBPyConnection:
                 CREATE OR REPLACE TABLE {table_name} AS
                 SELECT *
                 FROM _gbfs_tmp
-            """) # noqa: S608
+            """)  # noqa: S608
             con.unregister("_gbfs_tmp")
     except (OSError, json.JSONDecodeError, duckdb.Error):
         logger.exception("Failed to read GBFS data at %s", path)
@@ -620,10 +624,7 @@ def load_gbfs(path: str | Path) -> duckdb.DuckDBPyConnection:
 
     tables = sorted(_list_tables(con))
     for table in tables:
-        columns = {
-            row[1]
-            for row in con.execute(f"PRAGMA table_info({table})").fetchall()
-        }
+        columns = {row[1] for row in con.execute(f"PRAGMA table_info({table})").fetchall()}
         if {"lat", "lon"}.issubset(columns):
             con.execute(f"""
                 ALTER TABLE {table} ADD COLUMN geometry GEOMETRY;
@@ -634,9 +635,11 @@ def load_gbfs(path: str | Path) -> duckdb.DuckDBPyConnection:
                 )
                 WHERE try_cast(lon AS DOUBLE) IS NOT NULL
                   AND try_cast(lat AS DOUBLE) IS NOT NULL
-            """) # noqa: S608
+            """)  # noqa: S608
     logger.info("GBFS loaded: %s", ", ".join(tables))
     return con
+
+
 def _build_frequency_multipliers(
     con: duckdb.DuckDBPyConnection,
     *,
