@@ -23,6 +23,7 @@ import shapely.errors
 from shapely.geometry import GeometryCollection
 from shapely.geometry import LineString
 from shapely.geometry import MultiLineString
+from shapely.geometry import MultiPolygon
 from shapely.geometry import Point
 from shapely.geometry import Polygon
 
@@ -1145,6 +1146,7 @@ class TestTessellation(BaseGraphTest):
 
         def fake_enclosures(**kwargs: object) -> gpd.GeoDataFrame:
             captured["limit"] = kwargs["limit"]
+            captured["clip"] = kwargs["clip"]
             return gpd.GeoDataFrame(
                 {"eID": [1]},
                 geometry=[custom_limit],
@@ -1168,6 +1170,9 @@ class TestTessellation(BaseGraphTest):
         )
 
         assert captured["limit"] is custom_limit
+        # Explicit limits keep momepy's clip disabled (they may be non-polygonal
+        # and clipping would change the documented semantics).
+        assert captured["clip"] is False
         assert not result.empty
 
     def test_enclosed_tessellation_computes_default_limit(
@@ -1176,11 +1181,12 @@ class TestTessellation(BaseGraphTest):
         sample_segments_gdf: gpd.GeoDataFrame,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A non-empty buffered hull limit should be computed when none is supplied."""
+        """A non-empty buffered-union limit should be computed when none is supplied."""
         captured: dict[str, object] = {}
 
         def fake_enclosures(**kwargs: object) -> gpd.GeoDataFrame:
             captured["limit"] = kwargs["limit"]
+            captured["clip"] = kwargs["clip"]
             return gpd.GeoDataFrame(
                 {"eID": [1]},
                 geometry=[kwargs["limit"]],
@@ -1202,9 +1208,74 @@ class TestTessellation(BaseGraphTest):
         )
 
         limit = captured["limit"]
-        assert isinstance(limit, Polygon)
+        assert isinstance(limit, (Polygon, MultiPolygon))
         assert not limit.is_empty
+        # The derived limit may contain holes whose faces fall outside it, so
+        # the enclosures must be clipped to the limit.
+        assert captured["clip"] is True
         assert not result.empty
+
+    def test_enclosed_tessellation_default_limit_confines_cells(
+        self,
+        sample_crs: str,
+    ) -> None:
+        """Cells must not extend far beyond the built fabric without a limit.
+
+        The derived enclosure limit follows the buffered union of streets and
+        buildings; a convex-hull limit would let the Voronoi cell of a
+        street-front building stretch hundreds of metres into empty land as a
+        needle-shaped artifact.
+        """
+        corners = [(0.0, 0.0), (200.0, 0.0), (200.0, 200.0), (0.0, 200.0), (0.0, 0.0)]
+        streets = gpd.GeoDataFrame(
+            geometry=[LineString([corners[i], corners[i + 1]]) for i in range(4)],
+            crs=sample_crs,
+        )
+        buildings = gpd.GeoDataFrame(
+            geometry=[
+                Polygon([(40, 40), (80, 40), (80, 80), (40, 80)]),
+                Polygon([(120, 120), (160, 120), (160, 160), (120, 160)]),
+                # Street-front building outside the square: its cell lives in
+                # the outer enclosure bounded only by the derived limit.
+                Polygon([(80, 210), (120, 210), (120, 240), (80, 240)]),
+            ],
+            crs=sample_crs,
+        )
+
+        result = utils.create_tessellation(buildings, primary_barriers=streets, n_jobs=1)
+
+        fabric = gpd.GeoSeries(
+            list(streets.geometry) + list(buildings.geometry), crs=sample_crs
+        ).union_all()
+        assert not result.empty
+        assert result.geometry.union_all().within(fabric.buffer(100.0 + 1.0))
+
+    def test_enclosed_tessellation_default_limit_keeps_remote_building(
+        self,
+        sample_crs: str,
+    ) -> None:
+        """A building far from every street still receives its own cell.
+
+        The derived limit buffers the buildings themselves, so a remote
+        building forms its own enclosure island instead of being dropped.
+        """
+        corners = [(0.0, 0.0), (200.0, 0.0), (200.0, 200.0), (0.0, 200.0), (0.0, 0.0)]
+        streets = gpd.GeoDataFrame(
+            geometry=[LineString([corners[i], corners[i + 1]]) for i in range(4)],
+            crs=sample_crs,
+        )
+        buildings = gpd.GeoDataFrame(
+            geometry=[
+                Polygon([(80, 80), (120, 80), (120, 120), (80, 120)]),
+                Polygon([(500, 80), (540, 80), (540, 120), (500, 120)]),
+            ],
+            crs=sample_crs,
+        )
+
+        result = utils.create_tessellation(buildings, primary_barriers=streets, n_jobs=1)
+
+        remote_centroid = buildings.geometry.iloc[1].centroid
+        assert result.geometry.contains(remote_centroid).sum() == 1
 
 
 # ============================================================================

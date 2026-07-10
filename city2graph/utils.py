@@ -2637,6 +2637,10 @@ def create_isochrone(
         The method to generate the isochrone polygon. Options are:
 
         - "concave_hull_knn": Creates a concave hull (k-NN) around reachable nodes.
+          This iterative algorithm scales poorly with point count; for large
+          networks (tens of thousands of reachable nodes), prefer
+          "concave_hull_alpha", which uses shapely's C implementation and is
+          orders of magnitude faster.
         - "concave_hull_alpha": Creates a concave hull (alpha shape) around reachable nodes.
         - "convex_hull": Creates a convex hull around reachable nodes.
         - "buffer": Creates a buffer around reachable edges/nodes.
@@ -3432,6 +3436,11 @@ def _extract_edge_geometries(graph: nx.Graph | nx.MultiGraph) -> list[Any]:
     return [data["geometry"] for _, _, data in graph.edges(data=True) if "geometry" in data]
 
 
+# Maximum number of k values tried by _concave_hull_knn before falling back
+# to the alpha-shape hull. Bounds the worst case at O(cap * n) walk steps.
+_KNN_HULL_MAX_ATTEMPTS = 50
+
+
 def _concave_hull_knn(
     points: list[Point] | np.ndarray, k: int
 ) -> Polygon | MultiPolygon | LineString | Point:
@@ -3491,10 +3500,14 @@ def _concave_hull_knn(
     start_idx = int(np.lexsort((coords[:, 0], coords[:, 1]))[0])
     min_k = max(2, min(int(k), n_points - 1))
     tree = cKDTree(coords)
-    all_points = MultiPoint(coords.tolist())
     neighbor_cache: dict[int, np.ndarray] = {}
 
-    for current_k in range(min_k, n_points):
+    # Cap the number of k-escalation retries: each retry is a full O(n) hull
+    # walk, so an unbounded `range(min_k, n_points)` can degrade to O(n^2) on
+    # large point clouds. Past the cap, fall back to the alpha-shape hull.
+    max_k = min(n_points - 1, min_k + _KNN_HULL_MAX_ATTEMPTS - 1)
+
+    for current_k in range(min_k, max_k + 1):
         hull_indices = _trace_concave_hull_once(
             coords,
             start_idx,
@@ -3512,7 +3525,7 @@ def _concave_hull_knn(
         if poly.is_empty or not isinstance(poly, (Polygon, MultiPolygon)):
             continue
 
-        if _polygon_covers_all_points(poly, all_points):
+        if _polygon_covers_all_points(poly, coords):
             return poly
 
     return _concave_fallback_alpha(coords)
@@ -3523,11 +3536,12 @@ class _HullWalkState:
     """
     Mutable state for a single greedy concave-hull walk.
 
-    The state tracks accepted edges and their axis-aligned bounds so edge
-    intersection checks can be accelerated with vectorized bbox filtering.
+    The state tracks accepted edge endpoints and their axis-aligned bounds so
+    edge intersection checks can run fully vectorized in NumPy.
     """
 
-    existing_lines: list[LineString]
+    seg_starts: np.ndarray
+    seg_ends: np.ndarray
     seg_bounds_min: np.ndarray
     seg_bounds_max: np.ndarray
     segment_count: int
@@ -3557,7 +3571,8 @@ class _HullWalkState:
             Initialized state ready for a hull walk.
         """
         return cls(
-            existing_lines=[],
+            seg_starts=np.empty((max_segments, 2), dtype=float),
+            seg_ends=np.empty((max_segments, 2), dtype=float),
             seg_bounds_min=np.empty((max_segments, 2), dtype=float),
             seg_bounds_max=np.empty((max_segments, 2), dtype=float),
             segment_count=0,
@@ -3566,10 +3581,10 @@ class _HullWalkState:
 
     def append_segment(self, start: np.ndarray, end: np.ndarray) -> None:
         """
-        Append an accepted hull segment and cache its bbox.
+        Append an accepted hull segment and cache its endpoints and bbox.
 
-        The segment is stored as a `LineString`, and min/max coordinate bounds
-        are written into preallocated arrays for fast overlap pruning.
+        Raw endpoint coordinates and min/max bounds are written into
+        preallocated arrays so intersection checks stay fully vectorized.
 
         Parameters
         ----------
@@ -3578,15 +3593,15 @@ class _HullWalkState:
         end : np.ndarray
             Segment end coordinate as a length-2 array.
         """
-        self.existing_lines.append(LineString([start, end]))
         if self.segment_count >= len(self.seg_bounds_min):
             grow_by = max(1, len(self.seg_bounds_min))
-            self.seg_bounds_min = np.vstack(
-                [self.seg_bounds_min, np.empty((grow_by, 2), dtype=float)]
-            )
-            self.seg_bounds_max = np.vstack(
-                [self.seg_bounds_max, np.empty((grow_by, 2), dtype=float)]
-            )
+            grow = np.empty((grow_by, 2), dtype=float)
+            self.seg_starts = np.vstack([self.seg_starts, grow])
+            self.seg_ends = np.vstack([self.seg_ends, grow.copy()])
+            self.seg_bounds_min = np.vstack([self.seg_bounds_min, grow.copy()])
+            self.seg_bounds_max = np.vstack([self.seg_bounds_max, grow.copy()])
+        self.seg_starts[self.segment_count] = start
+        self.seg_ends[self.segment_count] = end
         self.seg_bounds_min[self.segment_count] = np.minimum(start, end)
         self.seg_bounds_max[self.segment_count] = np.maximum(start, end)
         self.segment_count += 1
@@ -3620,6 +3635,36 @@ class _HullWalkState:
             coordinates.
         """
         return self.seg_bounds_max[: self.segment_count]
+
+    def starts_view(self) -> np.ndarray:
+        """
+        Return the populated segment start-point view.
+
+        This slices the preallocated endpoint array to only the rows
+        associated with currently accepted segments.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape ``(segment_count, 2)`` with per-segment start
+            coordinates.
+        """
+        return self.seg_starts[: self.segment_count]
+
+    def ends_view(self) -> np.ndarray:
+        """
+        Return the populated segment end-point view.
+
+        This slices the preallocated endpoint array to only the rows
+        associated with currently accepted segments.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape ``(segment_count, 2)`` with per-segment end
+            coordinates.
+        """
+        return self.seg_ends[: self.segment_count]
 
 
 def _trace_concave_hull_once(
@@ -3719,12 +3764,14 @@ def _polygon_covers_all_points(
         ``True`` when all points are covered or touched by the buffered hull.
     """
     test_poly = poly.buffer(tol)
-    all_points = (
-        coords
+    point_coords = (
+        shapely.get_coordinates(coords)
         if isinstance(coords, MultiPoint)
-        else MultiPoint(np.asarray(coords, dtype=float).tolist())
+        else np.asarray(coords, dtype=float)
     )
-    return typing.cast("bool", test_poly.covers(all_points))
+    point_geoms = shapely.points(point_coords)
+    shapely.prepare(test_poly)
+    return bool(np.all(shapely.covers(test_poly, point_geoms)))
 
 
 def _concave_fallback_alpha(
@@ -3808,6 +3855,11 @@ def _find_next_hull_point(
     neighbor_cache = {} if hull_state is None else hull_state.neighbor_cache
     neighbor_indices = neighbor_cache.get(current_idx)
 
+    # Candidates rejected at a smaller k stay rejected: nothing in the hull
+    # state changes between escalations, so only the newly added neighbors
+    # need to be evaluated on each retry.
+    tested = 0
+
     while current_k <= n_points - 1:
         required = min(current_k + 1, n_points)
 
@@ -3826,10 +3878,11 @@ def _find_next_hull_point(
         # Filter candidates
         candidates = [
             int(idx)
-            for idx in neighbor_indices[:required]
+            for idx in neighbor_indices[tested:required]
             if idx != current_idx
             and (idx not in visited or (idx == start_idx and len(hull_indices) >= 3))
         ]
+        tested = required
 
         if candidates:
             best_idx = _find_best_candidate(
@@ -3915,21 +3968,120 @@ def _find_best_candidate(
     if hull_state is None:
         hull_state = _HullWalkState.create(max(0, len(hull_indices) - 2))
 
-    for idx in sorted_indices:
-        candidate_idx = int(candidates_array[idx])
+    if hull_state.segment_count == 0:
+        return int(candidates_array[sorted_indices[0]])
 
-        if _is_valid_edge(
-            coords=coords,
-            current_idx=current_idx,
-            candidate_idx=candidate_idx,
-            start_idx=start_idx,
-            existing_lines=hull_state.existing_lines,
-            seg_bounds_min=hull_state.bounds_min_view(),
-            seg_bounds_max=hull_state.bounds_max_view(),
-        ):
-            return candidate_idx
+    # Validate candidates in blocks so the segment-intersection test runs as
+    # a single vectorized operation per block instead of one Python call per
+    # candidate. The first valid candidate in preference order wins.
+    ordered = candidates_array[sorted_indices]
+    block_size = 32
+    for block_start in range(0, len(ordered), block_size):
+        block = ordered[block_start : block_start + block_size]
+        valid = _edges_valid_batch(
+            start=current_pos.astype(float),
+            ends=coords[block].astype(float),
+            closing_mask=block == start_idx,
+            hull_state=hull_state,
+        )
+        hits = np.flatnonzero(valid)
+        if len(hits):
+            return int(block[hits[0]])
 
     return None
+
+
+def _edges_valid_batch(
+    start: np.ndarray,
+    ends: np.ndarray,
+    closing_mask: np.ndarray,
+    hull_state: _HullWalkState,
+) -> np.ndarray:
+    """
+    Validate a batch of candidate edges against the accepted hull segments.
+
+    All candidate edges share the same start vertex. An edge is invalid when
+    it intersects any existing hull segment, except that the loop-closing
+    edge may touch the first hull segment in a single point.
+
+    Parameters
+    ----------
+    start : np.ndarray
+        Shared start coordinate of the candidate edges as a length-2 array.
+    ends : np.ndarray
+        Candidate end coordinates with shape ``(m, 2)``.
+    closing_mask : np.ndarray
+        Boolean mask of shape ``(m,)`` flagging candidates that close the
+        hull loop back to the start vertex.
+    hull_state : _HullWalkState
+        Accepted hull segments with cached endpoints and bounds.
+
+    Returns
+    -------
+    np.ndarray
+        Boolean mask of shape ``(m,)`` that is ``True`` for valid edges.
+    """
+    seg_bounds_min = hull_state.bounds_min_view()
+    seg_bounds_max = hull_state.bounds_max_view()
+
+    # Prefilter segments against the union bbox of all candidate edges.
+    union_min = np.minimum(ends.min(axis=0), start)
+    union_max = np.maximum(ends.max(axis=0), start)
+    overlap = np.flatnonzero(
+        np.all((seg_bounds_max >= union_min) & (seg_bounds_min <= union_max), axis=1)
+    )
+    if len(overlap) == 0:
+        return np.ones(len(ends), dtype=bool)
+
+    seg_starts = hull_state.starts_view()[overlap]
+    seg_ends = hull_state.ends_view()[overlap]
+    seg_dirs = seg_ends - seg_starts
+    new_dirs = ends - start
+
+    # Orientation terms; d1 depends only on the shared start vertex.
+    d1 = _cross_2d(seg_dirs, start - seg_starts)
+    d2 = _cross_2d(seg_dirs[np.newaxis], ends[:, np.newaxis, :] - seg_starts[np.newaxis])
+    d3 = _cross_2d(new_dirs[:, np.newaxis, :], (seg_starts - start)[np.newaxis])
+    d4 = _cross_2d(new_dirs[:, np.newaxis, :], (seg_ends - start)[np.newaxis])
+
+    proper = (d1[np.newaxis] * d2 < 0) & (d3 * d4 < 0)
+
+    seg_lo = np.minimum(seg_starts, seg_ends)
+    seg_hi = np.maximum(seg_starts, seg_ends)
+    start_on = (d1 == 0) & np.all((start >= seg_lo) & (start <= seg_hi), axis=1)
+    ends_on = (d2 == 0) & np.all(
+        (ends[:, np.newaxis, :] >= seg_lo[np.newaxis])
+        & (ends[:, np.newaxis, :] <= seg_hi[np.newaxis]),
+        axis=2,
+    )
+    edge_lo = np.minimum(ends, start)[:, np.newaxis, :]
+    edge_hi = np.maximum(ends, start)[:, np.newaxis, :]
+    seg_starts_on = (d3 == 0) & np.all(
+        (seg_starts[np.newaxis] >= edge_lo) & (seg_starts[np.newaxis] <= edge_hi), axis=2
+    )
+    seg_ends_on = (d4 == 0) & np.all(
+        (seg_ends[np.newaxis] >= edge_lo) & (seg_ends[np.newaxis] <= edge_hi), axis=2
+    )
+
+    intersects = proper | start_on[np.newaxis] | ends_on | seg_starts_on | seg_ends_on
+
+    # Allow the loop-closing edge to touch the first hull segment in a single
+    # point (shared start vertex or transversal crossing); only a collinear
+    # overlap of positive length still invalidates it.
+    closing_rows = np.flatnonzero(closing_mask)
+    first_seg_pos = np.flatnonzero(overlap == 0)
+    if len(closing_rows) and len(first_seg_pos):
+        for row in closing_rows:
+            allowed = _closing_touch_allowed_mask(
+                start,
+                ends[row],
+                seg_starts[first_seg_pos],
+                seg_ends[first_seg_pos],
+                overlap[first_seg_pos],
+            )
+            intersects[row, first_seg_pos] &= ~allowed
+
+    return typing.cast("np.ndarray", ~np.any(intersects, axis=1))
 
 
 def _bbox_overlap_indices(
@@ -3981,12 +4133,15 @@ def _is_valid_edge(
     seg_bounds: Sequence[tuple[float, float, float, float]] | None = None,
     seg_bounds_min: np.ndarray | None = None,
     seg_bounds_max: np.ndarray | None = None,
+    seg_starts: np.ndarray | None = None,
+    seg_ends: np.ndarray | None = None,
 ) -> bool:
     """
     Check if the new edge intersects with any existing hull edges.
 
     This validation ensures that adding the proposed edge does not create a self-intersecting
-    polygon. It checks for intersections with all non-adjacent edges in the current hull.
+    polygon. It checks for intersections with all non-adjacent edges in the current hull
+    using a vectorized NumPy orientation test, avoiding per-edge GEOS calls.
 
     Parameters
     ----------
@@ -4000,19 +4155,32 @@ def _is_valid_edge(
         Index of the starting point of the hull.
     existing_lines : Sequence[LineString]
         Cached existing hull edges excluding the immediate predecessor edge.
+        Used to derive segment endpoints when ``seg_starts``/``seg_ends`` are
+        not provided.
     seg_bounds : Sequence[tuple[float, float, float, float]] or None, optional
         Cached per-edge bounding boxes used when available.
     seg_bounds_min : np.ndarray
         Minimum x/y values for the cached hull edge bounding boxes.
     seg_bounds_max : np.ndarray
         Maximum x/y values for the cached hull edge bounding boxes.
+    seg_starts : np.ndarray or None, optional
+        Per-segment start coordinates with shape ``(n, 2)``. Takes precedence
+        over ``existing_lines`` when provided together with ``seg_ends``.
+    seg_ends : np.ndarray or None, optional
+        Per-segment end coordinates with shape ``(n, 2)``.
 
     Returns
     -------
     bool
         True if the edge is valid (no self-intersection), False otherwise.
     """
-    if not existing_lines:
+    if seg_starts is None or seg_ends is None:
+        if not existing_lines:
+            return True
+        endpoint_pairs = shapely.get_coordinates(list(existing_lines)).reshape(-1, 2, 2)
+        seg_starts = endpoint_pairs[:, 0]
+        seg_ends = endpoint_pairs[:, 1]
+    elif len(seg_starts) == 0:
         return True
 
     start = coords[current_idx]
@@ -4026,20 +4194,209 @@ def _is_valid_edge(
     if len(possible_hits) == 0:
         return True
 
-    new_edge = LineString([start, end])
+    hit_starts = seg_starts[possible_hits]
+    hit_ends = seg_ends[possible_hits]
+    intersects = _segments_intersect_mask(start, end, hit_starts, hit_ends)
 
-    for i in possible_hits:
-        existing_edge = existing_lines[int(i)]
+    if not bool(np.any(intersects)):
+        return True
 
-        intersection = new_edge.intersection(existing_edge)
+    # Allow touching at start point when closing the loop: the closing edge
+    # may meet the first hull segment in a single point (their shared start
+    # vertex or a transversal crossing), but not in a collinear overlap.
+    if candidate_idx == start_idx:
+        closing_ok = _closing_touch_allowed_mask(start, end, hit_starts, hit_ends, possible_hits)
+        intersects &= ~closing_ok
 
-        # Allow touching at start point when closing the loop
-        if not intersection.is_empty and not (
-            candidate_idx == start_idx and int(i) == 0 and isinstance(intersection, Point)
-        ):
-            return False
+    return not bool(np.any(intersects))
 
-    return True
+
+def _cross_2d(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """
+    Compute the scalar 2D cross product with broadcasting.
+
+    This replaces ``np.cross`` for 2D inputs, whose 2D-vector support is
+    deprecated since NumPy 2.0.
+
+    Parameters
+    ----------
+    a : np.ndarray
+        First vector(s), last axis of size 2.
+    b : np.ndarray
+        Second vector(s), last axis of size 2.
+
+    Returns
+    -------
+    np.ndarray
+        Scalar cross products ``a.x * b.y - a.y * b.x``.
+    """
+    return np.asarray(a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0])
+
+
+def _segments_intersect_mask(
+    start: np.ndarray,
+    end: np.ndarray,
+    seg_starts: np.ndarray,
+    seg_ends: np.ndarray,
+) -> np.ndarray:
+    """
+    Vectorized segment intersection test against a batch of segments.
+
+    A segment pair is flagged when it properly crosses or touches at any
+    point (including endpoint contact and collinear overlap), matching the
+    non-empty-intersection semantics of the previous GEOS-based check.
+
+    Parameters
+    ----------
+    start : np.ndarray
+        Start coordinate of the candidate segment as a length-2 array.
+    end : np.ndarray
+        End coordinate of the candidate segment as a length-2 array.
+    seg_starts : np.ndarray
+        Batch of segment start coordinates with shape ``(n, 2)``.
+    seg_ends : np.ndarray
+        Batch of segment end coordinates with shape ``(n, 2)``.
+
+    Returns
+    -------
+    np.ndarray
+        Boolean mask of shape ``(n,)`` that is ``True`` where the candidate
+        segment intersects the batch segment.
+    """
+    seg_dirs = seg_ends - seg_starts
+    new_dir = end - start
+
+    d1 = _cross_2d(seg_dirs, start - seg_starts)
+    d2 = _cross_2d(seg_dirs, end - seg_starts)
+    d3 = _cross_2d(new_dir, seg_starts - start)
+    d4 = _cross_2d(new_dir, seg_ends - start)
+
+    proper = (d1 * d2 < 0) & (d3 * d4 < 0)
+    touch = (
+        ((d1 == 0) & _points_within_bbox(start, seg_starts, seg_ends))
+        | ((d2 == 0) & _points_within_bbox(end, seg_starts, seg_ends))
+        | ((d3 == 0) & _points_within_bbox_single(seg_starts, start, end))
+        | ((d4 == 0) & _points_within_bbox_single(seg_ends, start, end))
+    )
+    return typing.cast("np.ndarray", proper | touch)
+
+
+def _points_within_bbox(point: np.ndarray, starts: np.ndarray, ends: np.ndarray) -> np.ndarray:
+    """
+    Check whether a single point lies within each segment's bounding box.
+
+    Combined with a zero cross product, this confirms the point lies on the
+    segment itself.
+
+    Parameters
+    ----------
+    point : np.ndarray
+        Query coordinate as a length-2 array.
+    starts : np.ndarray
+        Segment start coordinates with shape ``(n, 2)``.
+    ends : np.ndarray
+        Segment end coordinates with shape ``(n, 2)``.
+
+    Returns
+    -------
+    np.ndarray
+        Boolean mask of shape ``(n,)``.
+    """
+    lo = np.minimum(starts, ends)
+    hi = np.maximum(starts, ends)
+    return typing.cast("np.ndarray", np.all((point >= lo) & (point <= hi), axis=1))
+
+
+def _points_within_bbox_single(
+    points: np.ndarray, start: np.ndarray, end: np.ndarray
+) -> np.ndarray:
+    """
+    Check whether each point lies within a single segment's bounding box.
+
+    Combined with a zero cross product, this confirms the points lie on the
+    segment itself.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        Query coordinates with shape ``(n, 2)``.
+    start : np.ndarray
+        Segment start coordinate as a length-2 array.
+    end : np.ndarray
+        Segment end coordinate as a length-2 array.
+
+    Returns
+    -------
+    np.ndarray
+        Boolean mask of shape ``(n,)``.
+    """
+    lo = np.minimum(start, end)
+    hi = np.maximum(start, end)
+    return typing.cast("np.ndarray", np.all((points >= lo) & (points <= hi), axis=1))
+
+
+def _closing_touch_allowed_mask(
+    start: np.ndarray,
+    end: np.ndarray,
+    hit_starts: np.ndarray,
+    hit_ends: np.ndarray,
+    hit_indices: np.ndarray,
+) -> np.ndarray:
+    """
+    Identify allowed single-point contacts for the loop-closing edge.
+
+    The closing edge is permitted to meet the first hull segment in exactly
+    one point. Only a collinear overlap of positive length (a shared line
+    section rather than a point) still invalidates the edge, mirroring the
+    previous ``isinstance(intersection, Point)`` check.
+
+    Parameters
+    ----------
+    start : np.ndarray
+        Start coordinate of the closing edge as a length-2 array.
+    end : np.ndarray
+        End coordinate of the closing edge (the hull start vertex).
+    hit_starts : np.ndarray
+        Start coordinates of bbox-filtered hull segments, shape ``(n, 2)``.
+    hit_ends : np.ndarray
+        End coordinates of bbox-filtered hull segments, shape ``(n, 2)``.
+    hit_indices : np.ndarray
+        Original hull segment indices of the bbox-filtered segments.
+
+    Returns
+    -------
+    np.ndarray
+        Boolean mask of shape ``(n,)`` that is ``True`` where an intersection
+        should be tolerated.
+    """
+    is_first_segment = hit_indices == 0
+    if not bool(np.any(is_first_segment)):
+        return np.zeros(len(hit_indices), dtype=bool)
+
+    seg_dirs = hit_ends - hit_starts
+    new_dir = end - start
+    collinear = (
+        (_cross_2d(seg_dirs, start - hit_starts) == 0)
+        & (_cross_2d(seg_dirs, end - hit_starts) == 0)
+        & (_cross_2d(new_dir, seg_dirs) == 0)
+    )
+
+    # Positive-length overlap of the two collinear segments along the
+    # dominant axis means the intersection is a LineString, not a Point.
+    axis = np.where(
+        np.abs(hit_ends[:, 0] - hit_starts[:, 0]) >= np.abs(hit_ends[:, 1] - hit_starts[:, 1]),
+        0,
+        1,
+    )
+    idx = np.arange(len(hit_starts))
+    seg_lo = np.minimum(hit_starts[idx, axis], hit_ends[idx, axis])
+    seg_hi = np.maximum(hit_starts[idx, axis], hit_ends[idx, axis])
+    edge_lo = np.minimum(start[axis], end[axis])
+    edge_hi = np.maximum(start[axis], end[axis])
+    overlap = np.minimum(seg_hi, edge_hi) - np.maximum(seg_lo, edge_lo)
+
+    point_contact = ~(collinear & (overlap > 0))
+    return typing.cast("np.ndarray", is_first_segment & point_contact)
 
 
 def _coerce_seg_bounds_arrays(
@@ -4202,7 +4559,8 @@ def create_tessellation(
         available processors. Only used for enclosed tessellation.
     limit : geopandas.GeoDataFrame, geopandas.GeoSeries, shapely geometry, or None, optional
         Boundary passed to `momepy.enclosures` for enclosed tessellation. When
-        None, a buffered convex hull of input geometry and barriers is computed.
+        None, a buffered (100 m) union of input geometry and barriers is
+        computed and the enclosures are clipped to it.
     **kwargs : object, optional
         Additional keyword arguments passed to the underlying `momepy`
         tessellation function.
@@ -4839,8 +5197,8 @@ def _create_enclosed_tessellation(
     primary_barriers : geopandas.GeoDataFrame or geopandas.GeoSeries
         Geometries to use as barriers.
     limit : geopandas.GeoDataFrame, geopandas.GeoSeries, shapely geometry, or None
-        Boundary passed to `momepy.enclosures`. If None, one is derived from
-        geometry and barriers.
+        Boundary passed to `momepy.enclosures`. If None, a buffered union of
+        geometry and barriers is derived and the enclosures are clipped to it.
     shrink : float
         The distance to shrink the geometry.
     segment : float
@@ -4857,15 +5215,21 @@ def _create_enclosed_tessellation(
     geopandas.GeoDataFrame
         The enclosed tessellation.
     """
-    if limit is None:
+    derived_limit = limit is None
+    if derived_limit:
         limit = _compute_enclosure_limit(geometry, primary_barriers)
 
+    # The derived limit is a non-convex buffered union that may contain holes;
+    # polygonization turns those holes into faces outside the limit, so they
+    # must be clipped away. User-supplied limits keep clip=False because
+    # momepy's clip requires a polygonal limit and clipping would change the
+    # documented semantics of an explicit ``limit``.
     enclosures = momepy.enclosures(
         primary_barriers=primary_barriers,
         limit=limit,
         additional_barriers=None,
         enclosure_id="eID",
-        clip=False,
+        clip=derived_limit and limit is not None,
     )
 
     if not enclosures.empty:
@@ -5009,13 +5373,16 @@ def _enclosure_cells_without_splits(
 def _compute_enclosure_limit(
     geometry: gpd.GeoDataFrame | gpd.GeoSeries,
     primary_barriers: gpd.GeoDataFrame | gpd.GeoSeries,
-    buffer: float = 500,
+    buffer: float = 100,
 ) -> BaseGeometry | None:
     """
-    Compute a buffered hull limit for momepy enclosures.
+    Compute a buffered-union limit for momepy enclosures.
 
     The limit needs to include both buildings and street barriers so buildings
     near the outer street loops are not excluded from enclosed tessellation.
+    It follows the built fabric (buffered union) rather than a convex hull:
+    a hull leaves a vast outermost enclosure whose Voronoi cells stretch from
+    street-front buildings deep into empty land as needle-shaped artifacts.
 
     Parameters
     ----------
@@ -5023,14 +5390,16 @@ def _compute_enclosure_limit(
         Building geometries used to compute boundaries.
     primary_barriers : gpd.GeoDataFrame | gpd.GeoSeries
         Street geometries forming enclosures.
-    buffer : float, default 500
-        Distance in map units to buffer the combined convex hull.
+    buffer : float, default 100
+        Distance in map units to buffer each geometry before the union.
 
     Returns
     -------
     BaseGeometry | None
         A single geometry representing the enclosure limit, or None if no valid
-        geometries exist.
+        geometries exist. The result may contain holes (block interiors farther
+        than ``buffer`` from any street or building); callers must clip the
+        enclosures to the limit so those holes do not become enclosures.
     """
     geometries = [
         geom
@@ -5041,7 +5410,7 @@ def _compute_enclosure_limit(
     if not geometries:
         return None
 
-    return gpd.GeoSeries(geometries, crs=geometry.crs).union_all().convex_hull.buffer(buffer)
+    return gpd.GeoSeries(geometries, crs=geometry.crs).buffer(buffer).union_all()
 
 
 def _create_empty_tessellation(crs: Any) -> gpd.GeoDataFrame:  # noqa: ANN401
