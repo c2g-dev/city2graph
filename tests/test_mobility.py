@@ -11,6 +11,7 @@ from typing import cast
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import pytest
 
 from city2graph.mobility import od_matrix_to_graph
 
@@ -700,3 +701,112 @@ class TestODMatrixToGraph:
         sums = {tuple(idx): (row["w1"], row["w2"], row["weight"]) for idx, row in edges.iterrows()}
         assert sums[("A", "B")] == (3, 30, 3)
         assert sums[("A", "C")] == (7, 70, 7)
+
+    def test_threshold_keeps_weights_equal_to_boundary(
+        self, od_zones_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """Thresholding is inclusive: weights equal to the threshold survive."""
+        E = pd.DataFrame(
+            {
+                "source": ["A", "B"],
+                "target": ["B", "C"],
+                "flow": [2, 1],
+            }
+        )
+        _nodes, edges = od_matrix_to_graph(
+            E,
+            od_zones_gdf,
+            zone_id_col="zone_id",
+            matrix_type="edgelist",
+            weight_cols=["flow"],
+            threshold=2,
+        )
+        # weight == threshold kept, weight below dropped
+        assert list(edges.index) == [("A", "B")]
+        assert edges.iloc[0]["weight"] == 2
+
+    def test_edgelist_directed_self_loops_toggle(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
+        """include_self_loops controls self-loop retention on the directed edgelist path."""
+        E = pd.DataFrame(
+            {
+                "source": ["A", "A"],
+                "target": ["A", "B"],
+                "flow": [3, 1],
+            }
+        )
+        _nodes, edges_default = od_matrix_to_graph(
+            E,
+            od_zones_gdf,
+            zone_id_col="zone_id",
+            matrix_type="edgelist",
+            weight_cols=["flow"],
+        )
+        assert ("A", "A") not in edges_default.index
+        assert ("A", "B") in edges_default.index
+
+        _nodes, edges_loops = od_matrix_to_graph(
+            E,
+            od_zones_gdf,
+            zone_id_col="zone_id",
+            matrix_type="edgelist",
+            weight_cols=["flow"],
+            include_self_loops=True,
+        )
+        assert ("A", "A") in edges_loops.index
+        assert edges_loops.loc[("A", "A"), "weight"] == 3
+
+    def test_as_nx_metadata_follows_shared_conventions(
+        self, od_zones_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """as_nx output carries shared gdf_to_nx metadata and node conventions."""
+        A = np.array([[0, 2, 0], [0, 0, 1], [0, 0, 0]], dtype=float)
+        G = cast(
+            "nx.DiGraph",
+            od_matrix_to_graph(
+                A, od_zones_gdf, zone_id_col="zone_id", matrix_type="adjacency", as_nx=True
+            ),
+        )
+        assert str(G.graph["crs"]) == str(od_zones_gdf.crs)
+        assert G.graph["is_hetero"] is False
+        node_attrs = dict(G.nodes(data=True))
+        assert {attrs["_original_index"] for attrs in node_attrs.values()} == {"A", "B", "C"}
+        assert all("pos" in attrs for attrs in node_attrs.values())
+        for _u, _v, attrs in G.edges(data=True):
+            assert "weight" in attrs
+            assert "_original_edge_index" in attrs
+
+    def test_geographic_crs_emits_warning(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
+        """Zones in a geographic CRS trigger the accuracy warning."""
+        E = pd.DataFrame({"source": ["A"], "target": ["B"], "flow": [1]})
+        with pytest.warns(UserWarning, match="Geographic CRS detected"):
+            od_matrix_to_graph(
+                E,
+                od_zones_gdf,
+                zone_id_col="zone_id",
+                matrix_type="edgelist",
+                weight_cols=["flow"],
+            )
+
+    def test_adjacency_ndarray_with_zone_id_none_uses_index(
+        self, od_zones_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """NumPy adjacency with zone_id_col=None aligns rows to the zones index."""
+        zones = od_zones_gdf.set_index("zone_id")[["value", "geometry"]]
+        arr = np.array([[0, 5, 0], [0, 0, 2], [0, 0, 0]], dtype=float)
+        nodes, edges = od_matrix_to_graph(arr, zones, matrix_type="adjacency")
+        assert list(nodes.index) == ["A", "B", "C"]
+        assert list(edges.index) == [("A", "B"), ("B", "C")]
+        assert list(edges["weight"]) == [5.0, 2.0]
+
+    def test_empty_zones_gdf_raises(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
+        """An empty zones GeoDataFrame leaves no overlapping zone IDs and raises."""
+        empty_zones = od_zones_gdf.iloc[0:0]
+        E = pd.DataFrame({"source": ["A"], "target": ["B"], "flow": [1]})
+        with pytest.raises(ValueError, match="No overlapping zone IDs"):
+            od_matrix_to_graph(
+                E,
+                empty_zones,
+                zone_id_col="zone_id",
+                matrix_type="edgelist",
+                weight_cols=["flow"],
+            )

@@ -12,16 +12,20 @@ import json
 import logging
 import tempfile
 import zipfile
-from contextlib import suppress
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import duckdb
 import geopandas as gpd
-import networkx as nx
 import pandas as pd
 from shapely import wkt
+
+from .utils import gdf_to_nx
+
+if TYPE_CHECKING:
+    import networkx as nx
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -239,8 +243,10 @@ def _ensure_graph_sql_support(con: duckdb.DuckDBPyConnection) -> None:
             msg = "DuckDB spatial extension is required to build transport graph geometries."
             raise RuntimeError(msg) from error
 
-    # Usually raises duckdb.Error if the function already exists.
-    with suppress(duckdb.Error):
+    registered = con.execute(
+        "SELECT count(*) FROM duckdb_functions() WHERE function_name = 'time_to_seconds'"
+    ).fetchone()
+    if registered is None or not registered[0]:
         con.create_function(
             "time_to_seconds",
             _time_to_seconds,
@@ -1188,44 +1194,6 @@ def _build_travel_summary_nodes(con: duckdb.DuckDBPyConnection) -> gpd.GeoDataFr
     return nodes_gdf
 
 
-def _summary_graph_to_networkx(
-    nodes_gdf: gpd.GeoDataFrame,
-    edges_gdf: gpd.GeoDataFrame,
-    *,
-    directed: bool,
-) -> nx.DiGraph | nx.Graph:
-    """
-    Convert summary-graph GeoDataFrames into a NetworkX graph.
-
-    Node and edge attributes are copied row-wise so the NetworkX graph mirrors
-    the GeoDataFrame representation.
-
-    Parameters
-    ----------
-    nodes_gdf : gpd.GeoDataFrame
-        Summary graph nodes indexed by ``stop_id``.
-    edges_gdf : gpd.GeoDataFrame
-        Summary graph edges indexed by stop pairs.
-    directed : bool
-        Whether to create a directed or undirected graph.
-
-    Returns
-    -------
-    nx.DiGraph | nx.Graph
-        Graph populated with node and edge attributes.
-    """
-    graph = nx.DiGraph() if directed else nx.Graph()
-    graph.graph["crs"] = str(nodes_gdf.crs) if nodes_gdf.crs else None
-
-    for stop_id, row in nodes_gdf.iterrows():
-        graph.add_node(stop_id, **row.to_dict())
-
-    for (from_stop_id, to_stop_id), row in edges_gdf.iterrows():
-        graph.add_edge(from_stop_id, to_stop_id, **row.to_dict())
-
-    return graph
-
-
 def travel_summary_graph(
     con: duckdb.DuckDBPyConnection,
     start_time: str | None = None,
@@ -1286,7 +1254,12 @@ def travel_summary_graph(
     tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.DiGraph | nx.Graph
         ``(nodes_gdf, edges_gdf)`` when ``as_nx`` is ``False``; otherwise
         a ``nx.DiGraph`` (``directed=True``) or ``nx.Graph``
-        (``directed=False``) built from those GeoDataFrames.
+        (``directed=False``) built from those GeoDataFrames via
+        :func:`city2graph.utils.gdf_to_nx`, following its shared
+        conventions: integer node identifiers with the original
+        ``stop_id`` values stored in the ``_original_index`` node
+        attribute, node ``pos`` coordinates, and graph-level CRS and
+        index metadata.
     """
     tables = _list_tables(con)
     required = {"stop_times", "stops", "trips"}
@@ -1320,4 +1293,4 @@ def travel_summary_graph(
     if not as_nx:
         return nodes_gdf, edges_gdf
 
-    return _summary_graph_to_networkx(nodes_gdf, edges_gdf, directed=directed)
+    return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf, directed=directed)

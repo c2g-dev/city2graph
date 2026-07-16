@@ -49,6 +49,33 @@ def dict_to_con(d: dict[str, pd.DataFrame]) -> duckdb.DuckDBPyConnection:
     return con
 
 
+class _ShowTablesResult:
+    def fetchall(self) -> list[tuple[str]]:
+        return [("stop_times",), ("stops",), ("trips",)]
+
+
+class _FunctionCountResult:
+    def fetchone(self) -> tuple[int]:
+        return (0,)
+
+
+class FailingUdfConnection:
+    """Connection stub whose UDF registration fails after spatial support loads."""
+
+    def execute(self, query: str) -> _ShowTablesResult | _FunctionCountResult | None:
+        if query == "SHOW TABLES":
+            return _ShowTablesResult()
+        if query == "LOAD spatial;":
+            return None
+        if "duckdb_functions()" in query:
+            return _FunctionCountResult()
+        raise AssertionError(query)
+
+    def create_function(self, *_args: object, **_kwargs: object) -> None:
+        msg = "UDF registration failed"
+        raise duckdb.Error(msg)
+
+
 class TestTimeHelpers:
     def test_time_to_seconds_with_float(self) -> None:
         assert _time_to_seconds(3600.0) == 3600.0
@@ -639,3 +666,70 @@ class TestTravelSummaryGraph:
 
         with pytest.raises(ValueError, match="stops must contain either a geometry column"):
             travel_summary_graph(con)
+
+    def test_travel_summary_graph_as_nx_follows_shared_conventions(
+        self, sample_gtfs_dict: dict[str, pd.DataFrame]
+    ) -> None:
+        con = dict_to_con(sample_gtfs_dict)
+        graph = travel_summary_graph(con, as_nx=True)
+
+        assert isinstance(graph, nx.Graph)
+        assert str(graph.graph["crs"]) == "EPSG:4326"
+        assert graph.graph["is_hetero"] is False
+        assert all(isinstance(node_id, int) for node_id in graph.nodes)
+
+        node_attrs = dict(graph.nodes(data=True))
+        original_ids = {attrs["_original_index"] for attrs in node_attrs.values()}
+        assert original_ids == {"stop1", "stop2", "stop3"}
+        assert all("pos" in attrs for attrs in node_attrs.values())
+
+        assert graph.number_of_edges() > 0
+        for _u, _v, attrs in graph.edges(data=True):
+            assert attrs["travel_time_sec"] > 0
+            assert attrs["frequency"] > 0
+            assert "_original_edge_index" in attrs
+
+    def test_travel_summary_graph_as_nx_empty_edges(
+        self, sample_gtfs_dict: dict[str, pd.DataFrame]
+    ) -> None:
+        sample_gtfs_dict["stop_times"] = pd.DataFrame(
+            columns=["trip_id", "stop_id", "arrival_time", "departure_time", "stop_sequence"]
+        )
+        con = dict_to_con(sample_gtfs_dict)
+        graph = travel_summary_graph(con, as_nx=True)
+
+        assert isinstance(graph, nx.Graph)
+        assert graph.number_of_nodes() == 3
+        assert graph.number_of_edges() == 0
+
+    def test_travel_summary_graph_as_nx_time_filtered_directed(
+        self, sample_gtfs_dict: dict[str, pd.DataFrame]
+    ) -> None:
+        con = dict_to_con(sample_gtfs_dict)
+        graph = travel_summary_graph(
+            con,
+            start_time="08:00:00",
+            end_time="08:10:00",
+            as_nx=True,
+            directed=True,
+            use_frequencies=False,
+        )
+
+        assert isinstance(graph, nx.DiGraph)
+        assert graph.number_of_edges() == 2
+        for _u, _v, attrs in graph.edges(data=True):
+            assert attrs["travel_time_sec"] > 0
+            assert attrs["frequency"] > 0
+
+    def test_travel_summary_graph_instant_time_window(
+        self, sample_gtfs_dict: dict[str, pd.DataFrame]
+    ) -> None:
+        con = dict_to_con(sample_gtfs_dict)
+        nodes_gdf, edges_gdf = travel_summary_graph(con, start_time="08:00:00", end_time="08:00:00")
+
+        assert len(nodes_gdf) == 3
+        assert len(edges_gdf) == 0
+
+    def test_travel_summary_graph_surfaces_udf_registration_failures(self) -> None:
+        with pytest.raises(duckdb.Error, match="UDF registration failed"):
+            travel_summary_graph(cast("duckdb.DuckDBPyConnection", FailingUdfConnection()))
