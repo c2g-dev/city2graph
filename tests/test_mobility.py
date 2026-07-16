@@ -104,6 +104,38 @@ class TestODMatrixToGraph:
         assert G.number_of_nodes() == 3
         assert G.number_of_edges() == 2
 
+    def test_networkx_output_without_edge_geometry(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
+        """Edges survive NetworkX conversion when compute_edge_geometry=False."""
+        E = pd.DataFrame(
+            {
+                "source": ["A", "B"],
+                "target": ["B", "C"],
+                "flow": [5.0, 7.0],
+            }
+        )
+        G = cast(
+            "nx.DiGraph",
+            od_matrix_to_graph(
+                E,
+                od_zones_gdf,
+                zone_id_col="zone_id",
+                matrix_type="edgelist",
+                weight_cols=["flow"],
+                compute_edge_geometry=False,
+                as_nx=True,
+            ),
+        )
+        assert G.number_of_nodes() == 3
+        assert G.number_of_edges() == 2
+        # Endpoints map back to the zone ids and weights are preserved
+        weights = {
+            (G.nodes[u]["_original_index"], G.nodes[v]["_original_index"]): data["weight"]
+            for u, v, data in G.edges(data=True)
+        }
+        assert weights == {("A", "B"): 5.0, ("B", "C"): 7.0}
+        # No geometry attribute is stored on the edges
+        assert all("geometry" not in data for _, _, data in G.edges(data=True))
+
     def test_undirected_sums_reciprocals_edgelist(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """Undirected mode sums reciprocal edges for edgelist input."""
         E = pd.DataFrame(

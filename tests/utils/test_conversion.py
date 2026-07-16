@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import geopandas as gpd
@@ -253,6 +254,52 @@ class TestNxConversions(BaseConversionTest):
             assert isinstance(graph, nx.Graph)
             # Heterogeneous edges dict without nodes results in empty graph
             assert graph.number_of_edges() == 0
+
+    def test_geometryless_edges_mapped_by_index(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Edges without geometry are mapped via the (source, target) MultiIndex."""
+        edges = sample_edges_gdf.set_geometry(
+            gpd.GeoSeries([None] * len(sample_edges_gdf), index=sample_edges_gdf.index),
+            crs=sample_edges_gdf.crs,
+        )
+        # An edge referencing an unknown node id cannot be mapped and is dropped
+        unknown = edges.iloc[[0]].copy()
+        unknown.index = pd.MultiIndex.from_tuples([(1, 99)], names=edges.index.names)
+        edges = pd.concat([edges, unknown])
+
+        with caplog.at_level(logging.WARNING, logger="city2graph.utils"):
+            graph = gdf_to_nx(nodes=sample_nodes_gdf, edges=edges, keep_geom=False)
+
+        assert graph.number_of_edges() == len(sample_edges_gdf)
+        original_edges = {
+            (graph.nodes[u]["_original_index"], graph.nodes[v]["_original_index"])
+            for u, v in graph.edges()
+        }
+        assert original_edges == set(sample_edges_gdf.index)
+        assert "Could not find nodes for 1 edges without geometry" in caplog.text
+
+    def test_geometryless_edges_without_multiindex_are_dropped(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Edges without geometry and without a (u, v) MultiIndex cannot be mapped."""
+        flat_edges = sample_edges_gdf.reset_index(drop=True)
+        edges = flat_edges.set_geometry(
+            gpd.GeoSeries([None] * len(flat_edges), index=flat_edges.index),
+            crs=flat_edges.crs,
+        )
+
+        with caplog.at_level(logging.WARNING, logger="city2graph.utils"):
+            graph = gdf_to_nx(nodes=sample_nodes_gdf, edges=edges, keep_geom=False)
+
+        assert graph.number_of_edges() == 0
+        assert "MultiIndex is required" in caplog.text
 
     def test_nx_to_gdf_requires_nodes_or_edges(self, simple_nx_graph: nx.Graph) -> None:
         """Requesting neither nodes nor edges should raise."""

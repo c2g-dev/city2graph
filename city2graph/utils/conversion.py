@@ -275,11 +275,7 @@ class NxConverter(BaseGraphConverter):
             The validated nodes and edges GeoDataFrames.
         """
         nodes = self.processor.validate_gdf(nodes, allow_empty=True)
-        edges = self.processor.validate_gdf(
-            edges,
-            ["LineString", "MultiLineString"],
-            allow_empty=True,
-        )
+        edges = _validate_edge_frame(self.processor, edges, allow_empty=True)
         # mypy: ensure edges is GeoDataFrame
         if edges is None:
             msg = "Edges GeoDataFrame cannot be None"
@@ -529,6 +525,12 @@ class NxConverter(BaseGraphConverter):
         if edges_gdf.empty:
             return
 
+        # Without edge geometries, endpoints cannot be matched by coordinates;
+        # resolve them from the edge index against the original node index.
+        if _edges_lack_geometry(edges_gdf):
+            self._add_homogeneous_edges_by_index(graph, edges_gdf)
+            return
+
         # Create node mapping (either from existing nodes or from edge coordinates)
         if nodes_gdf is not None and not nodes_gdf.empty:
             coord_to_node = {
@@ -555,6 +557,60 @@ class NxConverter(BaseGraphConverter):
 
         # Filter valid edges
         valid_mask = u_nodes.notna() & v_nodes.notna()
+        valid_edges = edges_gdf[valid_mask]
+        valid_u = u_nodes[valid_mask]
+        valid_v = v_nodes[valid_mask]
+
+        self._create_edge_list(graph, valid_u, valid_v, valid_edges, self.keep_geom)
+
+    def _add_homogeneous_edges_by_index(
+        self,
+        graph: nx.Graph | nx.MultiGraph,
+        edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """
+        Add homogeneous edges by mapping the edge index to node identifiers.
+
+        Used when the edges GeoDataFrame carries no geometry (e.g. built with
+        ``compute_edge_geometry=False``), so endpoints cannot be matched by
+        coordinates. The first two levels of the edge index are matched
+        against the ``_original_index`` of the nodes already in the graph,
+        mirroring the heterogeneous conversion path.
+
+        Parameters
+        ----------
+        graph : networkx.Graph or networkx.MultiGraph
+            The NetworkX graph to which the edges will be added.
+        edges_gdf : geopandas.GeoDataFrame
+            The GeoDataFrame containing the edge data, indexed by a
+            ``(source, target)`` MultiIndex of node identifiers.
+        """
+        if not isinstance(edges_gdf.index, pd.MultiIndex) or edges_gdf.index.nlevels < 2:
+            logger.warning(
+                "Could not map %d edges without geometry: a (source, target) "
+                "MultiIndex is required",
+                len(edges_gdf),
+            )
+            return
+
+        node_lookup = {
+            node_data.get("_original_index"): node_id
+            for node_id, node_data in graph.nodes(data=True)
+        }
+        node_lookup.pop(None, None)
+
+        src_indices = edges_gdf.index.get_level_values(0)
+        dst_indices = edges_gdf.index.get_level_values(1)
+        u_nodes = pd.Series(src_indices, index=edges_gdf.index).map(node_lookup)
+        v_nodes = pd.Series(dst_indices, index=edges_gdf.index).map(node_lookup)
+
+        valid_mask = u_nodes.notna() & v_nodes.notna()
+        if not valid_mask.all():
+            logger.warning(
+                "Could not find nodes for %d edges without geometry",
+                int((~valid_mask).sum()),
+            )
+
         valid_edges = edges_gdf[valid_mask]
         valid_u = u_nodes[valid_mask]
         valid_v = v_nodes[valid_mask]
@@ -1427,6 +1483,68 @@ class NxConverter(BaseGraphConverter):
         )
 
 
+def _edges_lack_geometry(edges: gpd.GeoDataFrame | None) -> bool:
+    """
+    Check whether an edges GeoDataFrame carries no geometry at all.
+
+    Edge frames built without geometry (e.g. with
+    ``compute_edge_geometry=False``) hold ``None`` in every row of the
+    geometry column. Such frames must bypass geometry validation and have
+    their endpoints resolved from the edge index instead.
+
+    Parameters
+    ----------
+    edges : geopandas.GeoDataFrame or None
+        The edges GeoDataFrame to inspect.
+
+    Returns
+    -------
+    bool
+        True if ``edges`` is a non-empty GeoDataFrame whose geometry values
+        are all missing.
+    """
+    return (
+        isinstance(edges, gpd.GeoDataFrame)
+        and not edges.empty
+        and bool(edges.geometry.isna().all())
+    )
+
+
+def _validate_edge_frame(
+    processor: GeoDataProcessor,
+    edges: gpd.GeoDataFrame | None,
+    allow_empty: bool = True,
+) -> gpd.GeoDataFrame | None:
+    """
+    Validate a homogeneous edges GeoDataFrame, tolerating absent geometry.
+
+    Edges without any geometry (e.g. built with
+    ``compute_edge_geometry=False``) skip geometry validation, which would
+    drop every row; their endpoints are resolved from the edge index instead.
+
+    Parameters
+    ----------
+    processor : GeoDataProcessor
+        The processor performing the geometry validation.
+    edges : geopandas.GeoDataFrame or None
+        The edges GeoDataFrame to validate.
+    allow_empty : bool, default True
+        Whether to allow an empty GeoDataFrame.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame or None
+        The validated edges GeoDataFrame, or None if input was None.
+    """
+    if _edges_lack_geometry(edges):
+        return edges
+    return processor.validate_gdf(
+        edges,
+        ["LineString", "MultiLineString"],
+        allow_empty=allow_empty,
+    )
+
+
 def _normalize_index_name(name: object) -> str | None:
     """
     Normalize an index name to a string or None.
@@ -1986,11 +2104,7 @@ def validate_gdf(
             )
 
         if edges_gdf is not None:
-            validated_edges = processor.validate_gdf(
-                edges_gdf,
-                ["LineString", "MultiLineString"],
-                allow_empty=allow_empty,
-            )
+            validated_edges = _validate_edge_frame(processor, edges_gdf, allow_empty=allow_empty)
 
     # Ensure CRS consistency
     all_gdfs_to_check: list[gpd.GeoDataFrame] = []
