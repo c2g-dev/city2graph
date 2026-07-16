@@ -22,6 +22,7 @@ import warnings
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
+from typing import TypeVar
 from typing import cast
 
 if TYPE_CHECKING:
@@ -85,6 +86,10 @@ GRAPH_NO_NODES_MSG = "Graph has no nodes"
 
 # Lazily populated torch.dtype -> numpy.dtype mapping (torch is an optional import).
 _TORCH_TO_NUMPY_DTYPE: dict[Any, np.dtype[Any]] | None = None
+
+# Key type for stored feature-column metadata: node types are strings,
+# edge types are (source, relation, target) tuples.
+_ColumnKeyT = TypeVar("_ColumnKeyT", str, tuple[str, str, str])
 
 
 def _torch_dtype_to_numpy(dtype: torch.dtype) -> np.dtype[Any]:
@@ -432,6 +437,130 @@ class PyGConverter(BaseGraphConverter):
 
         return node_feature_cols_homo, node_label_cols_homo, edge_feature_cols_homo
 
+    def _build_node_tensors(
+        self,
+        node_gdf: gpd.GeoDataFrame,
+        feature_cols: list[str] | None,
+        label_cols: list[str] | None,
+    ) -> tuple[
+        dict[str, dict[str | int, int] | str | list[str | int]],
+        torch.Tensor,
+        torch.Tensor | None,
+        torch.Tensor | None,
+    ]:
+        """
+        Build node tensors and ID mapping information for one node table.
+
+        Shared node-processing phase for homogeneous and heterogeneous
+        conversion: creates the node ID mapping, feature tensor, position
+        tensor, and label tensor for a single node GeoDataFrame.
+
+        Parameters
+        ----------
+        node_gdf : gpd.GeoDataFrame
+            Node data as GeoDataFrame.
+        feature_cols : list[str] or None
+            Node feature column names.
+        label_cols : list[str] or None
+            Node label column names.
+
+        Returns
+        -------
+        tuple
+            ``(mapping_info, x, pos, y)`` where ``mapping_info`` holds the ID
+            mapping metadata and ``y`` is None when no label columns are given.
+        """
+        id_mapping, id_col_name, original_ids = self._create_node_id_mapping(node_gdf)
+        mapping_info: dict[str, dict[str | int, int] | str | list[str | int]] = {
+            "mapping": id_mapping,
+            "id_col": id_col_name,
+            "original_ids": original_ids,
+        }
+
+        x = self._create_features(node_gdf, feature_cols)
+        pos = self._create_node_positions(node_gdf)
+        y = self._create_features(node_gdf, label_cols) if label_cols else None
+
+        return mapping_info, x, pos, y
+
+    def _empty_edge_tensors(self, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Create empty edge index and edge attribute tensors.
+
+        Shared default used by homogeneous and heterogeneous conversion when
+        an edge table is absent or empty.
+
+        Parameters
+        ----------
+        device : torch.device
+            Device to allocate the tensors on.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            Empty ``(edge_index, edge_attr)`` tensors.
+        """
+        edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
+        edge_attr = torch.empty((0, 0), dtype=self.dtype or torch.float32, device=device)
+        return edge_index, edge_attr
+
+    def _build_edge_tensors(
+        self,
+        edge_gdf: gpd.GeoDataFrame,
+        source_index: pd.Index,
+        target_index: pd.Index | None,
+        feature_cols: list[str] | None,
+        device: torch.device,
+        *,
+        directed: bool,
+        same_type: bool,
+    ) -> tuple[torch.Tensor, torch.Tensor, bool]:
+        """
+        Build edge index and attribute tensors for one edge table.
+
+        Shared edge-processing phase for homogeneous and heterogeneous
+        conversion: maps edge endpoints to integer indices, extracts edge
+        features, and symmetrizes undirected same-type edges in place.
+
+        Parameters
+        ----------
+        edge_gdf : gpd.GeoDataFrame
+            Edge data as GeoDataFrame with a (source, target) MultiIndex.
+        source_index : pd.Index
+            Index of original source node IDs, in node order.
+        target_index : pd.Index or None
+            Index of original target node IDs, in node order.
+            If None, uses ``source_index``.
+        feature_cols : list[str] or None
+            Edge feature column names.
+        device : torch.device
+            Device to allocate the tensors on.
+        directed : bool
+            Whether the edges are directed.
+        same_type : bool
+            Whether source and target node types coincide.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor, bool]
+            ``(edge_index, edge_attr, was_symmetrized)``.
+        """
+        edge_pairs = self._create_edge_indices(edge_gdf, source_index, target_index)
+        edge_index = (
+            torch.from_numpy(edge_pairs).to(device)
+            if edge_pairs.size
+            else torch.zeros((2, 0), dtype=torch.long, device=device)
+        )
+        edge_attr = self._create_features(edge_gdf, feature_cols)
+
+        # Symmetrize same-type undirected edges in place
+        was_symmetrized = False
+        if not directed and same_type and edge_index.size(1) > 0:
+            edge_index, edge_attr = self._symmetrize_edges(edge_index, edge_attr, device)
+            was_symmetrized = True
+
+        return edge_index, edge_attr, was_symmetrized
+
     def _convert_homogeneous(
         self,
         nodes: gpd.GeoDataFrame | None,
@@ -472,33 +601,29 @@ class PyGConverter(BaseGraphConverter):
         device = _get_device(self.device)
 
         # Node processing
-        id_mapping, id_col_name, original_ids = self._create_node_id_mapping(nodes)
-
-        x = self._create_features(nodes, node_feature_cols_homo)
-        pos = self._create_node_positions(nodes)
-
-        # Handle labels
-        y = None
-        if node_label_cols_homo:
-            y = self._create_features(nodes, node_label_cols_homo)
+        mapping_info, x, pos, y = self._build_node_tensors(
+            nodes,
+            node_feature_cols_homo,
+            node_label_cols_homo,
+        )
 
         # Edge processing
-        edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
-        edge_attr = torch.empty((0, 0), dtype=self.dtype or torch.float32, device=device)
+        edge_index, edge_attr = self._empty_edge_tensors(device)
 
         if edges is not None:
             # Validate edge table
             self._validate_edge_gdf_for_pyg(edges, directed=directed_bool)
 
         if edges is not None and not edges.empty:
-            edge_pairs = self._create_edge_indices(edges, nodes.index)
-            if edge_pairs.size:
-                edge_index = torch.from_numpy(edge_pairs).to(device)
-            edge_attr = self._create_features(edges, edge_feature_cols_homo)
-
-            # Symmetrize edges for undirected graphs
-            if not directed_bool and edge_index.size(1) > 0:
-                edge_index, edge_attr = self._symmetrize_edges(edge_index, edge_attr, device)
+            edge_index, edge_attr, _ = self._build_edge_tensors(
+                edges,
+                nodes.index,
+                None,
+                edge_feature_cols_homo,
+                device,
+                directed=directed_bool,
+                same_type=True,
+            )
 
         data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, pos=pos)
 
@@ -506,9 +631,7 @@ class PyGConverter(BaseGraphConverter):
         metadata = self._create_homogeneous_metadata(
             nodes,
             edges,
-            id_mapping,
-            id_col_name,
-            original_ids,
+            mapping_info,
             node_feature_cols_homo,
             node_label_cols_homo,
             edge_feature_cols_homo,
@@ -523,9 +646,7 @@ class PyGConverter(BaseGraphConverter):
         self,
         nodes: gpd.GeoDataFrame,
         edges: gpd.GeoDataFrame | None,
-        id_mapping: dict[str | int, int],
-        id_col_name: str,
-        original_ids: list[str | int],
+        mapping_info: dict[str, dict[str | int, int] | str | list[str | int]],
         node_feature_cols: list[str] | None,
         node_label_cols: list[str] | None,
         edge_feature_cols: list[str] | None,
@@ -542,12 +663,8 @@ class PyGConverter(BaseGraphConverter):
             Node GeoDataFrame.
         edges : gpd.GeoDataFrame or None
             Edge GeoDataFrame.
-        id_mapping : dict
-            Node ID mapping.
-        id_col_name : str
-            ID column name.
-        original_ids : list
-            Original node IDs.
+        mapping_info : dict
+            Node ID mapping information.
         node_feature_cols : list or None
             Node feature columns.
         node_label_cols : list or None
@@ -561,13 +678,7 @@ class PyGConverter(BaseGraphConverter):
             Populated metadata object.
         """
         metadata = GraphMetadata(is_hetero=False)
-        metadata.node_mappings = {
-            "default": {
-                "mapping": id_mapping,
-                "id_col": id_col_name,
-                "original_ids": original_ids,
-            },
-        }
+        metadata.node_mappings = {"default": mapping_info}
         metadata.node_feature_cols = node_feature_cols or []
         metadata.node_label_cols = node_label_cols or []
         metadata.edge_feature_cols = edge_feature_cols or []
@@ -596,13 +707,11 @@ class PyGConverter(BaseGraphConverter):
         if self.keep_geom:
             metadata.node_geometries = self._serialize_geometries(nodes)
             if edges is not None and not edges.empty:
-                edge_geoms = self._serialize_geometries(edges)
-
-                # Symmetrize edge geometries for undirected graphs
-                if self.directed is False and edge_geoms is not None:
-                    edge_geoms = self._symmetrize_edge_geometries(edges, edge_geoms)
-
-                metadata.edge_geometries = edge_geoms
+                # Edge geometries are symmetrized for undirected graphs
+                metadata.edge_geometries = self._serialized_edge_geometries(
+                    edges,
+                    symmetrize=self.directed is False,
+                )
 
         return metadata
 
@@ -723,26 +832,17 @@ class PyGConverter(BaseGraphConverter):
         node_mappings: dict[str, dict[str, dict[str | int, int] | str | list[str | int]]] = {}
 
         for node_type, node_gdf in nodes_dict.items():
-            id_mapping, id_col_name, original_ids = self._create_node_id_mapping(node_gdf)
+            feature_cols = node_feature_cols.get(node_type) if node_feature_cols else None
+            label_cols = node_label_cols.get(node_type) if node_label_cols else None
+
+            mapping_info, x, pos, y = self._build_node_tensors(node_gdf, feature_cols, label_cols)
 
             # Store mapping with metadata in unified structure
-            node_mappings[node_type] = {
-                "mapping": id_mapping,
-                "id_col": id_col_name,
-                "original_ids": original_ids,
-            }
-
-            # Features
-            feature_cols = node_feature_cols.get(node_type) if node_feature_cols else None
-            data[node_type].x = self._create_features(node_gdf, feature_cols)
-
-            # Positions
-            data[node_type].pos = self._create_node_positions(node_gdf)
-
-            # Labels
-            label_cols = node_label_cols.get(node_type) if node_label_cols else None
-            if label_cols:
-                data[node_type].y = self._create_features(node_gdf, label_cols)
+            node_mappings[node_type] = mapping_info
+            data[node_type].x = x
+            data[node_type].pos = pos
+            if y is not None:
+                data[node_type].y = y
 
         return node_mappings
 
@@ -803,28 +903,18 @@ class PyGConverter(BaseGraphConverter):
                     edge_gdf, directed=is_directed_et, edge_type=edge_type
                 )
 
-                edge_pairs = self._create_edge_indices(
+                feature_cols = edge_feature_cols.get(edge_type) if edge_feature_cols else None
+                is_same_type = src_type == dst_type
+                edge_index, edge_attr, was_symmetrized = self._build_edge_tensors(
                     edge_gdf,
                     node_indices[src_type],
                     node_indices[dst_type],
+                    feature_cols,
+                    device,
+                    directed=is_directed_et,
+                    same_type=is_same_type,
                 )
-                edge_index = (
-                    torch.from_numpy(edge_pairs).to(device)
-                    if edge_pairs.size
-                    else torch.zeros((2, 0), dtype=torch.long, device=device)
-                )
-
-                feature_cols = edge_feature_cols.get(edge_type) if edge_feature_cols else None
-                edge_attr = self._create_features(edge_gdf, feature_cols)
-
-                # Decide symmetrization strategy
-                is_same_type = src_type == dst_type
-                if not is_directed_et and edge_index.size(1) > 0 and is_same_type:
-                    # Same-type undirected: symmetrise in-place
-                    edge_index, edge_attr = self._symmetrize_edges(edge_index, edge_attr, device)
-                    symmetrized_by_et[edge_type] = True
-                else:
-                    symmetrized_by_et[edge_type] = False
+                symmetrized_by_et[edge_type] = was_symmetrized
 
                 data[edge_type].edge_index = edge_index
                 data[edge_type].edge_attr = edge_attr
@@ -836,12 +926,9 @@ class PyGConverter(BaseGraphConverter):
                     reverse_et_map[edge_type] = reverse_et
                     gen_reverse_et_map[reverse_et] = edge_type
             else:
-                data[edge_type].edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
-                data[edge_type].edge_attr = torch.empty(
-                    (0, 0),
-                    dtype=self.dtype or torch.float32,
-                    device=device,
-                )
+                edge_index, edge_attr = self._empty_edge_tensors(device)
+                data[edge_type].edge_index = edge_index
+                data[edge_type].edge_attr = edge_attr
                 symmetrized_by_et[edge_type] = False
 
         return directed_by_et, symmetrized_by_et, reverse_et_map, gen_reverse_et_map
@@ -943,11 +1030,12 @@ class PyGConverter(BaseGraphConverter):
             metadata.edge_geometries = {}
             for edge_type, edge_gdf in edges_dict.items():
                 if edge_gdf is not None and not edge_gdf.empty:
-                    geoms = self._serialize_geometries(edge_gdf)
+                    # Edge geometries are symmetrized only for symmetrized edge types
+                    geoms = self._serialized_edge_geometries(
+                        edge_gdf,
+                        symmetrize=symmetrized_by_et.get(edge_type, False),
+                    )
                     if geoms is not None:
-                        # Symmetrize edge geometries only for edges that were symmetrized
-                        if symmetrized_by_et.get(edge_type, False):
-                            geoms = self._symmetrize_edge_geometries(edge_gdf, geoms)
                         metadata.edge_geometries[edge_type] = geoms
 
         # Per-edge-type directionality and provenance metadata
@@ -1781,6 +1869,53 @@ class PyGConverter(BaseGraphConverter):
         num_cols = min(len(cols), features_array.shape[1])
         return {cols[i]: features_array[:, i] for i in range(num_cols)}
 
+    @staticmethod
+    def _resolve_feature_columns(
+        stored_cols: dict[_ColumnKeyT, list[str]] | list[str] | None,
+        type_key: _ColumnKeyT | None,
+        tensor: torch.Tensor,
+        prefix: str,
+        *,
+        is_hetero: bool,
+    ) -> list[str]:
+        """
+        Resolve metadata-backed or synthesized feature column names.
+
+        Looks up the stored column names for the given type (heterogeneous) or
+        uses the stored list directly (homogeneous); when no stored names are
+        available, synthesizes ``f"{prefix}{i}"`` names from the tensor width.
+
+        Parameters
+        ----------
+        stored_cols : dict or list or None
+            Column names stored in metadata, keyed by type for heterogeneous
+            graphs or a plain list for homogeneous graphs.
+        type_key : str or tuple or None
+            Key to look up in a heterogeneous metadata dict, or None when no
+            type-specific lookup applies.
+        tensor : torch.Tensor
+            Tensor whose width determines the number of synthesized names.
+        prefix : str
+            Prefix for synthesized column names.
+        is_hetero : bool
+            Whether the metadata describes a heterogeneous graph.
+
+        Returns
+        -------
+        list[str]
+            Resolved column names.
+        """
+        cols_list: list[str] | None = None
+        if is_hetero and type_key is not None and isinstance(stored_cols, dict):
+            cols_list = stored_cols.get(type_key)
+        elif not is_hetero and isinstance(stored_cols, list):
+            cols_list = stored_cols
+
+        if cols_list is None:
+            cols_list = [f"{prefix}{i}" for i in range(tensor.shape[1])]
+
+        return cols_list
+
     def _extract_features(
         self,
         obj_data: Data | HeteroData,
@@ -1816,49 +1951,40 @@ class PyGConverter(BaseGraphConverter):
         is_hetero = metadata.is_hetero
 
         if is_node:
+            node_key = str(type_name) if type_name else None
+
             # Extract node features (x)
             if hasattr(obj_data, "x") and obj_data.x is not None:
-                feature_cols = metadata.node_feature_cols
-                cols_list = None
-                if is_hetero and type_name and isinstance(feature_cols, dict):
-                    cols_list = feature_cols.get(str(type_name))
-                elif not is_hetero and isinstance(feature_cols, list):
-                    cols_list = feature_cols
-
-                if cols_list is None:
-                    num_features = obj_data.x.shape[1]
-                    cols_list = [f"feat_{i}" for i in range(num_features)]
-
+                cols_list = self._resolve_feature_columns(
+                    metadata.node_feature_cols,
+                    node_key,
+                    obj_data.x,
+                    "feat_",
+                    is_hetero=is_hetero,
+                )
                 gdf_data.update(self._extract_tensor_columns(obj_data.x, cols_list))
 
             # Extract node labels (y)
             if hasattr(obj_data, "y") and obj_data.y is not None:
-                label_cols = metadata.node_label_cols
-                cols_list = None
-                if is_hetero and type_name and isinstance(label_cols, dict):
-                    cols_list = label_cols.get(str(type_name))
-                elif not is_hetero and isinstance(label_cols, list):
-                    cols_list = label_cols
-
-                if cols_list is None:
-                    num_labels = obj_data.y.shape[1]
-                    cols_list = [f"label_{i}" for i in range(num_labels)]
-
+                cols_list = self._resolve_feature_columns(
+                    metadata.node_label_cols,
+                    node_key,
+                    obj_data.y,
+                    "label_",
+                    is_hetero=is_hetero,
+                )
                 gdf_data.update(self._extract_tensor_columns(obj_data.y, cols_list))
 
         # Extract edge features (edge_attr)
         elif hasattr(obj_data, "edge_attr") and obj_data.edge_attr is not None:
-            edge_feat_cols = metadata.edge_feature_cols
-            cols_list = None
-            if is_hetero and isinstance(type_name, tuple) and isinstance(edge_feat_cols, dict):
-                cols_list = edge_feat_cols.get(type_name)  # full edge type tuple
-            elif not is_hetero and isinstance(edge_feat_cols, list):
-                cols_list = edge_feat_cols
-
-            if cols_list is None:
-                num_features = obj_data.edge_attr.shape[1]
-                cols_list = [f"edge_feat_{i}" for i in range(num_features)]
-
+            edge_key = type_name if isinstance(type_name, tuple) else None
+            cols_list = self._resolve_feature_columns(
+                metadata.edge_feature_cols,
+                edge_key,
+                obj_data.edge_attr,
+                "edge_feat_",
+                is_hetero=is_hetero,
+            )
             gdf_data.update(self._extract_tensor_columns(obj_data.edge_attr, cols_list))
 
         # Extract additional columns if specified
@@ -2374,6 +2500,36 @@ class PyGConverter(BaseGraphConverter):
         # Vectorized WKB hex serialization; missing geometries are stored as ""
         hex_array = shapely.to_wkb(gdf.geometry.to_numpy(), hex=True)
         return ["" if wkb_hex is None else wkb_hex for wkb_hex in hex_array]
+
+    def _serialized_edge_geometries(
+        self,
+        edge_gdf: gpd.GeoDataFrame,
+        *,
+        symmetrize: bool,
+    ) -> list[str] | None:
+        """
+        Serialize edge geometries, duplicating them for symmetrized edges.
+
+        Shared metadata-serialization step for homogeneous and heterogeneous
+        conversion, keeping stored geometries aligned with symmetrized edges.
+
+        Parameters
+        ----------
+        edge_gdf : gpd.GeoDataFrame
+            Edge GeoDataFrame whose geometries to serialize.
+        symmetrize : bool
+            Whether the edges were symmetrized, in which case the serialized
+            geometries are duplicated for the reverse edges.
+
+        Returns
+        -------
+        list[str] or None
+            List of WKB hexadecimal strings, or None if no geometry column.
+        """
+        geoms = self._serialize_geometries(edge_gdf)
+        if geoms is not None and symmetrize:
+            geoms = self._symmetrize_edge_geometries(edge_gdf, geoms)
+        return geoms
 
     def _deserialize_geometries(
         self, wkb_list: list[str], crs: object = None
