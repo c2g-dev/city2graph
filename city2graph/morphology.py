@@ -12,6 +12,20 @@ The module specializes in three types of spatial relationships:
 1. Place-to-place: Adjacency relationships between building tessellations
 2. Movement-to-movement: Topological connectivity between street segments
 3. Place-to-movement: Interface relationships between place and movement spaces
+
+Notes
+-----
+Frame ownership and copying:
+Public input GeoDataFrames are never mutated. Caller-owned frames are copied at
+most once, at the public boundary: ``_prepare_morphology`` copies
+``segments_gdf`` before assigning movement ids (and ``buildings_gdf`` only to
+flatten a MultiIndex), while ``segments_to_graph`` and
+``movement_to_movement_graph`` copy their input before writing to it. Frames
+created inside the pipeline (rename, filter, join, or concat products) are
+owned by the pipeline and may be mutated without further defensive copies.
+Frames stored on ``_MorphologyContext`` are shared across per-distance runs
+and must be treated as read-only; helpers that need to write to them copy
+first, as late as possible.
 """
 
 from __future__ import annotations
@@ -478,6 +492,10 @@ class _MorphologyContext(typing.NamedTuple):
     reachability cost field, or ``None`` when no distance budget applies.
     The remaining attributes mirror the options of
     :func:`morphological_graph`.
+
+    All frames held by the context are shared across per-distance runs and are
+    read-only: helpers must copy before writing to them. ``buildings`` may
+    alias the caller's GeoDataFrame and must never be mutated.
     """
 
     buildings: gpd.GeoDataFrame

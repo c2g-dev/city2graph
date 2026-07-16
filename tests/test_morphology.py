@@ -12,6 +12,7 @@ import geopandas as gpd
 import networkx as nx
 import pandas as pd
 import pytest
+from geopandas.testing import assert_geodataframe_equal
 from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
@@ -31,8 +32,23 @@ from city2graph.morphology import place_to_place_graph
 from city2graph.morphology import private_to_private_graph
 from city2graph.morphology import private_to_public_graph
 from city2graph.morphology import public_to_public_graph
+from city2graph.morphology import segments_to_graph
 from tests.helpers import assert_valid_nx_graph
 from tests.helpers import make_grid_polygons_gdf
+
+# Option sets exercised by TestPublicInputImmutability. The ``with_center`` key
+# marks cases that need the ``mg_center_point`` fixture injected as
+# ``center_point`` at test time.
+IMMUTABILITY_OPTION_SETS: list[dict[str, Any]] = [
+    {},
+    {
+        "with_center": True,
+        "distance": 100.0,
+        "keep_buildings": True,
+        "include_unenclosed_buildings": True,
+        "tessellation_fallback": True,
+    },
+]
 
 # ---------------------------------------------------------------------------
 # Module-level monkeypatch stubs.
@@ -2352,6 +2368,107 @@ class TestMorphologicalGraphMultiDistance(TestMorphologyBase):
                 [],
                 center_point=mg_center_point,
             )
+
+
+class TestPublicInputImmutability(TestMorphologyBase):
+    """Public morphology functions must leave their input GeoDataFrames unchanged."""
+
+    @pytest.mark.parametrize("options", IMMUTABILITY_OPTION_SETS)
+    def test_morphological_graph_does_not_mutate_inputs(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        mg_center_point: gpd.GeoSeries,
+        options: dict[str, Any],
+    ) -> None:
+        """morphological_graph leaves the buildings and segments inputs untouched."""
+        kwargs = dict(options)
+        if kwargs.pop("with_center", False):
+            kwargs["center_point"] = mg_center_point
+        buildings_before = sample_buildings_gdf.copy(deep=True)
+        segments_before = sample_segments_gdf.copy(deep=True)
+
+        morphological_graph(sample_buildings_gdf, sample_segments_gdf, **kwargs)
+
+        assert_geodataframe_equal(sample_buildings_gdf, buildings_before)
+        assert_geodataframe_equal(sample_segments_gdf, segments_before)
+
+    def test_morphological_graph_barrier_split_does_not_mutate_input(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """The barrier-only segment split leaves the segments input untouched."""
+        segments = sample_segments_gdf.copy(deep=True)
+        segments["is_barrier"] = [i % 2 == 0 for i in range(len(segments))]
+        segments_before = segments.copy(deep=True)
+
+        morphological_graph(
+            sample_buildings_gdf,
+            segments,
+            non_movement_barrier_col="is_barrier",
+        )
+
+        assert_geodataframe_equal(segments, segments_before)
+
+    def test_morphological_graphs_does_not_mutate_inputs(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        mg_center_point: gpd.GeoSeries,
+    ) -> None:
+        """The multi-distance pipeline leaves the shared inputs untouched."""
+        buildings_before = sample_buildings_gdf.copy(deep=True)
+        segments_before = sample_segments_gdf.copy(deep=True)
+
+        morphological_graphs(
+            sample_buildings_gdf,
+            sample_segments_gdf,
+            [50.0, 100.0],
+            center_point=mg_center_point,
+        )
+
+        assert_geodataframe_equal(sample_buildings_gdf, buildings_before)
+        assert_geodataframe_equal(sample_segments_gdf, segments_before)
+
+    def test_pairwise_graph_functions_do_not_mutate_inputs(
+        self,
+        sample_tessellation_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """place/movement pairwise builders leave their inputs untouched."""
+        tessellation_before = sample_tessellation_gdf.copy(deep=True)
+        segments_before = sample_segments_gdf.copy(deep=True)
+
+        place_to_place_graph(sample_tessellation_gdf)
+        place_to_movement_graph(sample_tessellation_gdf, sample_segments_gdf)
+        movement_to_movement_graph(sample_segments_gdf)
+
+        assert_geodataframe_equal(sample_tessellation_gdf, tessellation_before)
+        assert_geodataframe_equal(sample_segments_gdf, segments_before)
+
+    def test_movement_graph_without_movement_id_does_not_mutate_input(
+        self,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """The edge-id fallback write happens on a copy, not on the input."""
+        segments = sample_segments_gdf.drop(columns=["movement_id"])
+        segments_before = segments.copy(deep=True)
+
+        movement_to_movement_graph(segments)
+
+        assert_geodataframe_equal(segments, segments_before)
+
+    def test_segments_to_graph_does_not_mutate_input(
+        self,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """segments_to_graph builds its edge index on a copy of the input."""
+        segments_before = sample_segments_gdf.copy(deep=True)
+
+        segments_to_graph(sample_segments_gdf)
+
+        assert_geodataframe_equal(sample_segments_gdf, segments_before)
 
 
 class TestDeprecatedAliases:
