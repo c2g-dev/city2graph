@@ -2493,7 +2493,9 @@ def _match_fallback_cells_to_source_buildings(
     source_mask = joined[_SOURCE_BUILDING_INDEX_COL].notna().to_numpy()
     redundant = source_mask & joined.index.duplicated(keep="first")
     if redundant.any():
-        joined = joined.loc[~redundant]
+        # Copy keeps the column writes below warning-free on pandas 2.x
+        # (the boolean take would otherwise carry a chained-assignment flag).
+        joined = joined.loc[~redundant].copy()
         source_mask = joined[_SOURCE_BUILDING_INDEX_COL].notna().to_numpy()
     source_index = joined[_SOURCE_BUILDING_INDEX_COL]
     joined["index_right"] = np.where(source_mask, source_index, joined["index_right"])
