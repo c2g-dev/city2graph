@@ -1,13 +1,8 @@
-"""Tests for the utils module - lean and maintainable.
-
-This file delegates common assertions and helpers to tests/helpers.py to avoid
-duplication and keep a single source of truth for shared logic across tests.
-"""
+"""Tests for :mod:`city2graph.utils.spatial`."""
 
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING
 from typing import Any
 from typing import cast
 from unittest import mock
@@ -18,28 +13,19 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
-import rustworkx as rx
 import shapely.errors
 from shapely.geometry import GeometryCollection
 from shapely.geometry import LineString
-from shapely.geometry import MultiLineString
 from shapely.geometry import MultiPolygon
 from shapely.geometry import Point
 from shapely.geometry import Polygon
 
-from city2graph import morphology
 from city2graph import utils
-from city2graph.base import GeoDataProcessor
-from city2graph.base import GraphMetadata
-from city2graph.utils import NxConverter
 from city2graph.utils import gdf_to_nx
-from city2graph.utils import nx_to_gdf
+from city2graph.utils import spatial as spatial_utils
 from tests import helpers
+from tests.utils.helpers import BaseGraphTest
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-# Try to import matplotlib for tests that need it
 try:
     import matplotlib.pyplot as plt
 
@@ -47,48 +33,6 @@ try:
 except ImportError:
     plt = None  # type: ignore[assignment]
     MATPLOTLIB_AVAILABLE = False
-
-# ============================================================================
-# BASE TEST CLASSES WITH SHARED FUNCTIONALITY
-# ============================================================================
-
-
-class BaseGraphTest:
-    """Base class for graph-related tests with common utilities."""
-
-    @staticmethod
-    def assert_valid_gdf(gdf: gpd.GeoDataFrame, expected_empty: bool = False) -> None:
-        """Delegate to shared helper to ensure consistent checks across tests."""
-        helpers.assert_valid_gdf(gdf, expected_empty)
-
-    @staticmethod
-    def assert_crs_consistency(*gdfs: gpd.GeoDataFrame) -> None:
-        """Delegate to shared helper for CRS consistency checks."""
-        helpers.assert_crs_consistency(*gdfs)
-
-
-class BaseConversionTest(BaseGraphTest):
-    """Base class for conversion tests between GDF and NetworkX."""
-
-    def assert_roundtrip_consistency(
-        self,
-        original_nodes: gpd.GeoDataFrame,
-        original_edges: gpd.GeoDataFrame,
-        converted_nodes: gpd.GeoDataFrame,
-        converted_edges: gpd.GeoDataFrame,
-    ) -> None:
-        """Delegate to shared helper for roundtrip integrity checks."""
-        helpers.assert_roundtrip_consistency(
-            original_nodes,
-            original_edges,
-            converted_nodes,
-            converted_edges,
-        )
-
-
-# ============================================================================
-# TESSELLATION TESTS
-# ============================================================================
 
 
 class TestTessellation(BaseGraphTest):
@@ -270,8 +214,8 @@ class TestTessellation(BaseGraphTest):
         )
 
         # Mock momepy.enclosed_tessellation to raise ValueError with "No objects to concatenate"
-        # Since utils imports momepy, we patch city2graph.utils.momepy.enclosed_tessellation
-        with mock.patch("city2graph.utils.momepy.enclosed_tessellation") as mock_tess:
+        # Since utils imports momepy, we patch city2graph.utils.spatial.momepy.enclosed_tessellation
+        with mock.patch("city2graph.utils.spatial.momepy.enclosed_tessellation") as mock_tess:
             mock_tess.side_effect = ValueError("No objects to concatenate")
 
             # Should handle the error and return empty tessellation
@@ -1278,545 +1222,6 @@ class TestTessellation(BaseGraphTest):
         assert result.geometry.contains(remote_centroid).sum() == 1
 
 
-# ============================================================================
-# GRAPH STRUCTURE TESTS
-# ============================================================================
-
-
-class TestGraphStructures(BaseGraphTest):
-    """Test graph structure operations like dual graph and segments conversion."""
-
-    @pytest.mark.parametrize(
-        (
-            "nodes_fixture",
-            "edges_fixture",
-            "keep_geom",
-            "edge_id_col",
-            "should_error",
-            "error_match",
-        ),
-        [
-            # Success cases
-            ("sample_nodes_gdf", "sample_edges_gdf", False, None, False, None),
-            ("sample_nodes_gdf", "sample_edges_gdf", True, "edge_id", False, None),
-            ("empty_gdf", "empty_gdf", False, None, False, None),
-            # Error cases
-            ("sample_segments_gdf", None, False, None, True, r"Input `graph` must be a tuple"),
-            (
-                "sample_nodes_gdf",
-                "segments_gdf_no_crs",
-                False,
-                None,
-                True,
-                "Edges GeoDataFrame must have a CRS",
-            ),
-        ],
-    )
-    def test_dual_graph_conversion(
-        self,
-        nodes_fixture: str,
-        edges_fixture: str | None,
-        keep_geom: bool,
-        edge_id_col: str | None,
-        should_error: bool,
-        error_match: str | None,
-        request: pytest.FixtureRequest,
-    ) -> None:
-        """Test dual graph conversion with comprehensive parameter combinations."""
-        if edges_fixture is None:
-            graph_input = request.getfixturevalue(nodes_fixture)
-        else:
-            nodes = request.getfixturevalue(nodes_fixture)
-            edges = request.getfixturevalue(edges_fixture)
-            graph_input = (nodes, edges)
-
-        if should_error:
-            with pytest.raises((TypeError, ValueError, AttributeError), match=error_match):
-                utils.dual_graph(graph_input, edge_id_col=edge_id_col, keep_original_geom=keep_geom)
-        else:
-            dual_nodes, dual_edges = utils.dual_graph(
-                graph_input,
-                edge_id_col=edge_id_col,
-                keep_original_geom=keep_geom,
-            )
-
-            # Handle empty case
-            if isinstance(graph_input, tuple) and graph_input[1].empty:
-                self.assert_valid_gdf(dual_nodes, expected_empty=True)
-                self.assert_valid_gdf(dual_edges, expected_empty=True)
-                return
-
-            self.assert_valid_gdf(dual_nodes)
-            self.assert_valid_gdf(dual_edges)
-            self.assert_crs_consistency(dual_nodes, dual_edges)
-
-            if keep_geom:
-                assert "original_geometry" in dual_nodes.columns
-
-    def test_dual_graph_invalid_edge_id_col(
-        self,
-        sample_nodes_gdf: gpd.GeoDataFrame,
-        sample_edges_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Test that providing a non-existent edge_id_col raises ValueError."""
-        with pytest.raises(ValueError, match="Column 'non_existent_col' not found"):
-            utils.dual_graph((sample_nodes_gdf, sample_edges_gdf), edge_id_col="non_existent_col")
-
-    def test_dual_graph_accepts_networkx_input(self, simple_nx_graph: nx.Graph) -> None:
-        """Dual graph should accept NetworkX graphs directly."""
-        dual_nodes, dual_edges = utils.dual_graph(simple_nx_graph)
-        self.assert_valid_gdf(dual_nodes)
-        self.assert_valid_gdf(dual_edges, expected_empty=True)
-
-    def test_dual_graph_warns_on_geographic_crs(self) -> None:
-        """Warn users when dual graph is computed on geographic CRS data."""
-        edges = gpd.GeoDataFrame(
-            {
-                "source": [1, 2],
-                "target": [2, 3],
-                "geometry": [
-                    LineString([(0, 0), (1, 1)]),
-                    LineString([(1, 1), (2, 2)]),
-                ],
-            },
-            crs="EPSG:4326",
-        ).set_index(["source", "target"])
-        nodes = gpd.GeoDataFrame(
-            {"geometry": [Point(0, 0), Point(1, 1), Point(2, 2)]},
-            crs="EPSG:4326",
-            index=[1, 2, 3],
-        )
-
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            utils.dual_graph((nodes, edges))
-            assert any("geographic CRS" in str(item.message) for item in caught)
-
-    def test_dual_graph_handles_mixed_edge_ids(self) -> None:
-        """Mixed edge-id types should still yield deterministic adjacencies."""
-        edges = gpd.GeoDataFrame(
-            {
-                "edge_id": ["a", 1],
-                "source": [1, 2],
-                "target": [2, 3],
-                "geometry": [
-                    LineString([(0, 0), (1, 1)]),
-                    LineString([(1, 1), (2, 2)]),
-                ],
-            },
-            crs="EPSG:27700",
-        ).set_index(["source", "target"])
-        nodes = gpd.GeoDataFrame(
-            {"geometry": [Point(0, 0), Point(1, 1), Point(2, 2)]},
-            crs="EPSG:27700",
-            index=[1, 2, 3],
-        )
-
-        dual_nodes, dual_edges = utils.dual_graph((nodes, edges), edge_id_col="edge_id")
-        self.assert_valid_gdf(dual_nodes)
-        self.assert_valid_gdf(dual_edges)
-
-    def test_validate_nx_populates_pos_from_xy(self, sample_crs: str) -> None:
-        """validate_nx should auto-create pos from x/y when missing."""
-        G = nx.Graph()
-        G.add_node(1, x=0.0, y=0.0)
-        G.add_node(2, x=1.0, y=1.0)
-        G.add_edge(1, 2)
-        G.graph = {"crs": sample_crs, "is_hetero": False}
-
-        GeoDataProcessor().validate_nx(G)
-        assert "pos" in G.nodes[1]
-        assert "pos" in G.nodes[2]
-
-    @pytest.mark.parametrize(
-        ("segments_fixture", "expect_empty", "multigraph"),
-        [
-            ("sample_segments_gdf", False, False),
-            ("empty_gdf", True, False),
-            ("segments_invalid_geom_gdf", True, False),
-            ("sample_segments_gdf", False, True),  # Test multigraph functionality
-        ],
-    )
-    def test_segments_to_graph_conversion(
-        self,
-        segments_fixture: str,
-        expect_empty: bool,
-        multigraph: bool,
-        request: pytest.FixtureRequest,
-    ) -> None:
-        """Test conversion of line segments to graph structure."""
-        segments_gdf = request.getfixturevalue(segments_fixture)
-        nodes_gdf, edges_gdf = morphology.segments_to_graph(segments_gdf, multigraph=multigraph)
-
-        self.assert_valid_gdf(nodes_gdf, expect_empty)
-        self.assert_valid_gdf(edges_gdf, expect_empty)
-        self.assert_crs_consistency(nodes_gdf, edges_gdf)
-
-        if not expect_empty:
-            assert nodes_gdf.index.name == "node_id"
-            helpers.assert_geometry_types(nodes_gdf, ["Point"])
-            assert isinstance(edges_gdf.index, pd.MultiIndex)
-
-            expected_index_names = (
-                ["from_node_id", "to_node_id", "edge_key"]
-                if multigraph
-                else ["from_node_id", "to_node_id"]
-            )
-            helpers.assert_index_names(edges_gdf, expected_index_names)
-
-    def test_segments_multigraph_duplicate_handling(
-        self,
-        duplicate_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Test multigraph handling of duplicate edge connections."""
-        nodes_gdf, edges_gdf = morphology.segments_to_graph(duplicate_segments_gdf, multigraph=True)
-
-        assert len(nodes_gdf) == 2  # Two unique points
-        assert len(edges_gdf) == 2  # Both edges preserved
-        assert edges_gdf.index.names == ["from_node_id", "to_node_id", "edge_key"]
-
-        # Verify edge keys are different for duplicates
-        edge_keys = edges_gdf.index.get_level_values("edge_key")
-        assert list(edge_keys) == [0, 1]
-
-    def test_segments_to_graph_default_is_multigraph(
-        self,
-        sample_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """The default output carries a three-level multigraph index."""
-        _, edges_gdf = morphology.segments_to_graph(sample_segments_gdf)
-        assert edges_gdf.index.names == ["from_node_id", "to_node_id", "edge_key"]
-
-    def test_segments_to_graph_multigraph_false_duplicates_raise(
-        self,
-        duplicate_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """multigraph=False raises on duplicate node pairs instead of passing silently."""
-        with pytest.raises(ValueError, match=r"1 duplicate node pair\(s\)"):
-            morphology.segments_to_graph(duplicate_segments_gdf, multigraph=False)
-
-    def test_segments_to_graph_directed_default_preserves_draw_order(
-        self,
-        sample_crs: str,
-    ) -> None:
-        """Default directed=True keeps reverse-drawn segments as reciprocal pairs."""
-        segments = gpd.GeoDataFrame(
-            {"name": ["fwd", "rev"]},
-            geometry=[
-                LineString([(0, 0), (1, 1)]),
-                LineString([(1, 1), (0, 0)]),
-            ],
-            crs=sample_crs,
-        )
-        _, edges_gdf = morphology.segments_to_graph(segments)
-
-        pairs = list(
-            zip(
-                edges_gdf.index.get_level_values("from_node_id"),
-                edges_gdf.index.get_level_values("to_node_id"),
-                strict=True,
-            )
-        )
-        assert pairs == [(0, 1), (1, 0)]
-
-    def test_segments_to_graph_undirected_canonicalizes_reverse_segments(
-        self,
-        sample_crs: str,
-    ) -> None:
-        """directed=False folds reverse-drawn segments into one unordered pair."""
-        segments = gpd.GeoDataFrame(
-            {"name": ["fwd", "rev"]},
-            geometry=[
-                LineString([(0, 0), (1, 1)]),
-                LineString([(1, 1), (0, 0)]),
-            ],
-            crs=sample_crs,
-        )
-        _, edges_gdf = morphology.segments_to_graph(segments, directed=False)
-
-        assert edges_gdf.index.tolist() == [(0, 1, 0), (0, 1, 1)]
-        # Geometries are left unchanged; only the index order is normalized.
-        assert list(edges_gdf.geometry) == list(segments.geometry)
-
-    def test_segments_to_graph_empty_as_nx(
-        self,
-        empty_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Empty input honors as_nx=True instead of returning a tuple."""
-        result = morphology.segments_to_graph(empty_gdf, as_nx=True)
-        assert isinstance(result, nx.MultiGraph)
-        assert result.number_of_nodes() == 0
-
-        simple = morphology.segments_to_graph(empty_gdf, multigraph=False, as_nx=True)
-        assert isinstance(simple, nx.Graph)
-        assert not isinstance(simple, nx.MultiGraph)
-
-    def test_segments_to_graph_as_nx_keeps_parallel_edges(
-        self,
-        duplicate_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """as_nx=True with the multigraph default preserves parallel edges."""
-        graph = morphology.segments_to_graph(duplicate_segments_gdf, as_nx=True)
-        assert isinstance(graph, nx.MultiGraph)
-        assert graph.number_of_edges() == 2
-
-    def test_dual_graph_empty_result_with_edge_id_col(
-        self, sample_nodes_gdf: gpd.GeoDataFrame, sample_crs: str
-    ) -> None:
-        """Test dual_graph with empty result and edge_id_col specified (line 1527)."""
-        # Create edges that won't form any dual edges
-        single_edge = gpd.GeoDataFrame(
-            {"edge_id": ["e1"]},
-            geometry=[LineString([(0, 0), (1, 1)])],
-            crs=sample_crs,
-        )
-        single_edge.index = pd.MultiIndex.from_arrays([[0], [1]], names=["u", "v"])
-
-        dual_nodes, dual_edges = utils.dual_graph(
-            (sample_nodes_gdf, single_edge), edge_id_col="edge_id"
-        )
-
-        # Should have nodes but no edges (single edge has no dual connections)
-        assert not dual_nodes.empty
-        assert dual_edges.empty
-        assert dual_edges.index.names == ["from_edge_id", "to_edge_id"]
-
-    def test_dual_graph_as_nx(
-        self, sample_nodes_gdf: gpd.GeoDataFrame, sample_edges_gdf: gpd.GeoDataFrame
-    ) -> None:
-        """Test dual_graph with as_nx=True."""
-        result = utils.dual_graph((sample_nodes_gdf, sample_edges_gdf), as_nx=True)
-        assert isinstance(result, nx.Graph)
-        assert len(result) > 0
-
-    def test_canonical_edge_pair_self_loop(self) -> None:
-        """Test _canonical_edge_pair with self-loop (line 1370)."""
-        assert utils._canonical_edge_pair(1, 1) == (1, 1)
-        assert utils._canonical_edge_pair("a", "a") == ("a", "a")
-
-
-# ============================================================================
-# EDGE CANONICALIZATION TESTS
-# ============================================================================
-
-
-class TestCanonicalizeEdges(BaseGraphTest):
-    """Test canonicalize_edges collapsing of reciprocal and parallel rows."""
-
-    @staticmethod
-    def _make_edges(
-        tuples: list[tuple[Any, ...]],
-        names: list[str] | None = None,
-    ) -> gpd.GeoDataFrame:
-        """Build an edge GeoDataFrame with one distinct row per index tuple."""
-        if names is None:
-            names = ["u", "v"] if len(tuples[0]) == 2 else ["u", "v", "k"]
-        return gpd.GeoDataFrame(
-            {"name": [f"e{i}" for i in range(len(tuples))]},
-            geometry=[LineString([(i, 0), (i + 1, 1)]) for i in range(len(tuples))],
-            index=pd.MultiIndex.from_tuples(tuples, names=names),
-            crs="EPSG:27700",
-        )
-
-    def test_first_keeps_first_row_per_unordered_pair(self) -> None:
-        """duplicates='first' keeps the first reciprocal row verbatim."""
-        edges = self._make_edges([(0, 1), (1, 0), (1, 2)])
-        result = utils.canonicalize_edges(edges)
-
-        assert result.index.tolist() == [(0, 1), (1, 2)]
-        assert result.index.names == ["u", "v"]
-        assert list(result["name"]) == ["e0", "e2"]
-        assert result.geometry.iloc[0] == edges.geometry.iloc[0]
-        assert result.crs == edges.crs
-
-    def test_key_keeps_all_rows_as_multigraph(self) -> None:
-        """duplicates='key' keeps reciprocal rows under distinct keys."""
-        edges = self._make_edges([(0, 1), (1, 0), (1, 2)])
-        result = utils.canonicalize_edges(edges, duplicates="key")
-
-        assert result.index.tolist() == [(0, 1, 0), (0, 1, 1), (1, 2, 0)]
-        assert result.index.names == ["u", "v", "key"]
-        assert list(result["name"]) == ["e0", "e1", "e2"]
-
-    def test_error_reports_offending_pairs(self) -> None:
-        """duplicates='error' raises with row and pair counts."""
-        edges = self._make_edges([(0, 1), (1, 0)])
-        with pytest.raises(ValueError, match=r"2 row\(s\) across 1 unordered pair\(s\)"):
-            utils.canonicalize_edges(edges, duplicates="error")
-
-    def test_error_passes_when_no_duplicates(self) -> None:
-        """duplicates='error' returns canonicalized edges when keys are unique."""
-        edges = self._make_edges([(1, 0), (2, 1)])
-        result = utils.canonicalize_edges(edges, duplicates="error")
-        assert result.index.tolist() == [(0, 1), (1, 2)]
-
-    def test_three_level_input_preserves_distinct_keys(self) -> None:
-        """Three-level input keeps distinct parallel keys under 'first'."""
-        edges = self._make_edges([(1, 0, 0), (0, 1, 1), (1, 0, 1)])
-        result = utils.canonicalize_edges(edges)
-
-        # (1, 0, 1) duplicates (0, 1, 1) after canonicalization and is dropped.
-        assert result.index.tolist() == [(0, 1, 0), (0, 1, 1)]
-        assert result.index.names == ["u", "v", "k"]
-
-    def test_three_level_input_regenerates_keys(self) -> None:
-        """duplicates='key' regenerates keys per unordered pair."""
-        edges = self._make_edges([(1, 0, 0), (0, 1, 0)])
-        result = utils.canonicalize_edges(edges, duplicates="key")
-        assert result.index.tolist() == [(0, 1, 0), (0, 1, 1)]
-        assert result.index.names == ["u", "v", "k"]
-
-    def test_self_loops_unchanged(self) -> None:
-        """Self-loops keep their index values."""
-        edges = self._make_edges([(2, 2), (1, 0)])
-        result = utils.canonicalize_edges(edges)
-        assert result.index.tolist() == [(2, 2), (0, 1)]
-
-    def test_string_ids_sorted(self) -> None:
-        """String identifiers are ordered lexicographically."""
-        edges = self._make_edges([("b", "a")])
-        result = utils.canonicalize_edges(edges)
-        assert result.index.tolist() == [("a", "b")]
-
-    def test_mixed_type_ids_use_factorize_fallback(self) -> None:
-        """Non-comparable mixed-type identifiers fall back to appearance order."""
-        edges = self._make_edges([("a", 1), (1, "a")])
-        result = utils.canonicalize_edges(edges)
-        assert result.index.tolist() == [("a", 1)]
-
-    def test_empty_input_returns_copy(self) -> None:
-        """An empty edge GeoDataFrame is returned unchanged."""
-        edges = gpd.GeoDataFrame(
-            {"name": []},
-            geometry=[],
-            index=pd.MultiIndex.from_arrays([[], []], names=["u", "v"]),
-            crs="EPSG:27700",
-        )
-        result = utils.canonicalize_edges(edges)
-        assert result.empty
-        assert result is not edges
-
-    def test_non_multiindex_raises(self) -> None:
-        """A flat index is rejected."""
-        edges = gpd.GeoDataFrame(
-            {"name": ["e0"]},
-            geometry=[LineString([(0, 0), (1, 1)])],
-            crs="EPSG:27700",
-        )
-        with pytest.raises(ValueError, match="MultiIndex with at least"):
-            utils.canonicalize_edges(edges)
-
-    def test_invalid_duplicates_option_raises(self) -> None:
-        """Unknown duplicates options are rejected."""
-        edges = self._make_edges([(0, 1)])
-        with pytest.raises(ValueError, match="duplicates must be one of"):
-            utils.canonicalize_edges(edges, duplicates="drop")  # type: ignore[arg-type]
-
-
-class TestSymmetrizeEdges(BaseGraphTest):
-    """Test symmetrize_edges adding reverse rows of undirected edges."""
-
-    @staticmethod
-    def _make_edges(
-        tuples: list[tuple[Any, ...]],
-        names: list[str] | None = None,
-    ) -> gpd.GeoDataFrame:
-        """Build an edge GeoDataFrame with one distinct row per index tuple."""
-        if names is None:
-            names = ["u", "v"] if len(tuples[0]) == 2 else ["u", "v", "k"]
-        return gpd.GeoDataFrame(
-            {"name": [f"e{i}" for i in range(len(tuples))]},
-            geometry=[LineString([(i, 0), (i + 1, 1)]) for i in range(len(tuples))],
-            index=pd.MultiIndex.from_tuples(tuples, names=names),
-            crs="EPSG:27700",
-        )
-
-    def test_adds_reverse_rows(self) -> None:
-        """Each canonical edge gains a reverse row with copied attributes."""
-        edges = self._make_edges([(0, 1), (1, 2)])
-        result = utils.symmetrize_edges(edges)
-
-        assert result.index.tolist() == [(0, 1), (1, 2), (1, 0), (2, 1)]
-        assert result.index.names == ["u", "v"]
-        assert list(result["name"]) == ["e0", "e1", "e0", "e1"]
-        assert result.crs == edges.crs
-
-    def test_reverse_rows_have_reversed_geometry(self) -> None:
-        """Reverse rows reverse the LineString so it starts at the source node."""
-        edges = self._make_edges([(0, 1)])
-        result = utils.symmetrize_edges(edges)
-
-        forward = list(result.geometry.loc[(0, 1)].coords)
-        backward = list(result.geometry.loc[(1, 0)].coords)
-        assert backward == forward[::-1]
-
-    def test_self_loops_not_duplicated(self) -> None:
-        """Self-loops appear only once in the output."""
-        edges = self._make_edges([(2, 2), (0, 1)])
-        result = utils.symmetrize_edges(edges)
-        assert result.index.tolist() == [(2, 2), (0, 1), (1, 0)]
-
-    def test_idempotent(self) -> None:
-        """Applying symmetrize_edges twice equals applying it once."""
-        edges = self._make_edges([(0, 1), (1, 2)])
-        once = utils.symmetrize_edges(edges)
-        twice = utils.symmetrize_edges(once)
-        assert twice.equals(once)
-
-    def test_already_bidirectional_input_unchanged(self) -> None:
-        """Inputs already holding both directions gain no extra rows."""
-        edges = self._make_edges([(0, 1), (1, 0)])
-        result = utils.symmetrize_edges(edges)
-        assert result.index.tolist() == [(0, 1), (1, 0)]
-        assert list(result["name"]) == ["e0", "e1"]
-
-    def test_three_level_index_keeps_keys(self) -> None:
-        """Multigraph keys are preserved on reverse rows."""
-        edges = self._make_edges([(0, 1, 0), (0, 1, 1)])
-        result = utils.symmetrize_edges(edges)
-        assert result.index.tolist() == [(0, 1, 0), (0, 1, 1), (1, 0, 0), (1, 0, 1)]
-        assert result.index.names == ["u", "v", "k"]
-
-    def test_round_trip_with_canonicalize(self) -> None:
-        """canonicalize_edges collapses symmetrized output back to the input."""
-        edges = self._make_edges([(0, 1), (1, 2)])
-        result = utils.canonicalize_edges(utils.symmetrize_edges(edges))
-        assert result.equals(edges)
-
-    def test_mixed_type_ids_supported(self) -> None:
-        """Mixed, non-comparable identifier types are symmetrized verbatim."""
-        edges = self._make_edges([("a", 1)])
-        result = utils.symmetrize_edges(edges)
-        assert result.index.tolist() == [("a", 1), (1, "a")]
-
-    def test_empty_input_returns_copy(self) -> None:
-        """An empty edge GeoDataFrame is returned unchanged."""
-        edges = gpd.GeoDataFrame(
-            {"name": []},
-            geometry=[],
-            index=pd.MultiIndex.from_arrays([[], []], names=["u", "v"]),
-            crs="EPSG:27700",
-        )
-        result = utils.symmetrize_edges(edges)
-        assert result.empty
-        assert result is not edges
-
-    def test_non_multiindex_raises(self) -> None:
-        """A flat index is rejected."""
-        edges = gpd.GeoDataFrame(
-            {"name": ["e0"]},
-            geometry=[LineString([(0, 0), (1, 1)])],
-            crs="EPSG:27700",
-        )
-        with pytest.raises(ValueError, match="MultiIndex with at least"):
-            utils.symmetrize_edges(edges)
-
-
-# ============================================================================
-# GRAPH ANALYSIS TESTS
-# ============================================================================
-
-
 class TestGraphAnalysis(BaseGraphTest):
     """Test graph analysis operations like filtering and isochrone generation."""
 
@@ -1975,8 +1380,6 @@ class TestGraphAnalysis(BaseGraphTest):
         assert isinstance(isochrone, gpd.GeoDataFrame)
         assert len(isochrone) == 1
         assert isochrone.geometry.iloc[0].geom_type == "Polygon"
-        # All nodes should be reachable with distance 2.0 (max dist is 1.7)
-        # So hull should cover all points.
 
     def test_create_isochrone_buffer(self, sample_nx_graph: nx.Graph) -> None:
         """Test isochrone creation with buffer method."""
@@ -2118,8 +1521,8 @@ class TestGraphAnalysis(BaseGraphTest):
     ) -> None:
         """Layered isochrones should reuse a single distance computation."""
         with mock.patch(
-            "city2graph.utils._compute_center_node_distances",
-            wraps=utils._compute_center_node_distances,
+            "city2graph.utils.spatial._compute_center_node_distances",
+            wraps=spatial_utils._compute_center_node_distances,
         ) as mock_compute:
             result = utils.create_isochrone(
                 sample_nx_graph,
@@ -2600,7 +2003,7 @@ class TestGraphAnalysis(BaseGraphTest):
     def test_concave_hull_knn_degenerate_triangle(self) -> None:
         """Test concave hull with exactly 3 points (triangle)."""
         points = [Point(0, 0), Point(1, 0), Point(0, 1)]
-        poly = utils._concave_hull_knn(points, k=3)
+        poly = spatial_utils._concave_hull_knn(points, k=3)
         assert isinstance(poly, Polygon)
         assert poly.area == 0.5
 
@@ -2608,7 +2011,7 @@ class TestGraphAnalysis(BaseGraphTest):
         """Test concave hull with collinear points."""
         points = [Point(0, 0), Point(1, 1), Point(2, 2)]
         # Should return LineString or fallback to convex hull (which is LineString for collinear)
-        geom = utils._concave_hull_knn(points, k=3)
+        geom = spatial_utils._concave_hull_knn(points, k=3)
         assert isinstance(geom, LineString)
 
     def test_prepare_isochrone_graph_dict_edges_missing_attr(self, sample_crs: str) -> None:
@@ -2633,7 +2036,7 @@ class TestGraphAnalysis(BaseGraphTest):
         }
 
         # Should calculate length automatically
-        graph = utils._prepare_isochrone_graph(
+        graph = spatial_utils._prepare_isochrone_graph(
             graph=None, nodes=nodes, edges=edges, edge_attr="length"
         )
         assert isinstance(graph, (nx.Graph, nx.MultiGraph))
@@ -2658,7 +2061,7 @@ class TestGraphAnalysis(BaseGraphTest):
         start_idx = 0
 
         # This should find a candidate
-        best = utils._find_best_candidate(
+        best = spatial_utils._find_best_candidate(
             coords, current_idx, candidates, prev_vec, hull_indices, start_idx
         )
         assert best is not None
@@ -2666,7 +2069,7 @@ class TestGraphAnalysis(BaseGraphTest):
         # Now force failure by making candidates invalid (e.g. zero length vector)
         # coords[1] same as coords[0]
         coords_degenerate = np.array([(0, 0), (0, 0)])
-        best_degenerate = utils._find_best_candidate(
+        best_degenerate = spatial_utils._find_best_candidate(
             coords_degenerate, 0, [1], prev_vec, hull_indices, start_idx
         )
         assert best_degenerate is None
@@ -2688,7 +2091,7 @@ class TestGraphAnalysis(BaseGraphTest):
         seg_bounds_max = np.maximum(seg_starts, seg_ends)
 
         # Edge from (0,10) to (5,5) is valid (inside)
-        assert utils._is_valid_edge(
+        assert spatial_utils._is_valid_edge(
             coords=coords,
             current_idx=3,
             candidate_idx=4,
@@ -2700,7 +2103,7 @@ class TestGraphAnalysis(BaseGraphTest):
 
         # Edge from (0,10) to (5, -5) crosses (0,0)-(10,0)
         invalid_coords = np.vstack([coords, np.array([(5, -5)])])
-        assert not utils._is_valid_edge(
+        assert not spatial_utils._is_valid_edge(
             coords=invalid_coords,
             current_idx=3,
             candidate_idx=5,
@@ -2746,13 +2149,13 @@ class TestGraphAnalysis(BaseGraphTest):
         with pytest.raises(
             ValueError, match="Either 'graph' or 'nodes' and 'edges' must be provided"
         ):
-            utils._prepare_isochrone_graph(None, None, None, None)
+            spatial_utils._prepare_isochrone_graph(None, None, None, None)
 
     def test_process_component_empty(self, sample_crs: str) -> None:
         """Test _process_component with empty/invalid inputs."""
         # Empty component
         G = nx.Graph()
-        assert utils._process_component(G, "convex_hull", sample_crs) is None
+        assert spatial_utils._process_component(G, "convex_hull", sample_crs) is None
 
     def test_generate_buffer_options(self, sample_nx_graph: nx.Graph) -> None:
         """Test buffer method with non-default options."""
@@ -2771,7 +2174,7 @@ class TestGraphAnalysis(BaseGraphTest):
 
     def test_process_component_empty_geoms(self, sample_nx_graph: nx.Graph) -> None:
         """Test _process_component when geometries become empty/invalid."""
-        with mock.patch("city2graph.utils._extract_isochrone_geometries") as mock_extract:
+        with mock.patch("city2graph.utils.spatial._extract_isochrone_geometries") as mock_extract:
             mock_extract.return_value = [Point()]  # Empty point
 
             iso = utils.create_isochrone(
@@ -2801,10 +2204,10 @@ class TestGraphAnalysis(BaseGraphTest):
         """concave_hull_knn should retry the full walk with a larger neighborhood."""
         points = np.array([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)], dtype=float)
 
-        with mock.patch("city2graph.utils._trace_concave_hull_once") as mock_trace:
+        with mock.patch("city2graph.utils.spatial._trace_concave_hull_once") as mock_trace:
             mock_trace.side_effect = [None, [0, 1, 2, 3]]
 
-            poly = utils._concave_hull_knn(points, k=2)
+            poly = spatial_utils._concave_hull_knn(points, k=2)
 
         assert isinstance(poly, Polygon)
         assert [call.args[2] for call in mock_trace.call_args_list] == [2, 3]
@@ -2812,8 +2215,8 @@ class TestGraphAnalysis(BaseGraphTest):
     def test_concave_hull_knn_fallback(self, sample_nx_graph: nx.Graph) -> None:
         """Test concave_hull_knn fallback to alpha hull when the walker cannot progress."""
         with (
-            mock.patch("city2graph.utils._find_next_hull_point") as mock_find,
-            mock.patch("city2graph.utils._concave_fallback_alpha") as mock_fallback,
+            mock.patch("city2graph.utils.spatial._find_next_hull_point") as mock_find,
+            mock.patch("city2graph.utils.spatial._concave_fallback_alpha") as mock_fallback,
         ):
             mock_find.return_value = None
             mock_fallback.return_value = Polygon([(0, 0), (1, 0), (0, 1)])
@@ -2844,11 +2247,11 @@ class TestGraphAnalysis(BaseGraphTest):
 
         with (
             mock.patch(
-                "city2graph.utils._find_next_hull_point",
+                "city2graph.utils.spatial._find_next_hull_point",
                 side_effect=lambda **_kwargs: next(next_indices),
             ),
             mock.patch(
-                "city2graph.utils._concave_fallback_alpha",
+                "city2graph.utils.spatial._concave_fallback_alpha",
                 return_value=Polygon([(0, 0), (2, 0), (1, 1)]),
             ) as mock_fallback,
         ):
@@ -2890,7 +2293,7 @@ class TestGraphAnalysis(BaseGraphTest):
 
     def test_isochrone_generate_polygon_returns_none(self, sample_nx_graph: nx.Graph) -> None:
         """Test _process_component when _generate_polygon returns None."""
-        with mock.patch("city2graph.utils._generate_polygon") as mock_gen:
+        with mock.patch("city2graph.utils.spatial._generate_polygon") as mock_gen:
             mock_gen.return_value = None
             iso = utils.create_isochrone(
                 sample_nx_graph,
@@ -2950,721 +2353,6 @@ class TestGraphAnalysis(BaseGraphTest):
         # Should only contain node 2 (Point) -> buffered to Polygon
         assert not iso2.empty
         assert iso2.geometry.iloc[0].area < 4.0  # Small buffer around point
-
-
-# ============================================================================
-# CONVERSION TESTS
-# ============================================================================
-
-
-class TestNxConversions(BaseConversionTest):
-    """Test conversions between GeoDataFrame and NetworkX formats."""
-
-    def test_homogeneous_roundtrip_conversion(
-        self,
-        sample_nodes_gdf: gpd.GeoDataFrame,
-        sample_edges_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Test roundtrip conversion preserves data integrity for homogeneous graphs."""
-        graph = gdf_to_nx(sample_nodes_gdf, sample_edges_gdf)
-        nodes_converted, edges_converted = nx_to_gdf(graph)
-
-        self.assert_roundtrip_consistency(
-            sample_nodes_gdf,
-            sample_edges_gdf,
-            nodes_converted,
-            edges_converted,
-        )
-
-    def test_heterogeneous_roundtrip_conversion(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Test roundtrip conversion for heterogeneous graphs."""
-        graph = gdf_to_nx(
-            nodes=sample_hetero_nodes_dict,
-            edges=sample_hetero_edges_dict,
-            multigraph=True,
-        )
-        nodes_dict_converted, edges_dict_converted = nx_to_gdf(graph)
-
-        assert isinstance(nodes_dict_converted, dict)
-        assert isinstance(edges_dict_converted, dict)
-        assert sample_hetero_nodes_dict.keys() == nodes_dict_converted.keys()
-        assert sample_hetero_edges_dict.keys() == edges_dict_converted.keys()
-
-        for node_type, original_nodes in sample_hetero_nodes_dict.items():
-            assert isinstance(nodes_dict_converted[node_type], gpd.GeoDataFrame)
-            converted_nodes = nodes_dict_converted[node_type]
-            # Use the first available edge type for consistency check
-            first_edge_type = next(iter(sample_hetero_edges_dict.keys()))
-            original_edges = sample_hetero_edges_dict[first_edge_type]
-            assert isinstance(edges_dict_converted[first_edge_type], gpd.GeoDataFrame)
-            converted_edges = edges_dict_converted[first_edge_type]
-            self.assert_roundtrip_consistency(
-                original_nodes,
-                original_edges,
-                converted_nodes,
-                converted_edges,
-            )
-
-    @pytest.mark.parametrize(
-        ("input_type", "gdf_fixture"),
-        [("edges_only", "sample_edges_gdf"), ("hetero_edges_only", "sample_hetero_edges_dict")],
-    )
-    def test_edges_only_conversion(
-        self,
-        input_type: str,
-        gdf_fixture: str,
-        request: pytest.FixtureRequest,
-    ) -> None:
-        """Test conversion with only edge data provided."""
-        gdf = request.getfixturevalue(gdf_fixture)
-
-        if input_type == "edges_only":
-            graph = gdf_to_nx(edges=gdf)
-            assert isinstance(graph, nx.Graph)
-            assert graph.number_of_edges() == len(gdf)
-            assert graph.number_of_nodes() > 0  # Nodes created from edge endpoints
-        else:  # hetero_edges_only
-            graph = gdf_to_nx(edges=gdf)
-            assert isinstance(graph, nx.Graph)
-            # Heterogeneous edges dict without nodes results in empty graph
-            assert graph.number_of_edges() == 0
-
-    def test_nx_to_gdf_requires_nodes_or_edges(self, simple_nx_graph: nx.Graph) -> None:
-        """Requesting neither nodes nor edges should raise."""
-        with pytest.raises(ValueError, match="Must request at least one of nodes or edges"):
-            nx_to_gdf(simple_nx_graph, nodes=False, edges=False)
-
-    def test_directed_multigraph_conversion(
-        self,
-        directed_multigraph_edges_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Directed + multigraph flags should produce a MultiDiGraph."""
-        converter = NxConverter(directed=True, multigraph=True)
-        graph = converter.gdf_to_nx(nodes=None, edges=directed_multigraph_edges_gdf)
-        assert isinstance(graph, nx.MultiDiGraph)
-
-    @pytest.mark.parametrize(
-        ("nodes_arg", "edges_arg", "error_type", "error_match"),
-        [
-            (None, None, ValueError, "Either nodes or edges must be provided"),
-            ("not_a_gdf", "sample_edges_gdf", TypeError, "Input must be a GeoDataFrame"),
-            (
-                "sample_hetero_nodes_dict",
-                "sample_edges_gdf",
-                TypeError,
-                "If nodes is a dict, edges must also be a dict",
-            ),
-            (
-                "sample_nodes_gdf_alt_crs",
-                "sample_edges_gdf",
-                ValueError,
-                "All GeoDataFrames must have the same CRS",
-            ),
-        ],
-    )
-    def test_conversion_error_handling(
-        self,
-        nodes_arg: str | None,
-        edges_arg: str | None,
-        error_type: type[Exception],
-        error_match: str,
-        request: pytest.FixtureRequest,
-    ) -> None:
-        """Test proper error handling for invalid conversion inputs."""
-        nodes = request.getfixturevalue(nodes_arg) if nodes_arg else None
-        edges = request.getfixturevalue(edges_arg) if edges_arg else None
-
-        with pytest.raises(error_type, match=error_match):
-            gdf_to_nx(nodes=nodes, edges=edges)
-
-    def test_node_index_names_survive_roundtrip(
-        self,
-        single_name_index_nodes_gdf: gpd.GeoDataFrame,
-        simple_edges_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Roundtrips should respect single-level index names."""
-        graph = gdf_to_nx(nodes=single_name_index_nodes_gdf, edges=simple_edges_gdf)
-        nodes_back, _ = nx_to_gdf(graph)
-        assert isinstance(nodes_back, gpd.GeoDataFrame)
-        assert nodes_back.index.name == "single_name"
-
-        graph.graph["node_index_names"] = None
-        nodes_back, _ = nx_to_gdf(graph)
-        assert isinstance(nodes_back, gpd.GeoDataFrame)
-        assert nodes_back.index.name is None
-
-    def test_multiindex_nodes_roundtrip(
-        self,
-        multiindex_nodes_gdf: gpd.GeoDataFrame,
-        simple_edges_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """MultiIndex node metadata should be preserved in graph metadata."""
-        graph = gdf_to_nx(nodes=multiindex_nodes_gdf, edges=simple_edges_gdf)
-        assert graph.graph["node_index_names"] == ["node_type", "node_id"]
-
-    @pytest.mark.parametrize(
-        ("graph_fixture", "expect_crs", "expect_geom"),
-        [
-            ("sample_nx_graph", True, True),
-            ("sample_nx_graph_no_crs", False, True),
-            ("sample_nx_graph_no_pos", True, True),
-        ],
-    )
-    def test_nx_to_gdf_variants(
-        self,
-        graph_fixture: str,
-        expect_crs: bool,
-        expect_geom: bool,
-        request: pytest.FixtureRequest,
-    ) -> None:
-        """Test NetworkX to GDF conversion with different graph properties."""
-        graph = request.getfixturevalue(graph_fixture)
-        nodes, edges = nx_to_gdf(graph)
-
-        # These are homogeneous graphs, so ensure they return GeoDataFrames not dicts
-        assert isinstance(nodes, gpd.GeoDataFrame)
-        assert isinstance(edges, gpd.GeoDataFrame)
-
-        if expect_geom:
-            assert "geometry" in nodes.columns
-            assert "geometry" in edges.columns
-
-        if expect_crs:
-            assert nodes.crs is not None
-            assert edges.crs is not None
-        else:
-            assert nodes.crs is None
-            assert edges.crs is None
-
-    def test_nx_to_gdf_handles_empty_edges(self, sample_crs: str) -> None:
-        """Graphs with no edges should still return empty edge GeoDataFrames."""
-        graph = nx.Graph()
-        graph.add_node(1, pos=(0, 0), geometry=Point(0, 0))
-        graph.graph = {"crs": sample_crs, "is_hetero": False}
-
-        nodes_gdf, edges_gdf = nx_to_gdf(graph)
-        self.assert_valid_gdf(nodes_gdf)
-        self.assert_valid_gdf(edges_gdf, expected_empty=True)
-
-    def test_nx_to_gdf_multigraph_edges(self, sample_crs: str) -> None:
-        """Multigraph attributes should be preserved after conversion."""
-        graph = nx.MultiGraph()
-        graph.add_node(1, pos=(0, 0), geometry=Point(0, 0))
-        graph.add_node(2, pos=(1, 1), geometry=Point(1, 1))
-        graph.add_edge(1, 2, key=0, weight=1.0, geometry=LineString([(0, 0), (1, 1)]))
-        graph.graph = {"crs": sample_crs, "is_hetero": False}
-
-        _, edges_gdf = nx_to_gdf(graph)
-        self.assert_valid_gdf(edges_gdf)
-        assert isinstance(edges_gdf, gpd.GeoDataFrame)
-        assert "weight" in edges_gdf.columns
-
-    def test_nx_to_gdf_multiindex_edges(self, sample_crs: str) -> None:
-        """List-based stored edge indices should be normalized during reconstruction."""
-        graph = nx.MultiGraph()
-        graph.add_node(1, pos=(0, 0), geometry=Point(0, 0))
-        graph.add_node(2, pos=(1, 1), geometry=Point(1, 1))
-        graph.add_edge(1, 2, key=0, geometry=LineString([(0, 0), (1, 1)]))
-        graph.add_edge(1, 2, key=1, geometry=LineString([(0, 0), (1, 1)]))
-        graph.graph = {"crs": sample_crs, "is_hetero": False}
-
-        for u, v, k, attrs in graph.edges(data=True, keys=True):
-            attrs["_original_edge_index"] = [u, v, k]
-
-        _, edges_gdf = nx_to_gdf(graph)
-        self.assert_valid_gdf(edges_gdf)
-        assert len(edges_gdf) == 2
-
-    def test_nx_to_gdf_single_coord_attr(self, sample_crs: str) -> None:
-        """Missing pos attributes can be populated from alternative coordinate keys."""
-        graph = nx.Graph()
-        graph.add_node(1, coords=[0.0, 1.0])
-        graph.add_node(2, coords=(2.0, 3.0))
-        graph.graph = {"crs": sample_crs, "is_hetero": False}
-
-        nodes_gdf = nx_to_gdf(graph, nodes=True, edges=False, set_missing_pos_from=("coords",))
-        self.assert_valid_gdf(nodes_gdf)
-        assert len(nodes_gdf) == 2
-
-    def test_heterogeneous_edge_processing(
-        self,
-        regular_hetero_graph: nx.Graph,
-        empty_hetero_graph: nx.Graph,
-    ) -> None:
-        """nx_to_gdf should return dictionaries for heterogeneous graphs."""
-        nodes_dict, edges_dict = nx_to_gdf(regular_hetero_graph)
-        assert isinstance(nodes_dict, dict)
-        assert isinstance(edges_dict, dict)
-
-        nodes_dict, edges_dict = nx_to_gdf(empty_hetero_graph)
-        assert isinstance(edges_dict[("building", "connects", "road")], gpd.GeoDataFrame)
-        assert edges_dict[("building", "connects", "road")].empty
-
-    def test_empty_nodes_in_conversion(self, sample_crs: str) -> None:
-        """Test conversion with completely empty nodes (line 995)."""
-        # Create edges but with no nodes that will result in empty node records
-        edges_gdf = gpd.GeoDataFrame(
-            geometry=[LineString([(0, 0), (1, 1)])],
-            crs=sample_crs,
-        )
-
-        # Create a graph and then remove all node attributes to trigger empty records
-        converter = NxConverter()
-        graph = converter.gdf_to_nx(edges=edges_gdf)
-
-        # Manually clear node data to simulate empty records scenario
-        for node in graph.nodes():
-            # Keep only pos to trigger the empty records path
-            graph.nodes[node].clear()
-            graph.nodes[node]["pos"] = (0, 0)
-
-        # Convert back - this should handle empty node records
-        nodes_gdf, _edges_gdf_out = converter.nx_to_gdf(graph)
-        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
-
-    def test_build_edge_index_empty(self) -> None:
-        """Test _build_edge_index with empty original_indices (line 1225)."""
-        converter = NxConverter()
-        result = converter._build_edge_index([], None)
-        assert isinstance(result, pd.Index)
-        assert len(result) == 0
-
-    def test_build_node_index_empty(self) -> None:
-        """Test _build_node_index with empty original_indices (line 1243)."""
-        converter = NxConverter()
-        result = converter._build_node_index([], None)
-        assert isinstance(result, pd.Index)
-        assert len(result) == 0
-
-    def test_empty_graph_node_reconstruction(self, sample_crs: str) -> None:
-        """Test nx_to_gdf with graph that has nodes without attributes (line 996)."""
-        # Create a minimal graph with nodes that have no custom attributes
-        # This will result in empty records when reconstructing
-        G = nx.Graph()
-        G.add_node(0, pos=(0, 0))
-        G.add_node(1, pos=(1, 1))
-        G.graph = {"crs": sample_crs, "is_hetero": False, "node_index_names": None}
-
-        # Convert to GDF - should handle empty records gracefully
-        nodes_gdf, _edges_gdf = utils.nx_to_gdf(G)
-        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
-        assert len(nodes_gdf) == 2
-        assert "geometry" in nodes_gdf.columns
-
-    def test_edge_iteration_fallback(self, sample_crs: str) -> None:
-        """Test edge iteration handles unexpected edge format (line 1200)."""
-        # Create a graph and manually add malformed edge to test the fallback
-        converter = NxConverter()
-        graph = nx.Graph()
-        graph.add_node(0, pos=(0, 0))
-        graph.add_node(1, pos=(1, 1))
-        graph.add_edge(0, 1, geometry=LineString([(0, 0), (1, 1)]))
-        graph.graph = {"crs": sample_crs, "is_hetero": False, "edge_index_names": None}
-
-        # The actual iteration path that could hit line 1200 is very defensive
-        # It's hard to trigger without modifying internal NetworkX behavior
-        # Convert to GDF to exercise the edge reconstruction path
-        _, edges_gdf = converter.nx_to_gdf(graph)
-        assert isinstance(edges_gdf, gpd.GeoDataFrame)
-
-    def test_gdf_to_nx_edges_none(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:
-        """Test gdf_to_nx raises ValueError when edges is None."""
-        converter = NxConverter()
-        with pytest.raises(ValueError, match="Edges GeoDataFrame cannot be None"):
-            converter.gdf_to_nx(nodes=sample_nodes_gdf, edges=None)
-
-    def test_nx_to_gdf_multiindex_nodes(self, sample_crs: str) -> None:
-        """Test nx_to_gdf with MultiIndex nodes."""
-        G = nx.Graph()
-        # Add nodes with tuple indices
-        G.add_node((0, "a"), pos=(0, 0), _original_index=(0, "a"))
-        G.add_node((1, "b"), pos=(1, 1), _original_index=(1, "b"))
-        G.graph = {"crs": sample_crs, "is_hetero": False, "node_index_names": ["id", "type"]}
-
-        nodes_gdf, _ = utils.nx_to_gdf(G)
-        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
-        assert isinstance(nodes_gdf.index, pd.MultiIndex)
-        assert nodes_gdf.index.names == ["id", "type"]
-        assert len(nodes_gdf) == 2
-
-    def test_coerce_name_sequence_string(self) -> None:
-        """Test _coerce_name_sequence with string input."""
-        assert utils._coerce_name_sequence("index_name") == ["index_name"]
-        assert utils._coerce_name_sequence(["a", "b"]) == ["a", "b"]
-        assert utils._coerce_name_sequence(None) is None
-
-    def test_nx_to_gdf_empty_graph_no_nodes(self, sample_crs: str) -> None:
-        """Test nx_to_gdf with a completely empty graph (no nodes)."""
-        G = nx.Graph()
-        G.graph = {"crs": sample_crs, "is_hetero": False}
-        nodes_gdf, edges_gdf = utils.nx_to_gdf(G)
-        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
-        assert isinstance(edges_gdf, gpd.GeoDataFrame)
-        assert nodes_gdf.empty
-        assert edges_gdf.empty
-        assert "geometry" in nodes_gdf.columns
-
-
-# ============================================================================
-# VALIDATION TESTS
-# ============================================================================
-
-
-class TestValidation:
-    """Test validation functions for GeoDataFrames and NetworkX graphs."""
-
-    def test_geo_processor_edge_cases(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        empty_gdf: gpd.GeoDataFrame,
-        invalid_geom_gdf: gpd.GeoDataFrame,
-        all_invalid_geom_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """GeoDataProcessor should handle geometry filtering and allow-empty toggles."""
-        processor = GeoDataProcessor()
-
-        result = processor.validate_gdf(
-            sample_buildings_gdf,
-            expected_geom_types=["Polygon", "MultiPolygon"],
-        )
-        assert isinstance(result, gpd.GeoDataFrame)
-
-        assert processor.validate_gdf(empty_gdf, allow_empty=True) is not None
-        with pytest.raises(ValueError, match="GeoDataFrame cannot be empty"):
-            processor.validate_gdf(empty_gdf, allow_empty=False)
-
-        filtered = processor.validate_gdf(invalid_geom_gdf)
-        assert filtered is not None
-        assert len(filtered) < len(invalid_geom_gdf)
-
-        with pytest.raises(ValueError, match="GeoDataFrame cannot be empty"):
-            processor.validate_gdf(all_invalid_geom_gdf, allow_empty=False)
-
-    @pytest.mark.parametrize(
-        ("nodes_fixture", "edges_fixture", "should_error", "error_match"),
-        [
-            # Success cases
-            ("sample_nodes_gdf", "sample_edges_gdf", False, None),
-            ("sample_nodes_gdf", None, False, None),
-            (None, "sample_edges_gdf", False, None),
-            ("empty_gdf", "sample_edges_gdf", False, None),
-            # Error cases
-            ("not_a_gdf", "sample_edges_gdf", True, "Input must be a GeoDataFrame"),
-            (
-                "sample_nodes_gdf_alt_crs",
-                "sample_edges_gdf",
-                True,
-                "All GeoDataFrames must have the same CRS",
-            ),
-            (
-                "sample_nodes_gdf",
-                "edges_dict_for_hetero",
-                True,
-                "If edges is a dict, nodes must also be a dict or None",
-            ),
-            (
-                "simple_nodes_dict_type1",
-                "sample_edges_gdf",
-                True,
-                "If nodes is a dict, edges must also be a dict or None",
-            ),
-        ],
-    )
-    def test_gdf_validation(
-        self,
-        nodes_fixture: str | None,
-        edges_fixture: str | None,
-        should_error: bool,
-        error_match: str | None,
-        request: pytest.FixtureRequest,
-    ) -> None:
-        """Test GeoDataFrame validation with various input combinations."""
-        nodes = request.getfixturevalue(nodes_fixture) if nodes_fixture else None
-        edges = request.getfixturevalue(edges_fixture) if edges_fixture else None
-
-        if should_error:
-            with pytest.raises((TypeError, ValueError), match=error_match):
-                utils.validate_gdf(nodes, edges)
-        else:
-            utils.validate_gdf(nodes, edges)  # Should not raise
-
-    @pytest.mark.parametrize(
-        ("graph_fixture", "should_error", "error_match"),
-        [
-            ("sample_nx_graph", False, None),
-            ("sample_nx_multigraph", False, None),
-            ("not_a_gdf", True, "Input must be a NetworkX Graph or MultiGraph"),
-        ],
-    )
-    def test_nx_validation(
-        self,
-        graph_fixture: str,
-        should_error: bool,
-        error_match: str | None,
-        request: pytest.FixtureRequest,
-    ) -> None:
-        """Test NetworkX graph validation."""
-        graph = request.getfixturevalue(graph_fixture)
-
-        if should_error:
-            with pytest.raises(TypeError, match=error_match):
-                utils.validate_nx(graph)
-        else:
-            utils.validate_nx(graph)  # Should not raise
-
-    @pytest.mark.parametrize(
-        ("graph_fixture", "error_match"),
-        [
-            ("graph_missing_crs", "Graph metadata is missing required key"),
-            (
-                "hetero_graph_no_node_types",
-                "Heterogeneous graph metadata is missing 'node_types'",
-            ),
-            (
-                "hetero_graph_no_edge_types",
-                "Heterogeneous graph metadata is missing 'edge_types'",
-            ),
-            ("graph_no_pos_geom", "All nodes must have a 'pos' or 'geometry' attribute"),
-            (
-                "hetero_graph_no_node_type",
-                "All nodes in a heterogeneous graph must have a 'node_type' attribute",
-            ),
-            (
-                "hetero_graph_no_edge_type",
-                "All edges in a heterogeneous graph must have an 'edge_type' attribute",
-            ),
-        ],
-    )
-    def test_validate_nx_rejects_invalid_graphs(
-        self,
-        graph_fixture: str,
-        error_match: str,
-        request: pytest.FixtureRequest,
-    ) -> None:
-        """GeoDataProcessor.validate_nx should surface detailed errors."""
-        graph = request.getfixturevalue(graph_fixture)
-        processor = GeoDataProcessor()
-        with pytest.raises(ValueError, match=error_match):
-            processor.validate_nx(graph)
-
-    def test_validation_edge_cases(
-        self,
-        sample_nodes_gdf: gpd.GeoDataFrame,
-        empty_gdf: gpd.GeoDataFrame,
-        segments_invalid_geom_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Test validation handles edge cases properly."""
-        # Empty edges should be allowed
-        utils.validate_gdf(sample_nodes_gdf, empty_gdf)
-
-        # Invalid geometries should be handled with warning
-        utils.validate_gdf(sample_nodes_gdf, segments_invalid_geom_gdf)
-
-    def test_heterogeneous_validation_errors(
-        self,
-        nodes_dict_bad_keys: dict[int, gpd.GeoDataFrame],
-        edges_dict_bad_tuple: dict[str, gpd.GeoDataFrame],
-        simple_nodes_dict_type1: dict[str, gpd.GeoDataFrame],
-        edges_dict_bad_elements: dict[tuple[int, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Ensure validation catches malformed heterogeneous inputs."""
-        with pytest.raises(TypeError, match="Node type keys must be strings"):
-            gdf_to_nx(nodes=nodes_dict_bad_keys, edges=None)
-
-        with pytest.raises(TypeError, match="Edge type keys must be tuples"):
-            gdf_to_nx(nodes=simple_nodes_dict_type1, edges=edges_dict_bad_tuple)
-
-        with pytest.raises(TypeError, match="All elements in edge type tuples must be strings"):
-            gdf_to_nx(nodes=simple_nodes_dict_type1, edges=edges_dict_bad_elements)
-
-    def test_validate_nx_basic_structure_errors(self) -> None:
-        """Graphs with missing metadata or topology should raise informative errors."""
-        processor = GeoDataProcessor()
-
-        empty_graph = nx.Graph()
-        with pytest.raises(ValueError, match="Graph has no nodes"):
-            processor.validate_nx(empty_graph)
-
-        no_edges_graph = nx.Graph()
-        no_edges_graph.add_node(1)
-        with pytest.raises(ValueError, match="Graph has no edges"):
-            processor.validate_nx(no_edges_graph)
-
-        incomplete_graph = nx.Graph()
-        incomplete_graph.add_node(1, pos=(0, 0))
-        incomplete_graph.add_edge(1, 2)
-        delattr(incomplete_graph, "graph")
-        with pytest.raises(ValueError, match="Graph is missing 'graph' attribute dictionary"):
-            utils.validate_nx(incomplete_graph)
-
-    def test_validate_nx_pos_from_xy(self, sample_crs: str) -> None:
-        """Test validate_nx creates pos from x and y attributes (line 2016)."""
-        # Create a graph with x, y but no pos
-        G = nx.Graph()
-        G.add_node(1, x=10.0, y=20.0)
-        G.add_node(2, x=30.0, y=40.0)
-        G.add_edge(1, 2, geometry=LineString([(10, 20), (30, 40)]))
-        G.graph = {"crs": sample_crs, "is_hetero": False}
-
-        # This should set pos from x and y
-        utils.validate_nx(G)
-
-        assert "pos" in G.nodes[1]
-        assert "pos" in G.nodes[2]
-        assert G.nodes[1]["pos"] == (10.0, 20.0)
-        assert G.nodes[2]["pos"] == (30.0, 40.0)
-
-
-# ============================================================================
-# METADATA TESTS
-# ============================================================================
-
-
-class TestGraphMetadata:
-    """Test GraphMetadata class functionality."""
-
-    def test_metadata_creation_and_conversion(self) -> None:
-        """Test GraphMetadata creation, conversion, and validation."""
-        metadata = GraphMetadata(crs="EPSG:4326", is_hetero=True)
-        metadata.node_types = ["building", "road"]
-        metadata.edge_types = [("building", "connects", "road")]
-
-        # Test to_dict conversion
-        result_dict = metadata.to_dict()
-        assert result_dict["crs"] == "EPSG:4326"
-        assert result_dict["is_hetero"] is True
-        assert result_dict["node_types"] == ["building", "road"]
-
-        # Test from_dict creation
-        recreated = GraphMetadata.from_dict(result_dict)
-        assert recreated.crs == metadata.crs
-        assert recreated.is_hetero == metadata.is_hetero
-        assert recreated.node_types == metadata.node_types
-
-    @pytest.mark.parametrize(
-        ("invalid_data", "error_type", "error_match"),
-        [
-            ({"crs": 123.45, "is_hetero": False}, TypeError, "CRS must be str, int, dict"),
-            ({"crs": "EPSG:4326", "is_hetero": "not_bool"}, TypeError, "is_hetero must be bool"),
-        ],
-    )
-    def test_metadata_validation_errors(
-        self,
-        invalid_data: dict[str, object],
-        error_type: type[Exception],
-        error_match: str,
-    ) -> None:
-        """Test GraphMetadata validation catches invalid inputs."""
-        with pytest.raises(error_type, match=error_match):
-            GraphMetadata.from_dict(invalid_data)
-
-    def test_metadata_valid_crs_types(self) -> None:
-        """Test GraphMetadata accepts various valid CRS formats."""
-        valid_crs_values = ["EPSG:4326", 4326, {"init": "epsg:4326"}, None]
-
-        for crs_value in valid_crs_values:
-            metadata = GraphMetadata.from_dict({"crs": crs_value, "is_hetero": False})
-            assert metadata.crs == crs_value
-
-
-# ============================================================================
-# COMPREHENSIVE EDGE CASE TESTS
-# ============================================================================
-
-
-# ============================================================================
-# RUSTWORKX CONVERSION TESTS
-# ============================================================================
-
-
-class TestRustworkxConversions:
-    """Test conversions between NetworkX and rustworkx."""
-
-    @pytest.mark.parametrize(
-        "create_graph",
-        [
-            lambda: nx.Graph(name="undirected"),
-            lambda: nx.DiGraph(name="directed"),
-            lambda: nx.MultiGraph(name="multi_undirected"),
-            lambda: nx.MultiDiGraph(name="multi_directed"),
-        ],
-    )
-    def test_nx_rx_roundtrip(self, create_graph: Callable[[], nx.Graph]) -> None:
-        """Test full roundtrip conversion preserves structure and attributes."""
-        # Setup complex graph
-        G = create_graph()
-        G.graph["crs"] = "EPSG:4326"
-        G.add_node("a", color="red", size=10)
-        G.add_node(1, color="blue")
-
-        # Add edges with attributes
-        G.add_edge("a", 1, weight=0.5, type="road")
-
-        # If multi-graph, add another edge between same nodes
-        if G.is_multigraph():
-            G.add_edge("a", 1, weight=0.8, type="path")
-
-        # Convert to rustworkx
-        rx_graph = utils.nx_to_rx(G)
-
-        # Verify RX structure
-        assert rx_graph.num_nodes() == G.number_of_nodes()
-        assert rx_graph.num_edges() == G.number_of_edges()
-        assert rx_graph.attrs["crs"] == "EPSG:4326"
-
-        # Convert back to NetworkX
-        G_restored = utils.rx_to_nx(rx_graph)
-
-        # Verify restored graph
-        assert nx.utils.graphs_equal(G, G_restored)
-
-    def test_rx_to_nx_raw_input(self) -> None:
-        """Test converting a raw rustworkx graph (no __nx_node_id__)."""
-        rx_G = rx.PyGraph(multigraph=False)
-        rx_G.attrs = {"test": "attr"}
-
-        # Add nodes with raw payload (not dict) and dict payload
-        idx1 = rx_G.add_node("raw_payload")
-        idx2 = rx_G.add_node({"attr": "value"})
-
-        rx_G.add_edge(idx1, idx2, {"weight": 0.5})
-
-        if rx_G.multigraph:
-            rx_G.add_edge(idx1, idx2, {"weight": 0.8})
-
-        # Convert
-        nx_G = utils.rx_to_nx(rx_G)
-
-        assert isinstance(nx_G, nx.Graph)
-        assert nx_G.graph["test"] == "attr"
-
-        # Check nodes - should use integer indices since no __nx_node_id__
-        assert idx1 in nx_G.nodes
-        assert nx_G.nodes[idx1]["payload"] == "raw_payload"
-        assert nx_G.nodes[idx2]["attr"] == "value"
-
-        # Check edge
-        assert nx_G.has_edge(idx1, idx2)
-        assert nx_G.edges[idx1, idx2]["weight"] == 0.5
-
-    def test_rx_to_nx_raw_edge_payload(self) -> None:
-        """Test converting RX graph with non-dict edge payloads."""
-        rx_G = rx.PyGraph(multigraph=False)
-        i1 = rx_G.add_node(None)
-        i2 = rx_G.add_node(None)
-        rx_G.add_edge(i1, i2, "edge_label")
-
-        nx_G = utils.rx_to_nx(rx_G)
-        assert nx_G.edges[i1, i2]["payload"] == "edge_label"
-
-
-# ============================================================================
-# PLOTTING TESTS
-# ============================================================================
 
 
 class TestPlotting(BaseGraphTest):
@@ -3748,7 +2436,7 @@ class TestPlotting(BaseGraphTest):
     def test_plot_graph_no_matplotlib(self, sample_nx_graph: nx.Graph) -> None:
         """Test error when matplotlib is missing."""
         with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(utils, "MATPLOTLIB_AVAILABLE", False)
+            mp.setattr(spatial_utils, "MATPLOTLIB_AVAILABLE", False)
             with pytest.raises(ImportError, match=r"(?i)matplotlib is required"):
                 utils.plot_graph(sample_nx_graph)
 
@@ -3972,7 +2660,7 @@ class TestPlotting(BaseGraphTest):
         """Test _plot_gdf with empty GeoDataFrame (line 3246)."""
         # This should not raise and should return early
         fig, ax = plt.subplots()
-        utils._plot_gdf(empty_gdf, ax)
+        spatial_utils._plot_gdf(empty_gdf, ax)
         plt.close(fig)
 
     @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
@@ -4027,7 +2715,7 @@ class TestPlotting(BaseGraphTest):
 
         # This should return early without creating a plot
         fig, _ax = plt.subplots()
-        utils._plot_hetero_subplots(
+        spatial_utils._plot_hetero_subplots(
             sample_hetero_nodes_dict,
             empty_edges_dict,
             figsize=(10, 10),
@@ -4059,497 +2747,27 @@ class TestPlotting(BaseGraphTest):
         plt.close("all")
 
 
-# ============================================================================
-# INTERNAL UTILS TESTS
-# ============================================================================
-
-
-class TestIdentifySourceTargetCols:
-    """Test the _identify_source_target_cols function."""
-
-    @pytest.fixture
-    def basic_edges(self) -> gpd.GeoDataFrame:
-        """Create basic edges fixture for testing."""
-        return gpd.GeoDataFrame(
-            {"u": [1, 2], "v": [2, 3], "weight": [1.0, 2.0]},
-            geometry=[LineString([(0, 0), (1, 1)]), LineString([(1, 1), (2, 2)])],
-        )
-
-    def test_explicit_columns(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test explicit column specification."""
-        u, v = utils._identify_source_target_cols(basic_edges, source_col="u", target_col="v")
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_explicit_index_levels(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test explicit index level specification."""
-        edges = basic_edges.set_index(["u", "v"])
-        u, v = utils._identify_source_target_cols(edges, source_col="u", target_col="v")
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_implicit_columns_u_v(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test implicit detection of 'u' and 'v' columns."""
-        u, v = utils._identify_source_target_cols(basic_edges)
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_implicit_columns_source_target(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test implicit detection of 'source' and 'target' columns."""
-        edges = basic_edges.rename(columns={"u": "source", "v": "target"})
-        u, v = utils._identify_source_target_cols(edges)
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_implicit_index_from_to_node_id(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test implicit detection of 'from_node_id' and 'to_node_id' index levels."""
-        edges = basic_edges.rename(columns={"u": "from_node_id", "v": "to_node_id"})
-        edges = edges.set_index(["from_node_id", "to_node_id"])
-        u, v = utils._identify_source_target_cols(edges)
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_implicit_index_generic(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test implicit detection from first two index levels."""
-        edges = basic_edges.set_index(["u", "v"])
-        # Rename levels to something generic
-        edges.index.names = ["level_0", "level_1"]
-        u, v = utils._identify_source_target_cols(edges)
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_fallback_first_two_columns(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test fallback to first two columns."""
-        edges = basic_edges.rename(columns={"u": "col1", "v": "col2"})
-        # Ensure col1 and col2 are first
-        edges = edges[["col1", "col2", "weight", "geometry"]]
-        u, v = utils._identify_source_target_cols(edges)
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_error_missing_explicit(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test error when explicit columns are missing."""
-        with pytest.raises(ValueError, match=r"Source/Target column\(s\) not found: missing"):
-            utils._identify_source_target_cols(basic_edges, source_col="missing", target_col="v")
-
-    def test_error_unable_to_identify(self) -> None:
-        """Test error when unable to identify columns."""
-        edges = gpd.GeoDataFrame(geometry=[LineString([(0, 0), (1, 1)])])
-        with pytest.raises(ValueError, match="Could not identify source and target"):
-            utils._identify_source_target_cols(edges)
-
-    def test_only_source_missing_target(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test error when only source is found but target is missing."""
-        # This tests line 1647 - missing target column error
-        edges = basic_edges.copy()
-        with pytest.raises(
-            ValueError, match="Source/Target column\\(s\\) not found: missing_target"
-        ):
-            utils._identify_source_target_cols(edges, source_col="u", target_col="missing_target")
-
-    def test_standard_index_name_matching(self) -> None:
-        """Test _get_col_or_level with standard index name matching (line 1600)."""
-        # Create DataFrame with named index
-        df = pd.DataFrame({"col1": [1, 2, 3]}, index=pd.Index([10, 20, 30], name="my_index"))
-        result = utils._get_col_or_level(df, "my_index")
-        assert result is not None
-        assert (result == [10, 20, 30]).all()
-
-
-# ============================================================================
-# UTILITIES TESTS
-# ============================================================================
-
-
-class TestClipGraph(BaseGraphTest):
-    """Test graph clipping functionality."""
-
-    def test_clip_graph_basic(self, sample_crs: str) -> None:
-        """Test basic clipping with a polygon (default: strict within)."""
-        clip_poly = Polygon([(0, 0), (1, 0), (1, 2), (0, 2)])
-
-        gdf = gpd.GeoDataFrame(
-            {
-                "geometry": [
-                    LineString([(0, 0), (2, 0)]),  # partially inside
-                    LineString([(0.5, 0.5), (0.5, 1.5)]),  # fully inside
-                    LineString([(2, 0), (3, 0)]),  # fully outside
-                ]
-            },
-            crs=sample_crs,
-        )
-
-        # Default behavior: geometric clipping
-        clipped = utils.clip_graph(gdf, clip_poly)
-        assert isinstance(clipped, gpd.GeoDataFrame)
-        assert len(clipped) == 2  # Now keeps both fully inside and partially inside (clipped)
-
-        # Check that the partially inside line was clipped
-        _ = clipped[clipped.geometry.length < 1.1]  # The one that was clipped (length 1.0)
-        # Note: Depending on order/index, we need to be careful.
-        # Original: LineString([(0, 0), (2, 0)]) -> clipped to [(0,0), (1,0)]
-
-        # Verify geometries
-        # 1. [(0.5, 0.5), (0.5, 1.5)] - Unchanged, length 1.0
-        # 2. [(0, 0), (1, 0)] - Clipped, length 1.0
-
-        lengths = clipped.geometry.length.sort_values().to_numpy()
-        assert len(lengths) == 2
-        assert np.isclose(lengths[0], 1.0)
-        assert np.isclose(lengths[1], 1.0)
-
-    def test_clip_graph_keep_outer(self, sample_crs: str) -> None:
-        """Test clipping with keep_outer_neighbors=True (intersects)."""
-        clip_poly = Polygon([(0, 0), (1, 0), (1, 2), (0, 2)])
-        gdf = gpd.GeoDataFrame(
-            {
-                "geometry": [
-                    LineString([(0, 0), (2, 0)]),  # partially inside (intersects)
-                    LineString([(0.5, 0.5), (0.5, 1.5)]),  # fully inside
-                    LineString([(2, 0), (3, 0)]),  # fully outside
-                ]
-            },
-            crs=sample_crs,
-        )
-
-        clipped = utils.clip_graph(gdf, clip_poly, keep_outer_neighbors=True)
-        assert len(clipped) == 2
-
-    def test_clip_graph_geometry_handling(self, sample_crs: str) -> None:
-        """Test that MultiLineStrings are exploded."""
-        clip_poly = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
-        gdf = gpd.GeoDataFrame(
-            {
-                "geometry": [
-                    MultiLineString([LineString([(1, 1), (2, 2)]), LineString([(3, 3), (4, 4)])])
-                ]
-            },
-            crs=sample_crs,
-        )
-
-        clipped = utils.clip_graph(gdf, clip_poly)
-        assert isinstance(clipped, gpd.GeoDataFrame)
-        assert len(clipped) == 2
-        assert all(isinstance(g, LineString) for g in clipped.geometry)
-
-    def test_clip_graph_empty_input(self, sample_crs: str) -> None:
-        """Test with empty input GeoDataFrame."""
-        empty_gdf = gpd.GeoDataFrame(geometry=[], crs=sample_crs)
-        clip_poly = Polygon([(0, 0), (1, 1), (1, 0)])
-
-        result = utils.clip_graph(empty_gdf, clip_poly)
-        assert isinstance(result, gpd.GeoDataFrame)
-        assert result.empty
-
-    def test_clip_graph_area_as_gdf(self, sample_crs: str) -> None:
-        """Test passing area as GeoDataFrame."""
-        clip_poly = Polygon([(0, 0), (1, 0), (1, 2), (0, 2)])
-        area_gdf = gpd.GeoDataFrame({"geometry": [clip_poly]}, crs=sample_crs)
-
-        gdf = gpd.GeoDataFrame({"geometry": [LineString([(0.5, 0.5), (0.5, 1.5)])]}, crs=sample_crs)
-
-        clipped = utils.clip_graph(gdf, area_gdf)
-        assert len(clipped) == 1
-
-    def test_clip_graph_with_tuple_input(self, sample_crs: str) -> None:
-        """Test clipping with (nodes, edges) tuple input."""
-        clip_poly = Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])
-
-        nodes = gpd.GeoDataFrame(
-            {"geometry": [Point(0, 0), Point(1, 1), Point(3, 3)]},
-            index=pd.Index([1, 2, 3], name="node_id"),
-            crs=sample_crs,
-        )
-        edges = gpd.GeoDataFrame(
-            {"geometry": [LineString([(0, 0), (1, 1)]), LineString([(1, 1), (3, 3)])]},
-            index=pd.MultiIndex.from_tuples([(1, 2), (2, 3)], names=["u", "v"]),
-            crs=sample_crs,
-        )
-
-        clipped_nodes, clipped_edges = utils.clip_graph((nodes, edges), clip_poly)
-        assert isinstance(clipped_nodes, gpd.GeoDataFrame)
-        assert isinstance(clipped_edges, gpd.GeoDataFrame)
-        assert len(clipped_edges) == 1
-        assert len(clipped_nodes) == 2
-        assert isinstance(clipped_edges.index, pd.MultiIndex)
-        assert clipped_edges.index.names == ["u", "v"]
-        assert set(clipped_nodes.index.to_list()) == {1, 2}
-
-    def test_clip_graph_preserves_multiindex_after_explode(self, sample_crs: str) -> None:
-        """Test tuple clipping preserves edge MultiIndex after MultiLineString explode."""
-        clip_poly = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
-
-        nodes = gpd.GeoDataFrame(
-            {"geometry": [Point(1, 1), Point(4, 4), Point(9, 9)]},
-            index=pd.Index([1, 2, 3], name="node_id"),
-            crs=sample_crs,
-        )
-        edges = gpd.GeoDataFrame(
-            {
-                "geometry": [
-                    MultiLineString([LineString([(1, 1), (2, 2)]), LineString([(3, 3), (4, 4)])])
-                ]
-            },
-            index=pd.MultiIndex.from_tuples([(1, 2)], names=["u", "v"]),
-            crs=sample_crs,
-        )
-
-        clipped_nodes, clipped_edges = utils.clip_graph((nodes, edges), clip_poly)
-
-        assert isinstance(clipped_nodes, gpd.GeoDataFrame)
-        assert isinstance(clipped_edges.index, pd.MultiIndex)
-        assert clipped_edges.index.names == ["u", "v"]
-        assert len(clipped_edges) == 2
-        assert set(clipped_nodes.index.to_list()) == {1, 2}
-
-    def test_clip_graph_area_gdf_crs_alignment(self) -> None:
-        """Test clipping aligns area CRS with edge CRS when area is GeoDataFrame."""
-        nodes = gpd.GeoDataFrame(
-            {
-                "geometry": [
-                    Point(-0.150, 51.505),
-                    Point(-0.140, 51.510),
-                    Point(-0.220, 51.600),
-                ]
-            },
-            index=pd.Index([1, 2, 3], name="node_id"),
-            crs="EPSG:4326",
-        )
-        edges = gpd.GeoDataFrame(
-            {"geometry": [LineString([(-0.150, 51.505), (-0.140, 51.510)])]},
-            index=pd.MultiIndex.from_tuples([(1, 2)], names=["u", "v"]),
-            crs="EPSG:4326",
-        )
-
-        area_wgs84 = gpd.GeoDataFrame(
-            {
-                "geometry": [
-                    Polygon(
-                        [
-                            (-0.170, 51.490),
-                            (-0.120, 51.490),
-                            (-0.120, 51.530),
-                            (-0.170, 51.530),
-                        ]
-                    )
-                ]
-            },
-            crs="EPSG:4326",
-        )
-        area_bng = area_wgs84.to_crs(epsg=27700)
-
-        clipped_nodes, clipped_edges = utils.clip_graph((nodes, edges), area_bng)
-
-        assert isinstance(clipped_nodes, gpd.GeoDataFrame)
-        assert len(clipped_edges) == 1
-        assert isinstance(clipped_edges.index, pd.MultiIndex)
-        assert set(clipped_nodes.index.to_list()) == {1, 2}
-
-    def test_clip_graph_removes_out_of_boundary_endpoints(self, sample_crs: str) -> None:
-        """Test strict clipping removes outside endpoint nodes and crossing edges."""
-        clip_poly = Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])
-
-        nodes = gpd.GeoDataFrame(
-            {"geometry": [Point(0.5, 0.5), Point(1.5, 1.5), Point(3.0, 3.0)]},
-            index=pd.Index([1, 2, 3], name="node_id"),
-            crs=sample_crs,
-        )
-        edges = gpd.GeoDataFrame(
-            {
-                "geometry": [
-                    LineString([(0.5, 0.5), (1.5, 1.5)]),
-                    LineString([(1.5, 1.5), (3.0, 3.0)]),
-                ]
-            },
-            index=pd.MultiIndex.from_tuples([(1, 2), (2, 3)], names=["u", "v"]),
-            crs=sample_crs,
-        )
-
-        clipped_nodes, clipped_edges = utils.clip_graph(
-            (nodes, edges),
-            clip_poly,
-            keep_outer_neighbors=False,
-        )
-
-        assert isinstance(clipped_nodes, gpd.GeoDataFrame)
-        assert set(clipped_nodes.index.to_list()) == {1, 2}
-        assert set(clipped_edges.index.to_list()) == {(1, 2)}
-
-    def test_clip_graph_with_nx_input(self, sample_crs: str) -> None:
-        """Test clipping with NetworkX graph input."""
-        clip_poly = Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])
-
-        nodes = gpd.GeoDataFrame(
-            {"geometry": [Point(0, 0), Point(1, 1), Point(3, 3)]},
-            index=pd.Index([1, 2, 3], name="node_id"),
-            crs=sample_crs,
-        )
-        edges = gpd.GeoDataFrame(
-            {"geometry": [LineString([(0, 0), (1, 1)]), LineString([(1, 1), (3, 3)])]},
-            index=pd.MultiIndex.from_tuples([(1, 2), (2, 3)], names=["u", "v"]),
-            crs=sample_crs,
-        )
-        nx_graph = utils.gdf_to_nx(nodes=nodes, edges=edges)
-
-        result = utils.clip_graph(nx_graph, clip_poly)
-        assert isinstance(result, nx.Graph)
-
-    def test_clip_graph_as_nx_output(self, sample_crs: str) -> None:
-        """Test clipping with as_nx=True returns NetworkX graph."""
-        clip_poly = Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])
-        gdf = gpd.GeoDataFrame(
-            {"geometry": [LineString([(0.5, 0.5), (1, 1)])]},
-            crs=sample_crs,
-        )
-
-        result = utils.clip_graph(gdf, clip_poly, as_nx=True)
-        assert isinstance(result, nx.Graph)
-
-
 class TestRemoveIsolatedComponents(BaseGraphTest):
     """Test remove_isolated_components functionality."""
-
-    def test_remove_isolated_basic(self, sample_crs: str) -> None:
-        """Test basic isolation removal with GeoDataFrame."""
-        # Create a graph with two disconnected components
-        gdf = gpd.GeoDataFrame(
-            {
-                "geometry": [
-                    # Large component (3 edges)
-                    LineString([(0, 0), (1, 0)]),
-                    LineString([(1, 0), (2, 0)]),
-                    LineString([(2, 0), (3, 0)]),
-                    # Small isolated component (1 edge)
-                    LineString([(10, 10), (11, 10)]),
-                ]
-            },
-            crs=sample_crs,
-        )
-
-        result = utils.remove_isolated_components(gdf)
-        assert isinstance(result, gpd.GeoDataFrame)
-        assert len(result) == 3  # Only large component kept
-
-    def test_remove_isolated_with_tuple_input(self, sample_crs: str) -> None:
-        """Test with (nodes, edges) tuple input."""
-        nodes = gpd.GeoDataFrame(
-            {"geometry": [Point(0, 0), Point(1, 0), Point(10, 10), Point(11, 10)]},
-            index=pd.Index([1, 2, 3, 4], name="node_id"),
-            crs=sample_crs,
-        )
-        edges = gpd.GeoDataFrame(
-            {
-                "geometry": [
-                    LineString([(0, 0), (1, 0)]),  # Component 1
-                    LineString([(10, 10), (11, 10)]),  # Component 2 (isolated)
-                ]
-            },
-            index=pd.MultiIndex.from_tuples([(1, 2), (3, 4)], names=["u", "v"]),
-            crs=sample_crs,
-        )
-
-        result_nodes, result_edges = utils.remove_isolated_components((nodes, edges))
-        assert isinstance(result_nodes, gpd.GeoDataFrame)
-        assert isinstance(result_edges, gpd.GeoDataFrame)
-        # Both components have same size (1 edge), first one should be kept
-        assert len(result_edges) == 1
-
-    def test_remove_isolated_with_nx_input(self, sample_crs: str) -> None:
-        """Test with NetworkX graph input."""
-        nodes = gpd.GeoDataFrame(
-            {"geometry": [Point(0, 0), Point(1, 0), Point(10, 10)]},
-            index=pd.Index([1, 2, 3], name="node_id"),
-            crs=sample_crs,
-        )
-        edges = gpd.GeoDataFrame(
-            {"geometry": [LineString([(0, 0), (1, 0)])]},
-            index=pd.MultiIndex.from_tuples([(1, 2)], names=["u", "v"]),
-            crs=sample_crs,
-        )
-        nx_graph = utils.gdf_to_nx(nodes=nodes, edges=edges)
-        # Add isolated node
-        nx_graph.add_node(999, pos=(10, 10), geometry=Point(10, 10))
-
-        result = utils.remove_isolated_components(nx_graph)
-        assert isinstance(result, nx.Graph)
-
-    def test_remove_isolated_as_nx_output(self, sample_crs: str) -> None:
-        """Test with as_nx=True returns NetworkX graph."""
-        gdf = gpd.GeoDataFrame(
-            {"geometry": [LineString([(0, 0), (1, 0)])]},
-            crs=sample_crs,
-        )
-
-        result = utils.remove_isolated_components(gdf, as_nx=True)
-        assert isinstance(result, nx.Graph)
-
-    def test_remove_isolated_empty_input(self, sample_crs: str) -> None:
-        """Test with empty GeoDataFrame."""
-        empty_gdf = gpd.GeoDataFrame(geometry=[], crs=sample_crs)
-
-        result = utils.remove_isolated_components(empty_gdf)
-        assert isinstance(result, gpd.GeoDataFrame)
-        assert result.empty
-
-    def test_remove_isolated_graph_conversion_error(self, sample_crs: str) -> None:
-        """Test remove_isolated_components when graph conversion fails (covers lines 4936-4940)."""
-        # Create a GeoDataFrame with geometry but invalid structure for graph conversion
-        edges = gpd.GeoDataFrame(
-            {"geometry": [LineString([(0, 0), (1, 0)])]},
-            crs=sample_crs,
-        )
-        # Set a non-standard index that will cause issues
-        edges.index = pd.Index(["edge1"], name="weird_id")
-
-        # Should handle the error gracefully
-        result = utils.remove_isolated_components(edges)
-        assert isinstance(result, gpd.GeoDataFrame)
-
-    def test_remove_isolated_invalid_graph_structure(self, sample_crs: str) -> None:
-        """Test remove_isolated_components with edges that fail graph conversion."""
-        # Create a GeoDataFrame with geometry but non-standard index
-        edges = gpd.GeoDataFrame(
-            {"geometry": [LineString([(0, 0), (1, 0)])]},
-            crs=sample_crs,
-        )
-        # No MultiIndex, just a simple index that won't convert to graph properly
-        edges.index = pd.Index(["edge1"], name="weird_id")
-
-        # Should handle gracefully
-        result = utils.remove_isolated_components(edges)
-        assert isinstance(result, gpd.GeoDataFrame)
-
-    def test_nx_to_gdf_pos_from_xy_attributes(self) -> None:
-        """Test nx_to_gdf with pos populated from x/y attributes (covers line 2237)."""
-        G = nx.Graph()
-        G.add_node(1, x=0.0, y=0.0)
-        G.add_node(2, x=1.0, y=1.0)
-        G.add_edge(1, 2)
-        G.graph = {"crs": "EPSG:27700", "is_hetero": False}
-
-        # Should populate 'pos' from x/y when calling nx_to_gdf
-        nodes_gdf = nx_to_gdf(G, nodes=True, edges=False)
-        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
-        assert len(nodes_gdf) == 2
 
     def test_concave_hull_knn_two_points(self) -> None:
         """Test concave_hull_knn with 2 points returns LineString (covers line 3000)."""
         points = [Point(0, 0), Point(1, 1)]
-        result = utils._concave_hull_knn(points, k=10)
+        result = spatial_utils._concave_hull_knn(points, k=10)
         # With 2 points, should return a LineString
         assert result.geom_type == "LineString"
 
     def test_concave_hull_knn_one_point(self) -> None:
         """Test concave_hull_knn with 1 point returns Point (covers line 3000)."""
         points = [Point(0, 0)]
-        result = utils._concave_hull_knn(points, k=10)
+        result = spatial_utils._concave_hull_knn(points, k=10)
         # With 1 point, should return a Point
         assert result.geom_type == "Point"
 
     def test_concave_hull_alpha_degenerate(self) -> None:
         """Test _concave_hull_alpha with 2 points (covers line 3300)."""
         points = [Point(0, 0), Point(1, 1)]
-        result = utils._concave_hull_alpha(points, ratio=0.5, allow_holes=False)
+        result = spatial_utils._concave_hull_alpha(points, ratio=0.5, allow_holes=False)
         # Should fallback to convex hull
         assert result.geom_type in ["Polygon", "LineString", "Point"]
 
@@ -4581,7 +2799,7 @@ class TestPublicUtilityBranches(BaseGraphTest):
     ) -> None:
         """create_isochrone should normalize non-polygon unions back into polygon output."""
         monkeypatch.setattr(
-            utils,
+            spatial_utils,
             "_generate_component_polygons",
             lambda _reachable, _method, _crs, **_kwargs: [LineString([(0, 0), (1, 0)])],
         )
@@ -4629,7 +2847,7 @@ class TestPublicUtilityBranches(BaseGraphTest):
             error = ValueError(msg)
             raise error
 
-        monkeypatch.setattr("city2graph.utils.momepy.enclosed_tessellation", raise_boom)
+        monkeypatch.setattr("city2graph.utils.spatial.momepy.enclosed_tessellation", raise_boom)
 
         with pytest.raises(ValueError, match="boom"):
             utils.create_tessellation(sample_buildings_gdf, primary_barriers=sample_segments_gdf)
@@ -4716,78 +2934,3 @@ class TestPublicUtilityBranches(BaseGraphTest):
             assert not axes_list[1].get_visible()
         finally:
             plt.close(fig)
-
-    def test_clip_graph_rejects_invalid_input_type(self) -> None:
-        """clip_graph should reject unsupported graph inputs."""
-        with pytest.raises(TypeError, match="Input must be GeoDataFrame"):
-            utils.clip_graph("not_a_graph", Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]))
-
-    def test_clip_graph_returns_empty_nodes_when_edges_clip_out(
-        self,
-        sample_nodes_gdf: gpd.GeoDataFrame,
-        sample_edges_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Tuple clipping should return empty nodes when no clipped edges remain."""
-        clip_poly = Polygon([(100, 100), (101, 100), (101, 101), (100, 101)])
-
-        clipped_nodes, clipped_edges = utils.clip_graph(
-            (sample_nodes_gdf, sample_edges_gdf), clip_poly
-        )
-
-        assert clipped_edges.empty
-        assert clipped_nodes is not None
-        assert clipped_nodes.empty
-
-    def test_clip_graph_preserves_nodes_for_non_multiindex_edges(self, sample_crs: str) -> None:
-        """Tuple clipping should leave nodes untouched when edges have no connectivity index."""
-        nodes = gpd.GeoDataFrame({"value": [1]}, geometry=[Point(0, 0)], crs=sample_crs)
-        nodes.index = pd.Index(["n1"])
-        edges = gpd.GeoDataFrame(
-            {"value": [1]},
-            geometry=[LineString([(0, 0), (1, 0)])],
-            crs=sample_crs,
-        )
-        edges.index = pd.Index(["edge-1"])
-        clip_poly = Polygon([(-1, -1), (2, -1), (2, 1), (-1, 1)])
-
-        clipped_nodes, clipped_edges = utils.clip_graph((nodes, edges), clip_poly)
-
-        assert not clipped_edges.empty
-        assert clipped_nodes is not None
-        assert clipped_nodes.equals(nodes)
-
-    def test_remove_isolated_components_returns_original_on_conversion_error(
-        self,
-        sample_edges_gdf: gpd.GeoDataFrame,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """remove_isolated_components should fall back cleanly when conversion fails."""
-
-        def raise_bad_graph(*_args: object, **_kwargs: object) -> object:
-            msg = "bad graph"
-            error = ValueError(msg)
-            raise error
-
-        monkeypatch.setattr(
-            utils,
-            "gdf_to_nx",
-            raise_bad_graph,
-        )
-
-        result = utils.remove_isolated_components(sample_edges_gdf)
-
-        assert isinstance(result, gpd.GeoDataFrame)
-        assert result.equals(sample_edges_gdf)
-
-    def test_remove_isolated_components_handles_empty_networkx_graph(
-        self,
-        sample_edges_gdf: gpd.GeoDataFrame,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """remove_isolated_components should fall back when conversion yields an empty graph."""
-        monkeypatch.setattr(utils, "gdf_to_nx", lambda *_args, **_kwargs: nx.Graph())
-
-        result = utils.remove_isolated_components(sample_edges_gdf)
-
-        assert isinstance(result, gpd.GeoDataFrame)
-        assert result.equals(sample_edges_gdf)
