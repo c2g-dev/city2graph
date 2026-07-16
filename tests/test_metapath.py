@@ -440,6 +440,142 @@ class TestMetapaths:
         directed_pairs = set(directed_edges[relation].index.tolist())
         assert directed_pairs == {(1, 2), (2, 1)}
 
+    @pytest.mark.parametrize("directed", [True, False])
+    def test_add_metapaths_three_hop_duplicate_routes(self, directed: bool) -> None:
+        """Three-hop metapaths count duplicate intermediate routes and reduce attributes."""
+        buildings = gpd.GeoDataFrame(
+            {"geometry": [Point(0, 0), Point(30, 0)], "node_type": "building"},
+            index=[1, 2],
+            crs="EPSG:4326",
+        )
+        streets = gpd.GeoDataFrame(
+            {
+                "geometry": [Point(0, 1), Point(10, 1), Point(0, 2), Point(10, 2)],
+                "node_type": "street",
+            },
+            index=[101, 102, 103, 104],
+            crs="EPSG:4326",
+        )
+        nodes = {"building": buildings, "street": streets}
+        edges = {
+            ("building", "access", "street"): gpd.GeoDataFrame(
+                {
+                    "travel_time": [10.0, 40.0],
+                    "geometry": [
+                        LineString([(0, 0), (0, 1)]),
+                        LineString([(0, 0), (0, 2)]),
+                    ],
+                },
+                index=pd.MultiIndex.from_tuples([(1, 101), (1, 103)]),
+                crs="EPSG:4326",
+            ),
+            ("street", "road", "street"): gpd.GeoDataFrame(
+                {
+                    "travel_time": [20.0, 50.0],
+                    "geometry": [
+                        LineString([(0, 1), (10, 1)]),
+                        LineString([(0, 2), (10, 2)]),
+                    ],
+                },
+                index=pd.MultiIndex.from_tuples([(101, 102), (103, 104)]),
+                crs="EPSG:4326",
+            ),
+            ("street", "access", "building"): gpd.GeoDataFrame(
+                {
+                    "travel_time": [30.0, 60.0],
+                    "geometry": [
+                        LineString([(10, 1), (30, 0)]),
+                        LineString([(10, 2), (30, 0)]),
+                    ],
+                },
+                index=pd.MultiIndex.from_tuples([(102, 2), (104, 2)]),
+                crs="EPSG:4326",
+            ),
+        }
+        sequence = [
+            ("building", "access", "street"),
+            ("street", "road", "street"),
+            ("street", "access", "building"),
+        ]
+        relation = ("building", "metapath_0", "building")
+
+        _, edges_out = add_metapaths(
+            (nodes, edges),
+            sequence=sequence,
+            edge_attr="travel_time",
+            edge_attr_agg=np.nanmax,
+            directed=directed,
+        )
+
+        result = edges_out[relation]
+        # Two distinct routes (via 101-102 and via 103-104) between the same pair.
+        assert result.loc[(1, 2), "weight"] == 2
+        # Per-path maxima are 30 (route one) and 60 (route two); nanmax across paths.
+        assert result.loc[(1, 2), "travel_time"] == 60.0
+
+    def test_add_metapaths_undirected_parallel_edges_extra_index_level(self) -> None:
+        """Parallel edges on a three-level MultiIndex keep distinct undirected paths."""
+        buildings = gpd.GeoDataFrame(
+            {"geometry": [Point(0, 0), Point(10, 0)], "node_type": "building"},
+            index=[1, 2],
+            crs="EPSG:4326",
+        )
+        streets = gpd.GeoDataFrame(
+            {"geometry": [Point(0, 1), Point(10, 1)], "node_type": "street"},
+            index=[101, 102],
+            crs="EPSG:4326",
+        )
+        nodes = {"building": buildings, "street": streets}
+        edges = {
+            ("building", "access", "street"): gpd.GeoDataFrame(
+                {
+                    "geometry": [
+                        LineString([(0, 0), (0, 1)]),
+                        LineString([(10, 0), (10, 1)]),
+                    ],
+                },
+                index=pd.MultiIndex.from_tuples([(1, 101), (2, 102)]),
+                crs="EPSG:4326",
+            ),
+            ("street", "road", "street"): gpd.GeoDataFrame(
+                {
+                    "geometry": [
+                        LineString([(0, 1), (10, 1)]),
+                        LineString([(0, 1), (5, 2), (10, 1)]),
+                        LineString([(10, 1), (0, 1)]),
+                    ],
+                },
+                index=pd.MultiIndex.from_tuples(
+                    [(101, 102, "a"), (101, 102, "b"), (102, 101, "a")]
+                ),
+                crs="EPSG:4326",
+            ),
+            ("street", "access", "building"): gpd.GeoDataFrame(
+                {
+                    "geometry": [
+                        LineString([(0, 1), (0, 0)]),
+                        LineString([(10, 1), (10, 0)]),
+                    ],
+                },
+                index=pd.MultiIndex.from_tuples([(101, 1), (102, 2)]),
+                crs="EPSG:4326",
+            ),
+        }
+        sequence = [
+            ("building", "access", "street"),
+            ("street", "road", "street"),
+            ("street", "access", "building"),
+        ]
+        relation = ("building", "metapath_0", "building")
+
+        _, edges_out = add_metapaths((nodes, edges), sequence=sequence, directed=False)
+
+        result = edges_out[relation]
+        # Parallel edges "a" and "b" are distinct paths, while the mirrored
+        # traversal of edge "a" collapses onto its forward counterpart.
+        assert set(result.index.tolist()) == {(1, 2)}
+        assert result.loc[(1, 2), "weight"] == 2
+
     @pytest.mark.parametrize(
         "join_case", ["empty_hop", "disjoint", "nan_sources", "index_normalization"]
     )

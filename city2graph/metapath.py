@@ -492,9 +492,8 @@ def _row_reduce_sum(block: pd.DataFrame) -> pd.Series:
     pandas.Series
         Row-wise sums with missing values treated as zeros.
     """
-    numeric = block.apply(pd.to_numeric, errors="coerce")
-    result = numeric.fillna(0.0).sum(axis=1)
-    return cast("pd.Series", result)
+    values = _coerce_block_to_numpy(block)
+    return pd.Series(np.nansum(values, axis=1), index=block.index)
 
 
 def _row_reduce_mean(block: pd.DataFrame) -> pd.Series:
@@ -513,9 +512,16 @@ def _row_reduce_mean(block: pd.DataFrame) -> pd.Series:
     pandas.Series
         Row-wise means calculated with ``NaN`` values ignored.
     """
-    numeric = block.apply(pd.to_numeric, errors="coerce")
-    result = numeric.mean(axis=1, skipna=True)
-    return cast("pd.Series", result)
+    values = _coerce_block_to_numpy(block)
+    valid_counts = np.sum(~np.isnan(values), axis=1)
+    totals = np.nansum(values, axis=1)
+    means = np.divide(
+        totals,
+        valid_counts,
+        out=np.full(len(values), np.nan),
+        where=valid_counts > 0,
+    )
+    return pd.Series(means, index=block.index)
 
 
 def _row_reduce_callable(
@@ -540,41 +546,35 @@ def _row_reduce_callable(
     pandas.Series
         Row-wise reductions produced by ``func``.
     """
-    numeric = block.apply(pd.to_numeric, errors="coerce")
-    # Avoid passing `func` as a keyword to DataFrame.apply since it clashes with
-    # the DataFrame.apply(func=...) parameter name itself, causing
-    # "multiple values for argument 'func'" TypeError. Use a lambda to forward
-    # the user-supplied reducer to our row helper.
-    result = numeric.apply(lambda row: _apply_callable_row(row, func=func), axis=1)
-    return cast("pd.Series", result)
+    values = _coerce_block_to_numpy(block)
+    valid_mask = ~np.isnan(values)
+    results = np.full(len(values), np.nan)
+    for row_idx in range(len(values)):
+        valid = values[row_idx][valid_mask[row_idx]]
+        if valid.size:
+            results[row_idx] = float(func(valid))
+    return pd.Series(results, index=block.index)
 
 
-def _apply_callable_row(
-    row: pd.Series,
-    *,
-    func: Callable[[np.ndarray], float],
-) -> float:
+def _coerce_block_to_numpy(block: pd.DataFrame) -> np.ndarray:
     """
-    Reduce a single hop row using ``func`` while handling empty inputs.
+    Coerce a hop attribute block to a 2-D float array in a single pass.
 
-    Helper used by :func:`_row_reduce_callable` to evaluate user reducers.
+    Non-numeric values become ``NaN`` so downstream reductions can rely on a
+    homogeneous numeric array instead of per-row pandas dispatch.
 
     Parameters
     ----------
-    row : pandas.Series
-        Hop attribute values for a single metapath traversal.
-    func : Callable[[numpy.ndarray], float]
-        Callable that reduces numeric values to a scalar result.
+    block : pandas.DataFrame
+        Normalised attribute columns for a single hop across multiple paths.
 
     Returns
     -------
-    float
-        Reduced value for the row; ``NaN`` when all values are missing.
+    numpy.ndarray
+        Two-dimensional float array with missing values encoded as ``NaN``.
     """
-    valid = row.dropna().to_numpy()
-    if valid.size == 0:
-        return float("nan")
-    return float(func(valid))
+    numeric = block.apply(pd.to_numeric, errors="coerce")
+    return cast("np.ndarray", numeric.to_numpy(dtype=float, na_value=np.nan))
 
 
 def _group_reduce_callable(
@@ -718,11 +718,16 @@ def _materialize_metapath(
 
     # 1. Build canonical frames for each hop
     frames: list[pd.DataFrame] = []
+    hop_edge_sigs: list[list[object]] | None = None if directed else []
     start_index_name = f"{start_type}_id"
     end_index_name = f"{end_type}_id"
 
     for step_idx, edge_type in enumerate(metapath):
         edge_gdf, reversed_lookup = _get_edge_frame(edges, edge_type, directed)
+        if hop_edge_sigs is not None:
+            hop_edge_sigs.append(
+                [_canonicalize_undirected_edge_id(edge_id) for edge_id in edge_gdf.index]
+            )
 
         # Update index names from the first/last hop
         if step_idx == 0:
@@ -748,7 +753,8 @@ def _materialize_metapath(
             )
         frames.append(frame)
 
-    # 2. Join hops
+    # 2. Join hops, carrying only compact scalar columns; path information is
+    # assembled at most once after the final join (see _aggregate_paths).
     joined = frames[0]
     for idx in range(1, len(frames)):
         joined = joined.merge(
@@ -758,32 +764,9 @@ def _materialize_metapath(
             how="inner",
             suffixes=("", "_right"),
         )
-        joined["path_nodes"] = [
-            left + right[1:]
-            for left, right in zip(
-                joined["path_nodes"],
-                joined["path_nodes_right"],
-                strict=False,
-            )
-        ]
-        joined["path_edges"] = [
-            left + right
-            for left, right in zip(
-                joined["path_edges"],
-                joined["path_edges_right"],
-                strict=False,
-            )
-        ]
-        # Drop intermediate join columns to save memory
-        joined = joined.drop(
-            columns=[
-                f"dst_{idx - 1}",
-                f"src_{idx}",
-                "path_nodes_right",
-                "path_edges_right",
-            ],
-            errors="ignore",
-        )
+        # src_{idx} duplicates dst_{idx - 1}; the dst_* columns are kept as the
+        # intermediate nodes of each path.
+        joined = joined.drop(columns=[f"src_{idx}"])
 
         if joined.empty:
             return (
@@ -803,6 +786,7 @@ def _materialize_metapath(
         start_index_name=start_index_name,
         end_index_name=end_index_name,
         directed=directed,
+        hop_edge_sigs=hop_edge_sigs,
     )
 
     if aggregated.empty:
@@ -866,7 +850,9 @@ def _build_hop_frame(
     """
     Convert one hop into a canonical DataFrame used for joins.
 
-    Extracts source and destination indices and optional attributes.
+    Extracts source and destination indices, the row position within the hop
+    (used to recover edge identifiers after the joins), and optional
+    attributes.
 
     Parameters
     ----------
@@ -897,14 +883,7 @@ def _build_hop_frame(
     data = {
         src_col: edge_gdf.index.get_level_values(src_level).to_numpy(),
         dst_col: edge_gdf.index.get_level_values(dst_level).to_numpy(),
-        "path_nodes": list(
-            zip(
-                edge_gdf.index.get_level_values(src_level).to_numpy(),
-                edge_gdf.index.get_level_values(dst_level).to_numpy(),
-                strict=False,
-            )
-        ),
-        "path_edges": [(index_value,) for index_value in edge_gdf.index.to_list()],
+        f"epos_{step_idx}": np.arange(len(edge_gdf), dtype=np.int64),
     }
 
     if edge_attrs:
@@ -927,11 +906,14 @@ def _aggregate_paths(
     start_index_name: str,
     end_index_name: str,
     directed: bool,
+    hop_edge_sigs: list[list[object]] | None = None,
 ) -> pd.DataFrame:
     """
     Group joined paths into terminal node pairs with aggregated weights.
 
-    Aggregates weights and optional attributes for each path.
+    Aggregates weights and optional attributes for each path. Path node and
+    edge sequences are only materialised here, once, for the undirected
+    deduplication; the directed branch never builds them.
 
     Parameters
     ----------
@@ -949,6 +931,9 @@ def _aggregate_paths(
         Name of the end node index.
     directed : bool
         Whether the metapath should preserve edge orientation.
+    hop_edge_sigs : list[list[object]] or None
+        Canonicalised edge identifiers per hop, indexed by the ``epos_*``
+        columns of ``combined``. Required when ``directed`` is ``False``.
 
     Returns
     -------
@@ -962,7 +947,6 @@ def _aggregate_paths(
     agg_map: dict[str, str | Callable[[pd.Series], float]] = {"weight": "sum"}
 
     # Base workload with path count (weight=1 for each path)
-    path_nodes = cast("list[tuple[object, ...]]", combined["path_nodes"].to_list())
     workload_data: dict[str, object] = {
         "src": combined[src_col].to_numpy(),
         "dst": combined[dst_col].to_numpy(),
@@ -970,12 +954,18 @@ def _aggregate_paths(
     }
 
     if not directed:
+        node_columns = [src_col] + [f"dst_{i}" for i in range(step_count)]
+        path_nodes = zip(*(combined[col].to_numpy() for col in node_columns), strict=False)
         canonical_paths = [_canonicalize_undirected_sequence(path) for path in path_nodes]
+        edge_paths = zip(
+            *(
+                [sigs[pos] for pos in combined[f"epos_{i}"].to_numpy()]
+                for i, sigs in enumerate(hop_edge_sigs or [])
+            ),
+            strict=False,
+        )
         canonical_edge_paths = [
-            _canonicalize_undirected_sequence(
-                tuple(_canonicalize_undirected_edge_id(edge_id) for edge_id in edge_path)
-            )
-            for edge_path in cast("list[tuple[object, ...]]", combined["path_edges"].to_list())
+            _canonicalize_undirected_sequence(edge_path) for edge_path in edge_paths
         ]
         workload_data["src"] = [path[0] for path in canonical_paths]
         workload_data["dst"] = [path[-1] for path in canonical_paths]
