@@ -617,12 +617,15 @@ def _prepare_morphology(  # noqa: PLR0913
         raise ValueError(msg)
 
     if isinstance(buildings_gdf.index, pd.MultiIndex):
+        # Copy guards the index write below on the caller's frame.
         buildings_gdf = buildings_gdf.copy()
         buildings_gdf.index = buildings_gdf.index.to_flat_index()
 
     # Ensure CRS consistency between buildings and segments
     segments_gdf = _ensure_crs_consistency(buildings_gdf, segments_gdf)
 
+    # The single public-boundary copy of the segments: everything downstream
+    # works on this owned frame.
     segments_gdf = segments_gdf.copy()
     segments_gdf[_MOVEMENT_ID_COL] = segments_gdf.index
 
@@ -631,8 +634,8 @@ def _prepare_morphology(  # noqa: PLR0913
     barrier_segments = None
     if non_movement_barrier_col and non_movement_barrier_col in segments_gdf.columns:
         barrier_mask = segments_gdf[non_movement_barrier_col].fillna(value=False).astype(bool)
-        barrier_segments = segments_gdf.loc[barrier_mask].copy()
-        segments_gdf = segments_gdf.loc[~barrier_mask].copy()
+        barrier_segments = segments_gdf.loc[barrier_mask]
+        segments_gdf = segments_gdf.loc[~barrier_mask]
 
     # Compute the single-source reachability cost field once on the movement network so
     # that streets, buildings and cells are all judged against the same metric on the
@@ -984,7 +987,9 @@ def place_to_place_graph(
         edges_gdf[group_col] = edges_gdf["from_place_id"].map(id_to_group)
         to_group = edges_gdf["to_place_id"].map(id_to_group)
 
-        # Filter edges where source and target are in the same group
+        # Filter edges where source and target are in the same group.
+        # Copy keeps the returned frame free of a pandas 2.x _is_copy flag,
+        # since it leaves this public function.
         edges_gdf = edges_gdf[edges_gdf[group_col] == to_group].copy()
 
     else:
@@ -1533,6 +1538,8 @@ def segments_to_graph(
         from_ids = pd.Series(np.minimum(from_arr, to_arr), index=from_ids.index)
         to_ids = pd.Series(np.maximum(from_arr, to_arr), index=to_ids.index)
 
+    # Public-boundary copy: guards the edge-index writes below on a frame that
+    # may still be the caller's.
     edges_gdf = segments_clean.copy()
 
     if multigraph:
@@ -1877,6 +1884,7 @@ def _include_unenclosed_building_tessellation(
         len(missing_buildings),
         len(buildings_gdf),
     )
+    # Copy guards the enclosure-index write below on a possibly shared frame.
     tessellation = tessellation.copy()
     if "enclosure_index" in tessellation.columns:
         tessellation["enclosure_index"] = tessellation["enclosure_index"].astype(str)
@@ -1962,7 +1970,7 @@ def _filter_buildings_by_network_distance(
         The reachable subset of ``buildings_gdf``.
     """
     if buildings_gdf.empty or segments.empty or center_point is None or max_distance is None:
-        return buildings_gdf.copy()
+        return buildings_gdf
 
     keep_ilocs = _geometry_ilocs_within_network_distance(
         buildings_gdf.geometry.centroid,
@@ -1972,7 +1980,7 @@ def _filter_buildings_by_network_distance(
         extent_buffer,
         field=field,
     )
-    return buildings_gdf.iloc[keep_ilocs].copy()
+    return buildings_gdf.iloc[keep_ilocs]
 
 
 def _valid_polygon_gdf(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -1993,10 +2001,10 @@ def _valid_polygon_gdf(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     geopandas.GeoDataFrame
         The valid polygonal subset of ``gdf``.
     """
-    out = gdf.copy()
-    valid_geom = out.geometry.notna() & ~out.geometry.is_empty
-    valid_geom = valid_geom & out.geometry.geom_type.isin(["Polygon", "MultiPolygon"])
-    out = out.loc[valid_geom].copy()
+    valid_geom = gdf.geometry.notna() & ~gdf.geometry.is_empty
+    valid_geom = valid_geom & gdf.geometry.geom_type.isin(["Polygon", "MultiPolygon"])
+    # Copy guards the geometry-repair write below on a possibly shared frame.
+    out = gdf.loc[valid_geom].copy()
     if out.empty:
         return out
 
@@ -2005,7 +2013,7 @@ def _valid_polygon_gdf(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         out.loc[invalid, out.geometry.name] = out.loc[invalid].geometry.buffer(0)
         valid_geom = out.geometry.notna() & ~out.geometry.is_empty & out.geometry.is_valid
         valid_geom = valid_geom & out.geometry.geom_type.isin(["Polygon", "MultiPolygon"])
-        out = out.loc[valid_geom].copy()
+        out = out.loc[valid_geom]
     return out
 
 
@@ -2099,9 +2107,9 @@ def _buildings_without_tessellation(
         The subset of buildings that intersect no tessellation cell.
     """
     if buildings_gdf.empty:
-        return buildings_gdf.copy()
+        return buildings_gdf
     if tessellation.empty:
-        return buildings_gdf.copy()
+        return buildings_gdf
 
     covered = gpd.sjoin(
         buildings_gdf[[buildings_gdf.geometry.name]],
@@ -2109,7 +2117,7 @@ def _buildings_without_tessellation(
         how="inner",
         predicate="intersects",
     )
-    return buildings_gdf.loc[~buildings_gdf.index.isin(covered.index.unique())].copy()
+    return buildings_gdf.loc[~buildings_gdf.index.isin(covered.index.unique())]
 
 
 def _build_morphological_layers(
@@ -2196,15 +2204,17 @@ def _build_morphological_layers(
         )
         keep_mask = tessellation[_PLACE_ID_COL].isin(connected_place_ids)
         if not keep_mask.all():
-            tessellation = tessellation.loc[keep_mask].copy()
+            tessellation = tessellation.loc[keep_mask]
             if not place_to_place_edges.empty:
                 place_to_place_edges = place_to_place_edges.loc[
                     place_to_place_edges["from_place_id"].isin(connected_place_ids)
                     & place_to_place_edges["to_place_id"].isin(connected_place_ids)
-                ].copy()
+                ]
 
     # Prepare place nodes with Point geometry (centroids)
     # Preserve original tessellation geometry in tessellation_geometry column
+    # Copy is the node-assembly ownership boundary: it guards the column and
+    # centroid writes below on frames that may be shared across distances.
     place_nodes = tessellation.copy()
     place_nodes["tessellation_geometry"] = place_nodes.geometry
     # Convert geometry to centroid for place nodes
@@ -2212,6 +2222,7 @@ def _build_morphological_layers(
 
     # Prepare movement nodes with Point geometry (centroids)
     # Optionally preserve original segment geometry in segment_geometry column
+    # Copy guards the writes below; segments_filtered may alias shared frames.
     movement_nodes = segments_filtered.copy()
     if context.keep_segments:
         movement_nodes["segment_geometry"] = movement_nodes.geometry
@@ -2295,6 +2306,7 @@ def _prepare_barriers(
             crs=segments.crs,
         )
     else:
+        # Copy guards against downstream mutation (momepy receives this frame).
         barriers = segments.copy()
     keep = barriers.geometry.notna() & ~barriers.geometry.is_empty
     if not keep.all():
@@ -2443,6 +2455,7 @@ def _add_building_info(
         The tessellation GeoDataFrame with an added `building_geometry` column.
     """
     if tessellation.empty or buildings.empty:
+        # Copy guards the column write below on a possibly shared frame.
         joined = tessellation.copy()
         joined["building_geometry"] = gpd.GeoSeries(
             [None] * len(joined), index=joined.index, crs=buildings.crs
@@ -2451,7 +2464,7 @@ def _add_building_info(
 
     building_columns = [col for col in buildings.columns if col != buildings.geometry.name]
     points = gpd.GeoDataFrame(
-        buildings[building_columns].copy(),
+        buildings[building_columns],
         geometry=buildings.geometry.representative_point(),
         crs=buildings.crs,
     )
@@ -2508,11 +2521,11 @@ def _filter_adjacent_tessellation(
     """
     # If tessellation is empty, return an empty GeoDataFrame with the same structure
     if tessellation.empty:
-        return tessellation.copy()
+        return tessellation
 
     # If max_distance is infinite, no filtering is needed based on distance
     if math.isinf(max_distance):
-        return tessellation.copy()
+        return tessellation
 
     # Check if 'enclosure_index' column exists for grouped processing
     enclosure_col = "enclosure_index" if "enclosure_index" in tessellation.columns else None
@@ -2556,6 +2569,7 @@ def _filter_adjacent_tessellation(
             filtered_parts.append(filtered_group)
 
     if not filtered_parts:
+        # Copy detaches the empty basic slice (a view) from the parent frame.
         return tessellation.iloc[0:0].copy()
 
     # Concatenate all filtered parts into a single GeoDataFrame
@@ -2601,9 +2615,9 @@ def _filter_tessellation_by_network_distance(
         The filtered tessellation GeoDataFrame, containing only cells within the specified
         network distance from the center point.
     """
-    # Return a copy of tessellation if it or segments are empty
+    # Return the tessellation unchanged if it or segments are empty
     if tessellation.empty or segments.empty:
-        return tessellation.copy()
+        return tessellation
 
     keep_ilocs = _geometry_ilocs_within_network_distance(
         tessellation.geometry.centroid,
@@ -2615,7 +2629,7 @@ def _filter_tessellation_by_network_distance(
     )
 
     # Return the subset of the original tessellation corresponding to the kept ilocs
-    return tessellation.iloc[keep_ilocs].copy()
+    return tessellation.iloc[keep_ilocs]
 
 
 def _extract_center_geometry(
@@ -3074,11 +3088,12 @@ def _segments_within_network_distance(
         The subset of ``segments`` reachable within ``max_distance``.
     """
     if segments.empty:
-        return segments.copy()
+        return segments
 
     if field is None:
         field = _network_reachability_field(segments, center_point)
     if field is None:
+        # Copy detaches the empty basic slice (a view) from the parent frame.
         return segments.iloc[0:0].copy()
 
     keep_ilocs = [
@@ -3086,7 +3101,7 @@ def _segments_within_network_distance(
         for iloc, geometry in enumerate(segments.geometry)
         if _segment_min_reachable_cost(geometry, field.endpoint_lengths) <= max_distance
     ]
-    return segments.iloc[keep_ilocs].copy()
+    return segments.iloc[keep_ilocs]
 
 
 def _segment_min_reachable_cost(
