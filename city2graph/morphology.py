@@ -955,14 +955,87 @@ def place_to_place_graph(
     >>> nodes, edges = place_to_place_graph(tessellation_gdf, group_col='enclosure_id')
     """
     # Input validation
+    _validate_place_to_place_inputs(
+        place_gdf,
+        contiguity=contiguity,
+        group_col=group_col,
+        duplicate_edges=duplicate_edges,
+        as_nx=as_nx,
+    )
+
+    # Handle empty or insufficient data: return empty edges GeoDataFrame
+    if place_gdf.empty or len(place_gdf) < 2:
+        return _return_empty_place_edges(place_gdf, group_col, as_nx)
+
+    # Deduplicate based on place_id to avoid libpysal errors
+    # This handles cases where place_gdf has been joined with other data (e.g. buildings)
+    # resulting in multiple rows per place space. We only need unique place spaces for the graph.
+    gdf_unique = place_gdf.drop_duplicates(subset=[_PLACE_ID_COL])
+
+    # Set index to place_id so contiguity_graph returns edges with correct IDs
+    # We must ensure the index is unique for libpysal
+    gdf_indexed = gdf_unique.set_index(_PLACE_ID_COL)
+
+    _, edges_gdf = contiguity_graph(
+        gdf_indexed,
+        contiguity=contiguity,
+        as_nx=False,
+    )
+
+    if edges_gdf.empty:
+        return _return_empty_place_edges(place_gdf, group_col, as_nx)
+
+    # Reshape to from/to place-ID columns and apply the group filter
+    edges_gdf = _format_place_edges(edges_gdf, gdf_unique, group_col)
+
+    if as_nx:
+        return gdf_to_nx(nodes=gdf_unique, edges=edges_gdf)
+
+    if duplicate_edges:
+        edges_gdf = _symmetrize_edge_columns(edges_gdf, "from_place_id", "to_place_id")
+
+    return gdf_unique, edges_gdf
+
+
+def _validate_place_to_place_inputs(
+    place_gdf: gpd.GeoDataFrame,
+    *,
+    contiguity: str,
+    group_col: str | None,
+    duplicate_edges: bool,
+    as_nx: bool,
+) -> None:
+    """
+    Validate all inputs of :func:`place_to_place_graph`.
+
+    Checks the input GeoDataFrame, the output-mode flag combination, the
+    presence of the place-ID column, the contiguity type, and the group
+    column when one is requested.
+
+    Parameters
+    ----------
+    place_gdf : geopandas.GeoDataFrame
+        GeoDataFrame containing place polygons.
+    contiguity : str
+        Requested contiguity type; must be 'queen' or 'rook'.
+    group_col : str | None
+        Optional column used to group connections.
+    duplicate_edges : bool
+        Whether both edge directions were requested.
+    as_nx : bool
+        Whether NetworkX output was requested.
+
+    Returns
+    -------
+    None
+        This function validates input and raises on failure.
+    """
     _validate_duplicate_edges(duplicate_edges, as_nx)
     _validate_single_gdf_input(place_gdf, "place_gdf")
 
-    place_id_col = _PLACE_ID_COL
-
     # If not empty, require the ID column
-    if not place_gdf.empty and place_id_col not in place_gdf.columns:
-        msg = f"Expected ID column '{place_id_col}' not found in place_gdf."
+    if not place_gdf.empty and _PLACE_ID_COL not in place_gdf.columns:
+        msg = f"Expected ID column '{_PLACE_ID_COL}' not found in place_gdf."
         raise ValueError(msg)
 
     # Validate that the contiguity type is supported
@@ -975,28 +1048,33 @@ def place_to_place_graph(
         msg = f"group_col '{group_col}' not found in place_gdf columns"
         raise ValueError(msg)
 
-    # Handle empty or insufficient data: return empty edges GeoDataFrame
-    if place_gdf.empty or len(place_gdf) < 2:
-        return _return_empty_place_edges(place_gdf, group_col, as_nx)
 
-    # Deduplicate based on place_id to avoid libpysal errors
-    # This handles cases where place_gdf has been joined with other data (e.g. buildings)
-    # resulting in multiple rows per place space. We only need unique place spaces for the graph.
-    gdf_unique = place_gdf.drop_duplicates(subset=[place_id_col])
+def _format_place_edges(
+    edges_gdf: gpd.GeoDataFrame,
+    gdf_unique: gpd.GeoDataFrame,
+    group_col: str | None,
+) -> gpd.GeoDataFrame:
+    """
+    Reshape contiguity edges into the place-to-place output format.
 
-    # Set index to place_id so contiguity_graph returns edges with correct IDs
-    # We must ensure the index is unique for libpysal
-    gdf_indexed = gdf_unique.set_index(place_id_col)
+    Moves the (source, target) MultiIndex into ``from_place_id`` and
+    ``to_place_id`` columns, then either annotates and filters edges by the
+    requested group column or assigns the default group.
 
-    _, edges_gdf = contiguity_graph(
-        gdf_indexed,
-        contiguity=contiguity,
-        as_nx=False,
-    )
+    Parameters
+    ----------
+    edges_gdf : geopandas.GeoDataFrame
+        Contiguity edges indexed by (source, target) place IDs.
+    gdf_unique : geopandas.GeoDataFrame
+        Deduplicated places used to map place IDs to group values.
+    group_col : str | None
+        Optional column used to group connections.
 
-    if edges_gdf.empty:
-        return _return_empty_place_edges(place_gdf, group_col, as_nx)
-
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        Edges with place-ID columns and group annotation.
+    """
     # contiguity_graph returns edges with MultiIndex (source, target) containing the index values
     # (which are now place_ids). We reset index to get them as columns.
     edges_gdf = edges_gdf.reset_index()
@@ -1010,7 +1088,7 @@ def place_to_place_graph(
     if group_col:
         # Create a mapping from place_id to group
         # Use gdf_unique to ensure unique index
-        id_to_group = gdf_unique.set_index(place_id_col)[group_col]
+        id_to_group = gdf_unique.set_index(_PLACE_ID_COL)[group_col]
 
         # Map group values to edges
         edges_gdf[group_col] = edges_gdf["from_place_id"].map(id_to_group)
@@ -1018,19 +1096,12 @@ def place_to_place_graph(
 
         # Filter edges where source and target are in the same group.
         # Copy keeps the returned frame free of a pandas 2.x _is_copy flag,
-        # since it leaves this public function.
+        # since it leaves the public function.
         edges_gdf = edges_gdf[edges_gdf[group_col] == to_group].copy()
 
     else:
         edges_gdf["group"] = 0
-
-    if as_nx:
-        return gdf_to_nx(nodes=gdf_unique, edges=edges_gdf)
-
-    if duplicate_edges:
-        edges_gdf = _symmetrize_edge_columns(edges_gdf, "from_place_id", "to_place_id")
-
-    return gdf_unique, edges_gdf
+    return edges_gdf
 
 
 # ============================================================================
@@ -1575,22 +1646,93 @@ def segments_to_graph(
     segments_clean = processor.validate_gdf(segments_gdf, ["LineString"])
 
     if segments_clean is None or segments_clean.empty:
-        empty_nodes = gpd.GeoDataFrame(columns=["geometry"], crs=segments_gdf.crs)
-        empty_nodes.index.name = "node_id"
-        empty_edges = gpd.GeoDataFrame(
-            columns=["geometry"],
-            crs=segments_gdf.crs,
-            index=pd.MultiIndex.from_arrays([[], []], names=["from_node_id", "to_node_id"]),
-        )
-        if as_nx:
-            return gdf_to_nx(nodes=empty_nodes, edges=empty_edges, multigraph=multigraph)
-        return empty_nodes, empty_edges
+        return _empty_segments_result(segments_gdf, multigraph=multigraph, as_nx=as_nx)
 
     # Extract coordinates
     start_coords = processor.extract_coordinates(segments_clean, start=True)
     end_coords = processor.extract_coordinates(segments_clean, start=False)
 
-    # Create unique nodes
+    # Create unique nodes indexed by node ID
+    nodes_gdf, coord_to_id = _build_segment_nodes(start_coords, end_coords, segments_clean.crs)
+
+    # Create edges with a (from_node_id, to_node_id[, edge_key]) MultiIndex
+    edges_gdf = _build_segment_edges(
+        segments_clean,
+        from_ids=start_coords.map(coord_to_id),
+        to_ids=end_coords.map(coord_to_id),
+        directed=directed,
+        multigraph=multigraph,
+    )
+
+    if as_nx:
+        return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf, multigraph=multigraph)
+    return nodes_gdf, edges_gdf
+
+
+def _empty_segments_result(
+    segments_gdf: gpd.GeoDataFrame,
+    *,
+    multigraph: bool,
+    as_nx: bool,
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph:
+    """
+    Build the empty result for :func:`segments_to_graph`.
+
+    Creates empty node and edge GeoDataFrames with the expected index names
+    and the CRS of the input, converting to NetworkX when requested.
+
+    Parameters
+    ----------
+    segments_gdf : geopandas.GeoDataFrame
+        The original segments input, used only for its CRS.
+    multigraph : bool
+        Whether the NetworkX output should be a MultiGraph.
+    as_nx : bool
+        If True, return a NetworkX graph instead of GeoDataFrames.
+
+    Returns
+    -------
+    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] or networkx.Graph or networkx.MultiGraph
+        Empty ``(nodes, edges)`` GeoDataFrames or the equivalent NetworkX graph.
+    """
+    empty_nodes = gpd.GeoDataFrame(columns=["geometry"], crs=segments_gdf.crs)
+    empty_nodes.index.name = "node_id"
+    empty_edges = gpd.GeoDataFrame(
+        columns=["geometry"],
+        crs=segments_gdf.crs,
+        index=pd.MultiIndex.from_arrays([[], []], names=["from_node_id", "to_node_id"]),
+    )
+    if as_nx:
+        return gdf_to_nx(nodes=empty_nodes, edges=empty_edges, multigraph=multigraph)
+    return empty_nodes, empty_edges
+
+
+def _build_segment_nodes(
+    start_coords: pd.Series,
+    end_coords: pd.Series,
+    crs: object,
+) -> tuple[gpd.GeoDataFrame, dict[tuple[float, float], int]]:
+    """
+    Build the unique-node GeoDataFrame for :func:`segments_to_graph`.
+
+    Deduplicates the segment endpoint coordinates, assigns sequential node
+    IDs and materialises the nodes as a Point GeoDataFrame indexed by
+    ``node_id``.
+
+    Parameters
+    ----------
+    start_coords : pandas.Series
+        Segment start coordinates as (x, y) tuples.
+    end_coords : pandas.Series
+        Segment end coordinates as (x, y) tuples.
+    crs : object
+        CRS to assign to the nodes GeoDataFrame.
+
+    Returns
+    -------
+    tuple[geopandas.GeoDataFrame, dict[tuple[float, float], int]]
+        The nodes GeoDataFrame and the coordinate-to-node-ID mapping.
+    """
     all_coords = pd.concat([start_coords, end_coords]).drop_duplicates()
     coord_to_id = {coord: i for i, coord in enumerate(all_coords)}
 
@@ -1605,13 +1747,45 @@ def segments_to_graph(
             "node_id": range(len(all_coords)),
             "geometry": gpd.points_from_xy(x_coords, y_coords),
         },
-        crs=segments_clean.crs,
+        crs=crs,
     ).set_index("node_id", drop=True)
+    return nodes_gdf, coord_to_id
 
-    # Create edges with MultiIndex
-    from_ids = start_coords.map(coord_to_id)
-    to_ids = end_coords.map(coord_to_id)
 
+def _build_segment_edges(
+    segments_clean: gpd.GeoDataFrame,
+    *,
+    from_ids: pd.Series,
+    to_ids: pd.Series,
+    directed: bool,
+    multigraph: bool,
+) -> gpd.GeoDataFrame:
+    """
+    Build the edge GeoDataFrame for :func:`segments_to_graph`.
+
+    Optionally canonicalizes undirected edges to an unordered node-ID pair,
+    then assigns a ``(from_node_id, to_node_id)`` MultiIndex, extended with
+    an ``edge_key`` level for multigraphs. Rejects duplicate node pairs when
+    ``multigraph=False``.
+
+    Parameters
+    ----------
+    segments_clean : geopandas.GeoDataFrame
+        Validated LineString segments providing the edge rows.
+    from_ids : pandas.Series
+        Node IDs of the segment start points.
+    to_ids : pandas.Series
+        Node IDs of the segment end points.
+    directed : bool
+        Whether the edges keep their drawn orientation.
+    multigraph : bool
+        Whether duplicate node pairs are kept as parallel edges.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        Edges indexed by the node-ID MultiIndex.
+    """
     if not directed:
         # Canonicalize each edge to an unordered (min, max) node-id order so
         # reverse-drawn duplicate segments share one unordered pair. The
@@ -1647,10 +1821,7 @@ def segments_to_graph(
             [from_ids, to_ids],
             names=["from_node_id", "to_node_id"],
         )
-
-    if as_nx:
-        return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf, multigraph=multigraph)
-    return nodes_gdf, edges_gdf
+    return edges_gdf
 
 
 # ============================================================================

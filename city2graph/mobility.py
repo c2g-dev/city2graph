@@ -133,6 +133,112 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
             is returned if ``directed=True``, otherwise a ``networkx.Graph``.
     """
     # --- Validation (Task 2) ------------------------------------------------
+    _validate_od_inputs(
+        od_data,
+        zones_gdf,
+        zone_id_col=zone_id_col,
+        matrix_type=matrix_type,
+        source_col=source_col,
+        target_col=target_col,
+        weight_cols=weight_cols,
+        threshold=threshold,
+        threshold_col=threshold_col,
+    )
+
+    # --- Conversion to canonical edgelist ----------------------------------
+    edge_df = _build_canonical_edgelist(
+        od_data,
+        zones_gdf,
+        zone_id_col=zone_id_col,
+        matrix_type=matrix_type,
+        source_col=source_col,
+        target_col=target_col,
+        weight_cols=weight_cols,
+        # For undirected mode, postpone thresholding until after symmetrization
+        threshold=threshold if directed else None,
+        threshold_col=threshold_col,
+        include_self_loops=include_self_loops,
+    )
+    # If undirected, symmetrize by merging reciprocal edges and summing weights
+    if not directed and not edge_df.empty:
+        edge_df = _symmetrize_undirected_edges(
+            edge_df,
+            matrix_type=matrix_type,
+            weight_cols=weight_cols,
+            threshold=threshold,
+        )
+
+    # --- Spatial assembly (Task 5) -----------------------------------------
+    nodes_gdf, edges_gdf = _assemble_od_frames(
+        edge_df,
+        zones_gdf,
+        zone_id_col=zone_id_col,
+        compute_edge_geometry=compute_edge_geometry,
+    )
+
+    # --- Output selection (Task 6) -----------------------------------------
+    if not as_nx:
+        # GeoDataFrame-first API: return (nodes, edges)
+        logger.info("Created graph with %d nodes and %d edges", len(nodes_gdf), len(edges_gdf))
+        return nodes_gdf, edges_gdf
+
+    G = gdf_to_nx(
+        nodes=nodes_gdf, edges=edges_gdf, keep_geom=compute_edge_geometry, directed=directed
+    )
+    logger.info(
+        "Created graph with %d nodes and %d edges", G.number_of_nodes(), G.number_of_edges()
+    )
+    return G
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+def _validate_od_inputs(
+    od_data: pd.DataFrame | np.ndarray,
+    zones_gdf: gpd.GeoDataFrame,
+    *,
+    zone_id_col: str | None,
+    matrix_type: Literal["edgelist", "adjacency"],
+    source_col: str,
+    target_col: str,
+    weight_cols: list[str] | None,
+    threshold: float | None,
+    threshold_col: str | None,
+) -> None:
+    """
+    Validate all inputs of :func:`od_matrix_to_graph`.
+
+    Runs the zone-frame checks, CRS warnings, threshold type check and the
+    ``matrix_type``-specific validation of ``od_data`` before any conversion
+    takes place.
+
+    Parameters
+    ----------
+    od_data : pandas.DataFrame | numpy.ndarray
+        OD data as an edge list or adjacency matrix.
+    zones_gdf : geopandas.GeoDataFrame
+        GeoDataFrame of zones with unique identifiers.
+    zone_id_col : str | None
+        Name of the zone ID column in ``zones_gdf``.
+    matrix_type : {'edgelist', 'adjacency'}
+        Declares how to interpret ``od_data``.
+    source_col : str
+        Column name for origins when using an edge list.
+    target_col : str
+        Column name for destinations when using an edge list.
+    weight_cols : list[str] | None
+        Edge list weight (flow) columns to preserve.
+    threshold : float | None
+        Minimum flow retained, applied to the canonical weight.
+    threshold_col : str | None
+        Column among ``weight_cols`` used for thresholding.
+
+    Returns
+    -------
+    None
+        This function validates input and raises on failure.
+    """
     _validate_zones_gdf(zones_gdf, zone_id_col)
     GeoDataProcessor.warn_crs_issues(
         zones_gdf,
@@ -172,10 +278,57 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
             threshold_col=threshold_col,
         )
 
-    # --- Conversion to canonical edgelist ----------------------------------
-    # For undirected mode, postpone thresholding until after symmetrization
-    post_sum_threshold = threshold if not directed else None
 
+def _build_canonical_edgelist(
+    od_data: pd.DataFrame | np.ndarray,
+    zones_gdf: gpd.GeoDataFrame,
+    *,
+    zone_id_col: str | None,
+    matrix_type: Literal["edgelist", "adjacency"],
+    source_col: str,
+    target_col: str,
+    weight_cols: list[str] | None,
+    threshold: float | None,
+    threshold_col: str | None,
+    include_self_loops: bool,
+) -> pd.DataFrame:
+    """
+    Convert validated OD data into a canonical directed edgelist.
+
+    Dispatches on ``matrix_type`` and the concrete ``od_data`` container
+    (edge list, adjacency DataFrame or adjacency ndarray), aligning zone
+    labels and normalising to canonical ``source``/``target``/``weight``
+    columns. Guarantees the canonical columns exist even for empty results.
+
+    Parameters
+    ----------
+    od_data : pandas.DataFrame | numpy.ndarray
+        OD data as an edge list or adjacency matrix.
+    zones_gdf : geopandas.GeoDataFrame
+        GeoDataFrame of zones with unique identifiers.
+    zone_id_col : str | None
+        Name of the zone ID column in ``zones_gdf``.
+    matrix_type : {'edgelist', 'adjacency'}
+        Declares how to interpret ``od_data``.
+    source_col : str
+        Column name for origins when using an edge list.
+    target_col : str
+        Column name for destinations when using an edge list.
+    weight_cols : list[str] | None
+        Edge list weight (flow) columns to preserve.
+    threshold : float | None
+        Minimum flow retained. Pass ``None`` to skip thresholding here
+        (undirected mode applies it after symmetrization instead).
+    threshold_col : str | None
+        Column among ``weight_cols`` used for thresholding.
+    include_self_loops : bool
+        Keep flows where origin == destination.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Edgelist with canonical ``source``, ``target`` and ``weight`` columns.
+    """
     if matrix_type == "edgelist":
         # Filter to zones and aggregate duplicates first
         aligned = _align_edgelist_zones(
@@ -191,8 +344,7 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
             source_col=source_col,
             target_col=target_col,
             weight_cols=weight_cols if weight_cols is not None else [],
-            # In undirected mode, thresholding is applied later
-            threshold=None if not directed else threshold,
+            threshold=threshold,
             threshold_col=threshold_col,
             include_self_loops=include_self_loops,
         )
@@ -206,8 +358,7 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
         edge_df = _adjacency_to_edgelist(
             adj,
             include_self_loops=include_self_loops,
-            # In undirected mode, thresholding is applied later
-            threshold=None if not directed else threshold,
+            threshold=threshold,
         )
     elif matrix_type == "adjacency" and isinstance(od_data, np.ndarray):
         zone_ids = _align_numpy_array_zones(
@@ -219,8 +370,7 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
             od_data,
             zone_ids,
             include_self_loops=include_self_loops,
-            # In undirected mode, thresholding is applied later
-            threshold=None if not directed else threshold,
+            threshold=threshold,
         )
 
     # Ensure canonical columns exist even if empty result
@@ -229,25 +379,86 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
             include_extra_weights=(matrix_type == "edgelist" and bool(weight_cols)),
             extra_weights=(weight_cols or []),
         )
+    return edge_df
 
-    # If undirected, symmetrize by merging reciprocal edges and summing weights
-    if not directed and not edge_df.empty:
-        # Sum canonical 'weight' and any provided additional weight columns
-        sum_cols = ["weight"]
-        if matrix_type == "edgelist" and weight_cols:
-            # Ensure we sum the explicitly requested weight columns as well
-            # (they are already present in edge_df)
-            for c in weight_cols:
-                if c not in sum_cols:
-                    sum_cols.append(c)
 
-        edge_df = _symmetrize_edges(edge_df, sum_cols=sum_cols)
+def _symmetrize_undirected_edges(
+    edge_df: pd.DataFrame,
+    *,
+    matrix_type: Literal["edgelist", "adjacency"],
+    weight_cols: list[str] | None,
+    threshold: float | None,
+) -> pd.DataFrame:
+    """
+    Merge reciprocal edges for undirected output and apply the threshold.
 
-        # Apply threshold after summation when requested
-        if post_sum_threshold is not None:
-            edge_df = edge_df.loc[_apply_threshold(edge_df["weight"], threshold=post_sum_threshold)]
+    Symmetrizes a non-empty canonical edgelist by summing the weights of
+    reciprocal edges (including any additional weight columns), then applies
+    the post-summation threshold when requested.
 
-    # --- Spatial assembly (Task 5) -----------------------------------------
+    Parameters
+    ----------
+    edge_df : pandas.DataFrame
+        Canonical directed edgelist with ``source``/``target``/``weight``.
+    matrix_type : {'edgelist', 'adjacency'}
+        Declares how the edgelist was built.
+    weight_cols : list[str] | None
+        Additional weight columns to sum for edgelist inputs.
+    threshold : float | None
+        Minimum summed weight retained (>=). ``None`` keeps all edges.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Symmetrized (and optionally thresholded) edgelist.
+    """
+    # Sum canonical 'weight' and any provided additional weight columns
+    sum_cols = ["weight"]
+    if matrix_type == "edgelist" and weight_cols:
+        # Ensure we sum the explicitly requested weight columns as well
+        # (they are already present in edge_df)
+        for c in weight_cols:
+            if c not in sum_cols:
+                sum_cols.append(c)
+
+    edge_df = _symmetrize_edges(edge_df, sum_cols=sum_cols)
+
+    # Apply threshold after summation when requested
+    if threshold is not None:
+        edge_df = edge_df.loc[_apply_threshold(edge_df["weight"], threshold=threshold)]
+    return edge_df
+
+
+def _assemble_od_frames(
+    edge_df: pd.DataFrame,
+    zones_gdf: gpd.GeoDataFrame,
+    *,
+    zone_id_col: str | None,
+    compute_edge_geometry: bool,
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """
+    Assemble the spatial node and edge frames from a canonical edgelist.
+
+    Aligns the node index with the zone identifier, creates edge geometries
+    from zone centroids when requested, and converts the edge frame to a
+    (source, target) MultiIndex.
+
+    Parameters
+    ----------
+    edge_df : pandas.DataFrame
+        Canonical edgelist with ``source``/``target``/``weight`` columns.
+    zones_gdf : geopandas.GeoDataFrame
+        GeoDataFrame of zones with unique identifiers.
+    zone_id_col : str | None
+        Name of the zone ID column in ``zones_gdf``.
+    compute_edge_geometry : bool
+        Whether to build LineString geometries from zone centroids.
+
+    Returns
+    -------
+    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame]
+        The ``(nodes, edges)`` GeoDataFrames.
+    """
     # Nodes: set index aligned with zone identifier (column or original index)
     nodes_gdf = (
         zones_gdf.set_index(zone_id_col, drop=False).copy()
@@ -275,24 +486,9 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
         edges_gdf.index = mi
         # Ensure CRS preserved (GeoPandas keeps it on GeoDataFrame)
 
-    # --- Output selection (Task 6) -----------------------------------------
-    if not as_nx:
-        # GeoDataFrame-first API: return (nodes, edges)
-        logger.info("Created graph with %d nodes and %d edges", len(nodes_gdf), len(edges_gdf))
-        return nodes_gdf, edges_gdf
-
-    G = gdf_to_nx(
-        nodes=nodes_gdf, edges=edges_gdf, keep_geom=compute_edge_geometry, directed=directed
-    )
-    logger.info(
-        "Created graph with %d nodes and %d edges", G.number_of_nodes(), G.number_of_edges()
-    )
-    return G
+    return nodes_gdf, edges_gdf
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 def _validate_zones_gdf(zones_gdf: gpd.GeoDataFrame, zone_id_col: str | None) -> None:
     """
     Validate the zones GeoDataFrame structure.

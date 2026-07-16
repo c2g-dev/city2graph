@@ -3208,7 +3208,6 @@ def plot_graph(  # noqa: PLR0913
             ax.figure.patch.set_facecolor(bgcolor)
 
     # GeoDataFrame-based plotting
-    is_hetero = isinstance(nodes, dict) or isinstance(edges, dict)
     if is_hetero:
         _plot_hetero_graph(nodes, edges, ax, **style_kwargs)
     else:

@@ -1725,7 +1725,6 @@ def bridge_nodes(
         msg = "proximity_method must be 'knn' or 'fixed_radius'"
         raise ValueError(msg)
 
-    edge_dict = {}
     method = proximity_method.lower()
     metric_name = str(kwargs.get("distance_metric", "euclidean"))
     net_gdf = kwargs.get("network_gdf")
@@ -1741,6 +1740,66 @@ def bridge_nodes(
     source_types = _normalize_layer_types(source_node_types, "source", node_order, node_set)
     target_types = _normalize_layer_types(target_node_types, "target", node_order, node_set)
 
+    edge_dict = _build_bridge_edges(
+        nodes_dict,
+        source_types,
+        target_types,
+        method=method,
+        param=param,
+        distance_metric=metric_name,
+        network_gdf=net_gdf,
+        network_weight=net_weight,
+    )
+
+    if as_nx:
+        return gdf_to_nx(nodes=nodes_dict, edges=edge_dict, multigraph=multigraph, directed=True)
+    return nodes_dict, edge_dict
+
+
+def _build_bridge_edges(
+    nodes_dict: dict[str, gpd.GeoDataFrame],
+    source_types: list[str],
+    target_types: list[str],
+    *,
+    method: str,
+    param: float,
+    distance_metric: str,
+    network_gdf: gpd.GeoDataFrame | None,
+    network_weight: str | None,
+) -> dict[tuple[str, str, str], gpd.GeoDataFrame]:
+    """
+    Build directed proximity edges for every ordered pair of node layers.
+
+    Iterates over the ordered (source, target) layer pairs, skipping
+    same-layer pairs, and computes the directed edges for each pair with the
+    requested proximity method, unwrapping the layer index back to the
+    original node IDs.
+
+    Parameters
+    ----------
+    nodes_dict : dict[str, geopandas.GeoDataFrame]
+        Mapping of node type to node GeoDataFrame.
+    source_types : list[str]
+        Ordered, validated source node types.
+    target_types : list[str]
+        Ordered, validated target node types.
+    method : str
+        ``"knn"`` or ``"fixed_radius"`` proximity strategy.
+    param : float
+        Method-specific parameter (``k`` or radius).
+    distance_metric : str
+        Metric name as understood by :class:`DistanceMetric`.
+    network_gdf : geopandas.GeoDataFrame | None
+        Supporting network data required for the ``network`` metric.
+    network_weight : str | None
+        Edge attribute used as weight for the ``network`` metric.
+
+    Returns
+    -------
+    dict[tuple[str, str, str], geopandas.GeoDataFrame]
+        Edge GeoDataFrames keyed by ``(source_type, 'is_nearby', target_type)``.
+    """
+    edge_dict = {}
     for src_type in source_types:
         for dst_type in target_types:
             if src_type == dst_type:
@@ -1752,12 +1811,12 @@ def bridge_nodes(
             _, edges_gdf = _directed_graph(
                 src_gdf=src_gdf,
                 dst_gdf=dst_gdf,
-                distance_metric=metric_name,
+                distance_metric=distance_metric,
                 method=method,
                 param=param,
                 as_nx=False,
-                network_gdf=net_gdf,
-                network_weight=net_weight,
+                network_gdf=network_gdf,
+                network_weight=network_weight,
                 return_nodes=False,
             )
 
@@ -1765,10 +1824,7 @@ def bridge_nodes(
             if not edges_gdf.empty:
                 edges_gdf.index = GeoDataProcessor.unwrap_layer_edge_index(edges_gdf.index)
             edge_dict[(src_type, "is_nearby", dst_type)] = edges_gdf
-
-    if as_nx:
-        return gdf_to_nx(nodes=nodes_dict, edges=edge_dict, multigraph=multigraph, directed=True)
-    return nodes_dict, edge_dict
+    return edge_dict
 
 
 def group_nodes(
