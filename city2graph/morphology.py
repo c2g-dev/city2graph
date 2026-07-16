@@ -80,6 +80,14 @@ _SOURCE_BUILDING_INDEX_COL = "_source_building_index"
 _PLACE_ID_COL = "place_id"
 _MOVEMENT_ID_COL = "movement_id"
 
+# Warning emitted when morphological inputs are in a geographic CRS
+_GEOGRAPHIC_CRS_MSG = (
+    "Geometry is in a geographic CRS. Distance parameters "
+    "(distance, extent_buffer, tolerance) are treated as metric and "
+    "'.centroid' results are unreliable. Re-project to a projected CRS "
+    "with 'GeoSeries.to_crs()' before building the morphological graph."
+)
+
 
 def _validate_duplicate_edges(duplicate_edges: bool, as_nx: bool) -> None:
     """
@@ -625,7 +633,10 @@ def _prepare_morphology(  # noqa: PLR0913
         buildings_gdf.index = buildings_gdf.index.to_flat_index()
 
     # Ensure CRS consistency between buildings and segments
-    segments_gdf = _ensure_crs_consistency(buildings_gdf, segments_gdf)
+    segments_gdf = GeoDataProcessor.harmonize_crs(segments_gdf, buildings_gdf.crs, stacklevel=3)
+    GeoDataProcessor.warn_crs_issues(
+        buildings_gdf, geographic_message=_GEOGRAPHIC_CRS_MSG, stacklevel=3
+    )
 
     # The single public-boundary copy of the segments: everything downstream
     # works on this owned frame.
@@ -1179,7 +1190,9 @@ def _place_to_movement_edges(
 
     # Handle empty data: return empty edges GeoDataFrame
     if place_gdf.empty or movement_gdf.empty:
-        empty_edges = _create_empty_edges_gdf(place_gdf.crs, place_id_col, movement_id_col)
+        empty_edges = GeoDataProcessor.create_empty_edges_gdf(
+            place_gdf.crs, place_id_col, movement_id_col
+        )
         return empty_edges, movement_gdf
 
     # Ensure required ID columns exist in the input GeoDataFrames
@@ -1191,7 +1204,10 @@ def _place_to_movement_edges(
         raise ValueError(msg)
 
     # Ensure CRS consistency between place and movement GeoDataFrames
-    movement_gdf = _ensure_crs_consistency(place_gdf, movement_gdf)
+    movement_gdf = GeoDataProcessor.harmonize_crs(movement_gdf, place_gdf.crs, stacklevel=3)
+    GeoDataProcessor.warn_crs_issues(
+        place_gdf, geographic_message=_GEOGRAPHIC_CRS_MSG, stacklevel=3
+    )
 
     # Determine which geometry to use for the query
     query_geometry = (
@@ -1399,7 +1415,7 @@ def movement_to_movement_graph(
 
     # Handle empty or insufficient data: return empty edges GeoDataFrame
     if movement_gdf.empty or len(movement_gdf) < 2:
-        empty_edges = _create_empty_edges_gdf(
+        empty_edges = GeoDataProcessor.create_empty_edges_gdf(
             movement_gdf.crs, "from_movement_id", "to_movement_id"
         )
 
@@ -1727,59 +1743,6 @@ def _validate_single_gdf_input(
     if not isinstance(gdf, gpd.GeoDataFrame):
         msg = f"{gdf_name} must be a GeoDataFrame"
         raise TypeError(msg)
-
-
-def _ensure_crs_consistency(
-    target_gdf: gpd.GeoDataFrame,
-    source_gdf: gpd.GeoDataFrame,
-) -> gpd.GeoDataFrame:
-    """
-    Ensure that the source GeoDataFrame has the same CRS as the target.
-
-    This function checks if the Coordinate Reference System (CRS) of the source
-    GeoDataFrame matches that of the target. If they do not match, it reprojects
-    the source to the target's CRS and issues a warning. This is essential for
-    ensuring that spatial operations between the two GeoDataFrames are valid.
-
-    Parameters
-    ----------
-    target_gdf : geopandas.GeoDataFrame
-        The GeoDataFrame with the target CRS.
-    source_gdf : geopandas.GeoDataFrame
-        The GeoDataFrame to check and potentially reproject.
-
-    Returns
-    -------
-    geopandas.GeoDataFrame
-        The source GeoDataFrame, reprojected to the target CRS if necessary.
-
-    Warns
-    -----
-    RuntimeWarning
-        If a CRS mismatch is detected and reprojection is performed.
-    UserWarning
-        If the resolved CRS is geographic (degrees). Distance parameters
-        (``distance``, ``extent_buffer``, ``tolerance``) are interpreted as
-        metric and ``.centroid`` results are unreliable on such a CRS.
-    """
-    if source_gdf.crs != target_gdf.crs:
-        warnings.warn(
-            "CRS mismatch detected, reprojecting",
-            RuntimeWarning,
-            stacklevel=3,
-        )  # Warn user
-        source_gdf = source_gdf.to_crs(target_gdf.crs)
-
-    if target_gdf.crs is not None and target_gdf.crs.is_geographic:
-        warnings.warn(
-            "Geometry is in a geographic CRS. Distance parameters "
-            "(distance, extent_buffer, tolerance) are treated as metric and "
-            "'.centroid' results are unreliable. Re-project to a projected CRS "
-            "with 'GeoSeries.to_crs()' before building the morphological graph.",
-            UserWarning,
-            stacklevel=3,
-        )
-    return source_gdf
 
 
 # ============================================================================
@@ -3335,57 +3298,13 @@ def _return_empty_place_edges(
         Empty graph structure.
     """
     group_cols = [group_col] if group_col else ["group"]
-    empty_edges = _create_empty_edges_gdf(
+    empty_edges = GeoDataProcessor.create_empty_edges_gdf(
         place_gdf.crs,
         "from_place_id",
         "to_place_id",
         group_cols,
     )
     return (place_gdf, empty_edges) if not as_nx else gdf_to_nx(nodes=place_gdf, edges=empty_edges)
-
-
-def _create_empty_edges_gdf(
-    crs: str | int | None,
-    from_col: str,  # Name for the 'from' node ID column
-    to_col: str,  # Name for the 'to' node ID column
-    extra_cols: list[str] | None = None,  # Optional list of additional column names
-) -> gpd.GeoDataFrame:
-    """
-    Create an empty edges GeoDataFrame with specified column structure.
-
-    This helper function generates an empty GeoDataFrame suitable for representing
-    graph edges, ensuring it has the correct column names for 'from' and 'to'
-    node IDs, and optionally additional columns, along with a geometry column
-    and a specified Coordinate Reference System (CRS). This is useful for
-    initializing empty edge GeoDataFrames when no connections are found or
-    when setting up a new graph structure.
-
-    Parameters
-    ----------
-    crs : str, int, or None
-        Coordinate reference system.
-    from_col : str
-        Name for the 'from' node ID column.
-    to_col : str
-        Name for the 'to' node ID column.
-    extra_cols : list[str], optional
-        Optional list of additional column names.
-
-    Returns
-    -------
-    geopandas.GeoDataFrame
-        Empty GeoDataFrame with specified columns.
-    """
-    # Initialize list of column names with 'from' and 'to' ID columns
-    columns = [from_col, to_col]
-    # Add any extra columns if provided
-    if extra_cols:
-        columns.extend(extra_cols)
-    # Add the 'geometry' column name (standard for GeoDataFrames)
-    columns.append("geometry")
-
-    # Create an empty GeoDataFrame with the defined columns, geometry column, and CRS
-    return gpd.GeoDataFrame(columns=columns, geometry="geometry", crs=crs)
 
 
 def _set_node_index(gdf: gpd.GeoDataFrame, col: str) -> gpd.GeoDataFrame:

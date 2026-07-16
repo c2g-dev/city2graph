@@ -33,6 +33,8 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import LineString
 
+from .base import GeoDataProcessor
+
 # Use city2graph converters for compatibility across the stack
 from .utils import gdf_to_nx
 
@@ -132,7 +134,13 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
     """
     # --- Validation (Task 2) ------------------------------------------------
     _validate_zones_gdf(zones_gdf, zone_id_col)
-    _validate_crs(zones_gdf)
+    GeoDataProcessor.warn_crs_issues(
+        zones_gdf,
+        missing_message="zones_gdf has no CRS set; outputs will have undefined CRS (requirement 3.1)",
+        geographic_message=(
+            "Geographic CRS detected; distance/length measures may be inaccurate (requirement 3.5)"
+        ),
+    )
 
     # Validate matrix_type and that threshold is numeric if provided (Req 2.7)
     if threshold is not None and not isinstance(threshold, numbers.Number):
@@ -1045,65 +1053,6 @@ def _align_edgelist_zones(
 # ---------------------------------------------------------------------------
 # Spatial geometry helpers (centroids and edge geometries)
 # ---------------------------------------------------------------------------
-def _validate_crs(zones_gdf: gpd.GeoDataFrame) -> None:
-    """
-    Warn about CRS issues and ensure CRS info is preserved.
-
-    Emits warnings for missing CRS and geographic CRS to signal potential
-    issues with distance-based computations.
-
-    Parameters
-    ----------
-    zones_gdf : geopandas.GeoDataFrame
-        Zones GeoDataFrame whose CRS will be validated.
-
-    Returns
-    -------
-    None
-        This function validates input and raises on failure.
-    """
-    crs = zones_gdf.crs
-    if crs is None:
-        warnings.warn(
-            "zones_gdf has no CRS set; outputs will have undefined CRS (requirement 3.1)",
-            UserWarning,
-            stacklevel=2,
-        )
-        return
-
-    # pyproj.CRS exposes is_geographic when available
-    if getattr(crs, "is_geographic", False):
-        warnings.warn(
-            "Geographic CRS detected; distance/length measures may be inaccurate (requirement 3.5)",
-            UserWarning,
-            stacklevel=2,
-        )
-
-
-def _compute_centroids(zones_gdf: gpd.GeoDataFrame) -> gpd.GeoSeries:
-    """
-    Compute centroids for zones preserving CRS.
-
-    Calculates feature centroids and explicitly propagates the CRS to the
-    resulting GeoSeries for consistency.
-
-    Parameters
-    ----------
-    zones_gdf : geopandas.GeoDataFrame
-        Zones GeoDataFrame whose feature centroids will be computed.
-
-    Returns
-    -------
-    geopandas.GeoSeries
-        GeoSeries indexed like ``zones_gdf`` with the same CRS.
-    """
-    # GeoPandas returns a GeoSeries with the same CRS as input geometry
-    centroids = zones_gdf.geometry.centroid
-    # Explicitly carry CRS (some versions keep it automatically, we enforce)
-    centroids.set_crs(zones_gdf.crs, allow_override=True, inplace=True)
-    return centroids
-
-
 def _create_edge_geometries(
     edges_df: pd.DataFrame,
     zones_gdf: gpd.GeoDataFrame,
@@ -1154,7 +1103,7 @@ def _create_edge_geometries(
         return gpd.GeoDataFrame(e, geometry=geom, crs=zones_gdf.crs)
 
     # Centroid lookup by ID
-    centroids = _compute_centroids(zones_gdf)
+    centroids = GeoDataProcessor.compute_centroids(zones_gdf)
     if zone_id_col is not None:
         centroids.index = pd.Index(zones_gdf[zone_id_col])
 

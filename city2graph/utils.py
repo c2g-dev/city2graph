@@ -6857,7 +6857,7 @@ def clip_graph(
 
     # Align clip geometry CRS to edges CRS when area is geospatial tabular input.
     if isinstance(area, (gpd.GeoDataFrame, gpd.GeoSeries)):
-        area_aligned = area.to_crs(edges.crs) if area.crs != edges.crs else area
+        area_aligned = GeoDataProcessor.harmonize_crs(area, edges.crs, warn=False)
         clip_geom = (
             area_aligned.geometry.union_all()
             if isinstance(area_aligned, gpd.GeoDataFrame) and len(area_aligned) > 1

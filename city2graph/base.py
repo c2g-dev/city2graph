@@ -9,6 +9,7 @@ graph conversion functionality across different formats (NetworkX, PyTorch Geome
 
 # Standard library imports
 import logging
+import warnings
 from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
@@ -790,7 +791,8 @@ class GeoDataProcessor:
         This function calculates the geometric centroid for each geometry in a
         GeoDataFrame. It provides a simple and direct way to get the central point
         of polygons or lines, which is often used to represent the location of a
-        larger geometry in graph-based analyses.
+        larger geometry in graph-based analyses. The CRS of the input is
+        explicitly propagated to the resulting GeoSeries.
 
         Parameters
         ----------
@@ -818,4 +820,304 @@ class GeoDataProcessor:
         0    POINT (0.50000 0.50000)
         dtype: geometry
         """
-        return gdf.geometry.centroid
+        centroids = gdf.geometry.centroid
+        # Explicitly carry CRS (some versions keep it automatically, we enforce)
+        return centroids.set_crs(gdf.crs, allow_override=True)
+
+    @staticmethod
+    def harmonize_crs(
+        source: gpd.GeoDataFrame | gpd.GeoSeries,
+        target_crs: Any,  # noqa: ANN401
+        *,
+        warn: bool = True,
+        stacklevel: int = 2,
+    ) -> gpd.GeoDataFrame | gpd.GeoSeries:
+        """
+        Reproject a GeoDataFrame or GeoSeries to a target CRS when needed.
+
+        This function compares the Coordinate Reference System (CRS) of the
+        source against the target CRS and reprojects the source when they
+        differ. It centralizes the CRS-harmonization behaviour that spatial
+        operations rely on before combining datasets, optionally warning the
+        caller that a reprojection took place.
+
+        Parameters
+        ----------
+        source : geopandas.GeoDataFrame or geopandas.GeoSeries
+            The geospatial data to check and potentially reproject.
+        target_crs : Any
+            The target coordinate reference system to align with.
+        warn : bool, default True
+            Whether to emit a ``RuntimeWarning`` when a reprojection occurs.
+        stacklevel : int, default 2
+            Stack level passed to :func:`warnings.warn` so the warning points
+            at the caller's code.
+
+        Returns
+        -------
+        geopandas.GeoDataFrame or geopandas.GeoSeries
+            The source data, reprojected to the target CRS if necessary.
+
+        Warns
+        -----
+        RuntimeWarning
+            If a CRS mismatch is detected, reprojection is performed, and
+            ``warn`` is True.
+
+        See Also
+        --------
+        ensure_crs_consistency : Validate that GeoDataFrames share one CRS.
+        warn_crs_issues : Warn about missing or geographic CRS values.
+
+        Examples
+        --------
+        >>> import geopandas as gpd
+        >>> from shapely.geometry import Point
+        >>> gdf = gpd.GeoDataFrame(geometry=[Point(0, 0)], crs="EPSG:4326")
+        >>> aligned = GeoDataProcessor.harmonize_crs(gdf, "EPSG:4326")
+        >>> aligned.crs.to_epsg()
+        4326
+        """
+        if source.crs != target_crs:
+            if warn:
+                warnings.warn(
+                    "CRS mismatch detected, reprojecting",
+                    RuntimeWarning,
+                    stacklevel=stacklevel,
+                )
+            source = source.to_crs(target_crs)
+        return source
+
+    @staticmethod
+    def warn_crs_issues(
+        gdf: gpd.GeoDataFrame,
+        *,
+        missing_message: str | None = None,
+        geographic_message: str | None = None,
+        stacklevel: int = 2,
+    ) -> None:
+        """
+        Warn about missing or geographic CRS values on a GeoDataFrame.
+
+        This function inspects the Coordinate Reference System (CRS) of a
+        GeoDataFrame and emits a ``UserWarning`` when the CRS is missing or
+        geographic. Distance- and length-based computations are unreliable in
+        both situations, so callers pass context-specific messages describing
+        the consequences for their own outputs.
+
+        Parameters
+        ----------
+        gdf : geopandas.GeoDataFrame
+            GeoDataFrame whose CRS will be inspected.
+        missing_message : str or None, optional
+            Warning message emitted when the CRS is missing. When None, a
+            missing CRS is silently accepted.
+        geographic_message : str or None, optional
+            Warning message emitted when the CRS is geographic. When None, a
+            geographic CRS is silently accepted.
+        stacklevel : int, default 2
+            Stack level passed to :func:`warnings.warn` so the warning points
+            at the caller's code.
+
+        Returns
+        -------
+        None
+            This function only emits warnings.
+
+        Warns
+        -----
+        UserWarning
+            If the CRS is missing and ``missing_message`` is provided, or if
+            the CRS is geographic and ``geographic_message`` is provided.
+
+        See Also
+        --------
+        harmonize_crs : Reproject data to a target CRS when needed.
+        ensure_crs_consistency : Validate that GeoDataFrames share one CRS.
+
+        Examples
+        --------
+        >>> import geopandas as gpd
+        >>> from shapely.geometry import Point
+        >>> gdf = gpd.GeoDataFrame(geometry=[Point(0, 0)], crs="EPSG:27700")
+        >>> GeoDataProcessor.warn_crs_issues(gdf, geographic_message="Geographic CRS")
+        """
+        crs = gdf.crs
+        if crs is None:
+            if missing_message:
+                warnings.warn(missing_message, UserWarning, stacklevel=stacklevel)
+            return
+
+        # pyproj.CRS exposes is_geographic when available
+        if geographic_message and getattr(crs, "is_geographic", False):
+            warnings.warn(geographic_message, UserWarning, stacklevel=stacklevel)
+
+    @staticmethod
+    def create_empty_edges_gdf(
+        crs: Any,  # noqa: ANN401
+        from_col: str,
+        to_col: str,
+        extra_cols: list[str] | None = None,
+    ) -> gpd.GeoDataFrame:
+        """
+        Create an empty edges GeoDataFrame with specified column structure.
+
+        This helper function generates an empty GeoDataFrame suitable for representing
+        graph edges, ensuring it has the correct column names for 'from' and 'to'
+        node IDs, and optionally additional columns, along with a geometry column
+        and a specified Coordinate Reference System (CRS). This is useful for
+        initializing empty edge GeoDataFrames when no connections are found or
+        when setting up a new graph structure.
+
+        Parameters
+        ----------
+        crs : Any
+            Coordinate reference system.
+        from_col : str
+            Name for the 'from' node ID column.
+        to_col : str
+            Name for the 'to' node ID column.
+        extra_cols : list[str], optional
+            Optional list of additional column names.
+
+        Returns
+        -------
+        geopandas.GeoDataFrame
+            Empty GeoDataFrame with specified columns.
+
+        See Also
+        --------
+        validate_gdf : Validate a GeoDataFrame.
+
+        Examples
+        --------
+        >>> empty = GeoDataProcessor.create_empty_edges_gdf(
+        ...     "EPSG:4326", "from_id", "to_id"
+        ... )
+        >>> list(empty.columns)
+        ['from_id', 'to_id', 'geometry']
+        """
+        # Initialize list of column names with 'from' and 'to' ID columns
+        columns = [from_col, to_col]
+        # Add any extra columns if provided
+        if extra_cols:
+            columns.extend(extra_cols)
+        # Add the 'geometry' column name (standard for GeoDataFrames)
+        columns.append("geometry")
+
+        # Create an empty GeoDataFrame with the defined columns, geometry column, and CRS
+        return gpd.GeoDataFrame(columns=columns, geometry="geometry", crs=crs)
+
+    @staticmethod
+    def wrap_layer_ids(ids: list[Any], layer: str) -> list[tuple[str, Any]]:
+        """
+        Wrap node identifiers as ``(layer, id)`` tuples.
+
+        This function namespaces node identifiers with a layer label so that
+        nodes originating from different input layers remain distinguishable
+        after they are combined into a single graph. The tuples produced here
+        are the values later unwrapped by :meth:`unwrap_layer_edge_index`.
+
+        Parameters
+        ----------
+        ids : list[Any]
+            Node identifiers to wrap.
+        layer : str
+            Layer label used as the first tuple element (e.g., ``"src"``).
+
+        Returns
+        -------
+        list[tuple[str, Any]]
+            List of ``(layer, id)`` tuples in input order.
+
+        See Also
+        --------
+        wrap_layer_index : Wrap a pandas Index into a layered MultiIndex.
+        unwrap_layer_edge_index : Recover original identifiers from wrapped edges.
+
+        Examples
+        --------
+        >>> GeoDataProcessor.wrap_layer_ids([1, 2], "src")
+        [('src', 1), ('src', 2)]
+        """
+        return [(layer, i) for i in ids]
+
+    @staticmethod
+    def wrap_layer_index(index: pd.Index, layer: str) -> pd.MultiIndex:
+        """
+        Wrap a pandas Index into a layered MultiIndex.
+
+        This function converts a flat node index into a two-level MultiIndex
+        whose first level is a constant layer label. It mirrors
+        :meth:`wrap_layer_ids` for node GeoDataFrames so that node and edge
+        identifiers stay aligned when layers are concatenated.
+
+        Parameters
+        ----------
+        index : pandas.Index
+            Node index to wrap.
+        layer : str
+            Layer label used as the first index level (e.g., ``"src"``).
+
+        Returns
+        -------
+        pandas.MultiIndex
+            MultiIndex with levels ``["layer", index.name or "node_id"]``.
+
+        See Also
+        --------
+        wrap_layer_ids : Wrap identifiers as ``(layer, id)`` tuples.
+        unwrap_layer_edge_index : Recover original identifiers from wrapped edges.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> GeoDataProcessor.wrap_layer_index(pd.Index([1, 2]), "src").tolist()
+        [('src', 1), ('src', 2)]
+        """
+        return pd.MultiIndex.from_tuples(
+            [(layer, i) for i in index],
+            names=["layer", index.name or "node_id"],
+        )
+
+    @staticmethod
+    def unwrap_layer_edge_index(
+        index: pd.MultiIndex,
+        names: tuple[str, str] = ("source", "target"),
+    ) -> pd.MultiIndex:
+        """
+        Recover original node identifiers from a layered edge MultiIndex.
+
+        This function strips the ``(layer, id)`` wrappers produced by
+        :meth:`wrap_layer_ids` from both levels of an edge MultiIndex,
+        returning a MultiIndex of the original node identifiers. It is the
+        inverse operation applied when layered edges are handed back to
+        callers that expect the original identifier space.
+
+        Parameters
+        ----------
+        index : pandas.MultiIndex
+            Edge MultiIndex whose level values are ``(layer, id)`` tuples.
+        names : tuple[str, str], default ("source", "target")
+            Names assigned to the resulting MultiIndex levels.
+
+        Returns
+        -------
+        pandas.MultiIndex
+            MultiIndex of original source and target identifiers.
+
+        See Also
+        --------
+        wrap_layer_ids : Wrap identifiers as ``(layer, id)`` tuples.
+        wrap_layer_index : Wrap a pandas Index into a layered MultiIndex.
+
+        Examples
+        --------
+        >>> import pandas as pd
+        >>> idx = pd.MultiIndex.from_tuples([(("src", 1), ("dst", 2))])
+        >>> GeoDataProcessor.unwrap_layer_edge_index(idx).tolist()
+        [(1, 2)]
+        """
+        src_ids = [t[1] for t in index.get_level_values(0)]
+        dst_ids = [t[1] for t in index.get_level_values(1)]
+        return pd.MultiIndex.from_arrays([src_ids, dst_ids], names=list(names))

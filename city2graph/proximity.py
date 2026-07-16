@@ -39,6 +39,7 @@ from scipy.spatial import distance as sdist
 from shapely.geometry import LineString
 
 # Local imports
+from .base import GeoDataProcessor
 from .utils import gdf_to_nx
 from .utils import nx_to_gdf
 from .utils import symmetrize_edges
@@ -1762,11 +1763,7 @@ def bridge_nodes(
 
             # Strip the ("src", id) and ("dst", id) wrappers to return original IDs
             if not edges_gdf.empty:
-                src_ids = [s[1] for s in edges_gdf.index.get_level_values(0)]
-                dst_ids = [d[1] for d in edges_gdf.index.get_level_values(1)]
-                edges_gdf.index = pd.MultiIndex.from_arrays(
-                    [src_ids, dst_ids], names=["source", "target"]
-                )
+                edges_gdf.index = GeoDataProcessor.unwrap_layer_edge_index(edges_gdf.index)
             edge_dict[(src_type, "is_nearby", dst_type)] = edges_gdf
 
     if as_nx:
@@ -2142,8 +2139,8 @@ def _directed_graph(
     )
 
     # Prepare namespaced IDs
-    unique_src_ids = [("src", sid) for sid in src_ids]
-    unique_dst_ids = [("dst", did) for did in dst_ids]
+    unique_src_ids = GeoDataProcessor.wrap_layer_ids(src_ids, "src")
+    unique_dst_ids = GeoDataProcessor.wrap_layer_ids(dst_ids, "dst")
 
     context = DirectedGraphContext(
         src_gdf=src_gdf,
@@ -2214,18 +2211,12 @@ def _directed_graph_gdf(
 
     # Construct nodes GDF
     src_nodes = context.src_gdf.copy()
-    src_nodes.index = pd.MultiIndex.from_tuples(
-        [("src", i) for i in src_nodes.index],
-        names=["layer", context.src_gdf.index.name or "node_id"],
-    )
+    src_nodes.index = GeoDataProcessor.wrap_layer_index(src_nodes.index, "src")
     src_nodes["node_type"] = "src"
     src_nodes["_original_index"] = context.src_gdf.index
 
     dst_nodes = context.dst_gdf.copy()
-    dst_nodes.index = pd.MultiIndex.from_tuples(
-        [("dst", i) for i in dst_nodes.index],
-        names=["layer", context.dst_gdf.index.name or "node_id"],
-    )
+    dst_nodes.index = GeoDataProcessor.wrap_layer_index(dst_nodes.index, "dst")
     dst_nodes["node_type"] = "dst"
     dst_nodes["_original_index"] = context.dst_gdf.index
 
