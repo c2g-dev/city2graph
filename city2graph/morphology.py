@@ -496,6 +496,8 @@ class _MorphologyContext(typing.NamedTuple):
     All frames held by the context are shared across per-distance runs and are
     read-only: helpers must copy before writing to them. ``buildings`` may
     alias the caller's GeoDataFrame and must never be mutated.
+    ``segment_graph`` holds the ``(nodes, edges)`` graph derived from
+    ``segments`` once, so per-distance helpers do not rebuild it.
     """
 
     buildings: gpd.GeoDataFrame
@@ -516,6 +518,7 @@ class _MorphologyContext(typing.NamedTuple):
     tessellation_fallback: bool
     tessellation_n_jobs: int
     field: _ReachabilityField | None
+    segment_graph: tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | None = None
 
 
 def _prepare_morphology(  # noqa: PLR0913
@@ -637,13 +640,19 @@ def _prepare_morphology(  # noqa: PLR0913
         barrier_segments = segments_gdf.loc[barrier_mask]
         segments_gdf = segments_gdf.loc[~barrier_mask]
 
+    # Derive the segment graph once; it is shared read-only across distances
+    # instead of being rebuilt (and re-copied) for every distance value.
+    segment_graph = typing.cast(
+        "tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]",
+        segments_to_graph(segments_gdf),
+    )
+
     # Compute the single-source reachability cost field once on the movement network so
     # that streets, buildings and cells are all judged against the same metric on the
     # same network.
     field: _ReachabilityField | None = None
     if center_point is not None and has_distance and not segments_gdf.empty:
-        _, full_segment_edges = segments_to_graph(segments_gdf)
-        field = _network_reachability_field(full_segment_edges, center_point)
+        field = _network_reachability_field(segment_graph[1], center_point)
 
     return _MorphologyContext(
         buildings=buildings_gdf,
@@ -664,6 +673,7 @@ def _prepare_morphology(  # noqa: PLR0913
         tessellation_fallback=tessellation_fallback,
         tessellation_n_jobs=tessellation_n_jobs,
         field=field,
+        segment_graph=segment_graph,
     )
 
 
@@ -755,7 +765,15 @@ def _segments_for_distance(
         ``(segments_filtered, segments_buffer)`` where the buffer already
         includes the barrier-only context segments.
     """
-    segment_nodes, segment_edges = segments_to_graph(context.segments)
+    # Reuse the segment graph derived once in _prepare_morphology; fall back
+    # for contexts constructed without one.
+    segment_graph = context.segment_graph
+    if segment_graph is None:
+        segment_graph = typing.cast(
+            "tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]",
+            segments_to_graph(context.segments),
+        )
+    segment_nodes, segment_edges = segment_graph
 
     if context.center_point is None or distance is None or context.segments.empty:
         segments_filtered = segment_edges
@@ -1095,17 +1113,74 @@ def place_to_movement_graph(
     _validate_single_gdf_input(place_gdf, "place_gdf")
     _validate_single_gdf_input(movement_gdf, "movement_gdf")
 
+    edges_gdf, movement_gdf = _place_to_movement_edges(
+        place_gdf,
+        movement_gdf,
+        primary_barrier_col,
+        tolerance,
+        max_connection_distance,
+    )
+
+    nodes_gdf = pd.concat([place_gdf, movement_gdf], ignore_index=True)
+
+    if as_nx:
+        return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf)
+
+    if duplicate_edges:
+        edges_gdf = _symmetrize_edge_columns(edges_gdf, "place_id", "movement_id")
+
+    return nodes_gdf, edges_gdf
+
+
+def _place_to_movement_edges(
+    place_gdf: gpd.GeoDataFrame,
+    movement_gdf: gpd.GeoDataFrame,
+    primary_barrier_col: str | None,
+    tolerance: float,
+    max_connection_distance: float,
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """
+    Build the place-to-movement edge table without assembling node frames.
+
+    This carries the edge-construction phase of :func:`place_to_movement_graph`
+    so that :func:`_build_morphological_layers` can obtain the edges directly,
+    skipping the full node concatenation whose result it discards.
+
+    Parameters
+    ----------
+    place_gdf : geopandas.GeoDataFrame
+        GeoDataFrame containing place space polygons with a 'place_id' column.
+    movement_gdf : geopandas.GeoDataFrame
+        GeoDataFrame containing movement space geometries with a 'movement_id'
+        column.
+    primary_barrier_col : str or None
+        Column name for alternative movement geometry. If specified and
+        present, this geometry is used instead of the main geometry column.
+    tolerance : float
+        Buffer distance for movement geometries to detect proximity to place
+        spaces.
+    max_connection_distance : float
+        Maximum distance for the nearest-movement fallback connection.
+
+    Returns
+    -------
+    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame]
+        ``(edges_gdf, movement_gdf)`` where ``movement_gdf`` is the input
+        movement frame after CRS harmonisation with ``place_gdf``.
+
+    Raises
+    ------
+    ValueError
+        If 'place_id' or 'movement_id' columns are missing from non-empty
+        input GDFs.
+    """
     place_id_col = _PLACE_ID_COL
     movement_id_col = _MOVEMENT_ID_COL
 
     # Handle empty data: return empty edges GeoDataFrame
     if place_gdf.empty or movement_gdf.empty:
         empty_edges = _create_empty_edges_gdf(place_gdf.crs, place_id_col, movement_id_col)
-        all_nodes = pd.concat([place_gdf, movement_gdf], ignore_index=True)
-
-        return (
-            (all_nodes, empty_edges) if not as_nx else gdf_to_nx(nodes=all_nodes, edges=empty_edges)
-        )
+        return empty_edges, movement_gdf
 
     # Ensure required ID columns exist in the input GeoDataFrames
     if place_id_col not in place_gdf.columns:
@@ -1163,15 +1238,7 @@ def place_to_movement_graph(
         movement_id_col,
     )
 
-    nodes_gdf = pd.concat([place_gdf, movement_gdf], ignore_index=True)
-
-    if as_nx:
-        return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf)
-
-    if duplicate_edges:
-        edges_gdf = _symmetrize_edge_columns(edges_gdf, "place_id", "movement_id")
-
-    return nodes_gdf, edges_gdf
+    return edges_gdf, movement_gdf
 
 
 def _connect_unmatched_place_to_nearest_movement(
@@ -1760,7 +1827,9 @@ def _create_and_filter_tessellation(
     """
     barriers = _prepare_barriers(segments_buffer, context.primary_barrier_col)
     if base_tessellation is not None:
-        tessellation = base_tessellation.copy()
+        # No copy: the rename below materialises the owned per-distance frame,
+        # so the shared base tessellation is never written to.
+        tessellation = base_tessellation
     else:
         tessellation = _create_enclosed_tessellation(
             context.buildings,
@@ -2181,12 +2250,14 @@ def _build_morphological_layers(
     # extent_buffer caps the nearest-movement fallback faced_to connection: a
     # place cell whose nearest street lies farther receives no fallback edge, so
     # drop_isolated_place can remove it instead of forcing a long star edge.
-    _, place_to_movement_edges = place_to_movement_graph(
+    # The edge helper is called directly to skip assembling a combined node
+    # frame that this function would discard.
+    place_to_movement_edges, _ = _place_to_movement_edges(
         tessellation,
         segments_filtered,
-        primary_barrier_col=context.primary_barrier_col,
-        tolerance=context.tolerance,
-        max_connection_distance=context.extent_buffer,
+        context.primary_barrier_col,
+        context.tolerance,
+        context.extent_buffer,
     )
 
     # Log warning if no place-movement connections found
@@ -2366,7 +2437,6 @@ def _append_barrier_context_segments(
     if barriers.empty:
         return segments_buffer
 
-    barriers = barriers.copy()
     geometry_name = segments_buffer.geometry.name
     if barriers.geometry.name != geometry_name:
         barriers = barriers.rename_geometry(geometry_name)
@@ -2376,6 +2446,11 @@ def _append_barrier_context_segments(
         and primary_barrier_col in segments_buffer.columns
         and primary_barrier_col not in barriers.columns
     ):
+        # Copy guards the column write below; ``barriers`` may still alias the
+        # shared ``context.barrier_segments`` frame. On the internal pipeline
+        # path the barrier frame shares the buffer's columns, so this branch
+        # (and its copy) is not reached.
+        barriers = barriers.copy()
         barriers[primary_barrier_col] = barriers.geometry
 
     merged = (
