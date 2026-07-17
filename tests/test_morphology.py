@@ -1787,6 +1787,54 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
 class TestInputValidationAndErrors(TestMorphologyBase):
     """Comprehensive input validation and error handling tests."""
 
+    def test_invalid_building_is_repaired_before_enclosed_tessellation(
+        self,
+        sample_crs: str,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A malformed footprint must not degrade the whole unit to fallbacks."""
+        invalid = Polygon(
+            [(0, 0), (20, 0), (20, 20), (0, 20), (0, 0)],
+            holes=[[(8, -1), (12, -1), (12, 5), (8, 5), (8, -1)]],
+        )
+        buildings = gpd.GeoDataFrame(
+            {"building_name": ["invalid", "valid"]},
+            geometry=[
+                invalid,
+                Polygon([(30, 5), (40, 5), (40, 15), (30, 15), (30, 5)]),
+            ],
+            crs=sample_crs,
+        )
+        segments = gpd.GeoDataFrame(
+            geometry=[
+                LineString([(-10, -10), (60, -10)]),
+                LineString([(60, -10), (60, 40)]),
+                LineString([(60, 40), (-10, 40)]),
+                LineString([(-10, 40), (-10, -10)]),
+            ],
+            crs=sample_crs,
+        )
+
+        with caplog.at_level(logging.WARNING, logger="city2graph.morphology"):
+            nodes, _ = morphological_graph(
+                buildings,
+                segments,
+                keep_buildings=True,
+                include_unenclosed_buildings=True,
+                tessellation_fallback=True,
+                tessellation_n_jobs=1,
+            )
+
+        places = nodes["place"]
+        place_ids = places["place_id"] if "place_id" in places else places.index.to_series()
+        assert not place_ids.astype(str).str.startswith("fallback_").any()
+        assert places.geometry.is_valid.all()
+        assert set(places["building_name"].dropna()) == {"invalid", "valid"}
+        assert not buildings.geometry.is_valid.iloc[0]
+        assert buildings.geometry.iloc[0].equals_exact(invalid, tolerance=0)
+        assert "Repaired 1 invalid building geometries" in caplog.text
+        assert "dropped 0 geometries" in caplog.text
+
     def test_geometry_type_validation(self, sample_crs: str) -> None:
         """Test geometry type validation for buildings and segments."""
         # Test invalid building geometry types

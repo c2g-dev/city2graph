@@ -19,7 +19,7 @@ Frame ownership and copying:
 Public input GeoDataFrames are never mutated. Caller-owned frames are copied at
 most once, at the public boundary: ``_prepare_morphology`` copies
 ``segments_gdf`` before assigning movement ids (and ``buildings_gdf`` only to
-flatten a MultiIndex), while ``segments_to_graph`` and
+repair invalid polygons or flatten a MultiIndex), while ``segments_to_graph`` and
 ``movement_to_movement_graph`` copy their input before writing to it. Frames
 created inside the pipeline (rename, filter, join, or concat products) are
 owned by the pipeline and may be mutated without further defensive copies.
@@ -627,9 +627,14 @@ def _prepare_morphology(  # noqa: PLR0913
         msg = "clipping_buffer must be greater than or equal to extent_buffer."
         raise ValueError(msg)
 
+    original_buildings = buildings_gdf
+    buildings_gdf = _repair_invalid_buildings(buildings_gdf)
+
     if isinstance(buildings_gdf.index, pd.MultiIndex):
-        # Copy guards the index write below on the caller's frame.
-        buildings_gdf = buildings_gdf.copy()
+        # Reuse the owned repair result when possible; otherwise copy before
+        # flattening so the caller's index remains unchanged.
+        if buildings_gdf is original_buildings:
+            buildings_gdf = buildings_gdf.copy()
         buildings_gdf.index = buildings_gdf.index.to_flat_index()
 
     # Ensure CRS consistency between buildings and segments
@@ -2218,6 +2223,45 @@ def _valid_polygon_gdf(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         valid_geom = valid_geom & out.geometry.geom_type.isin(["Polygon", "MultiPolygon"])
         out = out.loc[valid_geom]
     return out
+
+
+def _repair_invalid_buildings(buildings: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Repair invalid building polygons before any morphology computation.
+
+    A single self-intersecting footprint can make GEOS reject the complete
+    enclosed tessellation, causing every otherwise valid building in the unit
+    to degrade to a footprint fallback. Reuse the fallback path's polygon
+    validation here so the primary tessellation, reachability filters and
+    building joins all operate on the same repaired geometries.
+
+    Parameters
+    ----------
+    buildings : geopandas.GeoDataFrame
+        Caller-owned building footprints.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        The original frame when every footprint is usable, otherwise an owned
+        frame with invalid polygons repaired and irreparable rows removed.
+    """
+    unusable = buildings.geometry.isna() | buildings.geometry.is_empty
+    unusable |= ~buildings.geometry.is_valid
+    if not unusable.any():
+        return buildings
+
+    invalid_count = int(unusable.sum())
+    repaired = _valid_polygon_gdf(buildings)
+    dropped_count = len(buildings) - len(repaired)
+    repaired_count = invalid_count - dropped_count
+    logger.warning(
+        "Repaired %d invalid building geometries with a zero-width buffer; "
+        "dropped %d geometries that remained unusable.",
+        repaired_count,
+        dropped_count,
+    )
+    return repaired
 
 
 def _fallback_tessellation_without_enclosures(
