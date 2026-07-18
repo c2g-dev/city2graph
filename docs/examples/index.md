@@ -51,6 +51,14 @@ Each tutorial below is a self-contained Jupyter notebook that starts from open d
 
     Generate k-nearest-neighbour, Delaunay, Gilbert, and Waxman graphs over Tokyo points of interest, compare Euclidean, Manhattan, and network distances, and apply contiguity graphs to London wards.
 
+- ![Walkable street networks of eight city centres extracted from Overture Maps](../assets/examples/overture_osmnx.jpg){ .card-img }
+
+    **[How to Use Overture Maps Like OSMnx](https://medium.com/@yuta.sato.now/how-to-use-overture-maps-like-osmnx-by-city2graph-7e01d38f9f61)**
+
+    ---
+
+    Bring the OSMnx-like experience to Overture Maps: fetch buildings, streets, and POIs for any place and turn them into analysis-ready graphs — a walkthrough on Medium.
+
 </div>
 
 ## Applied projects

@@ -2,11 +2,15 @@
 description: City2Graph is a Python library for converting geospatial datasets into graphs for Graph Neural Networks (GNN) and spatial analysis.
 keywords: GeoAI, Graph Neural Networks, GNN, PyTorch Geometric, Geospatial Analysis, Urban Analytics, Spatial Data Science, Urban Mobility, Transportation Networks, Geospatial Foundation Models, Digital Twin, Urban Informatics, Geographic Data Science, Graph Representation Learning, Urban Planning, Urban Morphology, Accessibility Analysis
 hide:
-  navigation
+  - navigation
+  - toc
 ---
 
 # City2Graph
 
+<p align="center">
+  <img src="assets/logos/social_preview_city2graph.png" alt="City2Graph logo" class="desktop-limit-width">
+</p>
 [![GitHub Stars](https://img.shields.io/github/stars/c2g-dev/city2graph)](https://github.com/c2g-dev/city2graph)
 [![PyPI version](https://badge.fury.io/py/city2graph.svg)](https://badge.fury.io/py/city2graph)
 [![conda-forge Version](https://anaconda.org/conda-forge/city2graph/badges/version.svg)](https://anaconda.org/conda-forge/city2graph)
@@ -16,10 +20,6 @@ hide:
 [![Platform](https://anaconda.org/conda-forge/city2graph/badges/platforms.svg)](https://anaconda.org/conda-forge/city2graph)
 [![codecov](https://codecov.io/gh/c2g-dev/city2graph/graph/badge.svg?token=2R449G75Z0)](https://codecov.io/gh/c2g-dev/city2graph)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-
-<p align="center">
-  <img src="assets/logos/social_preview_city2graph.png" alt="City2Graph logo">
-</p>
 
 **City2Graph** turns geospatial datasets — streets, buildings, transit feeds, OD matrices, and points of interest — into graphs, with one interface that bridges [GeoPandas](https://geopandas.org/), [NetworkX](https://networkx.org/), and [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/). Load open urban data, build a graph in a few lines of code, then analyse it as a spatial network or feed it to Graph Neural Networks (GNNs).
 
@@ -135,6 +135,8 @@ Every domain follows the same pattern: GeoDataFrames in, node and edge GeoDataFr
 
 ## Examples
 
+### Tutorials
+
 <div class="grid cards examples-gallery" markdown>
 
 - ![Metapath edges (cyan) linking amenities across the dual street graph of Soho, London](assets/examples/metapaths.jpg){ .card-img }
@@ -176,6 +178,20 @@ Every domain follows the same pattern: GeoDataFrames in, node and edge GeoDataFr
     ---
 
     Generate KNN, Delaunay, Gilbert, and Waxman graphs over Tokyo POIs under Euclidean, Manhattan, and network distances.
+
+- ![Walkable street networks of eight city centres extracted from Overture Maps](assets/examples/overture_osmnx.jpg){ .card-img }
+
+    **[How to Use Overture Maps Like OSMnx](https://medium.com/@yuta.sato.now/how-to-use-overture-maps-like-osmnx-by-city2graph-7e01d38f9f61)**
+
+    ---
+
+    Bring the OSMnx-like experience to Overture Maps: fetch buildings, streets, and POIs for any place and turn them into analysis-ready graphs.
+
+</div>
+
+### Applied projects
+
+<div class="grid cards examples-gallery" markdown>
 
 - ![Travel-time network over Liverpool output areas from the case study](assets/examples/case_study.jpg){ .card-img }
 

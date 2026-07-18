@@ -498,6 +498,17 @@ body {
   display: block;
 }
 
+/* Landing page (navigation and toc both hidden): with no sidebars the text
+   would span the full grid, so centre the content at a measure that matches
+   the 800px figure cap below */
+@media screen and (min-width: 60em) {
+  .md-main:has(.md-sidebar--primary[hidden]):has(.md-sidebar--secondary[hidden]) .md-content__inner {
+    max-width: 50rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
 /* Limit width on desktop for specific images */
 @media screen and (min-width: 60em) {
   .md-typeset p > img.desktop-limit-width:only-of-type,
@@ -956,17 +967,33 @@ body {
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
-  border-radius: var(--card-radius, 0.4rem);
+  border-radius: calc(var(--card-radius, 18px) - 8px);
+  box-shadow: none;
   margin: 0 0 0.6rem;
 }
 
+/* Two columns on desktop so the thumbnails read large (Material's default
+   auto-fit minmax would pack three columns at this width) */
+@media screen and (min-width: 45em) {
+  .md-typeset .grid.cards.examples-gallery {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Glass card treatment matching the landing-page feature cards */
 .md-typeset .grid.cards.examples-gallery > ul > li {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .md-typeset .grid.cards.examples-gallery > ul > li:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--card-shadow-hover);
 }
 
 /* ==========================================================================
@@ -1024,11 +1051,23 @@ body {
   padding: 0.55em 2.8em 0.55em 1.4em !important;
 }
 
-/* --- Footer logo (keep the lab logo modest) --- */
+/* --- Footer logo --- */
 .md-typeset p > a > img.footer-logo:only-of-type {
-  max-width: min(420px, 90%) !important;
+  max-width: min(500px, 100%) !important;
   width: auto !important;
   margin: 0 auto;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  filter:
+    drop-shadow(1px 0 0 #ffffff)
+    drop-shadow(-1px 0 0 #ffffff)
+    drop-shadow(0 1px 0 #ffffff)
+    drop-shadow(0 -1px 0 #ffffff)
+    drop-shadow(1px 1px 0 #ffffff)
+    drop-shadow(-1px 1px 0 #ffffff)
+    drop-shadow(1px -1px 0 #ffffff)
+    drop-shadow(-1px -1px 0 #ffffff);
 }
 
 /* --- Badge row (undo the global image card treatment for shields) --- */
