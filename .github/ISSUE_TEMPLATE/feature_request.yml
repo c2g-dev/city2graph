@@ -1,76 +1,54 @@
-name: Feature Request
-description: Suggest an idea for city2graph
-title: '[FEATURE] '
+name: Feature request
+description: Share an idea for city2graph, even if it is still taking shape
+title: '[Feature]: '
 labels: [enhancement]
 assignees: ['']
 body:
-  - type: checkboxes
-    id: contributing
+  - type: markdown
     attributes:
-      label: Contributing guidelines
-      description: |
-        Before you proceed, read the
-        [contributing guidelines](https://city2graph.net/contributing.html)
-        regarding where to ask usage questions and how to propose a feature.
-      options:
-        - label: I understand the contributing guidelines
-          required: true
-  - type: checkboxes
-    id: documentation_examples
-    attributes:
-      label: Documentation
-      description: |
-        Before you proceed, review the [documentation](https://city2graph.net), which covers
-        key concepts, installation, and package usage.
-      options:
-        - label: My proposal is not addressed by the documentation or examples
-          required: true
-  - type: checkboxes
-    id: existing_issue
-    attributes:
-      label: Existing issues
-      description: |
-        Before you proceed, search the open/closed issues and pull requests to see if
-        anything similar has been proposed.
-      options:
-        - label: Nothing similar appears in an existing issue
-          required: true
+      value: |
+        Thanks for sharing your idea! Early-stage suggestions are welcome, and you
+        do not need to design the API or implementation before opening an issue.
   - type: textarea
-    id: related-problem
+    id: idea
     attributes:
-      label: Is your feature request related to a problem? Please describe.
-      description: A clear and concise description of what the problem is.
+      label: What would you like city2graph to do?
+      description: Describe the feature or improvement in your own words.
+      placeholder: It would be helpful if city2graph could ...
     validations:
       required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: What would this help you accomplish?
+      description: Share the use case or problem behind the request, if applicable.
   - type: textarea
     id: solution
     attributes:
-      label: Describe the solution you'd like
-      description: A clear and concise description of what you want to happen.
-    validations:
-      required: true
+      label: Do you have a preferred solution?
+      description: A rough workflow, example, or desired behaviour is enough.
   - type: textarea
     id: alternatives
     attributes:
-      label: Describe alternatives you've considered
-      description: >-
-        A clear and concise description of any alternative solutions or
-        features you've considered.
+      label: Are there alternatives or workarounds?
+      description: Tell us what you use today, if anything.
   - type: textarea
-    id: api-changes
+    id: api
     attributes:
-      label: API changes
-      description: >-
-        If the feature would involve changes to the public API, please provide
-        a sketch of the new or modified functions/classes.
-      placeholder: |
-        # Example of proposed API change
-        def new_function(param1: str, param2: int) -> bool:
-            '''Description of the new function.'''
-            pass
+      label: API ideas
+      description: Include an API sketch if you have one. This is completely optional.
       render: python
-  - type: textarea
-    id: additional-context
+  - type: dropdown
+    id: contribution
     attributes:
-      label: Additional context
-      description: Add any other context or screenshots about the feature request here.
+      label: Would you be interested in helping with this?
+      options:
+        - 'Yes'
+        - Maybe, with guidance
+        - Not at the moment
+        - Not sure
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Add links, examples, screenshots, or other context.

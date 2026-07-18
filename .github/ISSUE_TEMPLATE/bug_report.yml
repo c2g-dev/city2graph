@@ -1,117 +1,68 @@
-name: Bug Report
-description: Create a report to help us improve city2graph
-title: '[BUG] '
+name: Bug report
+description: Tell us about unexpected behaviour, even if you do not have every detail
+title: '[Bug]: '
 labels: [bug]
 assignees: ['']
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to fill out this bug report!
-  - type: checkboxes
-    id: contributing
-    attributes:
-      label: Contributing guidelines
-      description: |
-        Before you proceed, read the
-        [contributing guidelines](https://city2graph.net/contributing.html)
-        regarding where to ask usage questions and how to propose a feature.
-      options:
-        - label: I understand the contributing guidelines
-          required: true
-  - type: checkboxes
-    id: documentation_examples
-    attributes:
-      label: Documentation
-      description: |
-        Before you proceed, review the [documentation](https://city2graph.net), which covers
-        key concepts, installation, and package usage.
-      options:
-        - label: My proposal is not addressed by the documentation or examples
-          required: true
-  - type: checkboxes
-    id: existing_issue
-    attributes:
-      label: Existing issues
-      description: |
-        Before you proceed, search the open/closed issues and pull requests to see if
-        anything similar has been proposed.
-      options:
-        - label: Nothing similar appears in an existing issue
-          required: true
+        Thanks for helping us improve city2graph!
+
+        Please share what you know, even if the report is incomplete. We can ask
+        follow-up questions if more information is needed. Checking the
+        [documentation](https://city2graph.net) and existing issues can be helpful,
+        but it is not required.
   - type: textarea
-    id: bug-description
+    id: problem
     attributes:
-      label: Describe the bug
-      description: A clear and concise description of what the bug is.
+      label: What happened?
+      description: Tell us about the problem in as much or as little detail as you have.
+      placeholder: I expected ... but instead ...
     validations:
       required: true
   - type: textarea
-    id: to-reproduce
+    id: reproduce
     attributes:
-      label: To Reproduce
-      description: >-
-        Please provide a minimal, self-contained, and reproducible example.
-        This is the most important part of a bug report.
+      label: How can we reproduce it?
+      description: Steps, sample data, or a small code example are all useful if available.
       placeholder: |
-        # Your code here
-        import city2graph as c2g
-        import osmnx as ox
-
-        # Example
-        : Fetching POIs and creating a KNN graph
-        poi_tags = {"amenity": ["restaurant"]}
-        poi_gdf = ox.features_from_point(
-            (35.658514, 139.70133),  # Tokyo Tower coordinates
-            tags=poi_tags,
-            dist=1000,  # Search radius in meters
-        )
-        poi_gdf = poi_gdf[poi_gdf.index.get_level_values("element") == "node"]
-        poi_gdf = poi_gdf.to_crs(epsg=6677)
-
-        # Create a KNN graph
-        knn_nodes, knn_edges = c2g.knn_graph(poi_gdf, k=5, distance_metric="euclidean")
-
-        # Describe what you expected to happen and what actually happened
-      render: python
-    validations:
-      required: true
+        1. Run ...
+        2. Call ...
+        3. See ...
   - type: textarea
-    id: expected-behavior
+    id: expected
     attributes:
-      label: Expected behavior
-      description: A clear and concise description of what you expected to happen.
-    validations:
-      required: true
+      label: What did you expect?
+      description: If it is not already clear above, describe the result you expected.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error messages
+      description: Paste any relevant traceback or error output here.
+      render: shell
   - type: textarea
     id: environment
     attributes:
-      label: 'Environment (please complete the following information):'
+      label: Environment
+      description: Share whichever details are relevant and easy to find.
       value: |
-        - OS: [e.g., Ubuntu 22.04, macOS Sonoma, Windows 11]
-        - CPU: [e.g., Intel Core i9, Apple M2]
-        - GPU: [e.g., NVIDIA RTX 4090, AMD Radeon RX 7900 XTX]
-        - Python version: [e.g., 3.10]
-        - `city2graph` version: [e.g., 0.1.0]
-        - `torch` version: [e.g., 2.12.0]
-        - `torch_geometric` version: [e.g., 2.7.0]
-    validations:
-      required: true
+        - OS:
+        - Python version:
+        - city2graph version:
+        - Other relevant package versions:
   - type: dropdown
-    id: installation-method
+    id: installation
     attributes:
       label: How did you install city2graph?
       options:
-        - via PyPI (e.g., pip)
-        - via conda-forge (e.g., conda, mamba)
+        - PyPI (pip)
+        - conda-forge (conda or mamba)
+        - Source or editable checkout
+        - Not sure
         - Other
-      default: 0
-    validations:
-      required: true
   - type: textarea
-    id: additional-context
+    id: context
     attributes:
-      label: Additional context
-      description: >-
-        Add any other context about the problem here, such as screenshots or
-        error messages.
+      label: Anything else?
+      description: Add screenshots, links, sample files, or any other helpful context.

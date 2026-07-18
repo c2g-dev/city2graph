@@ -131,41 +131,6 @@ The development dependencies include:
 
 The Jupyter kernel installation ensures that when you start Jupyter notebooks, you can select the "city2graph" kernel which has access to all your project dependencies in the correct virtual environment.
 
-### Using Docker Compose
-
-Before using Docker Compose, ensure you have Docker and Docker Compose installed on your system:
-
-```bash
-# Check Docker installation
-docker --version
-
-# Check Docker Compose installation
-docker compose version
-```
-
-If these commands don't work, you need to install Docker first:
-- For macOS: Install [Docker Desktop](https://www.docker.com/products/docker-desktop)
-- For Linux: Follow the [installation instructions](https://docs.docker.com/engine/install/) for your specific distribution
-- For Windows: Install [Docker Desktop](https://www.docker.com/products/docker-desktop)
-
-Once Docker is installed, clone the repository and start the containers:
-
-```bash
-# Clone the repository
-git clone https://github.com/yu-ta-sato/city2graph.git
-cd city2graph
-
-# Build and run in detached mode
-docker compose up -d
-
-# Access Jupyter notebook at http://localhost:8888
-
-# Stop containers when done
-docker compose down
-```
-
-You can customize the services in the `docker-compose.yml` file according to your needs.
-
 ## Citation
 
 If you use City2Graph in your research, please cite it as follows:

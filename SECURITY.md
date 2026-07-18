@@ -112,7 +112,6 @@ This security policy applies to:
 
 - The city2graph Python package
 - Official documentation and examples
-- Official Docker images (if applicable)
 
 This policy does not cover:
 
