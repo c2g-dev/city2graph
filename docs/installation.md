@@ -1,102 +1,140 @@
 ---
-description: Step-by-step guide to installing City2Graph via pip or conda, including instructions for PyTorch Geometric and CUDA support for GPU acceleration.
-keywords: install city2graph, pip install, conda install, PyTorch Geometric, CUDA, GPU acceleration, Python package, conda-forge, cu126, cu128, cu130
+seo_title: "Install City2Graph: pip, PyTorch, CUDA, and conda"
+description: "Install City2Graph with pip or conda-forge, choose optional PyTorch Geometric CPU or CUDA support, and verify the Python installation."
 hide:
   - navigation
 ---
 
-# Installation
+# Install City2Graph
+
+City2Graph supports Python 3.11–3.14. Install the core package for geospatial
+graph construction and network analysis, or choose a PyTorch extra when you
+need PyTorch Geometric tensors and Graph Neural Networks.
+
+## Choose an installation
+
+| Goal | Recommended command | Includes PyTorch and PyG? |
+| --- | --- | --- |
+| Spatial graph construction and NetworkX analysis | `pip install city2graph` | No |
+| GNN development on CPU | `pip install "city2graph[cpu]"` | Yes, CPU |
+| GNN training with CUDA 12.6 | `pip install "city2graph[cu126]"` | Yes, GPU |
+| GNN training with CUDA 12.8 | `pip install "city2graph[cu128]"` | Yes, GPU |
+| GNN training with CUDA 13.0 | `pip install "city2graph[cu130]"` | Yes, GPU |
+| Core package from conda-forge | `conda install -c conda-forge city2graph` | No |
 
 ## Using pip
 
-### Standard Installation
+### Core installation
 
-The simplest way to install City2Graph is via pip:
+Install the core package when you want to construct geospatial graphs, convert
+them to NetworkX or rustworkx, and run spatial network analysis:
 
 ```bash
 pip install city2graph
 ```
 
-This installs the core functionality without PyTorch and PyTorch Geometric.
+This keeps the installation smaller by excluding PyTorch and PyTorch Geometric.
 
 ### With PyTorch (CPU)
 
-If you need the graph neural network functionality, install with the `cpu` option:
+For PyTorch Geometric conversion and GNN development without a GPU, use:
 
 ```bash
 pip install "city2graph[cpu]"
 ```
 
-This will install PyTorch and PyTorch Geometric with CPU support.
+This installs PyTorch and PyTorch Geometric with CPU support.
 
-### With PyTorch + CUDA (GPU)
+### With PyTorch and CUDA (GPU)
 
-For GPU acceleration, you can install City2Graph with a specific CUDA version extra. For example, to install for CUDA 13.0:
+Choose the extra that matches the CUDA wheel required by your environment. For
+example, install CUDA 13.0 support with:
 
 ```bash
 pip install "city2graph[cu130]"
 ```
 
-Supported CUDA versions are `cu126`, `cu128`, and `cu130`.
-The `cpu`, `cu126`, and `cu130` extras use PyTorch 2.12 or newer. Because
-PyTorch 2.12 no longer publishes CUDA 12.8 wheels, `cu128` uses PyTorch 2.11.
+Supported extras are `cu126`, `cu128`, and `cu130`. The `cpu`, `cu126`, and
+`cu130` extras use PyTorch 2.12 or newer. Because PyTorch 2.12 no longer
+publishes CUDA 12.8 wheels, `cu128` uses PyTorch 2.11.
 
 ## Using conda-forge
 
-### Basic Installation
+### Core installation
 
-You can also install City2Graph using conda from conda-forge:
+Install the core City2Graph package from conda-forge with:
 
 ```bash
 conda install -c conda-forge city2graph
 ```
 
-This installs the core functionality without PyTorch and PyTorch Geometric.
+This does not install PyTorch or PyTorch Geometric.
 
 ### With PyTorch (CPU)
 
-To use PyTorch and PyTorch Geometric with City2Graph installed from conda-forge, you need to manually add these libraries to your environment:
+To use PyTorch Geometric with the conda-forge package, add the CPU dependencies
+separately:
 
 ```bash
-# Install city2graph
+# Install City2Graph
 conda install -c conda-forge city2graph
 
-# Then install PyTorch and PyTorch Geometric
+# Add PyTorch and PyTorch Geometric
 conda install -c conda-forge pytorch pytorch_geometric
 ```
 
-### With PyTorch + CUDA (GPU)
+### With PyTorch and CUDA (GPU)
 
-For GPU support, you should select the appropriate PyTorch variant by specifying the version and CUDA build string. For example, to install PyTorch 2.12.0 with CUDA 13.0 support:
+For GPU support, select the appropriate PyTorch version and CUDA build. For
+example, install PyTorch 2.12.0 with CUDA 13.0 support with:
 
 ```bash
-# Install city2graph
+# Install City2Graph
 conda install -c conda-forge city2graph
 
-# Then install PyTorch with CUDA support
+# Add PyTorch with CUDA support and PyTorch Geometric
 conda install -c conda-forge pytorch=2.12.0=*cuda130*
 conda install -c conda-forge pytorch_geometric
 ```
 
-You can browse available CUDA-enabled builds on the [conda-forge PyTorch files page](https://anaconda.org/conda-forge/pytorch/files) and substitute the desired version and CUDA variant in your install command. Make sure that the versions of PyTorch and PyTorch Geometric you install are compatible with each other and with your system.
+Browse the
+[conda-forge PyTorch files page](https://anaconda.org/conda-forge/pytorch/files)
+to select another supported version and CUDA variant. Ensure that PyTorch,
+PyTorch Geometric, and the installed CUDA runtime are mutually compatible.
 
 !!! warning
-    conda is not officially supported by PyTorch and PyTorch Geometric anymore, and only conda-forge distributions are available for them. We recommend using pip or uv for the most streamlined installation experience if you need PyTorch functionality.
+    PyTorch and PyTorch Geometric no longer officially support conda packages.
+    Only conda-forge distributions are available. Prefer pip or uv when you
+    need PyTorch functionality.
 
-## Requirements
+## Verify the installation
 
-City2Graph requires the following packages:
+Check that City2Graph imports and report the installed version:
 
-* networkx
-* duckdb
-* shapely
-* geopandas
-* libpysal
-* momepy
-* overturemaps
-* rustworkx
+```bash
+python -c "import city2graph as c2g; print(c2g.__version__)"
+```
 
-For graph neural network functionality, you'll also need:
+For a PyTorch-enabled installation, also verify that PyTorch Geometric is
+available:
 
-* torch
-* torch_geometric
+```bash
+python -c "import torch, torch_geometric; print(torch.__version__, torch_geometric.__version__)"
+```
+
+If these commands fail, confirm that the active Python environment is the same
+one in which City2Graph was installed.
+
+## Core dependencies
+
+The core installation includes:
+
+- NetworkX and rustworkx
+- GeoPandas, Shapely, and OSMnx
+- DuckDB
+- libpysal and momepy
+- Overture Maps
+- SciPy and geopy
+
+PyTorch and PyTorch Geometric are required only for PyG conversion and graph
+neural network workflows.

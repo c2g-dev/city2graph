@@ -1,10 +1,9 @@
 site_name: City2Graph
-site_url: !ENV [READTHEDOCS_CANONICAL_URL, 'https://city2graph.net/latest/']
+site_url: https://city2graph.net/latest/
 site_author: Yuta Sato
 site_description: >-
-  City2Graph is a Python library to transform geospatial data (OSM, GTFS, POIs)
-  into heterogeneous graphs for Urban Network Analysis and Graph Neural Networks
-  (GNNs).
+  Build spatial and heterogeneous graphs from buildings, streets, GTFS feeds,
+  OD matrices, and POIs for NetworkX analysis and PyTorch Geometric GNNs.
 repo_url: https://github.com/c2g-dev/city2graph
 repo_name: c2g-dev/city2graph
 copyright: Copyright &copy; 2026 Yuta Sato & City2Graph developers

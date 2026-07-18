@@ -1,12 +1,4 @@
 User-agent: *
 Allow: /
+
 Sitemap: https://city2graph.net/latest/sitemap.xml
-Sitemap: https://city2graph.net/stable/sitemap.xml
-Sitemap: https://city2graph.net/0.4.0/sitemap.xml
-Sitemap: https://city2graph.net/0.3.1/sitemap.xml
-Sitemap: https://city2graph.net/0.3.0/sitemap.xml
-Sitemap: https://city2graph.net/0.2.4/sitemap.xml
-Sitemap: https://city2graph.net/0.2.3/sitemap.xml
-Sitemap: https://city2graph.net/0.2.2/sitemap.xml
-Sitemap: https://city2graph.net/0.2.1/sitemap.xml
-Sitemap: https://city2graph.net/0.2.0/sitemap.xml

@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+import city2graph as c2g
 from city2graph.transportation import _time_to_seconds
 from city2graph.transportation import _timestamp
 from city2graph.transportation import get_od_pairs
@@ -147,6 +148,9 @@ class TestLoadGtfs:
 
 
 class TestLoadGbfs:
+    def test_load_gbfs_is_public_top_level_api(self) -> None:
+        assert c2g.load_gbfs is load_gbfs
+
     def test_load_gbfs_basic(self, tmp_path: Path) -> None:
         gbfs_dir = tmp_path / "gbfs"
         gbfs_dir.mkdir()

@@ -1,46 +1,123 @@
 {% extends "base.html" %}
 
+{% if page and page.meta and page.meta.seo_title %}
+  {% set seo_title = page.meta.seo_title %}
+{% elif page and page.title %}
+  {% set seo_title = page.title ~ " - " ~ config.site_name %}
+{% else %}
+  {% set seo_title = config.site_name %}
+{% endif %}
+
+{% if page and page.meta and page.meta.description %}
+  {% set seo_description = page.meta.description %}
+{% else %}
+  {% set seo_description = config.site_description %}
+{% endif %}
+
+{% set social_image = config.site_url ~ "assets/logos/social_preview_city2graph.png" %}
+{% if page and page.meta and page.meta.seo_title %}
+  {% set breadcrumb_title = page.meta.seo_title %}
+{% elif page %}
+  {% set breadcrumb_title = page.title %}
+{% endif %}
+
+{% block htmltitle %}
+<title>{{ seo_title }}</title>
+{% endblock %}
+
 {% block site_meta %}
 {{ super() }}
 <meta name="readthedocs-addons-api-version" content="1" />
 
-{# Custom Social Card Meta Tags for SEO #}
-{% set social_image = config.site_url ~ "assets/logos/social_preview_city2graph.png" %}
-
-{# Use page-specific description if available, otherwise use site description #}
-{% if page and page.meta and page.meta.description %}
-  {% set page_description = page.meta.description %}
-{% else %}
-  {% set page_description = config.site_description %}
-{% endif %}
-
-{# Build page title #}
-{% if page and page.title %}
-  {% set page_title = page.title ~ " - " ~ config.site_name %}
-{% else %}
-  {% set page_title = config.site_name %}
-{% endif %}
-
-{# Open Graph meta tags #}
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="{{ config.site_name }}" />
-<meta property="og:title" content="{{ page_title }}" />
-<meta property="og:description" content="{{ page_description }}" />
+<meta property="og:title" content="{{ seo_title }}" />
+<meta property="og:description" content="{{ seo_description }}" />
 <meta property="og:image" content="{{ social_image }}" />
+<meta property="og:image:alt" content="City2Graph geospatial graph construction workflow" />
 <meta property="og:image:type" content="image/png" />
 <meta property="og:image:width" content="1280" />
 <meta property="og:image:height" content="640" />
 <meta property="og:url" content="{{ page.canonical_url }}" />
 
-{# Twitter Card meta tags #}
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="{{ page_title }}" />
-<meta name="twitter:description" content="{{ page_description }}" />
+<meta name="twitter:title" content="{{ seo_title }}" />
+<meta name="twitter:description" content="{{ seo_description }}" />
 <meta name="twitter:image" content="{{ social_image }}" />
+<meta name="twitter:image:alt" content="City2Graph geospatial graph construction workflow" />
 
-{# Additional SEO meta tags #}
-<meta name="author" content="{{ config.site_author }}" />
-{% if page and page.meta and page.meta.keywords %}
-<meta name="keywords" content="{{ page.meta.keywords }}" />
+{% if page and page.url == "index.html" %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://city2graph.net/latest/#website",
+      "url": "https://city2graph.net/latest/",
+      "name": "City2Graph",
+      "description": {{ seo_description | tojson }}
+    },
+    {
+      "@type": "SoftwareSourceCode",
+      "@id": "https://city2graph.net/latest/#software",
+      "name": "City2Graph",
+      "description": {{ seo_description | tojson }},
+      "url": "https://city2graph.net/latest/",
+      "codeRepository": "https://github.com/c2g-dev/city2graph",
+      "downloadUrl": "https://pypi.org/project/city2graph/",
+      "license": "https://github.com/c2g-dev/city2graph/blob/main/LICENSE",
+      "programmingLanguage": "Python",
+      "runtimePlatform": "Python 3.11–3.14",
+      "isAccessibleForFree": true,
+      "image": {{ social_image | tojson }},
+      "citation": "https://doi.org/10.5281/zenodo.15858845"
+    }
+  ]
+}
+</script>
+{% elif page %}
+{% set is_api_child = page.url.startswith("api/") and page.url != "api/index.html" %}
+{% set is_example_child = page.url.startswith("examples/") and page.url != "examples/index.html" %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://city2graph.net/latest/index.html"
+    }
+    {% if is_api_child or is_example_child %},
+    {
+      "@type": "ListItem",
+      "position": 2,
+      {% if is_api_child %}
+      "name": "API Reference",
+      "item": "https://city2graph.net/latest/api/index.html"
+      {% else %}
+      "name": "Tutorials",
+      "item": "https://city2graph.net/latest/examples/index.html"
+      {% endif %}
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": {{ breadcrumb_title | tojson }},
+      "item": {{ page.canonical_url | tojson }}
+    }
+    {% else %},
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": {{ breadcrumb_title | tojson }},
+      "item": {{ page.canonical_url | tojson }}
+    }
+    {% endif %}
+  ]
+}
+</script>
 {% endif %}
 {% endblock %}

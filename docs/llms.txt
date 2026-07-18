@@ -1,0 +1,43 @@
+# City2Graph
+
+> City2Graph is a Python library for constructing spatial and heterogeneous
+> graphs from buildings, streets, public transport feeds, origin–destination
+> matrices, zones, and points of interest. It connects GeoPandas, NetworkX,
+> rustworkx, and PyTorch Geometric for spatial network analysis and Graph Neural
+> Networks.
+
+City2Graph documentation is written for geospatial developers, data scientists,
+and urban, mobility, and transport researchers. The links below point to the
+latest documentation.
+
+## Start here
+
+- [Overview](https://city2graph.net/latest/index.html): Capabilities, supported data, workflow guide, quickstart, and frequently asked questions.
+- [Installation](https://city2graph.net/latest/installation.html): pip, conda-forge, PyTorch CPU, and supported CUDA installation options.
+- [Tutorials](https://city2graph.net/latest/examples/index.html): Task-oriented notebooks and applied projects.
+- [Python API reference](https://city2graph.net/latest/api/index.html): Public modules and functions organised by task.
+
+## Tutorials
+
+- [Urban morphology from Overture Maps and OpenStreetMap](https://city2graph.net/latest/examples/morphological_graph_from_overturemaps.html): Build heterogeneous graphs from buildings, tessellations, and streets.
+- [GTFS public transport graphs](https://city2graph.net/latest/examples/gtfs.html): Build stop-to-stop travel-time graphs and multimodal isochrones.
+- [OD matrices and mobility graphs](https://city2graph.net/latest/examples/generating_graphs_from_od_matrix.html): Convert edge lists and adjacency matrices into weighted spatial graphs.
+- [Spatial proximity graphs](https://city2graph.net/latest/examples/generating_graphs_by_proximity.html): Construct KNN, Delaunay, Gilbert, Waxman, and contiguity graphs.
+- [Metapaths for heterogeneous GNNs](https://city2graph.net/latest/examples/add_metapaths.html): Add composite typed relations to heterogeneous graphs.
+
+## API modules
+
+- [Graph conversion](https://city2graph.net/latest/api/graph.html): Convert between GeoDataFrames, NetworkX, and PyTorch Geometric.
+- [Data](https://city2graph.net/latest/api/data.html): Load Overture Maps data and place boundaries.
+- [Morphology](https://city2graph.net/latest/api/morphology.html): Build building, tessellation, and street relations.
+- [Transportation](https://city2graph.net/latest/api/transportation.html): Load GTFS or GBFS data and build travel-summary graphs.
+- [Mobility](https://city2graph.net/latest/api/mobility.html): Convert origin–destination data to weighted graphs.
+- [Proximity](https://city2graph.net/latest/api/proximity.html): Build proximity, contiguity, bridge, grouping, and directed graphs.
+- [Metapath](https://city2graph.net/latest/api/metapath.html): Materialise metapath-derived relations.
+
+## Project
+
+- [GitHub repository](https://github.com/c2g-dev/city2graph): Source code, issues, releases, and contribution workflow.
+- [PyPI package](https://pypi.org/project/city2graph/): Python package releases and installation metadata.
+- [Zenodo DOI](https://doi.org/10.5281/zenodo.15858845): Citable archive.
+- [Citation metadata](https://github.com/c2g-dev/city2graph/blob/main/CITATION.cff): Citation File Format record.

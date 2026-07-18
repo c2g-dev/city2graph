@@ -1,23 +1,36 @@
 ---
-description: City2Graph API documentation: Modules for Urban Morphology, Public Transportation Networks, Mobility Flow Graphs, and Heterogeneous Metapath construction for geospatial machine learning.
-keywords: City2Graph API, PyTorch Geometric, Heterogeneous Graphs, Urban Morphology, Public Transport, GTFS, OD Matrices, Mobility Networks, POI Analysis, Overture Maps, Geospatial Deep Learning, GeoAI, Graph Neural Networks (GNNs)
+seo_title: "City2Graph Python API Reference"
+description: "City2Graph Python API reference for geospatial graph construction, GTFS and OD networks, proximity graphs, metapaths, and NetworkX or PyG conversion."
 ---
 
-# API Reference
+# City2Graph Python API reference
 
-This section contains the complete API reference for the `city2graph` package.
+Use this reference to find the public `city2graph` functions for constructing,
+combining, and converting geospatial graphs. Public functions are also exported
+from the top-level package, so the examples use `import city2graph as c2g`.
 
-City2Graph provides a comprehensive toolkit for constructing graphs from geospatial datasets, enabling network analysis and graph neural network applications on urban data.
+## Find an API by task
+
+| I want to... | Start with | Module |
+| --- | --- | --- |
+| Convert GeoDataFrames, NetworkX, or PyTorch Geometric graphs | `gdf_to_pyg`, `pyg_to_gdf`, `pyg_to_nx`, `nx_to_pyg` | [Graph](graph.md) |
+| Load Overture Maps data or place boundaries | `load_overture_data`, `get_boundaries` | [Data](data.md) |
+| Build a building–street morphology graph | `morphological_graph` | [Morphology](morphology.md) |
+| Load GTFS or GBFS data into DuckDB | `load_gtfs`, `load_gbfs` | [Transportation](transportation.md) |
+| Convert GTFS into a public transport graph | `get_od_pairs`, `travel_summary_graph` | [Transportation](transportation.md) |
+| Convert an OD matrix into a weighted spatial graph | `od_matrix_to_graph` | [Mobility](mobility.md) |
+| Build proximity, contiguity, bridge, or containment relations | `knn_graph`, `waxman_graph`, `contiguity_graph`, `bridge_nodes`, `group_nodes` | [Proximity](proximity.md) |
+| Compose typed relations for a heterogeneous GNN | `add_metapaths`, `add_metapaths_by_weight` | [Metapath](metapath.md) |
 
 ## Modules
 
-| Module | Description |
-|--------|-------------|
-| [Graph](graph.md) | Converting between GeoDataFrames, NetworkX, and PyTorch Geometric |
-| [Metapath](metapath.md) | Adding metapath-derived edges to heterogeneous graphs |
-| [Morphology](morphology.md) | Creating morphological graphs from urban form data |
-| [Transportation](transportation.md) | Processing GTFS data and transportation networks |
-| [Mobility](mobility.md) | Processing OD matrices and mobility networks |
-| [Proximity](proximity.md) | Generating proximity-based graph networks |
-| [Data](data.md) | Loading and processing geospatial data from sources like Overture Maps |
-| [Utils](utils.md) | Core utilities for graph conversion and validation |
+| Module | Scope |
+| --- | --- |
+| [Graph](graph.md) | Conversion between GeoDataFrames, NetworkX, and PyTorch Geometric |
+| [Data](data.md) | Overture Maps downloads, place boundaries, and geospatial preprocessing |
+| [Morphology](morphology.md) | Buildings, tessellations, street segments, and urban form relations |
+| [Transportation](transportation.md) | GTFS and GBFS loading, OD pairs, and travel-summary graphs |
+| [Mobility](mobility.md) | OD edge lists and adjacency matrices |
+| [Proximity](proximity.md) | Proximity, contiguity, bridge, grouping, and directed graph builders |
+| [Metapath](metapath.md) | Metapath-derived relations in heterogeneous graphs |
+| [Utils](utils.md) | Graph conversion, topology, spatial, and validation utilities |

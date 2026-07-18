@@ -1,11 +1,22 @@
 ---
-description: "Tutorials, case study, and workshop for city2graph: heterogeneous GNNs, Overture Maps and OpenStreetMap morphology, GTFS transit graphs, OD matrices, and spatial proximity graphs in Python."
-keywords: City2Graph Examples, Graph Neural Networks, Metapath, Urban Morphology, GTFS, OD Matrix, Spatial Proximity, Case Study, Workshop, Urban Analysis, Python Tutorial
+seo_title: "City2Graph Tutorials: GTFS, OD Matrices, Overture Maps, and GNNs"
+description: "Follow City2Graph tutorials for GTFS transit graphs, OD mobility networks, Overture Maps morphology, proximity graphs, metapaths, and heterogeneous GNNs."
 ---
 
-# Examples
+# City2Graph tutorials and examples
 
 Each tutorial below is a self-contained Jupyter notebook that starts from open data and ends with a graph you can analyse or feed to a graph neural network. The [case study](#applied-projects) and [workshop](#applied-projects) show the library applied end to end.
+
+## Choose a tutorial by task
+
+| Goal | Data | What you will build | Tutorial |
+| --- | --- | --- | --- |
+| Model urban form | Overture Maps or OpenStreetMap buildings and streets | Heterogeneous building, tessellation, and street graph | [Morphological graphs](morphological_graph_from_overturemaps.ipynb) |
+| Analyse public transport | London GTFS feed | Stop-to-stop travel-time graph and multimodal isochrones | [GTFS transit graphs](gtfs.ipynb) |
+| Model migration or commuting | OD edge list or adjacency matrix | Weighted mobility graph | [OD matrices](generating_graphs_from_od_matrix.ipynb) |
+| Connect POIs and zones | Points, polygons, and street networks | KNN, Delaunay, Gilbert, Waxman, and contiguity graphs | [Spatial proximity graphs](generating_graphs_by_proximity.ipynb) |
+| Add composite relations | Typed nodes and edges | Metapath-derived edges for heterogeneous GNNs | [Metapath construction](add_metapaths.ipynb) |
+| Build a complete GeoAI pipeline | Multiple open urban datasets | Graph construction, graph autoencoder, and spatial clusters | [Liverpool case study](https://github.com/c2g-dev/city2graph-case-study) |
 
 ## Tutorials
 

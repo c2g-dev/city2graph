@@ -1,8 +1,16 @@
-# City2Graph: GeoAI with Graph Neural Networks (GNNs) and Spatial Network Analysis
+# City2Graph: Geospatial Graphs for Network Analysis and GNNs
 
-[![City2Graph](http://city2graph.net/latest/assets/logos/social_preview_city2graph.png)](http://city2graph.net/latest/assets/logos/social_preview_city2graph.png)
+[![City2Graph](https://city2graph.net/latest/assets/logos/social_preview_city2graph.png)](https://city2graph.net/latest/)
 
-**City2Graph** converts geospatial datasets — streets, buildings, transit feeds, OD matrices, and points of interest — into graphs, with one interface that bridges [GeoPandas](https://geopandas.org/), [NetworkX](https://networkx.org/), and [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/) for heterogeneous GNNs and spatial network analysis. It enables researchers and practitioners to seamlessly develop advanced GeoAI and geographic data science applications. For more information, please visit the [documentation](https://city2graph.net).
+**City2Graph** is a Python library that turns buildings, streets, public
+transport feeds, origin–destination matrices, zones, and points of interest
+into spatial and heterogeneous graphs. It bridges
+[GeoPandas](https://geopandas.org/), [NetworkX](https://networkx.org/), and
+[PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/) so the
+same geospatial data can support network analysis, urban research, and Graph
+Neural Networks (GNNs). See the
+[documentation](https://city2graph.net/latest/) for installation, tutorials,
+and the Python API reference.
 
 [![PyPI version](https://badge.fury.io/py/city2graph.svg)](https://badge.fury.io/py/city2graph/) [![conda-forge Version](https://anaconda.org/conda-forge/city2graph/badges/version.svg)](https://anaconda.org/conda-forge/city2graph/) [![PyPI Downloads](https://static.pepy.tech/badge/city2graph)](https://pepy.tech/projects/city2graph) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15858845.svg)](https://doi.org/10.5281/zenodo.15858845) [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/c2g-dev/city2graph/blob/main/LICENSE)
 [![Platform](https://anaconda.org/conda-forge/city2graph/badges/platforms.svg
@@ -10,10 +18,11 @@
 
 ## Features
 
-[![scope](http://city2graph.net/latest/assets/figures/scope.png)](http://city2graph.net/latest/assets/figures/scope.png)
+[![City2Graph workflow from geospatial data to graph analysis](https://city2graph.net/latest/assets/figures/scope.png)](https://city2graph.net/latest/)
 
 - **Morphology:** Graphs of buildings, streets, and tessellated urban fabric from OpenStreetMap and Overture Maps.
-- **Transportation:** GTFS feeds loaded through DuckDB and aggregated into stop-to-stop public transit graphs.
+- **Transportation:** GTFS public transport and GBFS shared-mobility feeds loaded
+  into DuckDB, with GTFS aggregated into stop-to-stop transit graphs.
 - **Mobility:** Origin–destination matrices and flow data — migration, bike-sharing, pedestrian counts — as weighted spatial graphs.
 - **Proximity and Contiguity:** KNN, Delaunay, Gilbert, and Waxman graphs plus queen/rook contiguity, under Euclidean, Manhattan, or network distances.
 - **Heterogeneous Graphs and Metapaths:** Multiple node and edge types in one graph, with metapath-derived edges composing relations across them.
