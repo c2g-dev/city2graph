@@ -68,7 +68,7 @@ For details, see [Installation](installation.md) such as supported CUDA version.
     )
     ```
 
-    ![A morphological graph of 500m walking distance in Liverpool](assets/figures/morph_net_overview.png){ .desktop-limit-width }
+    ![A morphological graph of 500m walking distance in Liverpool](assets/figures/morph_net_overview.png){ .quickstart-figure }
 
 === "Transportation"
 
@@ -83,7 +83,7 @@ For details, see [Installation](installation.md) such as supported CUDA version.
     )
     ```
 
-    ![A bus transportation graph in London](assets/figures/trav_sum_network_overview.png){ .desktop-limit-width }
+    ![A bus transportation graph in London](assets/figures/trav_sum_network_overview.png){ .quickstart-figure }
 
 === "Mobility"
 
@@ -98,7 +98,7 @@ For details, see [Installation](installation.md) such as supported CUDA version.
     )
     ```
 
-    ![An OD matrix graph showing migration flows and degree centrality in England and Wales](assets/figures/od_matrix_to_graph_uk.png){ .desktop-limit-width }
+    ![An OD matrix graph showing migration flows and degree centrality in England and Wales](assets/figures/od_matrix_to_graph_uk.png){ .quickstart-figure }
 
 === "Proximity"
 
@@ -113,7 +113,7 @@ For details, see [Installation](installation.md) such as supported CUDA version.
     w_nodes, w_edges = c2g.contiguity_graph(wards_gdf, contiguity="queen")
     ```
 
-    ![Waxman graph of points of interest in Liverpool](assets/figures/waxman_graph.png){ .desktop-limit-width }
+    ![Waxman graph of points of interest in Liverpool](assets/figures/waxman_graph.png){ .quickstart-figure }
 
 === "Metapath"
 
@@ -130,17 +130,30 @@ For details, see [Installation](installation.md) such as supported CUDA version.
     )
     ```
 
-    ![Animation showing metapath connections between amenities through street segments in Soho, London](assets/figures/metapath.gif){ .desktop-limit-width }
+    ![Animation showing metapath connections between amenities through street segments in Soho, London](assets/figures/metapath.gif){ .quickstart-figure }
 
-=== "To GNNs"
+=== "Conversions"
 
     ```python
     import city2graph as c2g
 
-    # Any graph -> NetworkX or PyTorch Geometric, and back
+    # GeoPandas -> NetworkX
     G = c2g.gdf_to_nx(nodes, edges)
-    data = c2g.gdf_to_pyg(nodes, edges)   # Data / HeteroData
+
+    # GeoPandas -> PyTorch Geometric
+    data = c2g.gdf_to_pyg(nodes, edges)
+
+    # PyTorch Geometric -> GeoPandas
     nodes, edges = c2g.pyg_to_gdf(data)
+
+    # PyTorch Geometric -> NetworkX
+    G = c2g.pyg_to_nx(data)
+
+    # NetworkX -> rustworkx
+    G_rx = c2g.nx_to_rx(G_nx)
+
+    # rustworkx -> NetworkX
+    G_nx = c2g.rx_to_nx(G_rx)
     ```
 
 ## Examples

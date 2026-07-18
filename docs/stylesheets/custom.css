@@ -542,6 +542,16 @@ body {
   display: block;
 }
 
+/* Keep tall Quickstart figures compact while allowing wide figures to use
+   the full content width. On narrow screens, max-width still scales them down. */
+.md-typeset p > img.quickstart-figure:only-of-type {
+  width: auto !important;
+  max-width: min(100%, 800px) !important;
+  max-height: 560px;
+  height: auto;
+  margin: 0 auto;
+}
+
 /* Landing page (navigation and toc both hidden): with no sidebars the text
    would span the full grid, so centre the content at a measure that matches
    the 800px figure cap below */
