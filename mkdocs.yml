@@ -185,6 +185,7 @@ markdown_extensions:
   - toc:
       permalink: true
   - attr_list
+  - md_in_html
   - pymdownx.arithmatex:  # MathJax support
       generic: true
 
@@ -209,8 +210,8 @@ nav:
       - Overview of City2Graph Examples: examples/index.md
       - Metapath Construction for Heterogeneous GNNs: examples/add_metapaths.ipynb
       - Morphological Graphs from Overture Maps & OpenStreetMap: examples/morphological_graph_from_overturemaps.ipynb  # yamllint disable-line rule:line-length
-      - GTFS to Graphs: examples/gtfs.ipynb
-      - OD Matrix to Graphs: examples/generating_graphs_from_od_matrix.ipynb
+      - GTFS to Public Transit Graphs: examples/gtfs.ipynb
+      - OD Matrices to Mobility Graphs: examples/generating_graphs_from_od_matrix.ipynb
       - Spatial Proximity Graphs: examples/generating_graphs_by_proximity.ipynb
   - API Reference:
       - Overview: api/index.md

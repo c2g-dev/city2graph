@@ -947,3 +947,24 @@ body {
 .md-path__link:hover {
   color: var(--md-primary-fg-color);
 }
+
+/* ==========================================================================
+   13. EXAMPLES GALLERY (grid cards on docs/examples/index.md)
+   ========================================================================== */
+.md-typeset .examples-gallery img.card-img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--card-radius, 0.4rem);
+  margin: 0 0 0.6rem;
+}
+
+.md-typeset .grid.cards.examples-gallery > ul > li {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.md-typeset .grid.cards.examples-gallery > ul > li:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+}

@@ -1,21 +1,81 @@
 ---
-description: Python tutorials for urban network analysis: Heterogeneous GNNs, OpenStreetMap (OSM) integration, GTFS to Graph conversion, and Origin-Destination (OD) matrix processing for spatial AI.
-keywords: City2Graph Examples, Graph Neural Networks, Metapath, Urban Morphology, GTFS, OD Matrix, Spatial Proximity, Urban Analysis, Python Tutorial
+description: "Tutorials, case study, and workshop for city2graph: heterogeneous GNNs, Overture Maps and OpenStreetMap morphology, GTFS transit graphs, OD matrices, and spatial proximity graphs in Python."
+keywords: City2Graph Examples, Graph Neural Networks, Metapath, Urban Morphology, GTFS, OD Matrix, Spatial Proximity, Case Study, Workshop, Urban Analysis, Python Tutorial
 ---
 
 # Examples
 
-This section provides examples of how to use City2Graph in various urban analysis scenarios.
+Each tutorial below is a self-contained Jupyter notebook that starts from open data and ends with a graph you can analyse or feed to a graph neural network. The [case study](#applied-projects) and [workshop](#applied-projects) show the library applied end to end.
 
-| Example | Description |
-| :--- | :--- |
-| [Metapath Construction for Heterogeneous GNNs](add_metapaths.ipynb) | Demonstrates the workflow of metapath construction from a heterogeneous graph. The example creates a dual graph of streets, connects amenities, and materializes metapaths between amenities via streets for **Heterogeneous Graph Neural Networks (HGNNs)**. |
-| [Morphological Graphs from Overture Maps & OpenStreetMap](morphological_graph_from_overturemaps.ipynb) | Create morphological graphs from **Overture Maps** and **OpenStreetMap (OSM)**, capturing relationships between movement (streets) and place (tessellations/buildings) spaces for urban form analysis. |
-| [GTFS to Public Transit Networks as Graphs](gtfs.ipynb) | Transforms **General Transit Feed Specification (GTFS)** schedules into intuitive graph representations for **public transport accessibility analysis** and multi-modal network visualization. |
-| [OD Matrices to Mobility Networks as Graphs](generating_graphs_from_od_matrix.ipynb) | Demonstrates the conversion of **Origin-Destination (OD) Matrices** into mobility networks, supporting both edge-list and adjacency formats for modeling **human mobility flows**. |
-| [Spatial Proximity Graphs](generating_graphs_by_proximity.ipynb) | Illustrates how to generate and visualize different spatial graph types based on proximity metrics (**KNN, Delaunay Triangulation, Gilbert, Waxman**), bridging and grouping nodes for **spatial connectivity**. |
+## Tutorials
 
-## External Links
+<div class="grid cards examples-gallery" markdown>
+
+- ![Metapath edges (cyan) linking amenities across the dual street graph of Soho, London](../assets/examples/metapaths.jpg){ .card-img }
+
+    **[Metapath Construction for Heterogeneous GNNs](add_metapaths.ipynb)**
+
+    ---
+
+    Build a dual graph of Soho's street network, attach amenities to their nearest segments, and materialise metapath edges between amenities reachable within a few street hops — the composite relations used by heterogeneous GNNs.
+
+- ![Morphological graph of Liverpool: buildings, tessellation cells, and street segments](../assets/examples/morphology.jpg){ .card-img }
+
+    **[Morphological Graphs from Overture Maps & OpenStreetMap](morphological_graph_from_overturemaps.ipynb)**
+
+    ---
+
+    Tessellate Liverpool's urban fabric into private and public space, link it to the street network, and export the resulting heterogeneous graph to NetworkX and PyTorch Geometric. Works from both Overture Maps and OSM data.
+
+- ![Betweenness centrality of every transit stop in London on a dark basemap](../assets/examples/gtfs.jpg){ .card-img }
+
+    **[GTFS to Public Transit Graphs](gtfs.ipynb)**
+
+    ---
+
+    Convert a raw GTFS feed for London into a stop-to-stop travel-time graph, rank stops by betweenness centrality, and draw walk and walk-plus-transit isochrones around chosen origins.
+
+- ![Migration flows between England and Wales MSOAs drawn as a white network on black](../assets/examples/od_matrix.jpg){ .card-img }
+
+    **[OD Matrices to Mobility Graphs](generating_graphs_from_od_matrix.ipynb)**
+
+    ---
+
+    Turn origin–destination data — edge lists or adjacency matrices — into spatial graphs, from a toy grid up to the 2021 census migration flows between all MSOAs of England and Wales.
+
+- ![Waxman random geometric graph over points of interest in Tokyo](../assets/examples/proximity.jpg){ .card-img }
+
+    **[Spatial Proximity Graphs](generating_graphs_by_proximity.ipynb)**
+
+    ---
+
+    Generate k-nearest-neighbour, Delaunay, Gilbert, and Waxman graphs over Tokyo points of interest, compare Euclidean, Manhattan, and network distances, and apply contiguity graphs to London wards.
+
+</div>
+
+## Applied projects
+
+<div class="grid cards examples-gallery" markdown>
+
+- ![Travel-time network over Liverpool output areas from the case study](../assets/examples/case_study.jpg){ .card-img }
+
+    **[Liverpool Case Study](https://github.com/c2g-dev/city2graph-case-study)**
+
+    ---
+
+    A reproducible research pipeline for Liverpool: open data are processed into heterogeneous graphs, graph autoencoders are trained on them, and the resulting embeddings are clustered and evaluated to characterise urban structure.
+
+- ![city2graph workshop: streets network, walkability, and clustering with GNNs](../assets/examples/workshop.jpg){ .card-img }
+
+    **[Workshop: From Geospatial Data to GNNs](https://github.com/c2g-dev/city2graph-workshop)**
+
+    ---
+
+    *GeoAI in Practice*, a hands-on FOSS4G 2026 workshop in two parts: constructing spatial networks from open data, then building a graph autoencoder pipeline for spatial clustering. Runs locally with `uv` or on [Google Colab](https://colab.research.google.com/drive/1MKnc8nG0oGKTZIy_ZTQLTsUl9vez94Jz).
+
+</div>
+
+## Community articles
 
 | Title | Author | Language | Type | Release |
 | :--- | :--- | :--- | :--- | :--- |
