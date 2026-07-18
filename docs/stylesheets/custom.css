@@ -398,6 +398,22 @@ body {
   font-weight: 600;
 }
 
+/* Material marks headings above the current viewport as "passed" and dims
+   them by default. Keep every inactive table-of-contents entry at its normal
+   emphasis so only the heading currently in view is highlighted. */
+.md-nav--secondary .md-nav__link--passed,
+.md-nav--secondary .md-nav__link--passed code {
+  color: var(--md-default-fg-color);
+  font-weight: 400;
+  opacity: 1;
+}
+
+.md-nav--secondary .md-nav__link--active,
+.md-nav--secondary .md-nav__link--active code {
+  color: var(--md-typeset-a-color);
+  font-weight: 600;
+}
+
 /* Disable the scroll fade masks on sidebars */
 .md-sidebar__scrollwrap {
   mask-image: none !important;
