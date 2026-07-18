@@ -46,8 +46,12 @@
 
   /* Typography */
   --md-text-font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --md-heading-font-family: "Outfit", sans-serif;
+  --md-heading-font-family: "Outfit", var(--md-text-font-family);
   --md-code-font-family: "Fira Code", monospace;
+  --type-h1: clamp(1.65rem, 1.58rem + 0.3vw, 1.9rem);
+  --type-h2: clamp(1.25rem, 1.2rem + 0.2vw, 1.4rem);
+  --type-h3: clamp(1.05rem, 1.02rem + 0.12vw, 1.15rem);
+  --type-h4: 0.92rem;
 
   /* Colors */
   --doc-bg-color: #ffffff;
@@ -179,6 +183,7 @@ body {
   line-height: 1.6;
   color: var(--doc-text-color);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* ==========================================================================
@@ -192,28 +197,51 @@ body {
 .md-typeset h6 {
   font-family: var(--md-heading-font-family);
   color: var(--doc-heading-color);
-  font-weight: 650;
-  letter-spacing: 0;
-  margin-top: 2em;
-  margin-bottom: 0.8em;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  text-wrap: balance;
 }
 
 .md-typeset h1 {
-  font-size: 1.6rem;
-  font-weight: 300;
-  color: var(--doc-heading-color);
+  font-size: var(--type-h1);
+  font-weight: 700;
+  letter-spacing: -0.035em;
   margin-top: 0;
-  margin-bottom: 2rem;
-  line-height: 1.3;
+  margin-bottom: 1.25rem;
+  line-height: 1.15;
 }
 
 .md-typeset h2 {
-  font-size: 1.25rem;
-  font-weight: 300;
-  color: var(--doc-heading-color);
+  font-size: var(--type-h2);
+  font-weight: 600;
+  letter-spacing: -0.025em;
   border-bottom: none;
-  margin-top: 2rem;
-  margin-bottom: 0.8rem;
+  margin-top: 2.2rem;
+  margin-bottom: 0.85rem;
+  line-height: 1.22;
+}
+
+.md-typeset h3 {
+  font-size: var(--type-h3);
+  font-weight: 600;
+  margin-top: 1.6rem;
+  margin-bottom: 0.65rem;
+  line-height: 1.3;
+}
+
+.md-typeset h4 {
+  font-size: var(--type-h4);
+  font-weight: 600;
+  margin-top: 1.6rem;
+  margin-bottom: 0.6rem;
+  line-height: 1.35;
+}
+
+.md-typeset :is(h5, h6) {
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-top: 1.4rem;
+  margin-bottom: 0.5rem;
   line-height: 1.4;
 }
 
@@ -763,7 +791,7 @@ body {
   margin-top: 0 !important;
   margin-bottom: 0.5em !important;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.018em;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   padding-bottom: 0.4em;
 }
@@ -774,9 +802,9 @@ body {
 
 .doc-heading code {
   font-family: var(--md-heading-font-family);
-  font-size: 1.2rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
   background: transparent !important;
   padding: 0;
   color: var(--md-primary-fg-color);
@@ -824,8 +852,10 @@ body {
 
 /* --- Section Titles --- */
 .doc-section-title {
-  font-size: 0.85rem;
+  font-family: var(--md-heading-font-family);
+  font-size: 0.9rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--doc-heading-color);
   margin-top: 1.5em;
   margin-bottom: 0.6em;
@@ -972,6 +1002,14 @@ body {
   margin: 0 0 0.6rem;
 }
 
+.md-typeset .examples-gallery strong {
+  font-family: var(--md-heading-font-family);
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+}
+
 /* Two columns on desktop so the thumbnails read large (Material's default
    auto-fit minmax would pack three columns at this width) */
 @media screen and (min-width: 45em) {
@@ -980,7 +1018,7 @@ body {
   }
 }
 
-/* Glass card treatment matching the landing-page feature cards */
+/* Glass card treatment for the examples gallery */
 .md-typeset .grid.cards.examples-gallery > ul > li {
   background: var(--glass-bg);
   backdrop-filter: blur(var(--glass-blur));
@@ -997,59 +1035,8 @@ body {
 }
 
 /* ==========================================================================
-   14. LANDING PAGE (docs/index.md)
+   14. LANDING PAGE ASSETS (docs/index.md)
    ========================================================================== */
-
-/* --- Hero --- */
-.md-typeset .landing-hero {
-  text-align: center;
-  padding: 0.5rem 0 1rem;
-}
-
-.md-typeset .landing-hero img.hero-banner {
-  max-width: min(760px, 100%);
-  margin: 0 auto 1.5rem;
-}
-
-.md-typeset h1.hero-tagline {
-  font-size: 2.1rem;
-  font-weight: 650;
-  line-height: 1.15;
-  margin: 0 auto 0.6rem;
-  max-width: 44rem;
-  background: linear-gradient(90deg, var(--md-primary-fg-color), var(--md-accent-fg-color));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.md-typeset h1.hero-tagline .headerlink {
-  display: none;
-}
-
-.md-typeset .hero-subtitle {
-  max-width: 40rem;
-  margin: 0 auto 1.4rem;
-  font-size: 0.9rem;
-  color: var(--doc-muted-color);
-}
-
-.md-typeset .landing-hero .md-button {
-  margin: 0.2rem 0.25rem;
-}
-
-.md-typeset .hero-install {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 1.2rem;
-}
-
-.md-typeset .hero-install pre {
-  display: inline-block;
-  border-radius: 12px !important;
-  border: 1px solid var(--code-border) !important;
-  padding: 0.55em 2.8em 0.55em 1.4em !important;
-}
 
 /* --- Footer logo --- */
 .md-typeset p > a > img.footer-logo:only-of-type {
@@ -1070,23 +1057,6 @@ body {
     drop-shadow(-1px -1px 0 #ffffff);
 }
 
-/* --- Badge row (undo the global image card treatment for shields) --- */
-.md-typeset .badge-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.35rem;
-  margin-top: 0.5rem;
-}
-
-.md-typeset .badge-row img {
-  height: 20px;
-  width: auto;
-  border: none;
-  border-radius: 3px;
-  box-shadow: none;
-}
-
 /* --- Feature cards (glass treatment matching the design language) --- */
 .md-typeset .grid.cards.feature-cards > ul > li {
   background: var(--glass-bg);
@@ -1101,15 +1071,4 @@ body {
 .md-typeset .grid.cards.feature-cards > ul > li:hover {
   transform: translateY(-2px);
   box-shadow: var(--card-shadow-hover);
-}
-
-/* --- Mobile --- */
-@media screen and (max-width: 44.9375em) {
-  .md-typeset h1.hero-tagline {
-    font-size: 1.5rem;
-  }
-
-  .md-typeset .hero-subtitle {
-    font-size: 0.8rem;
-  }
 }

@@ -51,11 +51,11 @@ For citation:
 ## Quickstart
 
 ```bash
-pip install city2graph  # or e.g. "city2graph[cu130]" for CUDA (GPU)
+pip install city2graph
+conda install city2graph -c conda-forge
 ```
 
-See [Installation](installation.md) for supported CUDA versions and conda-based installation.
-Every domain follows the same pattern: GeoDataFrames in, node and edge GeoDataFrames out — ready for NetworkX or PyTorch Geometric.
+For details, see [Installation](installation.md) such as supported CUDA version.
 
 === "Morphology"
 
@@ -73,6 +73,8 @@ Every domain follows the same pattern: GeoDataFrames in, node and edge GeoDataFr
 === "Transportation"
 
     ```python
+    import city2graph as c2g
+
     gtfs = c2g.load_gtfs("itm_london_gtfs.zip")
 
     # Stop-to-stop travel-time graph from a GTFS feed
@@ -86,6 +88,8 @@ Every domain follows the same pattern: GeoDataFrames in, node and edge GeoDataFr
 === "Mobility"
 
     ```python
+    import city2graph as c2g
+
     # OD matrix + zone geometries -> weighted spatial graph
     nodes, edges = c2g.od_matrix_to_graph(
         od_df, zones_gdf,
@@ -99,6 +103,8 @@ Every domain follows the same pattern: GeoDataFrames in, node and edge GeoDataFr
 === "Proximity"
 
     ```python
+    import city2graph as c2g
+
     # Proximity graphs over points of interest
     knn_nodes, knn_edges = c2g.knn_graph(poi_gdf, k=5)
     wax_nodes, wax_edges = c2g.waxman_graph(poi_gdf, r0=100, beta=0.5)
@@ -112,6 +118,8 @@ Every domain follows the same pattern: GeoDataFrames in, node and edge GeoDataFr
 === "Metapath"
 
     ```python
+    import city2graph as c2g
+
     # Compose relations: amenity -> segment -> segment -> amenity
     metapaths = [[("amenity", "is_nearby", "segment"),
                   ("segment", "connects", "segment"),
@@ -127,6 +135,8 @@ Every domain follows the same pattern: GeoDataFrames in, node and edge GeoDataFr
 === "To GNNs"
 
     ```python
+    import city2graph as c2g
+
     # Any graph -> NetworkX or PyTorch Geometric, and back
     G = c2g.gdf_to_nx(nodes, edges)
     data = c2g.gdf_to_pyg(nodes, edges)   # Data / HeteroData
