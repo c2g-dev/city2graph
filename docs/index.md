@@ -184,13 +184,13 @@ For details, see [Installation](installation.md) such as supported CUDA version.
 
 <div class="grid cards examples-gallery" markdown>
 
-- ![Metapath edges (cyan) linking amenities across the dual street graph of Soho, London](assets/examples/metapaths.jpg){ .card-img }
+- ![Walkable street networks of eight city centres extracted from Overture Maps](assets/examples/overture_osmnx.jpg){ .card-img }
 
-    **[Metapath Construction for Heterogeneous GNNs](examples/add_metapaths.ipynb)**
+    **[How to Use Overture Maps Like OSMnx](https://medium.com/@yuta.sato.now/how-to-use-overture-maps-like-osmnx-by-city2graph-7e01d38f9f61)**
 
     ---
 
-    Materialise metapath edges between amenities reachable within a few street hops — the composite relations used by heterogeneous GNNs.
+    Bring the OSMnx-like experience to Overture Maps: fetch buildings, streets, and POIs for any place and turn them into analysis-ready graphs.
 
 - ![Morphological graph of Liverpool: buildings, tessellation cells, and street segments](assets/examples/morphology.jpg){ .card-img }
 
@@ -199,6 +199,14 @@ For details, see [Installation](installation.md) such as supported CUDA version.
     ---
 
     Tessellate Liverpool's urban fabric, link it to the street network, and export a heterogeneous graph to NetworkX and PyTorch Geometric.
+
+- ![Metapath edges (cyan) linking amenities across the dual street graph of Soho, London](assets/examples/metapaths.jpg){ .card-img }
+
+    **[Metapath Construction for Heterogeneous GNNs](examples/add_metapaths.ipynb)**
+
+    ---
+
+    Materialise metapath edges between amenities reachable within a few street hops — the composite relations used by heterogeneous GNNs.
 
 - ![Betweenness centrality of every transit stop in London on a dark basemap](assets/examples/gtfs.jpg){ .card-img }
 
@@ -223,14 +231,6 @@ For details, see [Installation](installation.md) such as supported CUDA version.
     ---
 
     Generate KNN, Delaunay, Gilbert, and Waxman graphs over Tokyo POIs under Euclidean, Manhattan, and network distances.
-
-- ![Walkable street networks of eight city centres extracted from Overture Maps](assets/examples/overture_osmnx.jpg){ .card-img }
-
-    **[How to Use Overture Maps Like OSMnx](https://medium.com/@yuta.sato.now/how-to-use-overture-maps-like-osmnx-by-city2graph-7e01d38f9f61)**
-
-    ---
-
-    Bring the OSMnx-like experience to Overture Maps: fetch buildings, streets, and POIs for any place and turn them into analysis-ready graphs.
 
 </div>
 
