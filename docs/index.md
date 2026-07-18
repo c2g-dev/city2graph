@@ -145,6 +145,28 @@ For details, see [Installation](installation.md) such as supported CUDA version.
 
 ## Examples
 
+### Applied projects
+
+<div class="grid cards examples-gallery" markdown>
+
+- ![Travel-time network over Liverpool output areas from the case study](assets/examples/case_study.jpg){ .card-img }
+
+    **[Liverpool Case Study](https://github.com/c2g-dev/city2graph-case-study)**
+
+    ---
+
+    A reproducible research pipeline for Liverpool: open data become heterogeneous graphs, graph autoencoders learn embeddings, and clusters characterise urban structure.
+
+- ![city2graph workshop: streets network, walkability, and clustering with GNNs](assets/examples/workshop.jpg){ .card-img }
+
+    **[Workshop: From Geospatial Data to GNNs](https://github.com/c2g-dev/city2graph-workshop)**
+
+    ---
+
+    *GeoAI in Practice*, a hands-on FOSS4G 2026 workshop: construct spatial networks from open data, then build a graph autoencoder pipeline for spatial clustering.
+
+</div>
+
 ### Tutorials
 
 <div class="grid cards examples-gallery" markdown>
@@ -196,28 +218,6 @@ For details, see [Installation](installation.md) such as supported CUDA version.
     ---
 
     Bring the OSMnx-like experience to Overture Maps: fetch buildings, streets, and POIs for any place and turn them into analysis-ready graphs.
-
-</div>
-
-### Applied projects
-
-<div class="grid cards examples-gallery" markdown>
-
-- ![Travel-time network over Liverpool output areas from the case study](assets/examples/case_study.jpg){ .card-img }
-
-    **[Liverpool Case Study](https://github.com/c2g-dev/city2graph-case-study)**
-
-    ---
-
-    A reproducible research pipeline for Liverpool: open data become heterogeneous graphs, graph autoencoders learn embeddings, and clusters characterise urban structure.
-
-- ![city2graph workshop: streets network, walkability, and clustering with GNNs](assets/examples/workshop.jpg){ .card-img }
-
-    **[Workshop: From Geospatial Data to GNNs](https://github.com/c2g-dev/city2graph-workshop)**
-
-    ---
-
-    *GeoAI in Practice*, a hands-on FOSS4G 2026 workshop: construct spatial networks from open data, then build a graph autoencoder pipeline for spatial clustering.
 
 </div>
 
