@@ -21,247 +21,22 @@ hide:
   <img src="assets/logos/social_preview_city2graph.png" alt="City2Graph logo">
 </p>
 
-**City2Graph** is a Python library for converting geospatial datasets into graphs for GNN with integrated interface of [GeoPandas](https://geopandas.org/), [NetworkX](https://networkx.org/), and [Pytorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/) across multiple domains (e.g. streets, transportations, OD matrices, POI proximities, etc.). It enables researchers and practitioners to seamlessly develop advanced GeoAI and geographic data science applications.
+**City2Graph** turns geospatial datasets — streets, buildings, transit feeds, OD matrices, and points of interest — into graphs, with one interface that bridges [GeoPandas](https://geopandas.org/), [NetworkX](https://networkx.org/), and [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/). Load open urban data, build a graph in a few lines of code, then analyse it as a spatial network or feed it to Graph Neural Networks (GNNs).
 
 <p align="center">
   <img src="assets/figures/scope.png" alt="Overview scope of City2Graph" class="desktop-limit-width">
 </p>
 
-## Features
+Use it to build graphs from:
 
-- Construct graphs from morphological datasets (e.g. buildings, streets, and land use from OpenStreetMap (OSM), Overture Maps, and others)
-- Construct graphs from transportation datasets (e.g. public transport of buses, trams, and trains from GTFS) with DuckDB-backed loading and aggregation
-- Construct graphs from contiguity datasets (e.g. land use, land cover, and administrative boundaries)
-- Construct graphs from mobility datasets (e.g. bike-sharing, migration, and pedestrian flows)
-- Convert geospatial data (GeoPandas / NetworkX) into tensors (PyTorch Geometric's Data and HeteroData) for graph representation learning, such as Graph Neural Networks (GNNs)
-- Build multi-center accessibility catchments and layered isochrones from network graphs
+- **Morphology**: buildings, streets, and tessellated urban fabric from OpenStreetMap and Overture Maps
+- **Transportation**: GTFS public transport feeds aggregated into stop-to-stop transit graphs
+- **Mobility**: origin–destination matrices and flows (migration, bike-sharing, pedestrian counts) as weighted spatial graphs
+- **Proximity & contiguity**: KNN, Delaunay, Gilbert, and Waxman graphs, plus queen/rook contiguity between zones
 
-**City2Graph** empowers researchers and practitioners in GeoAI, Urban Analytics, and Spatial Data Science to build advanced applications. A key distinction of this library is its ability to model complex urban systems by handling multiple geospatial relations as **heterogeneous graphs**. It bridges the gap between traditional GIS and modern Graph Neural Networks (GNNs) for a variety of applications. By supporting standard libraries like PyTorch Geometric, it enables seamless integration into deep learning workflows for Graph Representation Learning. With its versatile graph construction interface, this library can also be used for network analysis of urban systems from multiple geospatial relations, such as multi-modal accessibility (e.g. isochrone with street networks + public transport networks).
+Any of these graphs converts round-trip between GeoDataFrames, NetworkX, and PyTorch Geometric `Data`/`HeteroData` tensors. Because several geospatial relations can live in one **heterogeneous graph**, City2Graph serves both multi-modal network analysis (for example, isochrones over street plus transit networks) and training GNNs on urban systems.
 
-## Quickstart
-
-Install City2Graph using pip (recommended):
-
-```bash
-pip install city2graph
-```
-
-For graph neural network functionality (PyTorch, PyTorch Geometric):
-
-```bash
-pip install "city2graph[cpu]"  # or e.g. "city2graph[cu130]" for CUDA (GPU)
-```
-
-See [Installation](installation.md) for supported CUDA versions and
-conda-based installation.
-
-## Examples
-
-```python
-import city2graph as c2g
-import geopandas as gpd
-import networkx as nx
-import pandas as pd
-from pathlib import Path
-import rustworkx as rx
-```
-
-**Metapath**
-
-```python
-# Define metapath: amenity -> segment -> segment -> amenity (3-hop in this case)
-metapaths = [[("amenity", "is_nearby", "segment"),
-              ("segment", "connects", "segment"),
-              ("segment", "connects", "segment"),
-              ("segment", "is_nearby", "amenity")]]
-
-# Add metapath-derived edges to connect amenities through street networks
-nodes_with_metapaths, edges_with_metapaths = c2g.add_metapaths(
-    (combined_nodes, combined_edges),
-    metapaths,
-    edge_attr="distance_m",
-    edge_attr_agg="sum"
-)
-```
-
-<p align="center">
-  <img src="assets/figures/metapath.gif" alt="Animation showing metapath connections between amenities through street segments in Soho, London" class="desktop-limit-width">
-</p>
-
-For details, see [Examples](examples/add_metapaths.ipynb)
-
-**Morphology**
-
-```python
-morphological_nodes, morphological_edges = c2g.morphological_graph(
-   buildings_gdf,
-   segments_gdf,
-   center_point,
-   distance=500
- )
-```
-
-<p align="center">
-  <img src="assets/figures/morph_net_overview.png" alt="A morphological graph of 500m walking distance in Liverpool" class="desktop-limit-width">
-</p>
-
-For details, see [Examples](examples/morphological_graph_from_overturemaps.ipynb)
-
-**Transportation**
-
-```python
-sample_gtfs_path = Path("./itm_london_gtfs.zip")
-gtfs_con = c2g.load_gtfs(sample_gtfs_path)
-
-travel_summary_nodes, travel_summary_edges = c2g.travel_summary_graph(
-   gtfs_con,
-   calendar_start="20250601",
-   calendar_end="20250601",
-)
-
-travel_summary_graph = c2g.gdf_to_nx(travel_summary_nodes, travel_summary_edges)
-travel_rx_graph = c2g.nx_to_rx(travel_summary_graph)
-
-import rustworkx as rx
-betweenness_centrality = rx.betweenness_centrality(travel_rx_graph)
-
-# Set the betweenness centrality as a node attribute
-nx.set_node_attributes(
-  travel_summary_graph,
-  betweenness_centrality,
-  "betweenness_centrality",
-)
-```
-
-<p align="center">
-  <img src="assets/figures/trav_sum_network_overview.png" alt="A bus transportation graph in London" class="desktop-limit-width">
-</p>
-
-For details, see [Examples](examples/gtfs.ipynb)
-
-**Mobility**
-
-```python
-# Load zones (e.g., MSOA boundaries) and OD matrix data
-od_data = pd.read_csv("od_matrix.csv")
-zones_gdf = gpd.read_file("zones.gpkg")
-
-# Convert OD matrix to graph
-od_nodes, od_edges = c2g.od_matrix_to_graph(
-    od_data,
-    zones_gdf,
-    source_col="origin",
-    target_col="destination",
-    weight_cols=["flow"],
-    zone_id_col="zone_id",
-    directed=False
-)
-```
-
-<p align="center">
-  <img src="assets/figures/od_matrix_to_graph_uk.png" alt="An OD matrix graph showing migration flows and degree centrality in England and Wales" class="desktop-limit-width">
-</p>
-
-For details, see [Examples](examples/generating_graphs_from_od_matrix.ipynb)
-
-**Proximity**
-
-```python
-fixed_radius_graph = c2g.fixed_radius_graph(poi_gdf, radius=100)
-```
-
-<p align="center">
-  <video class="desktop-limit-width" controls>
-    <source src="assets/videos/gilbert_graph.mp4" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
-</p>
-
-```python
-wax_l1_nodes, wax_l1_edges = c2g.waxman_graph(poi_gdf,
-                                 distance_metric="manhattan",
-                                 r0=100,
-                                 beta=0.5)
-
-wax_l2_nodes, wax_l2_edges = c2g.waxman_graph(poi_gdf,
-                                 distance_metric="euclidean",
-                                 r0=100,
-                                 beta=0.5)
-
-wax_net_nodes, wax_net_edges = c2g.waxman_graph(poi_gdf,
-                                 distance_metric="network",
-                                 r0=100,
-                                 beta=0.5,
-                                 network_gdf=segments_gdf.to_crs(epsg=6677))
-```
-
-<p align="center">
-  <img src="assets/figures/waxman_graph.png" alt="Waxman graph of points of interest in Liverpool" class="desktop-limit-width">
-</p>
-
-```python
-nodes_dict = {
-   "restaurants": poi_gdf,
-   "hospitals": hospital_gdf,
-   "commercial": commercial_gdf
-}
-
-# Generate proximity edges between layers using KNN method
-proximity_nodes, proximity_edges = c2g.bridge_nodes(
-   nodes_dict,
-   proximity_method="knn",
-   k=5,
-   distance_metric="euclidean"
-)
-```
-
-<p align="center">
-  <img src="assets/figures/bridge_nodes.png" alt="Bridge nodes connecting different layers of POIs" class="desktop-limit-width">
-</p>
-
-```python
-# Build a contiguity graph (Queen or Rook) from polygonal zones
-wn_q_nodes, wn_q_edges = c2g.contiguity_graph(
-    wards_gdf,
-    contiguity="queen",        # or "rook"
-    distance_metric="euclidean" # or "manhattan", "network"
-)
-```
-
-```python
-# Link point features (e.g., POIs, stops) to containing polygons (e.g., wards)
-nodes_dict, edges_dict = c2g.group_nodes(
-    polygons_gdf=wards_gdf,
-    points_gdf=poi_gdf,
-    predicate="covered_by"      # include boundary points; alternatives: "within", "contains"
-)
-```
-
-```python
-# Combine contiguity edges and grouped edges into a single heterogeneous graph
-combined_nodes = {
-    "wards": wn_q_nodes,
-    "poi": nodes_dict["poi"]
-}
-
-combined_edges = {
-    ("wards", "is_contiguous_with", "wards"): wn_q_edges[("wards", "is_contiguous_with", "wards")],
-    ("wards", "covers", "poi"): edges_dict[("wards", "covers", "poi")]
-}
-
-# Convert to PyG HeteroData
-hetero_graph = c2g.gdf_to_pyg(combined_nodes, combined_edges)
-```
-
-<p align="center">
-  <img src="assets/figures/contiguity_graph.png" alt="Contiguity graph of wards (MSOA) with grouped connections of bus stations in London" class="desktop-limit-width">
-</p>
-
-For details, see [Examples](examples/generating_graphs_by_proximity.ipynb)
-
-## Citation
-
-If you use City2Graph in your research, please cite it as follows:
+For citation:
 
 ```bibtex
 @software{sato2025city2graph,
@@ -273,17 +48,157 @@ If you use City2Graph in your research, please cite it as follows:
 }
 ```
 
-You can also find the citation information in the [CITATION.cff](https://github.com/c2g-dev/city2graph/blob/main/CITATION.cff) file in the repository, which follows the Citation File Format standard.
+## Quickstart
 
-## Documentation
+```bash
+pip install city2graph  # or e.g. "city2graph[cu130]" for CUDA (GPU)
+```
 
-- [Installation](installation.md)
-- [Examples](examples/index.md)
-- [API Reference](api/index.md)
-- [Contributing](contributing.md)
+See [Installation](installation.md) for supported CUDA versions and conda-based installation.
+Every domain follows the same pattern: GeoDataFrames in, node and edge GeoDataFrames out — ready for NetworkX or PyTorch Geometric.
+
+=== "Morphology"
+
+    ```python
+    import city2graph as c2g
+
+    # Buildings + street segments -> heterogeneous morphological graph
+    nodes, edges = c2g.morphological_graph(
+        buildings_gdf, segments_gdf, center_point, distance=500
+    )
+    ```
+
+    ![A morphological graph of 500m walking distance in Liverpool](assets/figures/morph_net_overview.png){ .desktop-limit-width }
+
+=== "Transportation"
+
+    ```python
+    gtfs = c2g.load_gtfs("itm_london_gtfs.zip")
+
+    # Stop-to-stop travel-time graph from a GTFS feed
+    nodes, edges = c2g.travel_summary_graph(
+        gtfs, calendar_start="20250601", calendar_end="20250601"
+    )
+    ```
+
+    ![A bus transportation graph in London](assets/figures/trav_sum_network_overview.png){ .desktop-limit-width }
+
+=== "Mobility"
+
+    ```python
+    # OD matrix + zone geometries -> weighted spatial graph
+    nodes, edges = c2g.od_matrix_to_graph(
+        od_df, zones_gdf,
+        source_col="origin", target_col="destination",
+        weight_cols=["flow"], zone_id_col="zone_id",
+    )
+    ```
+
+    ![An OD matrix graph showing migration flows and degree centrality in England and Wales](assets/figures/od_matrix_to_graph_uk.png){ .desktop-limit-width }
+
+=== "Proximity"
+
+    ```python
+    # Proximity graphs over points of interest
+    knn_nodes, knn_edges = c2g.knn_graph(poi_gdf, k=5)
+    wax_nodes, wax_edges = c2g.waxman_graph(poi_gdf, r0=100, beta=0.5)
+
+    # Queen contiguity between polygonal zones
+    w_nodes, w_edges = c2g.contiguity_graph(wards_gdf, contiguity="queen")
+    ```
+
+    ![Waxman graph of points of interest in Liverpool](assets/figures/waxman_graph.png){ .desktop-limit-width }
+
+=== "Metapath"
+
+    ```python
+    # Compose relations: amenity -> segment -> segment -> amenity
+    metapaths = [[("amenity", "is_nearby", "segment"),
+                  ("segment", "connects", "segment"),
+                  ("segment", "is_nearby", "amenity")]]
+
+    nodes, edges = c2g.add_metapaths(
+        (nodes, edges), metapaths, edge_attr="distance_m", edge_attr_agg="sum"
+    )
+    ```
+
+    ![Animation showing metapath connections between amenities through street segments in Soho, London](assets/figures/metapath.gif){ .desktop-limit-width }
+
+=== "To GNNs"
+
+    ```python
+    # Any graph -> NetworkX or PyTorch Geometric, and back
+    G = c2g.gdf_to_nx(nodes, edges)
+    data = c2g.gdf_to_pyg(nodes, edges)   # Data / HeteroData
+    nodes, edges = c2g.pyg_to_gdf(data)
+    ```
+
+## Examples
+
+<div class="grid cards examples-gallery" markdown>
+
+- ![Metapath edges (cyan) linking amenities across the dual street graph of Soho, London](assets/examples/metapaths.jpg){ .card-img }
+
+    **[Metapath Construction for Heterogeneous GNNs](examples/add_metapaths.ipynb)**
+
+    ---
+
+    Materialise metapath edges between amenities reachable within a few street hops — the composite relations used by heterogeneous GNNs.
+
+- ![Morphological graph of Liverpool: buildings, tessellation cells, and street segments](assets/examples/morphology.jpg){ .card-img }
+
+    **[Morphological Graphs from Overture Maps & OpenStreetMap](examples/morphological_graph_from_overturemaps.ipynb)**
+
+    ---
+
+    Tessellate Liverpool's urban fabric, link it to the street network, and export a heterogeneous graph to NetworkX and PyTorch Geometric.
+
+- ![Betweenness centrality of every transit stop in London on a dark basemap](assets/examples/gtfs.jpg){ .card-img }
+
+    **[GTFS to Public Transit Graphs](examples/gtfs.ipynb)**
+
+    ---
+
+    Convert a raw GTFS feed for London into a travel-time graph, rank stops by betweenness centrality, and draw walk-plus-transit isochrones.
+
+- ![Migration flows between England and Wales MSOAs drawn as a white network on black](assets/examples/od_matrix.jpg){ .card-img }
+
+    **[OD Matrices to Mobility Graphs](examples/generating_graphs_from_od_matrix.ipynb)**
+
+    ---
+
+    Turn origin–destination data into spatial graphs, up to the 2021 census migration flows between all MSOAs of England and Wales.
+
+- ![Waxman random geometric graph over points of interest in Tokyo](assets/examples/proximity.jpg){ .card-img }
+
+    **[Spatial Proximity Graphs](examples/generating_graphs_by_proximity.ipynb)**
+
+    ---
+
+    Generate KNN, Delaunay, Gilbert, and Waxman graphs over Tokyo POIs under Euclidean, Manhattan, and network distances.
+
+- ![Travel-time network over Liverpool output areas from the case study](assets/examples/case_study.jpg){ .card-img }
+
+    **[Liverpool Case Study](https://github.com/c2g-dev/city2graph-case-study)**
+
+    ---
+
+    A reproducible research pipeline for Liverpool: open data become heterogeneous graphs, graph autoencoders learn embeddings, and clusters characterise urban structure.
+
+- ![city2graph workshop: streets network, walkability, and clustering with GNNs](assets/examples/workshop.jpg){ .card-img }
+
+    **[Workshop: From Geospatial Data to GNNs](https://github.com/c2g-dev/city2graph-workshop)**
+
+    ---
+
+    *GeoAI in Practice*, a hands-on FOSS4G 2026 workshop: construct spatial networks from open data, then build a graph autoencoder pipeline for spatial clustering.
+
+</div>
+
+[Browse all examples →](examples/index.md)
 
 <p align="center">
   <a href="https://www.liverpool.ac.uk/geographic-data-science/">
-    <img src="assets/logos/gdsl.png" alt="GeoGraphic Data Science Lab">
+    <img src="assets/logos/gdsl.png" alt="GeoGraphic Data Science Lab" class="footer-logo">
   </a>
 </p>

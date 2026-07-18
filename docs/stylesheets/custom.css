@@ -968,3 +968,109 @@ body {
   transform: translateY(-2px);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
 }
+
+/* ==========================================================================
+   14. LANDING PAGE (docs/index.md)
+   ========================================================================== */
+
+/* --- Hero --- */
+.md-typeset .landing-hero {
+  text-align: center;
+  padding: 0.5rem 0 1rem;
+}
+
+.md-typeset .landing-hero img.hero-banner {
+  max-width: min(760px, 100%);
+  margin: 0 auto 1.5rem;
+}
+
+.md-typeset h1.hero-tagline {
+  font-size: 2.1rem;
+  font-weight: 650;
+  line-height: 1.15;
+  margin: 0 auto 0.6rem;
+  max-width: 44rem;
+  background: linear-gradient(90deg, var(--md-primary-fg-color), var(--md-accent-fg-color));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.md-typeset h1.hero-tagline .headerlink {
+  display: none;
+}
+
+.md-typeset .hero-subtitle {
+  max-width: 40rem;
+  margin: 0 auto 1.4rem;
+  font-size: 0.9rem;
+  color: var(--doc-muted-color);
+}
+
+.md-typeset .landing-hero .md-button {
+  margin: 0.2rem 0.25rem;
+}
+
+.md-typeset .hero-install {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.2rem;
+}
+
+.md-typeset .hero-install pre {
+  display: inline-block;
+  border-radius: 12px !important;
+  border: 1px solid var(--code-border) !important;
+  padding: 0.55em 2.8em 0.55em 1.4em !important;
+}
+
+/* --- Footer logo (keep the lab logo modest) --- */
+.md-typeset p > a > img.footer-logo:only-of-type {
+  max-width: min(420px, 90%) !important;
+  width: auto !important;
+  margin: 0 auto;
+}
+
+/* --- Badge row (undo the global image card treatment for shields) --- */
+.md-typeset .badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.md-typeset .badge-row img {
+  height: 20px;
+  width: auto;
+  border: none;
+  border-radius: 3px;
+  box-shadow: none;
+}
+
+/* --- Feature cards (glass treatment matching the design language) --- */
+.md-typeset .grid.cards.feature-cards > ul > li {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.md-typeset .grid.cards.feature-cards > ul > li:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--card-shadow-hover);
+}
+
+/* --- Mobile --- */
+@media screen and (max-width: 44.9375em) {
+  .md-typeset h1.hero-tagline {
+    font-size: 1.5rem;
+  }
+
+  .md-typeset .hero-subtitle {
+    font-size: 0.8rem;
+  }
+}
