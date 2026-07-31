@@ -6,9 +6,9 @@ We actively maintain and provide security updates for the following versions of 
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.3.x   | :white_check_mark: |
-| 0.2.x   | :x:                |
-| < 0.2.0 | :x:                |
+| 1.0.x   | :white_check_mark: |
+| 0.4.x   | :x:                |
+| < 0.4.0 | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -61,9 +61,9 @@ When using city2graph, we recommend following these security best practices:
 
 - **Keep Dependencies Updated:** Regularly update city2graph and its dependencies to get the latest security patches
 - **Use Virtual Environments:** Isolate city2graph installations using virtual environments (venv, conda, etc.)
-- **Pin Secure PyTorch Versions:** city2graph requires `torch>=2.12.0` for CPU, CUDA 12.6, and CUDA 13.0, or `torch>=2.11.0` for CUDA 12.8
+- **Pin Secure PyTorch Versions:** city2graph requires `torch>=2.13.0` for CPU, CUDA 12.6, and CUDA 13.0, or `torch>=2.11.0` for CUDA 12.8
 - **Review Dependencies:** Be aware of the security status of core dependencies:
-  - PyTorch (≥ 2.11.0) and PyTorch Geometric (≥ 2.7.0)
+  - PyTorch (≥ 2.11.0) and PyTorch Geometric (≥ 2.8.0)
   - GeoPandas and its dependencies (GDAL, GEOS, etc.)
   - NetworkX
   - OSMnx

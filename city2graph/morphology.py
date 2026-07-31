@@ -34,7 +34,6 @@ from __future__ import annotations
 import logging
 import math
 import typing
-import warnings
 
 # Third-party imports
 import geopandas as gpd
@@ -66,9 +65,6 @@ __all__ = [
     "movement_to_movement_graph",
     "place_to_movement_graph",
     "place_to_place_graph",
-    "private_to_private_graph",
-    "private_to_public_graph",
-    "public_to_public_graph",
     "segments_to_graph",
 ]
 
@@ -3589,143 +3585,3 @@ def _set_edge_index(
         The GeoDataFrame with the new MultiIndex applied.
     """
     return gdf.set_index([from_col, to_col])
-
-
-# ============================================================================
-# DEPRECATED ALIASES
-# ============================================================================
-
-
-def private_to_private_graph(
-    place_gdf: gpd.GeoDataFrame,
-    group_col: str | None = None,
-    contiguity: str = "queen",
-    as_nx: bool = False,
-    duplicate_edges: bool = False,
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
-    """
-    Create edges between contiguous place polygons (deprecated).
-
-    .. deprecated::
-        Use :func:`place_to_place_graph` instead.
-
-    Parameters
-    ----------
-    place_gdf : geopandas.GeoDataFrame
-        GeoDataFrame containing place polygons (e.g., tessellation cells).
-    group_col : str, optional
-        Column name used to group connections (e.g., enclosures).
-    contiguity : str, default "queen"
-        Contiguity criterion, either "queen" or "rook".
-    as_nx : bool, default False
-        If True, return a NetworkX graph instead of GeoDataFrames.
-    duplicate_edges : bool, default False
-        If True, include both directions of each undirected edge.
-
-    Returns
-    -------
-    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] or networkx.Graph
-        Nodes and edges GeoDataFrames, or a NetworkX graph if ``as_nx=True``.
-    """
-    warnings.warn(
-        "private_to_private_graph is deprecated; use place_to_place_graph",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return place_to_place_graph(
-        place_gdf,
-        group_col=group_col,
-        contiguity=contiguity,
-        as_nx=as_nx,
-        duplicate_edges=duplicate_edges,
-    )
-
-
-def private_to_public_graph(
-    place_gdf: gpd.GeoDataFrame,
-    movement_gdf: gpd.GeoDataFrame,
-    primary_barrier_col: str | None = None,
-    tolerance: float = 1e-6,
-    as_nx: bool = False,
-    max_connection_distance: float = math.inf,
-    duplicate_edges: bool = False,
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
-    """
-    Create edges between place polygons and movement geometries (deprecated).
-
-    .. deprecated::
-        Use :func:`place_to_movement_graph` instead.
-
-    Parameters
-    ----------
-    place_gdf : geopandas.GeoDataFrame
-        GeoDataFrame containing place polygons (e.g., tessellation cells).
-    movement_gdf : geopandas.GeoDataFrame
-        GeoDataFrame containing movement geometries (e.g., street segments).
-    primary_barrier_col : str, optional
-        Column containing alternative geometries to use for movement spaces.
-    tolerance : float, default 1e-6
-        Buffer distance for spatial joins between places and movements.
-    as_nx : bool, default False
-        If True, return a NetworkX graph instead of GeoDataFrames.
-    max_connection_distance : float, default math.inf
-        Maximum distance for connecting unmatched places to movements.
-    duplicate_edges : bool, default False
-        If True, include both directions of each undirected edge.
-
-    Returns
-    -------
-    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] or networkx.Graph
-        Nodes and edges GeoDataFrames, or a NetworkX graph if ``as_nx=True``.
-    """
-    warnings.warn(
-        "private_to_public_graph is deprecated; use place_to_movement_graph",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return place_to_movement_graph(
-        place_gdf,
-        movement_gdf,
-        primary_barrier_col=primary_barrier_col,
-        tolerance=tolerance,
-        as_nx=as_nx,
-        max_connection_distance=max_connection_distance,
-        duplicate_edges=duplicate_edges,
-    )
-
-
-def public_to_public_graph(
-    movement_gdf: gpd.GeoDataFrame,
-    as_nx: bool = False,
-    duplicate_edges: bool = False,
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
-    """
-    Create edges between connected movement segments (deprecated).
-
-    .. deprecated::
-        Use :func:`movement_to_movement_graph` instead.
-
-    Parameters
-    ----------
-    movement_gdf : geopandas.GeoDataFrame
-        GeoDataFrame containing movement geometries (e.g., street segments).
-    as_nx : bool, default False
-        If True, return a NetworkX graph instead of GeoDataFrames.
-    duplicate_edges : bool, default False
-        If True, include both directions of each undirected edge.
-
-    Returns
-    -------
-    tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] or networkx.Graph
-        Nodes and edges GeoDataFrames, or a NetworkX graph if ``as_nx=True``.
-    """
-    warnings.warn(
-        "public_to_public_graph is deprecated; use movement_to_movement_graph",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return movement_to_movement_graph(
-        movement_gdf,
-        as_nx=as_nx,
-        duplicate_edges=duplicate_edges,
-    )

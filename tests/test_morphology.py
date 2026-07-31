@@ -29,9 +29,6 @@ from city2graph.morphology import morphological_graphs
 from city2graph.morphology import movement_to_movement_graph
 from city2graph.morphology import place_to_movement_graph
 from city2graph.morphology import place_to_place_graph
-from city2graph.morphology import private_to_private_graph
-from city2graph.morphology import private_to_public_graph
-from city2graph.morphology import public_to_public_graph
 from city2graph.morphology import segments_to_graph
 from tests.helpers import assert_valid_nx_graph
 from tests.helpers import make_grid_polygons_gdf
@@ -2517,44 +2514,3 @@ class TestPublicInputImmutability(TestMorphologyBase):
         segments_to_graph(sample_segments_gdf)
 
         assert_geodataframe_equal(sample_segments_gdf, segments_before)
-
-
-class TestDeprecatedAliases:
-    """Deprecated function names warn and delegate to the renamed functions."""
-
-    def test_private_to_private_graph_deprecated(
-        self,
-        sample_tessellation_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """private_to_private_graph warns and matches place_to_place_graph."""
-        with pytest.warns(DeprecationWarning, match="place_to_place_graph"):
-            nodes, edges = private_to_private_graph(sample_tessellation_gdf)
-        expected_nodes, expected_edges = place_to_place_graph(sample_tessellation_gdf)
-        pd.testing.assert_frame_equal(nodes, expected_nodes)
-        pd.testing.assert_frame_equal(edges, expected_edges)
-
-    def test_private_to_public_graph_deprecated(
-        self,
-        sample_tessellation_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """private_to_public_graph warns and matches place_to_movement_graph."""
-        with pytest.warns(DeprecationWarning, match="place_to_movement_graph"):
-            nodes, edges = private_to_public_graph(sample_tessellation_gdf, sample_segments_gdf)
-        expected_nodes, expected_edges = place_to_movement_graph(
-            sample_tessellation_gdf,
-            sample_segments_gdf,
-        )
-        pd.testing.assert_frame_equal(nodes, expected_nodes)
-        pd.testing.assert_frame_equal(edges, expected_edges)
-
-    def test_public_to_public_graph_deprecated(
-        self,
-        sample_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """public_to_public_graph warns and matches movement_to_movement_graph."""
-        with pytest.warns(DeprecationWarning, match="movement_to_movement_graph"):
-            nodes, edges = public_to_public_graph(sample_segments_gdf)
-        expected_nodes, expected_edges = movement_to_movement_graph(sample_segments_gdf)
-        pd.testing.assert_frame_equal(nodes, expected_nodes)
-        pd.testing.assert_frame_equal(edges, expected_edges)
