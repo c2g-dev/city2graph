@@ -12,7 +12,7 @@ Neural Networks (GNNs). See the
 [documentation](https://city2graph.net/latest/) for installation, tutorials,
 and the Python API reference.
 
-[![PyPI version](https://badge.fury.io/py/city2graph.svg)](https://badge.fury.io/py/city2graph/) [![conda-forge Version](https://anaconda.org/conda-forge/city2graph/badges/version.svg)](https://anaconda.org/conda-forge/city2graph/) [![PyPI Downloads](https://static.pepy.tech/badge/city2graph)](https://pepy.tech/projects/city2graph) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15858845.svg)](https://doi.org/10.5281/zenodo.15858845) [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/c2g-dev/city2graph/blob/main/LICENSE)
+[![PyPI version](https://badge.fury.io/py/city2graph.svg)](https://badge.fury.io/py/city2graph/) [![conda-forge Version](https://anaconda.org/conda-forge/city2graph/badges/version.svg)](https://anaconda.org/conda-forge/city2graph/) [![PyPI Downloads](https://static.pepy.tech/badge/city2graph)](https://pepy.tech/projects/city2graph) [![DOI](https://img.shields.io/badge/DOI-10.1016%2Fj.compenvurbsys.2026.102492-blue?logo=doi&logoColor=white)](https://doi.org/10.1016/j.compenvurbsys.2026.102492) [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/c2g-dev/city2graph/blob/main/LICENSE)
 [![Platform](https://anaconda.org/conda-forge/city2graph/badges/platforms.svg
 )](https://anaconda.org/conda-forge/city2graph) [![codecov](https://codecov.io/gh/c2g-dev/city2graph/graph/badge.svg?token=2R449G75Z0)](https://codecov.io/gh/c2g-dev/city2graph) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
@@ -112,19 +112,26 @@ setup, testing, code quality, documentation, and pull request instructions.
 
 ## Citation
 
-If you use City2Graph in your research, please cite it as follows:
+If you use City2Graph in your research, please cite the paper published in
+*Computers, Environment and Urban Systems*:
+
+Sato, Y., Pietrostefani, E., Mahabir, R., & Arribas-Bel, D. (2026). City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial analysis in urban systems. *Computers, Environment and Urban Systems*, 130, 102492. [https://doi.org/10.1016/j.compenvurbsys.2026.102492](https://doi.org/10.1016/j.compenvurbsys.2026.102492)
 
 ```bibtex
-@software{sato2025city2graph,
-  title = {City2Graph: Transform geospatial relations into graphs for spatial network analysis and Graph Neural Networks},
-  author = {Sato, Yuta},
-  year = {2025},
-  url = {https://github.com/c2g-dev/city2graph},
-  doi = {10.5281/zenodo.15858845},
+@article{sato2026city2graph,
+  title = {City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial analysis in urban systems},
+  author = {Sato, Yuta and Pietrostefani, Elisabetta and Mahabir, Ron and Arribas-Bel, Daniel},
+  journal = {Computers, Environment and Urban Systems},
+  volume = {130},
+  pages = {102492},
+  year = {2026},
+  issn = {0198-9715},
+  doi = {10.1016/j.compenvurbsys.2026.102492},
+  url = {https://www.sciencedirect.com/science/article/pii/S0198971526000943},
 }
 ```
 
-You can also use the DOI to cite a specific version: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15858845.svg)](https://doi.org/10.5281/zenodo.15858845)
+To cite a specific release of the software instead, use the archived version DOI: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15858845.svg)](https://doi.org/10.5281/zenodo.15858845)
 
 Alternatively, you can find the citation information in the [CITATION.cff](CITATION.cff) file in this repository, which follows the Citation File Format standard.
 

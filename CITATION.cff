@@ -33,13 +33,24 @@ keywords:
   - Graph Representation Learning
   - Urban Planning and Design
 preferred-citation:
-  type: software
-  title: "City2Graph: Transform geospatial relations into graphs for spatial analysis and Graph Neural Networks"
+  type: article
+  title: "City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial analysis in urban systems"
   authors:
     - given-names: Yuta
       family-names: Sato
       email: y.sato@liverpool.ac.uk
+      orcid: https://orcid.org/0009-0004-7052-7163
       affiliation: University of Liverpool
-  version: 0.4.0
-  url: "https://github.com/c2g-dev/city2graph"
+    - given-names: Elisabetta
+      family-names: Pietrostefani
+    - given-names: Ron
+      family-names: Mahabir
+    - given-names: Daniel
+      family-names: Arribas-Bel
+  journal: "Computers, Environment and Urban Systems"
+  volume: 130
+  start: 102492
   year: 2026
+  issn: "0198-9715"
+  doi: "10.1016/j.compenvurbsys.2026.102492"
+  url: "https://www.sciencedirect.com/science/article/pii/S0198971526000943"
