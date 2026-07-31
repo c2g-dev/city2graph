@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "city2graph"
-version = "0.4.0"
+version = "1.0.0"
 description = "A Python library for Geospatial Graph Neural Networks and GeoAI for Urban Analytics with PyTorch Geometric. Convert geospatial data to graphs for spatiotemporal analysis, urban mobility studies, and more."
 authors = [
     {name = "Yuta Sato", email = "y.sato@liverpool.ac.uk"}
@@ -12,11 +12,10 @@ authors = [
 readme = "README.md"
 license = {text = "BSD-3-Clause"}
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -24,15 +23,17 @@ classifiers = [
     "Topic :: Scientific/Engineering :: GIS",
 ]
 keywords = ["GeoAI", "Graph Neural Networks", "GNNs", "PyTorch Geometric", "Geospatial Analysis", "Urban Analytics", "Spatial Data Science", "Urban Mobility", "Transportation Networks", "Spatial Knowledge Graphs", "Spatiotemporal Analysis", "Geospatial Foundation Models", "Digital Twin", "Urban Informatics", "Geographic Data Science", "Graph Representation Learning", "Urban Planning and Design"]
-requires-python = ">=3.11,<3.15"
+requires-python = ">=3.12,<3.15"
 dependencies = [
     "networkx >=2.8",
     "duckdb >=1.1.0",
-    "osmnx >=2.0.3",
     "shapely >=2.1.0",
     "geopandas >=1.1.1",
     "libpysal >=4.12.1",
-    "momepy",
+    "momepy >=1.0.0",
+    "numpy >=1.24",
+    "pandas >=2.0",
+    "pyproj >=3.5",
     "overturemaps>=0.18.1",
     "rustworkx >=0.17.1",
     "scipy >=1.10.0",
@@ -41,24 +42,25 @@ dependencies = [
 
 [project.optional-dependencies]
 cpu = [
-    "torch>=2.12.0",
-    "torchvision>=0.27.0",
-    "torch_geometric>=2.7.0",
+    "torch>=2.13.0",
+    "torchvision>=0.28.0",
+    "torch_geometric>=2.8.0",
 ]
 cu126 = [
-    "torch>=2.12.0",
-    "torchvision>=0.27.0",
-    "torch_geometric>=2.7.0",
+    "torch>=2.13.0",
+    "torchvision>=0.28.0",
+    "torch_geometric>=2.8.0",
 ]
+# PyTorch publishes no CUDA 12.8 wheels past 2.11, so this extra stays behind.
 cu128 = [
     "torch>=2.11.0",
     "torchvision>=0.26.0",
-    "torch_geometric>=2.7.0",
+    "torch_geometric>=2.8.0",
 ]
 cu130 = [
-    "torch>=2.12.0",
-    "torchvision>=0.27.0",
-    "torch_geometric>=2.7.0",
+    "torch>=2.13.0",
+    "torchvision>=0.28.0",
+    "torch_geometric>=2.8.0",
 ]
 
 [tool.uv]
@@ -132,6 +134,7 @@ dev = [
     "folium >=0.19.6",
     "mapclassify >=2.8.1",
     "contextily>=1.6.2",
+    "osmnx >=2.0.3",
 ]
 
 [project.urls]
