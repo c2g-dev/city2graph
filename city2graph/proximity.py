@@ -14,6 +14,7 @@ from __future__ import annotations
 
 # Standard library imports
 import logging
+import warnings
 from dataclasses import dataclass
 from itertools import combinations
 from numbers import Real
@@ -776,7 +777,7 @@ def knn_graph(
     network_weight: str | None = None,
     *,
     target_gdf: gpd.GeoDataFrame | None = None,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
@@ -810,9 +811,14 @@ def knn_graph(
         If provided, creates a directed graph where edges connect nodes from `gdf` to
         their k nearest neighbors in `target_gdf`. If None, creates an undirected graph
         within `gdf` itself.
-    as_nx : bool, default False
+    as_nx : bool, optional
         If True, returns a NetworkX graph object. Otherwise, returns a tuple of
-        GeoDataFrames (nodes, edges).
+        GeoDataFrames (nodes, edges). If not explicitly set, defaults to False.
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     duplicate_edges : bool, default False
         If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
         for every undirected edge (roughly doubling the row count), so
@@ -834,6 +840,16 @@ def knn_graph(
         If `k` is greater than or equal to the number of available nodes.
         If `duplicate_edges` is True together with `as_nx=True` or `target_gdf`.
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     _validate_duplicate_edges(duplicate_edges, as_nx, target_gdf)
 
     # Handle directed variant
@@ -893,7 +909,7 @@ def delaunay_graph(
     network_gdf: gpd.GeoDataFrame | None = None,
     network_weight: str | None = None,
     *,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
@@ -917,9 +933,14 @@ def delaunay_graph(
     network_weight : str, optional
         Edge attribute name in `network_gdf` used as the path weight when
         `distance_metric` is ``"network"``. Defaults to geometry length.
-    as_nx : bool, default False
+    as_nx : bool, optional
         If True, returns a NetworkX graph object. Otherwise, returns a tuple of
-        GeoDataFrames (nodes, edges).
+        GeoDataFrames (nodes, edges). If not explicitly set, defaults to False.
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     duplicate_edges : bool, default False
         If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
         for every undirected edge (roughly doubling the row count), so
@@ -960,6 +981,16 @@ def delaunay_graph(
        Delaunay triangulation. International Journal of Computer & Information Sciences, 9(3),
        219-242. https://doi.org/10.1007/BF00977785
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     _validate_duplicate_edges(duplicate_edges, as_nx)
 
     metric = DistanceMetric(distance_metric, network_gdf, network_weight)
@@ -988,7 +1019,7 @@ def gabriel_graph(
     network_gdf: gpd.GeoDataFrame | None = None,
     network_weight: str | None = None,
     *,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
@@ -1009,9 +1040,14 @@ def gabriel_graph(
     network_weight : str, optional
         Edge attribute in `network_gdf` that supplies weights for network distances.
         Defaults to geometry length when not provided.
-    as_nx : bool, default False
+    as_nx : bool, optional
         If True return a NetworkX graph, otherwise return two GeoDataFrames (nodes, edges)
-        via `nx_to_gdf`.
+        via `nx_to_gdf`. If not explicitly set, defaults to False.
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     duplicate_edges : bool, default False
         If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
         for every undirected edge (roughly doubling the row count), so
@@ -1046,6 +1082,16 @@ def gabriel_graph(
        variation analysis. Systematic zoology, 18(3), 259-278.
        https://doi.org/10.2307/2412323
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     _validate_duplicate_edges(duplicate_edges, as_nx)
 
     metric = DistanceMetric(distance_metric, network_gdf, network_weight)
@@ -1087,7 +1133,7 @@ def relative_neighborhood_graph(
     network_gdf: gpd.GeoDataFrame | None = None,
     network_weight: str | None = None,
     *,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
@@ -1108,9 +1154,14 @@ def relative_neighborhood_graph(
     network_weight : str, optional
         Edge attribute in `network_gdf` used for network distances. Defaults to
         geometry length when omitted.
-    as_nx : bool, default False
+    as_nx : bool, optional
         If True return a NetworkX graph, otherwise return two GeoDataFrames (nodes, edges)
-        via `nx_to_gdf`.
+        via `nx_to_gdf`. If not explicitly set, defaults to False.
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     duplicate_edges : bool, default False
         If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
         for every undirected edge (roughly doubling the row count), so
@@ -1144,6 +1195,16 @@ def relative_neighborhood_graph(
        set. Pattern recognition, 12(4), 261-268.
        https://doi.org/10.1016/0031-3203(80)90066-7
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     _validate_duplicate_edges(duplicate_edges, as_nx)
 
     metric = DistanceMetric(distance_metric, network_gdf, network_weight)
@@ -1190,7 +1251,7 @@ def euclidean_minimum_spanning_tree(
     network_gdf: gpd.GeoDataFrame | None = None,
     network_weight: str | None = None,
     *,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
@@ -1217,9 +1278,14 @@ def euclidean_minimum_spanning_tree(
     network_weight : str, optional
         Edge attribute name in `network_gdf` used for weighting shortest paths when
         `distance_metric='network'`. Defaults to geometry length.
-    as_nx : bool, default False
+    as_nx : bool, optional
         If True return a NetworkX graph, otherwise return two GeoDataFrames (nodes, edges)
-        via `nx_to_gdf`.
+        via `nx_to_gdf`. If not explicitly set, defaults to False.
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     duplicate_edges : bool, default False
         If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
         for every undirected edge (roughly doubling the row count), so
@@ -1263,6 +1329,16 @@ def euclidean_minimum_spanning_tree(
        SIGKDD international conference on Knowledge discovery and data mining (pp.
        603-612). https://doi.org/10.1145/1835804.1835882
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     _validate_duplicate_edges(duplicate_edges, as_nx)
 
     metric = DistanceMetric(distance_metric, network_gdf, network_weight)
@@ -1308,7 +1384,7 @@ def fixed_radius_graph(
     network_weight: str | None = None,
     *,
     target_gdf: gpd.GeoDataFrame | None = None,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
@@ -1342,9 +1418,14 @@ def fixed_radius_graph(
         If provided, creates a directed graph where edges connect nodes from `gdf` to
         nodes in `target_gdf` within the specified radius. If None, creates an undirected
         graph from `gdf` itself.
-    as_nx : bool, default False
+    as_nx : bool, optional
         If True, returns a NetworkX graph object. Otherwise, returns a tuple of
-        GeoDataFrames (nodes, edges).
+        GeoDataFrames (nodes, edges). If not explicitly set, defaults to False.
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     duplicate_edges : bool, default False
         If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
         for every undirected edge (roughly doubling the row count), so
@@ -1386,6 +1467,16 @@ def fixed_radius_graph(
        finding fixed-radius near neighbors. Information processing letters, 6(6),
        209-212. https://doi.org/10.1016/0020-0190(77)90070-9
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     _validate_duplicate_edges(duplicate_edges, as_nx, target_gdf)
 
     if target_gdf is not None:
@@ -1446,7 +1537,7 @@ def waxman_graph(
     network_gdf: gpd.GeoDataFrame | None = None,
     network_weight: str | None = None,
     *,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
@@ -1489,9 +1580,14 @@ def waxman_graph(
     network_weight : str, optional
         Edge attribute name in `network_gdf` used for network distances. Defaults to
         geometry length when omitted.
-    as_nx : bool, default False
+    as_nx : bool, optional
         If True, returns a NetworkX graph object. Otherwise, returns a tuple of
-        GeoDataFrames (nodes, edges).
+        GeoDataFrames (nodes, edges). If not explicitly set, defaults to False.
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     duplicate_edges : bool, default False
         If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
         for every undirected edge (roughly doubling the row count), so
@@ -1538,6 +1634,16 @@ def waxman_graph(
        selected areas in communications, 6(9), 1617-1622.
        https://doi.org/10.1109/49.12889
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     _validate_duplicate_edges(duplicate_edges, as_nx)
 
     rng = np.random.default_rng(seed)
@@ -1613,7 +1719,7 @@ def bridge_nodes(
     source_node_types: Iterable[str] | None = None,
     target_node_types: Iterable[str] | None = None,
     multigraph: bool = False,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     **kwargs: float | str | bool,
 ) -> tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]] | nx.Graph:
     r"""
@@ -1648,9 +1754,15 @@ def bridge_nodes(
     multigraph : bool, default False
         If True, the resulting NetworkX graph will be a MultiGraph, allowing
         multiple edges between the same pair of nodes from different proximity relationships.
-    as_nx : bool, default False
+    as_nx : bool, optional
         If True, returns a NetworkX graph object containing all nodes and
         inter-layer edges. Otherwise, returns dictionaries of GeoDataFrames.
+        If not explicitly set, defaults to False.
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     **kwargs : Any
         Additional keyword arguments passed to the underlying proximity method:
 
@@ -1717,6 +1829,16 @@ def bridge_nodes(
     - The resulting structure is ideal for heterogeneous graph neural networks,
       multi-layer network analysis, and cross-domain spatial relationship modeling
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     if len(nodes_dict) < 2:
         msg = "`nodes_dict` needs at least two layers"
         raise ValueError(msg)
@@ -1837,7 +1959,7 @@ def group_nodes(
     predicate: str = "covered_by",
     node_geom_col: str | None = None,
     set_point_nodes: bool = False,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
 ) -> tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]] | nx.Graph:
     r"""
     Create a heterogeneous graph linking polygon zones to contained points.
@@ -1877,9 +1999,15 @@ def group_nodes(
     set_point_nodes : bool, default False
         When True, set polygon node geometries to points (``node_geom_col`` when provided,
         otherwise centroids) and store original polygon geometries in ``original_geometry``.
-    as_nx : bool, default False
+    as_nx : bool, optional
         If False, return heterogeneous GeoDataFrame dictionaries. If True, return a
-        typed heterogeneous NetworkX graph built with `gdf_to_nx`.
+        typed heterogeneous NetworkX graph built with `gdf_to_nx`. If not
+        explicitly set, defaults to False.
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
 
     Returns
     -------
@@ -1905,6 +2033,16 @@ def group_nodes(
       (_prepare_nodes, _distance_matrix, _add_edges) to ensure consistency with other
       proximity functions.
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     relation = _relation_from_predicate(predicate)
     metric = DistanceMetric(distance_metric, network_gdf, network_weight)
 
@@ -1974,7 +2112,7 @@ def contiguity_graph(
     network_weight: str | None = None,
     node_geom_col: str | None = None,
     set_point_nodes: bool = False,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     r"""
@@ -2027,10 +2165,16 @@ def contiguity_graph(
         If True, set node geometries as points (using ``node_geom_col`` when provided,
         otherwise polygon centroids) and store the original geometries as ``original_geometry``
         in the returned nodes GeoDataFrame and NetworkX graph metadata.
-    as_nx : bool, default False
+    as_nx : bool, optional
         Output format control. If True, returns a NetworkX Graph object with spatial
         attributes. If False, returns a tuple of GeoDataFrames for nodes and edges,
-        compatible with other city2graph functions.
+        compatible with other city2graph functions. If not explicitly set, defaults
+        to False.
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     duplicate_edges : bool, default False
         If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
         for every undirected edge (roughly doubling the row count), so
@@ -2066,6 +2210,16 @@ def contiguity_graph(
     relative_neighborhood_graph : Generate relative neighborhood graphs.
     waxman_graph : Generate probabilistic Waxman graphs.
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     _validate_duplicate_edges(duplicate_edges, as_nx)
     _validate_contiguity_input(gdf, contiguity)
     metric = DistanceMetric(distance_metric, network_gdf, network_weight)

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
+import warnings
 import zipfile
 from datetime import datetime
 from datetime import timedelta
@@ -1200,7 +1201,7 @@ def travel_summary_graph(
     end_time: str | None = None,
     calendar_start: str | None = None,
     calendar_end: str | None = None,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     directed: bool = False,
     use_frequencies: bool = True,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.DiGraph | nx.Graph:
@@ -1239,8 +1240,14 @@ def travel_summary_graph(
         Optional calendar window start, ``YYYYMMDD``.
     calendar_end : str | None, default=None
         Optional calendar window end, ``YYYYMMDD``.
-    as_nx : bool, default=False
+    as_nx : bool, optional
         If ``True``, return a NetworkX graph instead of GeoDataFrames.
+        If not explicitly set, defaults to ``False`` (GeoDataFrame output).
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     directed : bool, default=False
         If ``True``, return a directed graph (``nx.DiGraph``) preserving
         trip direction.  If ``False`` (default), edges in opposite
@@ -1261,6 +1268,16 @@ def travel_summary_graph(
         attribute, node ``pos`` coordinates, and graph-level CRS and
         index metadata.
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     tables = _list_tables(con)
     required = {"stop_times", "stops", "trips"}
     if not required.issubset(tables):
