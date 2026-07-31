@@ -38,29 +38,55 @@ can support mapping, spatial network analysis, and machine-learning workflows.
   <img src="assets/figures/scope.png" alt="City2Graph workflow from geospatial data to NetworkX and PyTorch Geometric graphs" class="desktop-limit-width">
 </p>
 
-## Choose a geospatial graph workflow
-
-| Input or task | Graph produced | Main API | Typical use | Guide |
-| --- | --- | --- | --- | --- |
-| Buildings, streets, and tessellations | Heterogeneous urban morphology graph | [`morphological_graph`](api/morphology.md) | Urban form, walkability, GNN embeddings | [Morphology tutorial](examples/morphological_graph_from_overturemaps.ipynb) |
-| GTFS public transport feed | Stop-to-stop travel-time graph | [`travel_summary_graph`](api/transportation.md) | Accessibility, centrality, multimodal routing | [GTFS tutorial](examples/gtfs.ipynb) |
-| GBFS shared-mobility JSON feeds | DuckDB tables with station or vehicle point geometry | [`load_gbfs`](api/transportation.md) | Bike-share and shared-mobility preprocessing | [Transportation API](api/transportation.md) |
-| OD matrix or flow edge list | Weighted mobility graph | [`od_matrix_to_graph`](api/mobility.md) | Migration, commuting, bike-sharing flows | [OD matrix tutorial](examples/generating_graphs_from_od_matrix.ipynb) |
-| Points, polygons, or graph layers | Proximity, contiguity, bridge, or containment graph | [`knn_graph`](api/proximity.md), [`contiguity_graph`](api/proximity.md) | POI access, spatial interaction, zonal adjacency | [Proximity tutorial](examples/generating_graphs_by_proximity.ipynb) |
-| Typed relations in a heterogeneous graph | Metapath-derived edges | [`add_metapaths`](api/metapath.md) | Heterogeneous GNNs and composite relations | [Metapath tutorial](examples/add_metapaths.ipynb) |
-| GeoDataFrames, NetworkX, PyG, or rustworkx | Converted graph representation | [Graph conversion API](api/graph.md) | Spatial analysis, fast graph algorithms, GNN training | [API reference](api/index.md) |
-
 ## Why City2Graph?
 
-- **Geospatial inputs stay geospatial.** Nodes and edges retain geometries,
-  coordinate reference systems, and attributes in GeoDataFrames.
-- **Heterogeneous graphs are first-class.** Multiple node and relation types can
-  represent buildings, streets, transit stops, zones, and amenities together.
-- **Conversions work both ways.** Move between GeoDataFrames, NetworkX,
-  PyTorch Geometric `Data`/`HeteroData`, and rustworkx without rebuilding the
-  graph for every analysis tool.
-- **Open urban data is supported.** Load or process Overture Maps,
-  OpenStreetMap-derived data, GTFS, GBFS, OD matrices, and common GIS layers.
+Turning a city into a graph is rarely the interesting part of the work. It
+usually means writing throwaway code to parse a feed, deciding what counts as a
+node, flattening geometries into indices, and then writing it all again in a
+different shape as soon as the analysis moves from mapping to centrality to a
+GNN. City2Graph removes that step.
+
+- **A city is more than one network.** Buildings, streets, transit stops, zones,
+  and amenities can live in the same graph as distinct node and relation types
+  rather than being collapsed into a single homogeneous network. That is the
+  structure heterogeneous GNNs expect, and it keeps the question "which kind of
+  thing is connected to which" answerable.
+- **Build the graph once, use it everywhere.** The same graph moves between
+  GeoDataFrames, NetworkX, PyTorch Geometric `Data` and `HeteroData`, and
+  rustworkx. Explore it in NetworkX, run heavy algorithms in rustworkx, train on
+  it in PyTorch Geometric, and map the results, without rebuilding it for each
+  tool or maintaining conversion code of your own.
+- **Start from the data you already have.** Overture Maps, OpenStreetMap-derived
+  data, GTFS and GBFS feeds, origin–destination matrices, points of interest,
+  and ordinary GIS layers are read directly, so a working graph is a few lines
+  away rather than a preprocessing project.
+
+For details, please read the paper published in *Computers, Environment and Urban Systems*.
+
+<p align="center">
+  <a href="https://doi.org/10.1016/j.compenvurbsys.2026.102492">
+    <img src="assets/figures/CEUS_thumbnail.jpg" alt="City2Graph paper in Computers, Environment and Urban Systems" class="desktop-limit-width">
+  </a>
+</p>
+
+Sato, Y., Pietrostefani, E., Mahabir, R., & Arribas-Bel, D. (2026). City2Graph:
+A Python library for Heterogeneous Graph Neural Networks and spatial analysis in
+urban systems. *Computers, Environment and Urban Systems*, 130, 102492.
+[https://doi.org/10.1016/j.compenvurbsys.2026.102492](https://doi.org/10.1016/j.compenvurbsys.2026.102492)
+
+```bibtex
+@article{sato2026city2graph,
+  title = {City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial analysis in urban systems},
+  author = {Sato, Yuta and Pietrostefani, Elisabetta and Mahabir, Ron and Arribas-Bel, Daniel},
+  journal = {Computers, Environment and Urban Systems},
+  volume = {130},
+  pages = {102492},
+  year = {2026},
+  issn = {0198-9715},
+  doi = {10.1016/j.compenvurbsys.2026.102492},
+  url = {https://www.sciencedirect.com/science/article/pii/S0198971526000943},
+}
+```
 
 ## Quickstart
 
@@ -252,7 +278,7 @@ supported Python and CUDA versions, and conda-forge instructions.
 
 [Browse all examples →](examples/index.md)
 
-## Frequently asked questions
+## FAQ
 
 ### What data can City2Graph convert into graphs?
 
@@ -282,19 +308,18 @@ networks. City2Graph can use street data from OSMnx and combines it with
 buildings, Overture Maps, transit, mobility, proximity, and heterogeneous graph
 workflows. The two libraries are complementary.
 
-### How should City2Graph be cited?
+## Sample workflow
 
-Use the project DOI when citing City2Graph in research:
+| Input or task | Graph produced | Main API | Typical use | Guide |
+| --- | --- | --- | --- | --- |
+| Buildings, streets, and tessellations | Heterogeneous urban morphology graph | [`morphological_graph`](api/morphology.md) | Urban form, walkability, GNN embeddings | [Morphology tutorial](examples/morphological_graph_from_overturemaps.ipynb) |
+| GTFS public transport feed | Stop-to-stop travel-time graph | [`travel_summary_graph`](api/transportation.md) | Accessibility, centrality, multimodal routing | [GTFS tutorial](examples/gtfs.ipynb) |
+| GBFS shared-mobility JSON feeds | DuckDB tables with station or vehicle point geometry | [`load_gbfs`](api/transportation.md) | Bike-share and shared-mobility preprocessing | [Transportation API](api/transportation.md) |
+| OD matrix or flow edge list | Weighted mobility graph | [`od_matrix_to_graph`](api/mobility.md) | Migration, commuting, bike-sharing flows | [OD matrix tutorial](examples/generating_graphs_from_od_matrix.ipynb) |
+| Points, polygons, or graph layers | Proximity, contiguity, bridge, or containment graph | [`knn_graph`](api/proximity.md), [`contiguity_graph`](api/proximity.md) | POI access, spatial interaction, zonal adjacency | [Proximity tutorial](examples/generating_graphs_by_proximity.ipynb) |
+| Typed relations in a heterogeneous graph | Metapath-derived edges | [`add_metapaths`](api/metapath.md) | Heterogeneous GNNs and composite relations | [Metapath tutorial](examples/add_metapaths.ipynb) |
+| GeoDataFrames, NetworkX, PyG, or rustworkx | Converted graph representation | [Graph conversion API](api/graph.md) | Spatial analysis, fast graph algorithms, GNN training | [API reference](api/index.md) |
 
-```bibtex
-@software{sato2025city2graph,
-  title = {City2Graph: Transform geospatial relations into graphs for spatial network analysis and Graph Neural Networks},
-  author = {Sato, Yuta},
-  year = {2025},
-  url = {https://github.com/c2g-dev/city2graph},
-  doi = {10.5281/zenodo.15858845},
-}
-```
 
 <p align="center">
   <a href="https://www.liverpool.ac.uk/geographic-data-science/">
