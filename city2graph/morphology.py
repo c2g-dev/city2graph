@@ -34,6 +34,7 @@ from __future__ import annotations
 import logging
 import math
 import typing
+import warnings
 
 # Third-party imports
 import geopandas as gpd
@@ -163,7 +164,7 @@ def morphological_graph(  # noqa: PLR0913
     keep_segments: bool = True,
     tolerance: float = 1e-6,
     include_unenclosed_buildings: bool = False,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     duplicate_edges: bool = False,
     non_movement_barrier_col: str | None = None,
     tessellation_fallback: bool = False,
@@ -233,8 +234,14 @@ def morphological_graph(  # noqa: PLR0913
     include_unenclosed_buildings : bool, default=False
         If True, buildings excluded by enclosed tessellation are added using
         barrier-free tessellation before distance filters are applied.
-    as_nx : bool, default=False
-        If True, convert the output to a NetworkX graph.
+    as_nx : bool, optional
+        If True, convert the output to a NetworkX graph. If not explicitly
+        set, defaults to False (GeoDataFrame output).
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     duplicate_edges : bool, default=False
         If True, the undirected same-type edge GeoDataFrames —
         ("place", "touched_to", "place") and
@@ -321,6 +328,16 @@ def morphological_graph(  # noqa: PLR0913
     >>> place_nodes = nodes['place']
     >>> movement_nodes = nodes['movement']
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     context = _prepare_morphology(
         buildings_gdf,
         segments_gdf,
@@ -888,7 +905,7 @@ def place_to_place_graph(
     place_gdf: gpd.GeoDataFrame,
     group_col: str | None = None,
     contiguity: str = "queen",
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     """
@@ -909,8 +926,14 @@ def place_to_place_graph(
     contiguity : str, default="queen"
         Type of spatial contiguity to use. Must be either "queen" or "rook".
         Queen contiguity includes vertex neighbors, Rook includes only edge neighbors.
-    as_nx : bool, default=False
-        If True, convert the output to a NetworkX graph.
+    as_nx : bool, optional
+        If True, convert the output to a NetworkX graph. If not explicitly
+        set, defaults to False (GeoDataFrame output).
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     duplicate_edges : bool, default=False
         If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
         for every undirected edge (roughly doubling the row count), with the
@@ -955,6 +978,16 @@ def place_to_place_graph(
     >>> # With grouping by enclosures
     >>> nodes, edges = place_to_place_graph(tessellation_gdf, group_col='enclosure_id')
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     # Input validation
     _validate_place_to_place_inputs(
         place_gdf,
@@ -1115,7 +1148,7 @@ def place_to_movement_graph(
     movement_gdf: gpd.GeoDataFrame,
     primary_barrier_col: str | None = None,
     tolerance: float = 1e-6,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     max_connection_distance: float = math.inf,
     duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
@@ -1139,8 +1172,14 @@ def place_to_movement_graph(
         this geometry will be used instead of the main geometry column.
     tolerance : float, default=1e-6
         Buffer distance for movement geometries to detect proximity to place spaces.
-    as_nx : bool, default=False
-        If True, convert the output to a NetworkX graph.
+    as_nx : bool, optional
+        If True, convert the output to a NetworkX graph. If not explicitly
+        set, defaults to False (GeoDataFrame output).
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     max_connection_distance : float, default=``math.inf``
         Maximum distance for the nearest-movement fallback connection. Place
         cells matched by the ``tolerance`` proximity query are unaffected; cells
@@ -1191,6 +1230,16 @@ def place_to_movement_graph(
     >>> # With custom tolerance
     >>> nodes, edges = place_to_movement_graph(tessellation_gdf, segments_gdf, tolerance=2.0)
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     # Input validation
     _validate_duplicate_edges(duplicate_edges, as_nx)
     _validate_single_gdf_input(place_gdf, "place_gdf")
@@ -1422,7 +1471,7 @@ def _connect_unmatched_place_to_nearest_movement(
 
 def movement_to_movement_graph(
     movement_gdf: gpd.GeoDataFrame,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
     duplicate_edges: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     """
@@ -1437,8 +1486,14 @@ def movement_to_movement_graph(
     ----------
     movement_gdf : geopandas.GeoDataFrame
         GeoDataFrame containing movement space geometries (typically LineString).
-    as_nx : bool, default=False
-        If True, convert the output to a NetworkX graph.
+    as_nx : bool, optional
+        If True, convert the output to a NetworkX graph. If not explicitly
+        set, defaults to False (GeoDataFrame output).
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
     duplicate_edges : bool, default=False
         If True, the edges GeoDataFrame contains both (u, v) and (v, u) rows
         for every undirected edge (roughly doubling the row count), with the
@@ -1481,6 +1536,16 @@ def movement_to_movement_graph(
     >>> # Convert to NetworkX format
     >>> graph = movement_to_movement_graph(segments_gdf, as_nx=True)
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     # Input validation
     _validate_duplicate_edges(duplicate_edges, as_nx)
     _validate_single_gdf_input(movement_gdf, "movement_gdf")
@@ -1542,7 +1607,7 @@ def segments_to_graph(
     segments_gdf: gpd.GeoDataFrame,
     multigraph: bool = True,
     directed: bool = True,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph:
     r"""
     Convert a GeoDataFrame of LineString segments into a graph structure.
@@ -1583,8 +1648,14 @@ def segments_to_graph(
         left unchanged; only the index order is normalized. Use
         ``directed=False`` when the output feeds an undirected pipeline such
         as ``gdf_to_pyg(..., directed=False)``.
-    as_nx : bool, default False
+    as_nx : bool, optional
         If True, returns a NetworkX graph instead of a tuple of GeoDataFrames.
+        If not explicitly set, defaults to False (GeoDataFrame output).
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
 
     Returns
     -------
@@ -1642,6 +1713,16 @@ def segments_to_graph(
     >>> print(edges_gdf.index.names)
     ['from_node_id', 'to_node_id', 'edge_key']
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     processor = GeoDataProcessor()
 
     # Validate input

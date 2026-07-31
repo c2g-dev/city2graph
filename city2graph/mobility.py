@@ -65,7 +65,7 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
     include_self_loops: bool = False,
     compute_edge_geometry: bool = True,
     directed: bool = True,
-    as_nx: bool = False,
+    as_nx: bool | None = None,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.DiGraph:
     """
     Convert OD data (edge list or adjacency matrix) into graph structures.
@@ -116,9 +116,15 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
     directed : bool, default True
         Whether to build a directed graph. If False, reciprocal edges are
         merged by summing their weights (and all provided weight columns).
-    as_nx : bool, default False
+    as_nx : bool, optional
         If True, final output will be an NetworkX graph (``nx.DiGraph`` when
-        ``directed=True``; otherwise ``nx.Graph``).
+        ``directed=True``; otherwise ``nx.Graph``). If not explicitly set,
+        defaults to False (GeoDataFrame output).
+
+        .. deprecated::
+            ``as_nx`` is deprecated and will be removed in a future release.
+            Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
+            obtain a NetworkX graph.
 
     Returns
     -------
@@ -132,6 +138,16 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
         *   When ``as_nx=True``: Returns a NetworkX graph. A ``networkx.DiGraph``
             is returned if ``directed=True``, otherwise a ``networkx.Graph``.
     """
+    if as_nx is not None:
+        warnings.warn(
+            "`as_nx` is deprecated and will be removed in a future release. "
+            "Use `gdf_to_nx()` on the returned GeoDataFrames instead to "
+            "obtain a NetworkX graph.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    as_nx = bool(as_nx)
+
     # --- Validation (Task 2) ------------------------------------------------
     _validate_od_inputs(
         od_data,
