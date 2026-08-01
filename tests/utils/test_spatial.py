@@ -270,7 +270,7 @@ class TestTessellation(BaseGraphTest):
         caplog: pytest.LogCaptureFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A geometry-type TypeError should first retry with a coarser grid_size."""
+        """A coverage_simplify TypeError should first retry with a coarser grid_size."""
         monkeypatch.setattr(
             momepy,
             "enclosures",
@@ -305,23 +305,17 @@ class TestTessellation(BaseGraphTest):
 
         assert not result.empty
         assert "tess_id" in result.columns
-        # ``simplify`` is never injected: momepy >=1.0 rejects it as a no-op.
-        assert calls == [(None, None), (None, 1e-3)]
+        assert calls == [(None, None), (None, 1e-3)]  # simplify untouched
         assert "retrying with grid_size=1e-3" in caplog.text
 
-    def test_enclosed_tessellation_falls_back_to_jitter_when_grid_size_fails(
+    def test_enclosed_tessellation_falls_back_to_simplify_false_when_grid_size_fails(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
         sample_segments_gdf: gpd.GeoDataFrame,
         caplog: pytest.LogCaptureFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """When the grid_size retry still fails, retry once more with jittered geometry.
-
-        The jitter rung replaces the coarse grid rather than stacking on it, so
-        the third attempt reaches momepy with the original options and can only
-        be told apart from the first by the geometry it receives.
-        """
+        """When the grid_size retry still fails, retry once more with simplify=False."""
         monkeypatch.setattr(
             momepy,
             "enclosures",
@@ -333,12 +327,10 @@ class TestTessellation(BaseGraphTest):
         )
 
         calls: list[tuple[object, object]] = []
-        geometries: list[gpd.GeoDataFrame] = []
 
         def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
             calls.append((kwargs.get("simplify"), kwargs.get("grid_size")))
-            geometries.append(cast("gpd.GeoDataFrame", kwargs.get("geometry")))
-            if len(calls) < 3:
+            if kwargs.get("simplify") is not False:
                 msg = "One of the Geometry inputs is of incorrect geometry type."
                 raise TypeError(msg)
             return gpd.GeoDataFrame(
@@ -357,10 +349,9 @@ class TestTessellation(BaseGraphTest):
             )
 
         assert not result.empty
-        assert calls == [(None, None), (None, 1e-3), (None, None)]
-        assert not geometries[2].geometry.geom_equals(geometries[0].geometry).all()
+        assert calls == [(None, None), (None, 1e-3), (False, 1e-3)]
         assert "retrying with grid_size=1e-3" in caplog.text
-        assert "retrying with jittered geometry" in caplog.text
+        assert "retrying with simplify=False" in caplog.text
 
     def test_enclosed_tessellation_retries_overlapping_cells_with_grid_size(
         self,
@@ -408,22 +399,16 @@ class TestTessellation(BaseGraphTest):
 
         assert len(result) == 2
         assert result.geometry.area.sum() == pytest.approx(enclosure.area)
-        assert "overlapping or incomplete cells" in caplog.text
+        assert "overlapping cells" in caplog.text
 
-    def test_enclosed_tessellation_retries_cells_that_undercover_the_enclosure(
+    def test_enclosed_tessellation_overlap_retry_falls_back_to_simplify_false(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
         sample_segments_gdf: gpd.GeoDataFrame,
         caplog: pytest.LogCaptureFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Disjoint cells that leave the enclosure uncovered must also be retried.
-
-        Collapsed cells do not overlap, so the area checks against the enclosure
-        and against the cells' own union both pass; only the coverage check
-        catches them. Such a cell no longer contains the building it was built
-        around, which would silently drop that building downstream.
-        """
+        """A geometry-type error during the overlap retry should retry simplify=False."""
         enclosure = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
         monkeypatch.setattr(
             momepy,
@@ -439,66 +424,15 @@ class TestTessellation(BaseGraphTest):
             Polygon([(0, 0), (5, 0), (5, 10), (0, 10)]),
             Polygon([(5, 0), (10, 0), (10, 10), (5, 10)]),
         ]
-        collapsed_cells = [
-            Polygon([(0, 0), (1, 0), (1, 10), (0, 10)]),
-            Polygon([(9, 0), (10, 0), (10, 10), (9, 10)]),
-        ]
-
-        def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
-            cells = sane_cells if kwargs.get("grid_size") else collapsed_cells
-            return gpd.GeoDataFrame(
-                {"enclosure_index": [0, 0]},
-                geometry=cells,
-                index=[0, 1],
-                crs=sample_buildings_gdf.crs,
-            )
-
-        monkeypatch.setattr(momepy, "enclosed_tessellation", fake_enclosed_tessellation)
-
-        with caplog.at_level("WARNING"):
-            result = utils.create_tessellation(
-                sample_buildings_gdf,
-                primary_barriers=sample_segments_gdf,
-            )
-
-        assert len(result) == 2
-        assert result.geometry.area.sum() == pytest.approx(enclosure.area)
-        assert "overlapping or incomplete cells" in caplog.text
-
-    def test_enclosed_tessellation_overlap_retry_falls_back_to_jitter(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        caplog: pytest.LogCaptureFixture,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """A geometry-type error during the overlap retry should escalate to jitter."""
-        enclosure = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [0]},
-                geometry=[enclosure],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
-
-        sane_cells = [
-            Polygon([(0, 0), (5, 0), (5, 10), (0, 10)]),
-            Polygon([(5, 0), (10, 0), (10, 10), (5, 10)]),
-        ]
-        calls: list[object] = []
 
         def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
             # The first run silently degenerates; the coarser grid_size retry
-            # snaps cells into non-polygonal geometry and raises; only the
-            # jittered attempt partitions the enclosure.
-            calls.append(kwargs.get("grid_size"))
-            if kwargs.get("grid_size"):
+            # snaps cells into non-polygonal geometry and blows up in
+            # coverage_simplify; only simplify=False succeeds.
+            if kwargs.get("grid_size") and kwargs.get("simplify") is not False:
                 msg = "One of the Geometry inputs is of incorrect geometry type."
                 raise TypeError(msg)
-            cells = sane_cells if len(calls) > 1 else [enclosure, enclosure]
+            cells = sane_cells if kwargs.get("grid_size") else [enclosure, enclosure]
             return gpd.GeoDataFrame(
                 {"enclosure_index": [0, 0]},
                 geometry=cells,
@@ -515,10 +449,8 @@ class TestTessellation(BaseGraphTest):
             )
 
         assert len(result) == 2
-        assert calls == [None, 1e-3, None]
         assert result.geometry.area.sum() == pytest.approx(enclosure.area)
-        assert "overlapping or incomplete cells" in caplog.text
-        assert "retrying with jittered geometry" in caplog.text
+        assert "retrying with simplify=False" in caplog.text
 
     def test_enclosed_tessellation_drops_persistently_overlapping_enclosures(
         self,
@@ -612,7 +544,7 @@ class TestTessellation(BaseGraphTest):
         sample_segments_gdf: gpd.GeoDataFrame,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A TypeError that does not report an incorrect geometry type should propagate."""
+        """A TypeError unrelated to coverage_simplify should propagate."""
         monkeypatch.setattr(
             momepy,
             "enclosures",
@@ -713,6 +645,55 @@ class TestTessellation(BaseGraphTest):
         assert result.empty
         assert "returning empty" in caplog.text
 
+    def test_enclosed_tessellation_geos_retry_falls_back_to_simplify_false(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A coarser-grid retry after a GEOS error may fail simplification instead."""
+        monkeypatch.setattr(
+            momepy,
+            "enclosures",
+            lambda **_kwargs: gpd.GeoDataFrame(
+                {"eID": [1]},
+                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
+                crs=sample_buildings_gdf.crs,
+            ),
+        )
+
+        calls: list[tuple[object, object]] = []
+
+        def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
+            calls.append((kwargs.get("grid_size"), kwargs.get("simplify")))
+            if kwargs.get("grid_size") is None:
+                msg = "TopologyException: side location conflict at 0 0"
+                raise shapely.errors.GEOSException(msg)
+            if kwargs.get("simplify") is not False:
+                msg = "One of the Geometry inputs is of incorrect geometry type."
+                raise TypeError(msg)
+            return gpd.GeoDataFrame(
+                {"enclosure_index": [1]},
+                geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+                index=[0],
+                crs=sample_buildings_gdf.crs,
+            )
+
+        monkeypatch.setattr(momepy, "enclosed_tessellation", fake_enclosed_tessellation)
+
+        with caplog.at_level("WARNING"):
+            result = utils.create_tessellation(
+                sample_buildings_gdf,
+                primary_barriers=sample_segments_gdf,
+            )
+
+        assert not result.empty
+        assert "tess_id" in result.columns
+        assert calls[-1] == (1e-3, False)
+        assert "retrying with coarser" in caplog.text
+        assert "retrying with simplify=False" in caplog.text
+
     def test_enclosed_tessellation_degrades_to_empty_with_pinned_grid_size(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -754,14 +735,14 @@ class TestTessellation(BaseGraphTest):
         assert "retrying with jittered geometry" in caplog.text
         assert "returning empty" in caplog.text
 
-    def test_enclosed_tessellation_pinned_grid_size_retries_with_jitter(
+    def test_enclosed_tessellation_pinned_grid_size_retries_simplify_false(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
         sample_segments_gdf: gpd.GeoDataFrame,
         caplog: pytest.LogCaptureFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """With a pinned grid_size, a geometry-type TypeError skips to the jitter rung."""
+        """With a pinned grid_size, a coverage_simplify TypeError retries simplify=False."""
         monkeypatch.setattr(
             momepy,
             "enclosures",
@@ -776,7 +757,7 @@ class TestTessellation(BaseGraphTest):
 
         def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
             calls.append((kwargs.get("simplify"), kwargs.get("grid_size")))
-            if len(calls) < 2:
+            if kwargs.get("simplify") is not False:
                 msg = "One of the Geometry inputs is of incorrect geometry type."
                 raise TypeError(msg)
             return gpd.GeoDataFrame(
@@ -796,9 +777,49 @@ class TestTessellation(BaseGraphTest):
             )
 
         assert not result.empty
-        # The pinned grid_size is kept and simplify is never injected.
-        assert calls == [(None, 1e-5), (None, 1e-5)]
-        assert "retrying with jittered geometry" in caplog.text
+        assert calls == [(None, 1e-5), (False, 1e-5)]  # pinned grid_size kept
+        assert "retrying with simplify=False" in caplog.text
+
+    def test_enclosed_tessellation_degrades_when_both_retry_options_pinned(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """With grid_size and simplify both pinned, a known failure degrades to empty."""
+        monkeypatch.setattr(
+            momepy,
+            "enclosures",
+            lambda **_kwargs: gpd.GeoDataFrame(
+                {"eID": [1]},
+                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
+                crs=sample_buildings_gdf.crs,
+            ),
+        )
+
+        calls: list[tuple[object, object]] = []
+
+        def raise_type_error(**kwargs: object) -> gpd.GeoDataFrame:
+            calls.append((kwargs.get("simplify"), kwargs.get("grid_size")))
+            msg = "One of the Geometry inputs is of incorrect geometry type."
+            raise TypeError(msg)
+
+        monkeypatch.setattr(momepy, "enclosed_tessellation", raise_type_error)
+
+        with caplog.at_level("WARNING"):
+            result = utils.create_tessellation(
+                sample_buildings_gdf,
+                primary_barriers=sample_segments_gdf,
+                grid_size=1e-5,
+                simplify=True,
+            )
+
+        assert result.empty
+        # Pinned options are never overridden; the final rung retries them
+        # once with jittered geometry before degrading.
+        assert calls == [(True, 1e-5), (True, 1e-5)]
+        assert "returning empty" in caplog.text
 
     def test_enclosed_tessellation_reraises_unknown_error_on_retry(
         self,
@@ -832,18 +853,18 @@ class TestTessellation(BaseGraphTest):
                 primary_barriers=sample_segments_gdf,
             )
 
-    def test_enclosed_tessellation_overlap_repair_jitter_failure_keeps_cells(
+    def test_enclosed_tessellation_overlap_repair_simplify_retry_failure_keeps_cells(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
         sample_segments_gdf: gpd.GeoDataFrame,
         caplog: pytest.LogCaptureFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A repair retry that exhausts the ladder keeps the original cells.
+        """A GEOS crash in the repair simplify=False retry still drops only the broken cells.
 
-        The repair escalates coarse grid -> jitter, and the jitter attempt
-        crashes too, so no replacement cells exist. The original ones are kept
-        and the broken enclosure is dropped while the good one survives.
+        The repair retry escalates through the jitter rung, whose (mocked)
+        result stays degenerate, so the broken enclosure is dropped while the
+        good one survives.
         """
         bad_enclosure = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
         good_enclosure = Polygon([(20, 0), (25, 0), (25, 5), (20, 5)])
@@ -857,17 +878,14 @@ class TestTessellation(BaseGraphTest):
             ),
         )
 
-        calls: list[object] = []
-
         def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
             # The first run silently degenerates in enclosure 0; the repair
-            # retry at a coarser grid raises, and the jitter attempt that
-            # follows crashes in GEOS, exhausting the repair ladder.
-            calls.append(kwargs.get("grid_size"))
-            if kwargs.get("grid_size"):
+            # retry fails coverage_simplify and its simplify=False retry
+            # crashes in GEOS.
+            if kwargs.get("grid_size") and kwargs.get("simplify") is not False:
                 msg = "One of the Geometry inputs is of incorrect geometry type."
                 raise TypeError(msg)
-            if len(calls) > 1:
+            if kwargs.get("grid_size"):
                 msg = "TopologyException: side location conflict at 0 0"
                 raise shapely.errors.GEOSException(msg)
             return gpd.GeoDataFrame(
@@ -886,9 +904,7 @@ class TestTessellation(BaseGraphTest):
             )
 
         assert set(result["enclosure_index"]) == {1}
-        assert calls == [None, 1e-3, None]
         assert "retrying with jittered geometry" in caplog.text
-        assert "keeping the original cells" in caplog.text
         assert "Dropping 1 enclosure(s)" in caplog.text
 
     def test_enclosed_tessellation_degrades_when_concat_error_on_retry(
@@ -931,7 +947,7 @@ class TestTessellation(BaseGraphTest):
         assert calls == [(None, None), (None, 1e-3)]
         assert "returning empty GeoDataFrame" in caplog.text
 
-    def test_enclosed_tessellation_degrades_when_geos_error_during_grid_size_retry(
+    def test_enclosed_tessellation_degrades_when_geos_error_during_simplify_retry(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
         sample_segments_gdf: gpd.GeoDataFrame,
@@ -980,7 +996,7 @@ class TestTessellation(BaseGraphTest):
         caplog: pytest.LogCaptureFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A geometry-type TypeError persisting through every rung degrades to empty."""
+        """A coverage_simplify TypeError persisting through every rung degrades to empty."""
         monkeypatch.setattr(
             momepy,
             "enclosures",
@@ -1007,9 +1023,9 @@ class TestTessellation(BaseGraphTest):
             )
 
         assert result.empty
-        # grid_size, then one jittered attempt at default options before
-        # degrading.
-        assert calls == [(None, None), (None, 1e-3), (None, None)]
+        # grid_size, then simplify=False, then one jittered attempt at
+        # default options before degrading.
+        assert calls == [(None, None), (None, 1e-3), (False, 1e-3), (None, None)]
         assert "returning empty" in caplog.text
 
     def test_enclosed_tessellation_overlap_retry_failure_drops_enclosures(

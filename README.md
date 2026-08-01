@@ -34,7 +34,7 @@ and the Python API reference.
 
 #### Basic Installation
 
-City2Graph supports Python 3.12–3.14. The simplest way to install it is via pip:
+The simplest way to install City2Graph is via pip:
 
 ```bash
 pip install city2graph
@@ -61,8 +61,8 @@ pip install "city2graph[cu130]"
 ```
 
 Supported CUDA versions are `cu126`, `cu128`, and `cu130`.
-The `cpu`, `cu126`, and `cu130` extras use PyTorch 2.13 or newer. Because
-PyTorch no longer publishes CUDA 12.8 wheels past 2.11, `cu128` uses PyTorch 2.11.
+The `cpu`, `cu126`, and `cu130` extras use PyTorch 2.12 or newer. Because
+PyTorch 2.12 no longer publishes CUDA 12.8 wheels, `cu128` uses PyTorch 2.11.
 
 ### Using conda
 
@@ -90,14 +90,14 @@ conda install -c conda-forge pytorch pytorch_geometric
 
 #### With PyTorch + CUDA (GPU)
 
-For GPU support, you should select the appropriate PyTorch variant by specifying the version and CUDA build string. For example, to install PyTorch 2.13.0 with CUDA 13.0 support:
+For GPU support, you should select the appropriate PyTorch variant by specifying the version and CUDA build string. For example, to install PyTorch 2.12.0 with CUDA 13.0 support:
 
 ```bash
 # Install city2graph
 conda install -c conda-forge city2graph
 
 # Then install PyTorch with CUDA support
-conda install -c conda-forge pytorch=2.13.0=*cuda130*
+conda install -c conda-forge pytorch=2.12.0=*cuda130*
 conda install -c conda-forge pytorch_geometric
 ```
 

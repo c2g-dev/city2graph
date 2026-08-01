@@ -31,7 +31,7 @@ pull request.
    ```
 
 The CPU build keeps development installations fast and deterministic. The
-project supports Python 3.12 through 3.14, and CI tests every supported version.
+project supports Python 3.11 through 3.14, and CI tests every supported version.
 
 There is no separate virtual-environment activation step. Run project commands
 with `uv run`; uv automatically uses the managed environment.

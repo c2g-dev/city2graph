@@ -10,7 +10,6 @@ operations commonly needed for urban network analysis.
 # Standard library imports
 import io
 import json
-import logging
 import subprocess
 import warnings
 from pathlib import Path
@@ -39,8 +38,6 @@ from .utils import clip_graph
 
 # Public API definition
 __all__ = ["get_boundaries", "load_overture_data", "process_overture_segments"]
-
-logger = logging.getLogger(__name__)
 
 # =============================================================================
 # CONSTANTS AND CONFIGURATION
@@ -138,12 +135,12 @@ def load_overture_data(
         default release from the CLI tool. Must be a valid release from the overturemaps
         library's ALL_RELEASES list.
     connect_timeout : float, optional
-        Socket connection timeout in seconds, rounded to whole seconds for the
-        Overture CLI. If None, uses the AWS SDK default value (typically 1 second).
+        Socket connection timeout in seconds. If None, uses the AWS SDK default value
+        (typically 1 second).
     request_timeout : float, optional
-        Socket read timeout in seconds (Windows and macOS only), rounded to whole
-        seconds for the Overture CLI. If None, uses the AWS SDK default value
-        (typically 3 seconds). This option is ignored on non-Windows, non-macOS systems.
+        Socket read timeout in seconds (Windows and macOS only). If None, uses the AWS SDK
+        default value (typically 3 seconds). This option is ignored on non-Windows,
+        non-macOS systems.
     use_stac : bool, default True
         Whether to use Overture's STAC-geoparquet catalog to speed up queries. If False,
         data will be read normally without the STAC optimization.
@@ -206,8 +203,9 @@ def load_overture_data(
         raise ValueError(msg)
 
     # Validate release parameter if provided
-    if release is not None:
-        _validate_overture_release(release)
+    if release is not None and ALL_RELEASES is not None and release not in ALL_RELEASES:
+        msg = f"Invalid release: {release}. Valid releases are: {', '.join(ALL_RELEASES)}"
+        raise ValueError(msg)
 
     # Prepare area and bounding box
     bbox_str, clip_geom = _prepare_area_and_bbox(area)
@@ -380,41 +378,6 @@ def process_overture_segments(
     return result_gdf
 
 
-def _validate_overture_release(release: str) -> None:
-    """
-    Check a release string against the releases Overture advertises.
-
-    From overturemaps 1.0 ``ALL_RELEASES`` is a lazy proxy that fetches the STAC
-    catalogue on first use, so the list is resolved once here and a catalogue
-    that cannot be reached downgrades to a warning: an unreachable network is no
-    reason to reject a release the CLI may well accept.
-
-    Parameters
-    ----------
-    release : str
-        The Overture Maps release version to validate.
-
-    Raises
-    ------
-    ValueError
-        If the catalogue is reachable and does not advertise ``release``.
-    """
-    try:
-        available = list(ALL_RELEASES)
-    except Exception as error:  # noqa: BLE001 - overturemaps raises a bare Exception
-        logger.warning(
-            "Could not fetch the Overture release catalogue (%s); skipping validation of "
-            "release %s.",
-            error,
-            release,
-        )
-        return
-
-    if release not in available:
-        msg = f"Invalid release: {release}. Valid releases are: {', '.join(available)}"
-        raise ValueError(msg)
-
-
 def _prepare_area_and_bbox(
     area: list[float] | Polygon | MultiPolygon | gpd.GeoSeries | gpd.GeoDataFrame,
 ) -> tuple[str, Polygon | MultiPolygon | None]:
@@ -505,12 +468,12 @@ def _download_and_process_type(  # noqa: PLR0912, PLR0913, C901
     release : str or None
         Overture Maps release version to use.
     connect_timeout : float, optional
-        Socket connection timeout in seconds, rounded to whole seconds for the
-        Overture CLI. If None, uses the AWS SDK default value (typically 1 second).
+        Socket connection timeout in seconds. If None, uses the AWS SDK default value
+        (typically 1 second).
     request_timeout : float, optional
-        Socket read timeout in seconds (Windows and macOS only), rounded to whole
-        seconds for the Overture CLI. If None, uses the AWS SDK default value
-        (typically 3 seconds). This option is ignored on non-Windows, non-macOS systems.
+        Socket read timeout in seconds (Windows and macOS only). If None, uses the AWS SDK
+        default value (typically 3 seconds). This option is ignored on non-Windows,
+        non-macOS systems.
     use_stac : bool, default True
         Whether to use Overture's STAC-geoparquet catalog to speed up queries. If False,
         data will be read normally without the STAC optimization.
@@ -538,12 +501,10 @@ def _download_and_process_type(  # noqa: PLR0912, PLR0913, C901
     cmd = ["overturemaps", "download", f"--bbox={bbox_str}", "-f", "geojson", f"--type={data_type}"]
     if release:
         cmd.extend(["-r", release])
-    # The Overture CLI declares these options with underscores and parses them
-    # as integers, so fractional seconds are rounded to the nearest whole one.
     if connect_timeout is not None:
-        cmd.extend(["--connect_timeout", str(round(connect_timeout))])
+        cmd.extend(["--connect-timeout", str(connect_timeout)])
     if request_timeout is not None:
-        cmd.extend(["--request_timeout", str(round(request_timeout))])
+        cmd.extend(["--request-timeout", str(request_timeout)])
     if not use_stac:
         cmd.append("--no-stac")
     if save_to_file:

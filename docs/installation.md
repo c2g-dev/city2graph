@@ -7,7 +7,7 @@ hide:
 
 # Install City2Graph
 
-City2Graph supports Python 3.12–3.14. Install the core package for geospatial
+City2Graph supports Python 3.11–3.14. Install the core package for geospatial
 graph construction and network analysis, or choose a PyTorch extra when you
 need PyTorch Geometric tensors and Graph Neural Networks.
 
@@ -55,8 +55,8 @@ pip install "city2graph[cu130]"
 ```
 
 Supported extras are `cu126`, `cu128`, and `cu130`. The `cpu`, `cu126`, and
-`cu130` extras use PyTorch 2.13 or newer. Because PyTorch no longer publishes
-CUDA 12.8 wheels past 2.11, `cu128` uses PyTorch 2.11.
+`cu130` extras use PyTorch 2.12 or newer. Because PyTorch 2.12 no longer
+publishes CUDA 12.8 wheels, `cu128` uses PyTorch 2.11.
 
 ## Using conda-forge
 
@@ -86,14 +86,14 @@ conda install -c conda-forge pytorch pytorch_geometric
 ### With PyTorch and CUDA (GPU)
 
 For GPU support, select the appropriate PyTorch version and CUDA build. For
-example, install PyTorch 2.13.0 with CUDA 13.0 support with:
+example, install PyTorch 2.12.0 with CUDA 13.0 support with:
 
 ```bash
 # Install City2Graph
 conda install -c conda-forge city2graph
 
 # Add PyTorch with CUDA support and PyTorch Geometric
-conda install -c conda-forge pytorch=2.13.0=*cuda130*
+conda install -c conda-forge pytorch=2.12.0=*cuda130*
 conda install -c conda-forge pytorch_geometric
 ```
 

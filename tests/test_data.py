@@ -23,30 +23,6 @@ process_overture_segments = data_module.process_overture_segments
 get_boundaries = data_module.get_boundaries
 
 
-class UnreachableReleases:
-    """Stand-in for ``ALL_RELEASES`` when the STAC catalogue cannot be fetched.
-
-    overturemaps resolves the proxy on iteration and raises a bare ``Exception``
-    when the catalogue is unreachable.
-    """
-
-    def __iter__(self) -> object:
-        """Raise as overturemaps does when the catalogue cannot be fetched.
-
-        Returns
-        -------
-        object
-            Never returns; always raises.
-
-        Raises
-        ------
-        Exception
-            Always, mirroring the bare exception overturemaps raises.
-        """
-        msg = "Could not fetch STAC catalog: <urlopen error>"
-        raise Exception(msg)  # noqa: TRY002 - mirrors the bare exception overturemaps raises
-
-
 # ============================================================================
 # TESTS FOR CONSTANTS
 # ============================================================================
@@ -282,35 +258,6 @@ class TestLoadOvertureData:
 
     @patch("city2graph.data.subprocess.run")
     @patch("city2graph.data.gpd.read_file")
-    def test_release_validation_skipped_when_catalogue_unreachable(
-        self,
-        mock_read_file: Mock,
-        mock_subprocess: Mock,
-        test_bbox: list[float],
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """An unreachable release catalogue warns instead of rejecting the release.
-
-        From overturemaps 1.0 ``ALL_RELEASES`` resolves lazily over the network,
-        so listing it can raise. That must not turn a validation step into an
-        unhandled connection error.
-        """
-        mock_gdf = Mock(spec=gpd.GeoDataFrame)
-        mock_gdf.empty = False
-        mock_read_file.return_value = mock_gdf
-
-        with (
-            patch.object(data_module, "ALL_RELEASES", UnreachableReleases()),
-            caplog.at_level("WARNING"),
-        ):
-            result = load_overture_data(test_bbox, types=["building"], release="2025-08-20.1")
-
-        assert "building" in result
-        assert "skipping validation" in caplog.text
-        mock_subprocess.assert_called_once()
-
-    @patch("city2graph.data.subprocess.run")
-    @patch("city2graph.data.gpd.read_file")
     def test_valid_release(
         self,
         mock_read_file: Mock,
@@ -467,11 +414,7 @@ class TestLoadOvertureData:
         mock_subprocess: Mock,
         test_bbox: list[float],
     ) -> None:
-        """Test load_overture_data with connect_timeout parameter.
-
-        The Overture CLI declares underscored options parsed as integers, so the
-        flag must not be hyphenated and the value must not carry a decimal part.
-        """
+        """Test load_overture_data with connect_timeout parameter."""
         mock_gdf = Mock(spec=gpd.GeoDataFrame)
         mock_gdf.empty = False
         mock_read_file.return_value = mock_gdf
@@ -479,8 +422,8 @@ class TestLoadOvertureData:
         load_overture_data(test_bbox, types=["building"], connect_timeout=5.0)
 
         args = mock_subprocess.call_args[0][0]
-        assert "--connect_timeout" in args
-        assert "5" in args
+        assert "--connect-timeout" in args
+        assert "5.0" in args
 
     @patch("city2graph.data.subprocess.run")
     @patch("city2graph.data.gpd.read_file")
@@ -495,12 +438,11 @@ class TestLoadOvertureData:
         mock_gdf.empty = False
         mock_read_file.return_value = mock_gdf
 
-        load_overture_data(test_bbox, types=["building"], request_timeout=10.5)
+        load_overture_data(test_bbox, types=["building"], request_timeout=10.0)
 
         args = mock_subprocess.call_args[0][0]
-        assert "--request_timeout" in args
-        # Fractional seconds are rounded: the CLI parses this option as an int.
-        assert "10" in args
+        assert "--request-timeout" in args
+        assert "10.0" in args
 
     @patch("city2graph.data.subprocess.run")
     @patch("city2graph.data.gpd.read_file")

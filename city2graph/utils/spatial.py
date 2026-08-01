@@ -2202,11 +2202,10 @@ def _polygonal_tessellation(tessellation: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     Return only polygonal tessellation cells, salvaging GeometryCollections.
 
     Degenerate or overlapping footprints can make momepy emit GeometryCollection
-    cells: when its own coverage simplification fails it warns and returns the
-    raw dense partition, line work and all. Downstream consumers such as
-    libpysal contiguity weights only accept (Multi)Polygon geometries, so
-    collections are replaced by the union of their polygonal parts and any
-    remaining non-polygonal or empty rows are dropped.
+    cells (especially on the ``simplify=False`` retry path). Downstream
+    consumers such as libpysal contiguity weights only accept (Multi)Polygon
+    geometries, so collections are replaced by the union of their polygonal
+    parts and any remaining non-polygonal or empty rows are dropped.
 
     Parameters
     ----------
@@ -2241,23 +2240,19 @@ def _polygonal_tessellation(tessellation: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return tessellation
 
 
-def _degenerate_enclosures(
+def _overfilled_enclosures(
     tessellation: gpd.GeoDataFrame,
     enclosures: gpd.GeoDataFrame,
     tolerance: float = 1.05,
 ) -> list[Any]:
     """
-    Return the indices of enclosures whose cells fail to partition them.
+    Return enclosure indices whose cells' total area exceeds the enclosure area.
 
-    A valid enclosed tessellation partitions its enclosure exactly, so the
-    cells must neither overlap each other nor leave the enclosure uncovered.
-    Both symptoms mean ``shapely.voronoi_polygons`` degenerated: overlapping
-    cells contain the same building points and explode downstream spatial
-    joins, while a cell that lost area no longer contains its own building and
-    silently drops it. The three ratios catch distinct degeneracies: cells that
-    each span (nearly) the whole enclosure overfill it, cells that overlap
-    inside a partially covered enclosure exceed their own union, and cells
-    collapsed to slivers or line work cover too little of the enclosure.
+    A valid enclosed tessellation partitions each enclosure, so the summed cell
+    area can never meaningfully exceed the enclosure's own area. A large excess
+    means ``shapely.voronoi_polygons`` degenerated and every cell spans (nearly)
+    the whole enclosure; such cells all contain the same building points and
+    would explode downstream spatial joins.
 
     Parameters
     ----------
@@ -2267,8 +2262,8 @@ def _degenerate_enclosures(
     enclosures : geopandas.GeoDataFrame
         The enclosures the tessellation was generated from.
     tolerance : float, default 1.05
-        Allowed ratio between the summed cell area, the cells' union area and
-        the enclosure area before an enclosure is reported as degenerate.
+        Allowed ratio of summed cell area to enclosure area before an
+        enclosure is reported as degenerate.
 
     Returns
     -------
@@ -2277,16 +2272,10 @@ def _degenerate_enclosures(
     """
     if tessellation.empty or "enclosure_index" not in tessellation.columns:
         return []
-    grouped = tessellation.geometry.groupby(tessellation["enclosure_index"])
-    cell_areas = grouped.apply(lambda cells: cells.area.sum())
-    union_areas = grouped.apply(lambda cells: cells.union_all().area)
+    cell_areas = tessellation.geometry.area.groupby(tessellation["enclosure_index"]).sum()
     enclosure_areas = enclosures.geometry.area.reindex(cell_areas.index)
     # NaN enclosure areas (unmatched indices) compare as False and are kept.
-    broken = (
-        (cell_areas > enclosure_areas * tolerance)
-        | (cell_areas > union_areas * tolerance)
-        | (union_areas * tolerance < enclosure_areas)
-    )
+    broken = cell_areas > enclosure_areas * tolerance
     return list(cell_areas.index[broken])
 
 
@@ -2384,8 +2373,8 @@ def _classify_tessellation_failure(error: Exception) -> str | None:
     Known failures are the errors the retry ladder in
     :func:`_run_tessellation_with_retries` recovers from: the ``ValueError``
     momepy raises when an enclosure produces nothing to concatenate, the
-    ``TypeError`` reporting an incorrect geometry type from the voronoi
-    construction, and any ``GEOSException``. Anything else must propagate.
+    ``TypeError`` raised by ``shapely.coverage_simplify`` on non-polygonal
+    cells, and any ``GEOSException``. Anything else must propagate.
 
     Parameters
     ----------
@@ -2395,13 +2384,13 @@ def _classify_tessellation_failure(error: Exception) -> str | None:
     Returns
     -------
     str or None
-        ``"empty"``, ``"geometry_type"`` or ``"geos"`` for known failures, or
+        ``"empty"``, ``"simplify"`` or ``"geos"`` for known failures, or
         ``None`` for unknown errors that must propagate.
     """
     if isinstance(error, ValueError):
         return "empty" if "No objects to concatenate" in str(error) else None
     if isinstance(error, TypeError):
-        return "geometry_type" if "incorrect geometry type" in str(error) else None
+        return "simplify" if "incorrect geometry type" in str(error) else None
     return "geos" if isinstance(error, shapely.errors.GEOSException) else None
 
 
@@ -2414,10 +2403,11 @@ def _next_retry_overrides(
     Return the next retry overrides for a classified tessellation failure.
 
     A coarser ``grid_size`` repairs the underlying voronoi partition, so it
-    is tried first; the jitter rung then breaks the exact collinearity that no
-    change of precision can fix. A ``grid_size`` pinned by the caller in
-    ``kwargs`` (or already applied via ``overrides``) is never overridden, and
-    the momepy concat failure has no remedy at all.
+    is always tried before ``simplify=False``, which would keep degenerate
+    cells; the ``simplify=False`` rung only applies to ``coverage_simplify``
+    failures. Options pinned by the caller in ``kwargs`` (or already applied
+    via ``overrides``) are never overridden, and the momepy concat failure
+    has no remedy at all.
 
     Parameters
     ----------
@@ -2437,8 +2427,10 @@ def _next_retry_overrides(
     if kind != "empty" and "_jitter" not in overrides:
         if "grid_size" not in kwargs and "grid_size" not in overrides:
             return {**overrides, "grid_size": _COARSE_GRID_SIZE}
-        # The final jitter rung replaces the earlier workaround instead of
-        # stacking on it: snapping to the coarse grid would re-align the
+        if kind == "simplify" and "simplify" not in kwargs and "simplify" not in overrides:
+            return {**overrides, "simplify": False}
+        # The final jitter rung replaces the earlier workarounds instead of
+        # stacking on them: snapping to the coarse grid would re-align the
         # jittered coordinates and reintroduce the degeneracy.
         return {"_jitter": True}
     return None
@@ -2462,21 +2454,27 @@ def _log_tessellation_retry(
     error : Exception
         The failure that triggered the retry.
     added_option : str
-        The option the next rung adds: ``"grid_size"`` or ``"_jitter"``.
+        The option the next rung adds: ``"grid_size"``, ``"simplify"`` or
+        ``"_jitter"``.
     """
-    if added_option == "_jitter":
-        logger.warning(
-            "Tessellation stayed degenerate (%s); retrying with jittered geometry.",
-            error,
-        )
-    elif kind == "geos":
+    if added_option == "grid_size" and kind == "geos":
         logger.warning(
             "Tessellation hit a GEOS topology error (%s); retrying with coarser grid_size=1e-3.",
             error,
         )
+    elif added_option == "grid_size":
+        logger.warning(
+            "Tessellation boundary simplification failed (%s); retrying with grid_size=1e-3.",
+            error,
+        )
+    elif added_option == "_jitter":
+        logger.warning(
+            "Tessellation stayed degenerate (%s); retrying with jittered geometry.",
+            error,
+        )
     else:
         logger.warning(
-            "Tessellation hit an incorrect geometry type (%s); retrying with grid_size=1e-3.",
+            "Tessellation boundary simplification failed (%s); retrying with simplify=False.",
             error,
         )
 
@@ -2486,7 +2484,7 @@ def _log_tessellation_degradation(error: Exception) -> None:
     Log a known terminal failure before degrading the unit to an empty result.
 
     The warning message depends on the failure kind: the momepy concat
-    ``ValueError`` keeps its historical wording, while geometry-type and GEOS
+    ``ValueError`` keeps its historical wording, while simplification and GEOS
     failures report the exhausted retry ladder.
 
     Parameters
@@ -2534,14 +2532,14 @@ def _run_tessellation_with_retries(
 
     ``shapely.voronoi_polygons`` can fail numerically inside an enclosure at
     momepy's default snapping precision; depending on the options this
-    surfaces as a ``TypeError`` reporting an incorrect geometry type, a
+    surfaces as a ``TypeError`` from ``shapely.coverage_simplify``, a
     ``GEOSException``, or as a silently degenerate partition (handled
     separately by :func:`_repair_or_drop_degenerate_enclosures`). Each known
     failure escalates to the next rung chosen by
-    :func:`_next_retry_overrides` — the coarser grid first, then jittered
-    geometry — until the options are exhausted and the unit degrades to an
-    empty tessellation. A caller-pinned ``grid_size`` is never overridden;
-    only unknown errors propagate.
+    :func:`_next_retry_overrides` — the coarser grid first, then
+    ``simplify=False`` — until the options are exhausted and the unit
+    degrades to an empty tessellation. Caller-pinned ``simplify``/
+    ``grid_size`` values are never overridden; only unknown errors propagate.
 
     Parameters
     ----------
@@ -2593,11 +2591,9 @@ def _repair_or_drop_degenerate_enclosures(
     """
     Validate a tessellation and retry or drop degenerate enclosures.
 
-    A degenerate voronoi partition can come back without any error at all, so
-    the cells are validated against each other
-    and against the enclosure areas before they can poison downstream spatial
-    joins: overlapping cells claim the same buildings, and cells that lost area
-    silently drop the building they were built around. A broken
+    A degenerate voronoi partition can come back without any error (notably
+    under ``simplify=False``), so the cells are validated against the
+    enclosure areas before they can poison downstream spatial joins. A broken
     partition is retried once with a coarser ``grid_size`` (unless one is
     already in effect) and then once with deterministically jittered geometry
     (which breaks the exact collinearity that degenerates the voronoi
@@ -2624,11 +2620,11 @@ def _repair_or_drop_degenerate_enclosures(
         The validated tessellation, with degenerate enclosures repaired or
         removed.
     """
-    broken = _degenerate_enclosures(tessellation, enclosures)
+    broken = _overfilled_enclosures(tessellation, enclosures)
     if broken and "grid_size" not in kwargs and "grid_size" not in overrides:
         logger.warning(
-            "Tessellation produced overlapping or incomplete cells in %d enclosure(s); "
-            "retrying with grid_size=1e-3.",
+            "Tessellation produced overlapping cells in %d enclosure(s); retrying with "
+            "grid_size=1e-3.",
             len(broken),
         )
         retried, overrides = _run_tessellation_with_retries(
@@ -2639,11 +2635,11 @@ def _repair_or_drop_degenerate_enclosures(
         )
         if retried is not None:
             tessellation = retried
-            broken = _degenerate_enclosures(tessellation, enclosures)
+            broken = _overfilled_enclosures(tessellation, enclosures)
     if broken and "_jitter" not in overrides:
         logger.warning(
-            "Tessellation kept overlapping or incomplete cells in %d enclosure(s); "
-            "retrying with jittered geometry.",
+            "Tessellation kept overlapping cells in %d enclosure(s); retrying with "
+            "jittered geometry.",
             len(broken),
         )
         # Jitter replaces the earlier workarounds (see _next_retry_overrides):
@@ -2656,13 +2652,13 @@ def _repair_or_drop_degenerate_enclosures(
         )
         if retried is not None:
             tessellation = retried
-            broken = _degenerate_enclosures(tessellation, enclosures)
+            broken = _overfilled_enclosures(tessellation, enclosures)
     if broken:
         dropped = tessellation["enclosure_index"].isin(broken)
         logger.warning(
-            "Dropping %d enclosure(s) whose tessellation cells overlap or leave gaps "
-            "instead of partitioning the enclosure; %d cell(s) removed and their "
-            "buildings degrade to footprint fallback cells.",
+            "Dropping %d enclosure(s) whose tessellation cells overlap instead of "
+            "partitioning the enclosure; %d cell(s) removed and their buildings "
+            "degrade to footprint fallback cells.",
             len(broken),
             int(dropped.sum()),
         )
@@ -2705,8 +2701,8 @@ def _run_enclosed_tessellation(
     kwargs : dict[str, object]
         Caller-supplied momepy options.
     **extra_kwargs : object
-        Retry overrides, such as ``grid_size`` or the internal ``_jitter``
-        marker.
+        Retry overrides, such as ``simplify``, ``grid_size`` or the internal
+        ``_jitter`` marker.
 
     Returns
     -------

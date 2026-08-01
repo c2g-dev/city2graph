@@ -11,66 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 ### Changed
+- Updated optional graph neural network dependencies to PyTorch 2.12, torchvision 0.27, and PyTorch Geometric 2.7 for CPU, CUDA 12.6, and CUDA 13.0 installs. CUDA 12.8 remains on PyTorch 2.11 because PyTorch 2.12 no longer publishes CUDA 12.8 wheels.
 
 ### Deprecated
 
 ### Removed
-
-### Fixed
-
-### Documentation
-
-
-## 1.0.0 (2026-07-31)
-
-First stable release. The public API is now considered settled and will follow
-semantic versioning: breaking changes are reserved for future major releases.
-
-### Added
-- Added `morphological_graphs()`, which builds morphological graphs for several distances in one shared pass. The expensive shared work, the reachability cost field and the enclosed tessellation, is computed once from the context of the largest distance and reused across all distances, so requesting every distance costs roughly one tessellation instead of one per distance. Because the tessellation context corresponds to the largest distance, results for smaller distances can differ slightly near the clipping boundary compared with calling `morphological_graph()` once per distance.
-- Added `load_gbfs()` for loading GBFS JSON feeds from a local directory into an in-memory DuckDB connection, flattening station, bike, vehicle, vehicle-type, and feed structures into tables and materialising geometry columns from `lon`/`lat` fields where available.
-- Added `non_movement_barrier_col`, `tessellation_fallback`, and `tessellation_n_jobs` parameters to `morphological_graph()` (and `morphological_graphs()`): `non_movement_barrier_col` supplies barrier geometries that constrain tessellation without becoming movement nodes, `tessellation_fallback` degrades failed enclosed tessellation to building footprints instead of raising, and `tessellation_n_jobs` controls tessellation parallelism.
-
-### Changed
-- **Breaking:** Removed the deprecated morphology aliases (see Removed below).
-- **Breaking:** Changed the default `extent_buffer` of `morphological_graph()` from `50.0` to `100.0`. The perpendicular access cap between a street and a building or cell is now wider by default, so the default output retains more buildings and more `faced_to` edges. Pass `extent_buffer=50.0` explicitly to reproduce the previous default.
-- **Breaking:** Raised the minimum Python version to 3.12. `momepy` 1.0, now the minimum supported version, requires Python 3.12 or newer, and keeping 3.11 would have meant shipping and testing two different tessellation implementations.
-- **Breaking:** Required `momepy>=1.0.0`. Only its functional API is used, and 1.0 is the version the tessellation behaviour is tested against.
-- **Breaking:** Removed `osmnx` from the runtime dependencies. It is never imported by the library; the example notebooks and the test suite still use it, so it moved to the `dev` dependency group. Install it alongside city2graph if you follow those examples.
-- Declared `numpy`, `pandas`, and `pyproj` explicitly. All three are imported directly by the library but were previously relied on transitively through GeoPandas.
-- Updated optional graph neural network dependencies to PyTorch 2.13, torchvision 0.28, and PyTorch Geometric 2.8 for CPU, CUDA 12.6, and CUDA 13.0 installs. CUDA 12.8 remains on PyTorch 2.11 and torchvision 0.26 because PyTorch no longer publishes CUDA 12.8 wheels past 2.11.
-- Split `city2graph/utils.py` into a `city2graph/utils/` package with focused submodules for graph conversion, topology, and spatial operations. The public `city2graph.utils` surface is unchanged: every previously exported name is re-exported from the package, so `from city2graph.utils import ...` and `city2graph.<name>` continue to work.
-- Consolidated shared CRS, centroid, validation, and graph-index handling into `city2graph/base.py`, so the mobility, morphology, and proximity builders now apply the same rules.
-- Decomposed the long graph-building orchestrators (`od_matrix_to_graph()`, `segments_to_graph()`, `place_to_place_graph()`, `bridge_nodes()`, `plot_graph()`) into private validation, transformation, assembly, and output phase helpers. No public signature, return type, warning, or error message changed.
-- Reworked `travel_summary_graph()` to produce its NetworkX output through the shared `gdf_to_nx()` path, so `as_nx=True` results now carry the same metadata and CRS conventions as the rest of the library.
-- Narrowed the GTFS UDF registration in `load_gtfs()` from a blanket DuckDB error suppression to an existence pre-check, so genuine registration failures now propagate instead of being swallowed.
-- Improved performance across the conversion and graph-building paths without changing behaviour: `gdf_to_pyg()` and `pyg_to_gdf()` map endpoints and serialise geometries with vectorised operations instead of Python loops, the homogeneous and heterogeneous PyG pipelines share one set of node and edge helpers, metapath materialisation is deferred with vectorised reducers, the proximity builders no longer allocate dense distance matrices, Overture segment post-processing is vectorised, concave-hull and tessellation-boundary construction is faster, and per-distance invariant work is hoisted out of the morphology multi-distance loop.
-- Documented the frame ownership rule for the morphology module: public input GeoDataFrames are never mutated, caller-owned frames are copied at most once at the public boundary, and the public entry points are covered by input-immutability tests.
-
-### Removed
-- **Breaking:** Removed `private_to_private_graph()`, `private_to_public_graph()`, and `public_to_public_graph()`, deprecated in 0.4.0. Use `place_to_place_graph()`, `place_to_movement_graph()`, and `movement_to_movement_graph()` instead.
 - Removed the unused Docker development environment and its support configuration.
 
 ### Fixed
-- Fixed `gabriel_graph()` dropping valid edges. The disc test counted points within a closed disc and required exactly two, so any third node lying on the circle removed the edge. The criterion is now the exact open-disc test, `d(u,w)^2 + d(v,w)^2 < d(u,v)^2`, which keeps edges on cocircular configurations such as regular grids.
-- Fixed `relative_neighborhood_graph()` on degenerate point configurations: the lune test now applies a relative floating-point tolerance so nodes at exactly the edge length no longer eliminate valid edges, and an exact Gabriel-disc pre-test rejects genuinely blocked candidates.
-- Fixed `od_matrix_to_graph(compute_edge_geometry=False, as_nx=True)` returning a graph with no edges. Edge frames whose geometry column is entirely missing now bypass geometry validation and resolve their endpoints from the `(source, target)` MultiIndex, warning about unmappable edges instead of dropping them silently.
-- Made enclosed tessellation substantially more robust. Invalid building footprints are repaired before any morphology computation, so one self-intersecting polygon no longer forces every building in the enclosure onto the footprint fallback. Null barrier geometries are ignored. The retry ladder is driven by a failure classifier and every known failure, whether a geometry-type `TypeError`, a GEOS topology error, or a momepy concatenation `ValueError`, now ends in a warning and an empty tessellation for the affected unit at whichever rung it occurs, rather than aborting the whole run; only unknown errors propagate. Tessellation is retried at a coarser precision and then with deterministically jittered geometry, and the overlap repair keeps the good cells and drops only the broken enclosures.
-- Broadened the enclosed-tessellation degeneracy check. A tessellation must partition its enclosure, so cells are now validated against each other as well as against the enclosure: overlapping cells that stay within the enclosure area, and cells that collapse and leave the enclosure partly uncovered, are both detected and repaired. Previously only cells that overfilled the enclosure were caught, which let a degenerate partition silently drop the building a cell was built around.
-- Fixed the timeout options passed to the Overture Maps CLI. `connect_timeout` and `request_timeout` were sent as `--connect-timeout`/`--request-timeout` with a fractional value, neither of which the CLI accepts, so any download with a timeout set failed outright. They are now sent as `--connect_timeout`/`--request_timeout` and rounded to whole seconds.
-- Made Overture release validation resilient. From overturemaps 1.0 the release list resolves lazily over the network, so validating a `release` argument could raise a connection error instead of a `ValueError`. The catalogue is now fetched once and an unreachable catalogue downgrades to a warning.
-- Unified the schema of empty enclosed-tessellation results so every path returns `[geometry, enclosure_index, tess_id]` instead of varying by failure mode.
-- Unified fallback place-cell generation across the whole-tessellation and unenclosed-building fallbacks. Both now record the source building index and match exactly, fixing duplicated rows and mis-assigned buildings when one footprint contained several representative points, and the internal source-index column no longer leaks into the place nodes when `keep_buildings=False`.
-- Guarded `get_od_pairs()` against an empty calendar table.
-- Fixed a pandas chained-assignment warning raised when writing columns to the fallback-cell frame.
 
 ### Documentation
-- Rebuilt the documentation landing page and the examples index with per-example thumbnails, refreshed logos, and a revised example order.
-- Consolidated contributor guidance into `docs/contributing.md` as the single canonical development, testing, code-quality, and pull-request reference, with `README.md` and the pull request template pointing at it.
-- Expanded `docs/llms.txt` and page metadata, and simplified the MkDocs setup.
-- Clarified in the API documentation when `suppress_empty_error` actually fires: with barriers present, `create_tessellation()` degrades a momepy concatenation failure to an empty tessellation internally, so the `ValueError` conversion only applies on the barrier-free morphological path.
 - Updated installation and security guidance for the current PyTorch and PyTorch Geometric support matrix.
-- Updated release metadata and versioned documentation links for `v1.0.0`.
 
 
 ## 0.4.0 (2026-06-11)
