@@ -115,6 +115,8 @@ setup, testing, code quality, documentation, and pull request instructions.
 If you use City2Graph in your research, please cite the paper published in
 *Computers, Environment and Urban Systems*:
 
+[![City2Graph paper in Computers, Environment and Urban Systems](https://city2graph.net/latest/assets/figures/CEUS_thumbnail.jpg)](https://doi.org/10.1016/j.compenvurbsys.2026.102492)
+
 Sato, Y., Pietrostefani, E., Mahabir, R., & Arribas-Bel, D. (2026). City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial analysis in urban systems. *Computers, Environment and Urban Systems*, 130, 102492. [https://doi.org/10.1016/j.compenvurbsys.2026.102492](https://doi.org/10.1016/j.compenvurbsys.2026.102492)
 
 ```bibtex
