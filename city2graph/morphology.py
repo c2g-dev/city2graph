@@ -1010,10 +1010,11 @@ def place_to_place_graph(
     # We must ensure the index is unique for libpysal
     gdf_indexed = gdf_unique.set_index(_PLACE_ID_COL)
 
+    # `as_nx` is left at its default: passing it explicitly would raise a
+    # DeprecationWarning that the caller cannot act on.
     _, edges_gdf = contiguity_graph(
         gdf_indexed,
         contiguity=contiguity,
-        as_nx=False,
     )
 
     if edges_gdf.empty:
