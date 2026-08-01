@@ -48,6 +48,9 @@ semantic versioning: breaking changes are reserved for future major releases.
 - Documented the frame ownership rule for the morphology module: public input GeoDataFrames are never mutated, caller-owned frames are copied at most once at the public boundary, and the public entry points are covered by input-immutability tests.
 - Restricted the source distribution to the package, tests, and project metadata. Previous sdists shipped the full documentation tree (91 MB at 0.4.0, close to PyPI's 100 MB upload limit) along with repository configuration files; the sdist is now under 1 MB.
 
+### Deprecated
+- Deprecated the `as_nx` parameter of the graph builders. Passing `as_nx` explicitly, whether `True` or `False`, now emits a `DeprecationWarning` pointing at `gdf_to_nx()`, which will be the only supported route to a NetworkX graph once the parameter is removed in a future major release. The affected functions are `knn_graph()`, `delaunay_graph()`, `gabriel_graph()`, `relative_neighborhood_graph()`, `euclidean_minimum_spanning_tree()`, `fixed_radius_graph()`, `waxman_graph()`, `contiguity_graph()`, `bridge_nodes()`, `group_nodes()`, `morphological_graph()`, `place_to_place_graph()`, `place_to_movement_graph()`, `movement_to_movement_graph()`, `segments_to_graph()`, `od_matrix_to_graph()`, and `travel_summary_graph()`. Their `as_nx` default changed from `False` to a `None` sentinel so that the warning fires only on explicit use; the effective default, the return types, and the behaviour are all unchanged. To migrate, drop `as_nx` and pass the returned GeoDataFrames through `gdf_to_nx()`.
+
 ### Removed
 - **Breaking:** Removed `private_to_private_graph()`, `private_to_public_graph()`, and `public_to_public_graph()`, deprecated in 0.4.0. Use `place_to_place_graph()`, `place_to_movement_graph()`, and `movement_to_movement_graph()` instead.
 - Removed the unused Docker development environment and its support configuration.
@@ -67,6 +70,7 @@ semantic versioning: breaking changes are reserved for future major releases.
 
 ### Documentation
 - Rebuilt the documentation landing page and the examples index with per-example thumbnails, refreshed logos, and a revised example order.
+- Updated the preferred citation to the published *Computers, Environment and Urban Systems* article (doi: `10.1016/j.compenvurbsys.2026.102492`) across `CITATION.cff`, the README, and the documentation landing page. `preferred-citation` is now of type `article` and lists all four authors instead of citing the software release.
 - Repaired the executable docstring examples that produced wrong or impossible output: corrected stale GeoPandas/Shapely reprs, converted pseudo-output blocks to real doctest output in `segments_to_graph()`, `gdf_to_nx()`, and `nx_to_gdf()` (whose documented `full_edge_type` attribute is actually `edge_type`), made the `nx_to_pyg()` example pass its own CRS validation, and replaced the no-longer-available Overture release pinned in the `load_overture_data()` examples.
 - Fixed an undefined variable in a plotting cell of the proximity-graphs example notebook, and repaired the broken workflow-table anchor on the landing page.
 - Consolidated contributor guidance into `docs/contributing.md` as the single canonical development, testing, code-quality, and pull-request reference, with `README.md` and the pull request template pointing at it.
