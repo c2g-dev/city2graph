@@ -124,7 +124,7 @@ def filter_graph_by_distance(
     >>> center = Point(1, 0)
     >>> filtered_graph = filter_graph_by_distance(G, center, threshold=12)
     >>> print(list(filtered_graph.nodes))
-    [0, 1]
+    >>> [0, 1]
     """
     is_graph_input = isinstance(graph, (nx.Graph, nx.MultiGraph))
 
@@ -2157,10 +2157,7 @@ def create_tessellation(
     ... )
     >>> # Generate morphological tessellation
     >>> tessellation = create_tessellation(buildings)
-    >>> print(tessellation.head())  # doctest: +NORMALIZE_WHITESPACE
-                                                geometry  tess_id
-    0     POLYGON ((2.6 0.4, 0.4 0.4, 0.4 2.6, 2.6 0.4))        0
-    1  POLYGON ((0.4 2.6, 0.4 2.6, 2.6 2.6, 2.6 0.4, ...        1
+    >>> print(tessellation.head())
 
     >>> # Generate enclosed tessellation with roads as barriers
     >>> from shapely.geometry import LineString
@@ -2169,8 +2166,7 @@ def create_tessellation(
     ...     crs="EPSG:32633"
     ... )
     >>> enclosed_tess = create_tessellation(buildings, primary_barriers=roads)
-    >>> print(sorted(enclosed_tess.columns))
-    ['enclosure_index', 'geometry', 'tess_id']
+    >>> print(enclosed_tess.head())
     """
     if geometry.empty:
         if primary_barriers is not None:
@@ -3157,7 +3153,7 @@ def plot_graph(  # noqa: PLR0913
     >>> G = nx.Graph()
     >>> G.add_node(0, pos=(0, 0))
     >>> G.add_edge(0, 1)
-    >>> ax = plot_graph(graph=G)
+    >>> plot_graph(graph=G)
     >>> # Plot from GeoDataFrames with scalar styling
     >>> plot_graph(nodes=nodes_gdf, edges=edges_gdf, node_color='red')
     >>> # Plot with attribute-based node colors (by column name)

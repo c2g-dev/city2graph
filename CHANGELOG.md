@@ -46,7 +46,6 @@ semantic versioning: breaking changes are reserved for future major releases.
 - Narrowed the GTFS UDF registration in `load_gtfs()` from a blanket DuckDB error suppression to an existence pre-check, so genuine registration failures now propagate instead of being swallowed.
 - Improved performance across the conversion and graph-building paths without changing behaviour: `gdf_to_pyg()` and `pyg_to_gdf()` map endpoints and serialise geometries with vectorised operations instead of Python loops, the homogeneous and heterogeneous PyG pipelines share one set of node and edge helpers, metapath materialisation is deferred with vectorised reducers, the proximity builders no longer allocate dense distance matrices, Overture segment post-processing is vectorised, concave-hull and tessellation-boundary construction is faster, and per-distance invariant work is hoisted out of the morphology multi-distance loop.
 - Documented the frame ownership rule for the morphology module: public input GeoDataFrames are never mutated, caller-owned frames are copied at most once at the public boundary, and the public entry points are covered by input-immutability tests.
-- Restricted the source distribution to the package, tests, and project metadata. Previous sdists shipped the full documentation tree (91 MB at 0.4.0, close to PyPI's 100 MB upload limit) along with repository configuration files; the sdist is now under 1 MB.
 
 ### Removed
 - **Breaking:** Removed `private_to_private_graph()`, `private_to_public_graph()`, and `public_to_public_graph()`, deprecated in 0.4.0. Use `place_to_place_graph()`, `place_to_movement_graph()`, and `movement_to_movement_graph()` instead.
@@ -67,8 +66,6 @@ semantic versioning: breaking changes are reserved for future major releases.
 
 ### Documentation
 - Rebuilt the documentation landing page and the examples index with per-example thumbnails, refreshed logos, and a revised example order.
-- Repaired the executable docstring examples that produced wrong or impossible output: corrected stale GeoPandas/Shapely reprs, converted pseudo-output blocks to real doctest output in `segments_to_graph()`, `gdf_to_nx()`, and `nx_to_gdf()` (whose documented `full_edge_type` attribute is actually `edge_type`), made the `nx_to_pyg()` example pass its own CRS validation, and replaced the no-longer-available Overture release pinned in the `load_overture_data()` examples.
-- Fixed an undefined variable in a plotting cell of the proximity-graphs example notebook, and repaired the broken workflow-table anchor on the landing page.
 - Consolidated contributor guidance into `docs/contributing.md` as the single canonical development, testing, code-quality, and pull-request reference, with `README.md` and the pull request template pointing at it.
 - Expanded `docs/llms.txt` and page metadata, and simplified the MkDocs setup.
 - Clarified in the API documentation when `suppress_empty_error` actually fires: with barriers present, `create_tessellation()` degrades a momepy concatenation failure to an empty tessellation internally, so the `ValueError` conversion only applies on the barrier-free morphological path.

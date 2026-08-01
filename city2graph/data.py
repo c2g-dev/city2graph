@@ -134,10 +134,9 @@ def load_overture_data(
     return_data : bool, default True
         Whether to return the data as GeoDataFrames.
     release : str, optional
-        Overture Maps release version to use (e.g., '2026-07-22.0'). If None, uses the
+        Overture Maps release version to use (e.g., '2024-11-13.0'). If None, uses the
         default release from the CLI tool. Must be a valid release from the overturemaps
-        library's ALL_RELEASES list; Overture keeps only the most recent monthly
-        releases available.
+        library's ALL_RELEASES list.
     connect_timeout : float, optional
         Socket connection timeout in seconds, rounded to whole seconds for the
         Overture CLI. If None, uses the AWS SDK default value (typically 1 second).
@@ -177,8 +176,8 @@ def load_overture_data(
     >>> buildings = data['building']
     >>> segments = data['segment']
 
-    >>> # Download with a specific release version (must be a currently available release)
-    >>> data = load_overture_data(bbox, types=['building'], release='2026-07-22.0')
+    >>> # Download with a specific release version
+    >>> data = load_overture_data(bbox, types=['building'], release='2024-11-13.0')
 
     >>> # Download with custom timeout settings
     >>> data = load_overture_data(
@@ -530,7 +529,7 @@ def _download_and_process_type(  # noqa: PLR0912, PLR0913, C901
     Examples
     --------
     >>> gdf = _download_and_process_type('building', '-74.1,40.7,-74.0,40.8',
-    ...                                  './data', 'nyc', True, True, None, '2026-07-22.0')
+    ...                                  './data', 'nyc', True, True, None, '2024-11-13.0')
     """
     output_path = Path(output_dir) / f"{prefix}{data_type}.geojson"
     needs_postprocessing = clip_geom is not None or data_type == "segment"

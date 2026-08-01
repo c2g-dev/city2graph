@@ -145,20 +145,6 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["city2graph"]
 
-[tool.hatch.build.targets.sdist]
-# Ship only the package, tests, and project metadata: docs assets alone exceed
-# PyPI's 100 MB upload limit, and nothing else in the repository root belongs
-# in a source distribution.
-only-include = [
-    "city2graph",
-    "tests",
-    "README.md",
-    "LICENSE",
-    "CHANGELOG.md",
-    "CITATION.cff",
-    "SECURITY.md",
-]
-
 [tool.coverage.report]
 exclude_also = ["@overload", "if TYPE_CHECKING:"]
 

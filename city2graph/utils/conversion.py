@@ -362,20 +362,13 @@ class NxConverter(BaseGraphConverter):
         Examples
         --------
         >>> import geopandas as gpd
-        >>> import pandas as pd
         >>> from shapely.geometry import Point, LineString
-        >>> nodes_dict = {
-        ...     'building': gpd.GeoDataFrame({'geometry': [Point(0, 0)]}),
-        ...     'street': gpd.GeoDataFrame({'geometry': [Point(1, 1)]}),
-        ... }
-        >>> edges_dict = {('building', 'connects', 'street'): gpd.GeoDataFrame(
-        ...     {'geometry': [LineString([(0, 0), (1, 1)])]},
-        ...     index=pd.MultiIndex.from_tuples([(0, 0)]),
-        ... )}
+        >>> nodes_dict = {'building': gpd.GeoDataFrame({'geometry': [Point(0, 0)]})}
+        >>> edges_dict = {('building', 'connects', 'street'): gpd.GeoDataFrame({'geometry': [LineString([(0, 0), (1, 1)])]})}
         >>> converter = NxConverter()
         >>> graph = converter._convert_heterogeneous(nodes_dict, edges_dict)
         >>> graph.number_of_nodes()
-        2
+        1
         """
         # Validate inputs
         self._validate_hetero_inputs(nodes_dict, edges_dict)
@@ -1831,12 +1824,17 @@ def gdf_to_nx(
     ...     index=pd.MultiIndex.from_tuples([(10, 20)], names=["u", "v"])
     ... )
     >>> G = gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf)
-    >>> print(G.nodes(data=True))  # doctest: +NORMALIZE_WHITESPACE
-    [(0, {'geometry': <POINT (0 0)>, '_original_index': 10, 'pos': (0.0, 0.0)}),
-     (1, {'geometry': <POINT (1 1)>, '_original_index': 20, 'pos': (1.0, 1.0)})]
-    >>> print(G.edges(data=True))  # doctest: +NORMALIZE_WHITESPACE
-    [(0, 1, {'length': 1.414, 'geometry': <LINESTRING (0 0, 1 1)>,
-             '_original_edge_index': (10, 20)})]
+    >>> print(G.nodes(data=True))
+    >>> [(0, {'geometry': <POINT (0 0)>,
+    ...       '_original_index': 10,
+    ...       'pos': (0.0, 0.0)}),
+    ...  (1, {'geometry': <POINT (1 1)>,
+    ...       '_original_index': 20,
+    ...       'pos': (1.0, 1.0)})]
+    >>> print(G.edges(data=True))
+    >>> [(0, 1, {'length': 1.414,
+    ...          'geometry': <LINESTRING (0 0, 1 1)>,
+    ...          '_original_edge_index': (10, 20)})]
 
     >>> # Heterogeneous graph
     >>> buildings_gdf = gpd.GeoDataFrame(geometry=[Point(0, 0)], index=pd.Index(['b1'], name="b_id"))
@@ -1848,15 +1846,19 @@ def gdf_to_nx(
     >>> nodes_dict = {"building": buildings_gdf, "street": streets_gdf}
     >>> edges_dict = {("building", "connects_to", "street"): connections_gdf}
     >>> H = gdf_to_nx(nodes=nodes_dict, edges=edges_dict)
-    >>> print(H.nodes(data=True))  # doctest: +NORMALIZE_WHITESPACE
-    [(0, {'geometry': <POINT (0 0)>, 'node_type': 'building',
-          '_original_index': 'b1', 'pos': (0.0, 0.0)}),
-     (1, {'geometry': <POINT (1 1)>, 'node_type': 'street',
-          '_original_index': 's1', 'pos': (1.0, 1.0)})]
-    >>> print(H.edges(data=True))  # doctest: +NORMALIZE_WHITESPACE
-    [(0, 1, {'geometry': <LINESTRING (0 0, 1 1)>,
-             '_original_edge_index': ('b1', 's1'),
-             'edge_type': ('building', 'connects_to', 'street')})]
+    >>> print(H.nodes(data=True))
+    >>> [(0, {'geometry': <POINT (0 0)>,
+    ...       'node_type': 'building',
+    ...       '_original_index': 'b1',
+    ...       'pos': (0.0, 0.0)}),
+    ...  (1, {'geometry': <POINT (1 1)>,
+    ...       'node_type': 'street',
+    ...       '_original_index': 's1',
+    ...       'pos': (1.0, 1.0)})]
+    >>> print(H.edges(data=True))
+    >>> [(0, 1, {'geometry': <LINESTRING (0 0, 1 1)>,
+    ...          'full_edge_type': ('building', 'connects_to', 'street'),
+    ...          '_original_edge_index': ('b1', 's1')})]
     """
     # Validate inputs using enhanced validation with type detection
     validated_nodes, validated_edges, _ = validate_gdf(
@@ -1944,13 +1946,13 @@ def nx_to_gdf(
     >>> G.add_edge(0, 1, weight=1.5, geometry=LineString([(0, 0), (1, 1)]))
     >>> # Convert back to GeoDataFrames
     >>> nodes_gdf, edges_gdf = nx_to_gdf(G)
-    >>> print(nodes_gdf)  # doctest: +NORMALIZE_WHITESPACE
-       population     geometry
-    0         100  POINT (0 0)
-    1         200  POINT (1 1)
-    >>> print(edges_gdf)  # doctest: +NORMALIZE_WHITESPACE
-         weight               geometry
-    0 1     1.5  LINESTRING (0 0, 1 1)
+    >>> print(nodes_gdf)
+    >>> print(edges_gdf)
+    >>>           population     geometry
+    ... 0         100           POINT (0 0)
+    ... 1         200           POINT (1 1)
+    ...           weight        geometry
+    ... 0 1       1.5           LINESTRING (0 0, 1 1)
     """
     if not (nodes or edges):
         msg = "Must request at least one of nodes or edges"

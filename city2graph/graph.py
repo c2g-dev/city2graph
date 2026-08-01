@@ -3087,7 +3087,7 @@ def nx_to_pyg(
     >>> from city2graph.graph import nx_to_pyg
     >>>
     >>> # Create NetworkX graph with spatial attributes
-    >>> G = nx.Graph(crs="EPSG:4326")
+    >>> G = nx.Graph()
     >>> G.add_node(0, x=0.0, y=0.0, population=1000)
     >>> G.add_node(1, x=1.0, y=1.0, population=1500)
     >>> G.add_edge(0, 1, weight=0.5, road_type='primary')
