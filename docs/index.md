@@ -285,7 +285,7 @@ supported Python and CUDA versions, and conda-forge instructions.
 City2Graph supports buildings, street segments, tessellations, Overture Maps
 features, GTFS and GBFS feeds, origin–destination matrices, points of interest,
 polygonal zones, and existing GeoDataFrame or NetworkX graphs. The
-[workflow table](#choose-a-geospatial-graph-workflow) links each input to its
+[workflow table](#sample-workflow) links each input to its
 builder and tutorial.
 
 ### Is PyTorch required?
