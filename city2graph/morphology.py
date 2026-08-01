@@ -1618,16 +1618,17 @@ def segments_to_graph(
     ... )
     >>> # Convert to graph representation
     >>> nodes_gdf, edges_gdf = segments_to_graph(segments)
-    >>> print(nodes_gdf)
-    >>> print(edges_gdf)
-    node_id  geometry
+    >>> print(nodes_gdf)  # doctest: +NORMALIZE_WHITESPACE
+                geometry
+    node_id
     0        POINT (0 0)
     1        POINT (1 1)
     2        POINT (1 0)
-                                             road_name   geometry
+    >>> print(edges_gdf)  # doctest: +NORMALIZE_WHITESPACE
+                                     road_name               geometry
     from_node_id to_node_id edge_key
-    0            1          0                A           LINESTRING (0 0, 1 1)
-    1            2          0                B           LINESTRING (1 1, 1 0)
+    0            1          0                A  LINESTRING (0 0, 1 1)
+    1            2          0                B  LINESTRING (1 1, 1 0)
 
     >>> # Duplicate connections become parallel edges with distinct keys
     >>> segments_with_duplicates = gpd.GeoDataFrame(

@@ -617,7 +617,6 @@ class GeoDataProcessor:
         >>> G = nx.Graph(is_hetero=False, crs="EPSG:4326")
         >>> G.add_node(0, pos=(0, 0))
         >>> G.add_node(1, pos=(0, 1))
-        >>> G.add_edge(0, 1)
         >>> try:
         ...     GeoDataProcessor.validate_nx(G)
         ... except ValueError as e:
@@ -719,7 +718,7 @@ class GeoDataProcessor:
         >>> gdf1 = gpd.GeoDataFrame(geometry=[Point(0, 0)], crs="EPSG:4326")
         >>> gdf2 = gpd.GeoDataFrame(geometry=[Point(1, 1)], crs="EPSG:4326")
         >>> try:
-        ...     GeoDataProcessor.ensure_crs_consistency(gdf1, gdf2)
+        ...     _ = GeoDataProcessor.ensure_crs_consistency(gdf1, gdf2)
         ...     print("CRS is consistent.")
         ... except ValueError as e:
         ...     print(e)
@@ -775,7 +774,7 @@ class GeoDataProcessor:
         >>> print(start_points)
         0    (0.0, 0.0)
         1    (2.0, 2.0)
-        dtype: object
+        Name: geometry, dtype: object
         """
         if start:
             coords: pd.Series = gdf.geometry.apply(lambda g: g.coords[0] if g else None)
@@ -817,7 +816,7 @@ class GeoDataProcessor:
         ... )
         >>> centroids = GeoDataProcessor.compute_centroids(gdf)
         >>> print(centroids)
-        0    POINT (0.50000 0.50000)
+        0    POINT (0.5 0.5)
         dtype: geometry
         """
         centroids = gdf.geometry.centroid
