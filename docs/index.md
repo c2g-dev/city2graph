@@ -22,7 +22,7 @@ Graph Neural Networks (GNNs).
 [![PyPI version](https://badge.fury.io/py/city2graph.svg)](https://badge.fury.io/py/city2graph)
 [![conda-forge Version](https://anaconda.org/conda-forge/city2graph/badges/version.svg)](https://anaconda.org/conda-forge/city2graph)
 [![PyPI Downloads](https://static.pepy.tech/badge/city2graph)](https://pepy.tech/projects/city2graph)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15858845.svg)](https://doi.org/10.5281/zenodo.15858845)
+[![DOI](https://img.shields.io/badge/DOI-10.1016%2Fj.compenvurbsys.2026.102492-blue?logo=doi&logoColor=white)](https://doi.org/10.1016/j.compenvurbsys.2026.102492)
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/c2g-dev/city2graph/blob/main/LICENSE)
 [![Platform](https://anaconda.org/conda-forge/city2graph/badges/platforms.svg)](https://anaconda.org/conda-forge/city2graph)
 [![codecov](https://codecov.io/gh/c2g-dev/city2graph/graph/badge.svg?token=2R449G75Z0)](https://codecov.io/gh/c2g-dev/city2graph)
@@ -37,29 +37,6 @@ can support mapping, spatial network analysis, and machine-learning workflows.
 <p align="center">
   <img src="assets/figures/scope.png" alt="City2Graph workflow from geospatial data to NetworkX and PyTorch Geometric graphs" class="desktop-limit-width">
 </p>
-
-## Why City2Graph?
-
-Turning a city into a graph is rarely the interesting part of the work. It
-usually means writing throwaway code to parse a feed, deciding what counts as a
-node, flattening geometries into indices, and then writing it all again in a
-different shape as soon as the analysis moves from mapping to centrality to a
-GNN. City2Graph removes that step.
-
-- **A city is more than one network.** Buildings, streets, transit stops, zones,
-  and amenities can live in the same graph as distinct node and relation types
-  rather than being collapsed into a single homogeneous network. That is the
-  structure heterogeneous GNNs expect, and it keeps the question "which kind of
-  thing is connected to which" answerable.
-- **Build the graph once, use it everywhere.** The same graph moves between
-  GeoDataFrames, NetworkX, PyTorch Geometric `Data` and `HeteroData`, and
-  rustworkx. Explore it in NetworkX, run heavy algorithms in rustworkx, train on
-  it in PyTorch Geometric, and map the results, without rebuilding it for each
-  tool or maintaining conversion code of your own.
-- **Start from the data you already have.** Overture Maps, OpenStreetMap-derived
-  data, GTFS and GBFS feeds, origin–destination matrices, points of interest,
-  and ordinary GIS layers are read directly, so a working graph is a few lines
-  away rather than a preprocessing project.
 
 For details, please read the paper published in *Computers, Environment and Urban Systems*.
 
@@ -278,6 +255,29 @@ supported Python and CUDA versions, and conda-forge instructions.
 
 [Browse all examples →](examples/index.md)
 
+## Why City2Graph?
+
+Turning a city into a graph is rarely the interesting part of the work. It
+usually means writing throwaway code to parse a feed, deciding what counts as a
+node, flattening geometries into indices, and then writing it all again in a
+different shape as soon as the analysis moves from mapping to centrality to a
+GNN. City2Graph removes that step.
+
+- **A city is more than one network.** Buildings, streets, transit stops, zones,
+  and amenities can live in the same graph as distinct node and relation types
+  rather than being collapsed into a single homogeneous network. That is the
+  structure heterogeneous GNNs expect, and it keeps the question "which kind of
+  thing is connected to which" answerable.
+- **Build the graph once, use it everywhere.** The same graph moves between
+  GeoDataFrames, NetworkX, PyTorch Geometric `Data` and `HeteroData`, and
+  rustworkx. Explore it in NetworkX, run heavy algorithms in rustworkx, train on
+  it in PyTorch Geometric, and map the results, without rebuilding it for each
+  tool or maintaining conversion code of your own.
+- **Start from the data you already have.** Overture Maps, OpenStreetMap-derived
+  data, GTFS and GBFS feeds, origin–destination matrices, points of interest,
+  and ordinary GIS layers are read directly, so a working graph is a few lines
+  away rather than a preprocessing project.
+
 ## FAQ
 
 ### What data can City2Graph convert into graphs?
@@ -285,7 +285,7 @@ supported Python and CUDA versions, and conda-forge instructions.
 City2Graph supports buildings, street segments, tessellations, Overture Maps
 features, GTFS and GBFS feeds, origin–destination matrices, points of interest,
 polygonal zones, and existing GeoDataFrame or NetworkX graphs. The
-[workflow table](#choose-a-geospatial-graph-workflow) links each input to its
+[workflow table](#sample-workflow) links each input to its
 builder and tutorial.
 
 ### Is PyTorch required?
