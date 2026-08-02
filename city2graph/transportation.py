@@ -548,7 +548,14 @@ def load_gtfs(path: str | Path) -> duckdb.DuckDBPyConnection:
                     zf.extract(name, tmp_dir)
                     table_name = name.rsplit("/", 1)[-1].replace(".txt", "")
                     file_path = str(Path(tmp_dir) / name)
-                    con.read_csv(file_path, all_varchar=True, auto_detect=True).create(table_name)
+                    con.read_csv(
+                        file_path,
+                        all_varchar=True,
+                        header=True,
+                        delimiter=",",
+                        strict_mode=False,
+                        null_padding=True,
+                    ).create(table_name)
     except (OSError, zipfile.BadZipFile, duckdb.Error):
         logger.exception("Failed to read GTFS archive at %s", path)
         return con
