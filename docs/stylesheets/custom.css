@@ -1109,6 +1109,30 @@ body {
   font-weight: 600;
 }
 
+.md-typeset .paper-crossmark-wrapper {
+  margin: 0.25rem 0 0.75rem;
+}
+
+.md-typeset .paper-crossmark {
+  display: inline-block;
+  line-height: 0;
+  border-radius: 2px;
+}
+
+.md-typeset .paper-crossmark img {
+  display: block;
+  width: 80px;
+  height: 80px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.md-typeset .paper-crossmark:focus-visible {
+  outline: 3px solid var(--md-accent-fg-color);
+  outline-offset: 4px;
+}
+
 .md-typeset .paper-actions {
   display: flex;
   flex-wrap: wrap;
