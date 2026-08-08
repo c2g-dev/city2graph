@@ -15,6 +15,10 @@
 {% endif %}
 
 {% set social_image = config.site_url ~ "assets/logos/social_preview_city2graph.png" %}
+{% set paper_title = "City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial analysis in urban systems" %}
+{% set paper_abstract = "City2Graph is an open-source Python library that streamlines workflows for heterogeneous Graph Neural Networks (GNNs) in urban systems. Cities are complex systems of diverse spatial relations long modelled as graphs in network science, and recent advances in GNNs have further enabled the identification of non-linear patterns of urban complexity. Unlike homogeneous graphs with a single node and edge type, heterogeneous graphs with multiple types are receiving growing attention to accommodate richer information in GNNs. However, their diffusion remains constrained by fragmented graph construction processes across different data domains, and by the lack of a unified framework for converting constructed graphs into GNN-ready tensors. City2Graph standardises graph construction across domains of morphology, transportation, mobility, and proximity. The library supports conversions between spatial geometries, network topologies, and tensors for spatial analysis with visualisation, network analysis, and GNN training, respectively. City2Graph also supports metapath construction, capturing higher-order connections across node and edge types (e.g., areas linked via multimodal transit). The library’s efficacy was demonstrated through a case study on clustering urban functions in Liverpool, UK, using Graph Autoencoder models with three relation types: spatial contiguity, walk-based accessibility, and multimodal accessibility between census units. Compared with the homogeneous model, heterogeneous models identified spatially coherent clusters that aligned more closely with defined accessibility patterns. City2Graph enables reproducible workflows for heterogeneous GNNs and model interpretation, fostering comprehensive understanding of urban systems across disciplines. The library is released under the BSD 3-Clause License on GitHub." %}
+{% set paper_url = config.site_url ~ "paper.html" %}
+{% set paper_pdf_url = config.site_url ~ "assets/papers/sato2026city2graph.pdf" %}
 {% if page and page.meta and page.meta.seo_title %}
   {% set breadcrumb_title = page.meta.seo_title %}
 {% elif page %}
@@ -29,7 +33,7 @@
 {{ super() }}
 <meta name="readthedocs-addons-api-version" content="1" />
 
-<meta property="og:type" content="website" />
+<meta property="og:type" content="{% if page and page.url == 'paper.html' %}article{% else %}website{% endif %}" />
 <meta property="og:site_name" content="{{ config.site_name }}" />
 <meta property="og:title" content="{{ seo_title }}" />
 <meta property="og:description" content="{{ seo_description }}" />
@@ -45,6 +49,33 @@
 <meta name="twitter:description" content="{{ seo_description }}" />
 <meta name="twitter:image" content="{{ social_image }}" />
 <meta name="twitter:image:alt" content="City2Graph geospatial graph construction workflow" />
+
+{% if page and page.url == "paper.html" %}
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+<meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+<meta property="article:published_time" content="2026-07-31" />
+<meta property="article:section" content="Geographic Data Science" />
+
+<meta name="citation_title" content="{{ paper_title }}" />
+<meta name="citation_author" content="Yuta Sato" />
+<meta name="citation_author" content="Elisabetta Pietrostefani" />
+<meta name="citation_author" content="Ron Mahabir" />
+<meta name="citation_author" content="Daniel Arribas-Bel" />
+<meta name="citation_publication_date" content="2026/07/31" />
+<meta name="citation_online_date" content="2026/07/31" />
+<meta name="citation_journal_title" content="Computers, Environment and Urban Systems" />
+<meta name="citation_volume" content="130" />
+<meta name="citation_firstpage" content="102492" />
+<meta name="citation_issn" content="0198-9715" />
+<meta name="citation_doi" content="10.1016/j.compenvurbsys.2026.102492" />
+<meta name="citation_publisher" content="Elsevier Ltd." />
+<meta name="citation_language" content="en" />
+<meta name="citation_abstract" content="{{ paper_abstract }}" />
+<meta name="citation_keywords" content="Geospatial artificial intelligence; Graph representation learning; Urban morphology; Multimodal transportation; 15-minute accessibility; Overture Maps; Open source software" />
+<meta name="citation_pdf_url" content="{{ paper_pdf_url }}" />
+<meta name="citation_fulltext_html_url" content="{{ paper_url }}" />
+<link rel="alternate" type="application/pdf" title="{{ paper_title }}" href="{{ paper_pdf_url }}" />
+{% endif %}
 
 {% if page and page.url == "index.html" %}
 <script type="application/ld+json">
@@ -87,10 +118,119 @@
         },
         "volumeNumber": "130",
         "pageStart": "102492",
-        "datePublished": "2026",
+        "datePublished": "2026-07-31",
         "identifier": "https://doi.org/10.1016/j.compenvurbsys.2026.102492",
         "url": "https://www.sciencedirect.com/science/article/pii/S0198971526000943"
       }
+    }
+  ]
+}
+</script>
+{% elif page and page.url == "paper.html" %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebPage",
+      "@id": "{{ paper_url }}#webpage",
+      "url": "{{ paper_url }}",
+      "name": {{ paper_title | tojson }},
+      "description": {{ seo_description | tojson }},
+      "mainEntity": {"@id": "{{ paper_url }}#article"},
+      "isPartOf": {"@id": "https://city2graph.net/latest/#website"}
+    },
+    {
+      "@type": "ScholarlyArticle",
+      "@id": "{{ paper_url }}#article",
+      "name": {{ paper_title | tojson }},
+      "headline": {{ paper_title | tojson }},
+      "abstract": {{ paper_abstract | tojson }},
+      "url": "{{ paper_url }}",
+      "mainEntityOfPage": {"@id": "{{ paper_url }}#webpage"},
+      "sameAs": [
+        "https://doi.org/10.1016/j.compenvurbsys.2026.102492",
+        "https://www.sciencedirect.com/science/article/pii/S0198971526000943"
+      ],
+      "identifier": {
+        "@type": "PropertyValue",
+        "propertyID": "DOI",
+        "value": "10.1016/j.compenvurbsys.2026.102492"
+      },
+      "author": [
+        {
+          "@type": "Person",
+          "name": "Yuta Sato",
+          "sameAs": "https://orcid.org/0009-0004-7052-7163",
+          "affiliation": {"@type": "Organization", "name": "University of Liverpool"}
+        },
+        {
+          "@type": "Person",
+          "name": "Elisabetta Pietrostefani",
+          "affiliation": {"@type": "Organization", "name": "University of Liverpool"}
+        },
+        {
+          "@type": "Person",
+          "name": "Ron Mahabir",
+          "affiliation": {"@type": "Organization", "name": "University of Liverpool"}
+        },
+        {
+          "@type": "Person",
+          "name": "Daniel Arribas-Bel",
+          "affiliation": {"@type": "Organization", "name": "University of Liverpool"}
+        }
+      ],
+      "datePublished": "2026-07-31",
+      "publisher": {"@type": "Organization", "name": "Elsevier Ltd."},
+      "isPartOf": {
+        "@type": "Periodical",
+        "name": "Computers, Environment and Urban Systems",
+        "issn": "0198-9715"
+      },
+      "volumeNumber": "130",
+      "pageStart": "102492",
+      "pagination": "102492",
+      "inLanguage": "en",
+      "isAccessibleForFree": true,
+      "license": "https://creativecommons.org/licenses/by/4.0/",
+      "copyrightYear": 2026,
+      "copyrightHolder": [
+        {"@type": "Person", "name": "Yuta Sato"},
+        {"@type": "Person", "name": "Elisabetta Pietrostefani"},
+        {"@type": "Person", "name": "Ron Mahabir"},
+        {"@type": "Person", "name": "Daniel Arribas-Bel"}
+      ],
+      "keywords": [
+        "Geospatial artificial intelligence",
+        "Graph representation learning",
+        "Urban morphology",
+        "Multimodal transportation",
+        "15-minute accessibility",
+        "Overture Maps",
+        "Open source software"
+      ],
+      "encoding": {
+        "@type": "MediaObject",
+        "contentUrl": "{{ paper_pdf_url }}",
+        "encodingFormat": "application/pdf"
+      }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://city2graph.net/latest/index.html"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Paper",
+          "item": "{{ paper_url }}"
+        }
+      ]
     }
   ]
 }
