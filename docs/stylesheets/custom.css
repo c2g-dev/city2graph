@@ -1102,6 +1102,13 @@ body {
 /* ==========================================================================
    15. PAPER PAGE (docs/paper.md)
    ========================================================================== */
+.md-typeset .paper-authors {
+  margin-top: -0.35rem;
+  color: var(--md-default-fg-color--light);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
 .md-typeset .paper-actions {
   display: flex;
   flex-wrap: wrap;

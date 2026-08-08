@@ -1,3 +1,30 @@
+# AI search and user-requested retrieval
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+# AI model discovery and grounding
+User-agent: GPTBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+# General search engines and other standards-compliant crawlers
+User-agent: Googlebot
+Allow: /
+
 User-agent: *
 Allow: /
 

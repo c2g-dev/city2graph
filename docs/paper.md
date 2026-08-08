@@ -1,19 +1,23 @@
 ---
-seo_title: "City2Graph paper: Open-access Version of Record"
-description: "Read and download the open-access City2Graph paper published in Computers, Environment and Urban Systems."
+seo_title: "City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial analysis in urban systems"
+description: "Read the abstract and open-access Version of Record of the City2Graph paper published in Computers, Environment and Urban Systems."
 hide:
   - navigation
   - toc
 ---
 
-# City2Graph paper
+# City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial analysis in urban systems { .citation_title }
+
+<p class="paper-authors citation_author">
+  Yuta Sato, Elisabetta Pietrostefani, Ron Mahabir, and Daniel Arribas-Bel
+</p>
 
 ## Open-access Version of Record
 
-Sato, Y., Pietrostefani, E., Mahabir, R., & Arribas-Bel, D. (2026).
-City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial
-analysis in urban systems. *Computers, Environment and Urban Systems*, 130,
-102492. [https://doi.org/10.1016/j.compenvurbsys.2026.102492](https://doi.org/10.1016/j.compenvurbsys.2026.102492)
+Sato, Y., Pietrostefani, E., Mahabir, R., & Arribas-Bel, D. (2026). City2Graph:
+A Python library for Heterogeneous Graph Neural Networks and spatial analysis in
+urban systems. *Computers, Environment and Urban Systems*, 130, 102492.
+[https://doi.org/10.1016/j.compenvurbsys.2026.102492](https://doi.org/10.1016/j.compenvurbsys.2026.102492)
 
 <div class="paper-actions">
   <a class="md-button md-button--primary" href="assets/papers/sato2026city2graph.pdf" target="_blank" rel="noopener">Open PDF</a>
@@ -29,6 +33,38 @@ publication on ScienceDirect, as required by Elsevier's
 [open-access article sharing policy](https://www.elsevier.com/en-au/about/policies-and-standards/sharing).
 See also Elsevier's
 [end-user reuse and open-access licence policy](https://www.elsevier.com/about/policies-and-standards/open-access-licenses).
+
+## Abstract
+
+City2Graph is an open-source Python library that streamlines workflows for
+heterogeneous Graph Neural Networks (GNNs) in urban systems. Cities are complex
+systems of diverse spatial relations long modelled as graphs in network science,
+and recent advances in GNNs have further enabled the identification of
+non-linear patterns of urban complexity. Unlike homogeneous graphs with a single
+node and edge type, heterogeneous graphs with multiple types are receiving
+growing attention to accommodate richer information in GNNs. However, their
+diffusion remains constrained by fragmented graph construction processes across
+different data domains, and by the lack of a unified framework for converting
+constructed graphs into GNN-ready tensors. City2Graph standardises graph
+construction across domains of morphology, transportation, mobility, and
+proximity. The library supports conversions between spatial geometries, network
+topologies, and tensors for spatial analysis with visualisation, network
+analysis, and GNN training, respectively. City2Graph also supports metapath
+construction, capturing higher-order connections across node and edge types
+(e.g., areas linked via multimodal transit). The library’s efficacy was
+demonstrated through a case study on clustering urban functions in Liverpool,
+UK, using Graph Autoencoder models with three relation types: spatial
+contiguity, walk-based accessibility, and multimodal accessibility between
+census units. Compared with the homogeneous model, heterogeneous models
+identified spatially coherent clusters that aligned more closely with defined
+accessibility patterns. City2Graph enables reproducible workflows for
+heterogeneous GNNs and model interpretation, fostering comprehensive
+understanding of urban systems across disciplines. The library is released
+under the BSD 3-Clause License on GitHub.
+
+**Keywords:** Geospatial artificial intelligence; Graph representation
+learning; Urban morphology; Multimodal transportation; 15-minute accessibility;
+Overture Maps; Open source software.
 
 <div class="paper-pdf-frame">
   <iframe
