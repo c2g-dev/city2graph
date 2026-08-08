@@ -204,6 +204,7 @@ extra:
 # Navigation Structure
 nav:
   - Home: index.md
+  - Paper: paper.md
   - Installation: installation.md
   - Examples:
       - Overview of City2Graph Examples: examples/index.md

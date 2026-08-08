@@ -38,10 +38,11 @@ can support mapping, spatial network analysis, and machine-learning workflows.
   <img src="assets/figures/scope.png" alt="City2Graph workflow from geospatial data to NetworkX and PyTorch Geometric graphs" class="desktop-limit-width">
 </p>
 
-For details, please read the paper published in *Computers, Environment and Urban Systems*.
+For details, read the [open-access Version of Record](paper.md) published in
+*Computers, Environment and Urban Systems*.
 
 <p align="center">
-  <a href="https://doi.org/10.1016/j.compenvurbsys.2026.102492">
+  <a href="paper.md">
     <img src="assets/figures/CEUS_thumbnail.jpg" alt="City2Graph paper in Computers, Environment and Urban Systems" class="desktop-limit-width">
   </a>
 </p>
