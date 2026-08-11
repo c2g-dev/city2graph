@@ -29,3 +29,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://city2graph.net/latest/sitemap.xml
+Sitemap: https://city2graph.net/latest/sitemap-papers.xml
