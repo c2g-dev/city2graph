@@ -14,6 +14,8 @@ hide:
 
 ## Open-access Version of Record
 
+Any use of City2Graph in research must cite this paper.
+
 Sato, Y., Pietrostefani, E., Mahabir, R., & Arribas-Bel, D. (2026). City2Graph:
 A Python library for Heterogeneous Graph Neural Networks and spatial analysis in
 urban systems. *Computers, Environment and Urban Systems*, 130, 102492.

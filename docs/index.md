@@ -38,9 +38,10 @@ can support mapping, spatial network analysis, and machine-learning workflows.
   <img src="assets/figures/scope.png" alt="City2Graph workflow from geospatial data to NetworkX and PyTorch Geometric graphs" class="desktop-limit-width">
 </p>
 
-For details, read the [paper landing page](paper.md) or
+**Any use of City2Graph in research must cite the paper below**, published in
+*Computers, Environment and Urban Systems*. For details, read the
+[paper landing page](paper.md) or
 [open the open-access Version of Record PDF directly](assets/papers/sato2026city2graph.pdf).
-The paper was published in *Computers, Environment and Urban Systems*.
 
 <p align="center">
   <a href="paper.md">
