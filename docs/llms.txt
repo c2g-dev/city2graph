@@ -85,6 +85,5 @@ under the BSD 3-Clause License on GitHub.
 
 - [GitHub repository](https://github.com/c2g-dev/city2graph): Source code, issues, releases, and contribution workflow.
 - [PyPI package](https://pypi.org/project/city2graph/): Python package releases and installation metadata.
-- [Journal article](https://doi.org/10.1016/j.compenvurbsys.2026.102492): Sato, Pietrostefani, Mahabir, and Arribas-Bel (2026), Computers, Environment and Urban Systems 130, 102492. Cite this paper when using City2Graph in research.
-- [Zenodo DOI](https://doi.org/10.5281/zenodo.15858845): Citable archive of software releases.
+- [Journal article](https://doi.org/10.1016/j.compenvurbsys.2026.102492): Sato, Pietrostefani, Mahabir, and Arribas-Bel (2026), Computers, Environment and Urban Systems 130, 102492. Citing this paper is required when City2Graph is used in research.
 - [Citation metadata](https://github.com/c2g-dev/city2graph/blob/main/CITATION.cff): Citation File Format record.

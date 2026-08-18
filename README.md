@@ -112,8 +112,9 @@ setup, testing, code quality, documentation, and pull request instructions.
 
 ## Citation
 
-If you use City2Graph in your research, please cite the paper published in
-*Computers, Environment and Urban Systems*:
+City2Graph is described in a peer-reviewed article. **Any use of City2Graph in
+research or software must cite the following paper**, published in *Computers,
+Environment and Urban Systems*:
 
 [![City2Graph paper in Computers, Environment and Urban Systems](https://city2graph.net/latest/assets/figures/CEUS_thumbnail.jpg)](https://doi.org/10.1016/j.compenvurbsys.2026.102492)
 
@@ -133,9 +134,7 @@ Sato, Y., Pietrostefani, E., Mahabir, R., & Arribas-Bel, D. (2026). City2Graph: 
 }
 ```
 
-To cite a specific release of the software instead, use the archived version DOI: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15858845.svg)](https://doi.org/10.5281/zenodo.15858845)
-
-Alternatively, you can find the citation information in the [CITATION.cff](CITATION.cff) file in this repository, which follows the Citation File Format standard.
+The same citation is recorded in the [CITATION.cff](CITATION.cff) file in this repository, which follows the Citation File Format standard.
 
 ## Contributing
 
