@@ -12,8 +12,8 @@ authors:
 repository-code: "https://github.com/c2g-dev/city2graph"
 url: "https://city2graph.net"
 license: BSD-3-Clause
-version: 1.0.0
-date-released: "2026-07-31"
+version: 1.0.1
+date-released: "2026-08-24"
 identifiers:
   - type: doi
     value: "https://doi.org/10.1016/j.compenvurbsys.2026.102492"

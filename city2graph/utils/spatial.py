@@ -198,8 +198,10 @@ def create_isochrone(
         The edge attribute to use for distance calculation (e.g., 'length',
         'travel_time'). If None, the function will use the default edge attribute.
     cut_edge_types : list[tuple[str, str, str]] | None, default None
-        List of edge types to remove from the graph before processing (e.g.,
-        [("bus_stop", "is_next_to", "bus_stop")]).
+        List of edge types to remove from the graph before the reachability
+        search (e.g., [("bus_stop", "is_next_to", "bus_stop")]). Because the
+        edges are removed first, they cannot be traversed at all, so nodes that
+        are only reachable through them fall outside the isochrone.
     method : str, default "concave_hull_knn"
         The method to generate the isochrone polygon. Options are:
 
@@ -264,6 +266,10 @@ def create_isochrone(
     nx_graph = _prepare_isochrone_graph(graph, nodes, edges, edge_attr)
     crs = nx_graph.graph.get("crs")
 
+    # Cut edge types before traversal so they cannot be used to reach further nodes
+    if cut_edge_types:
+        nx_graph = _filter_edges_by_type(nx_graph, cut_edge_types)
+
     distances = _compute_center_node_distances(
         nx_graph,
         center_point=center_point,
@@ -275,9 +281,6 @@ def create_isochrone(
         rows: list[dict[str, float | Polygon | MultiPolygon | GeometryCollection]] = []
         for layer_threshold in thresholds:
             reachable = _build_reachable_subgraph(nx_graph, distances, layer_threshold)
-            if cut_edge_types:
-                reachable = _filter_edges_by_type(reachable, cut_edge_types)
-
             geometry = _build_isochrone_geometry(reachable, method, crs, **kwargs)
             rows.append(
                 {
@@ -289,11 +292,6 @@ def create_isochrone(
         return gpd.GeoDataFrame(rows, geometry="geometry", crs=crs)
 
     reachable = _build_reachable_subgraph(nx_graph, distances, thresholds[0])
-
-    # Filter Edge Types if requested
-    if cut_edge_types:
-        reachable = _filter_edges_by_type(reachable, cut_edge_types)
-
     final_geom = _build_isochrone_geometry(reachable, method, crs, **kwargs)
 
     if final_geom is None:
@@ -561,7 +559,8 @@ def _filter_edges_by_type(
     Remove edges of specified types from the graph.
 
     Iterates through the graph edges and removes those that match any of the
-    specified types in `cut_edge_types`.
+    specified types in `cut_edge_types`. For multigraphs, parallel edges are
+    matched individually so that only the edges of a cut type are removed.
 
     Parameters
     ----------
@@ -576,11 +575,19 @@ def _filter_edges_by_type(
         The graph with specified edges removed.
     """
     graph = graph.copy()
-    edges_to_remove = [
-        (u, v)
-        for u, v, d in graph.edges(data=True)
-        if (d.get("full_edge_type") or d.get("edge_type")) in cut_edge_types
-    ]
+    edges_to_remove: list[tuple[Any, ...]]
+    if graph.is_multigraph():
+        edges_to_remove = [
+            (u, v, key)
+            for u, v, key, d in graph.edges(keys=True, data=True)
+            if (d.get("full_edge_type") or d.get("edge_type")) in cut_edge_types
+        ]
+    else:
+        edges_to_remove = [
+            (u, v)
+            for u, v, d in graph.edges(data=True)
+            if (d.get("full_edge_type") or d.get("edge_type")) in cut_edge_types
+        ]
     if edges_to_remove:
         graph.remove_edges_from(edges_to_remove)
     return graph

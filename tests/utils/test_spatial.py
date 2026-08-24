@@ -1568,8 +1568,8 @@ class TestGraphAnalysis(BaseGraphTest):
         assert not iso_cut.empty
         assert iso_cut.geometry.iloc[0].area < iso_full.geometry.iloc[0].area
 
-    def test_isochrone_disconnected_components(self, sample_crs: str) -> None:
-        """Test that cutting edges results in multiple polygons if graph becomes disconnected."""
+    def test_isochrone_cut_edges_are_not_traversed(self, sample_crs: str) -> None:
+        """Cut edges must be removed before traversal, not just dropped from the geometry."""
         # Create two clusters connected by a single edge
         # Cluster 1
         c1_nodes = [Point(0, 0), Point(1, 0), Point(0, 1)]
@@ -1609,8 +1609,7 @@ class TestGraphAnalysis(BaseGraphTest):
 
         graph = gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf)
 
-        # Generate isochrone with cutting "transit"
-        # Distance 20 is enough to reach cluster 2
+        # Distance 20 is enough to reach cluster 2, but only via the transit edge
         iso = utils.create_isochrone(
             graph,
             center_point=Point(0, 0),
@@ -1620,11 +1619,119 @@ class TestGraphAnalysis(BaseGraphTest):
             cut_edge_types=[("transit", "transit", "transit")],
         )
 
-        # Should be MultiPolygon (or at least disjoint)
+        # Cluster 2 is only reachable through the cut edge, so it must be excluded
         geom = iso.geometry.iloc[0]
-        assert geom.geom_type == "MultiPolygon"
-        # Area should be small (approx 2 small triangles), not covering the gap
-        assert geom.area < 100.0
+        assert geom.geom_type == "Polygon"
+        assert geom.covers(Point(0, 0))
+        assert not geom.intersects(Point(100, 100))
+        assert geom.area == pytest.approx(0.5)
+
+        # Without cutting, the transit edge is traversable and cluster 2 is reached
+        iso_full = utils.create_isochrone(
+            graph,
+            center_point=Point(0, 0),
+            threshold=20,
+            edge_attr="length",
+            method="convex_hull",
+        )
+        assert iso_full.geometry.iloc[0].intersects(Point(100, 100))
+
+    def test_isochrone_cut_edge_types_matches_omitting_edge_type(self, sample_crs: str) -> None:
+        """Cutting an edge type must equal never supplying that edge type at all."""
+        # A straight walking chain plus a fast link that shortcuts from end to end
+        xs = [0, 100, 200]
+        street = gpd.GeoDataFrame(
+            {"geometry": [Point(x, 0) for x in xs]},
+            index=pd.Index([f"s{i}" for i in range(len(xs))], name="node_id"),
+            crs=sample_crs,
+        )
+        stop = gpd.GeoDataFrame(
+            {"geometry": [Point(0, 5), Point(200, 5)]},
+            index=pd.Index(["b0", "b1"], name="node_id"),
+            crs=sample_crs,
+        )
+        walk = (
+            gpd.GeoDataFrame(
+                {
+                    "length": [100.0, 100.0],
+                    "geometry": [
+                        LineString([(0, 0), (100, 0)]),
+                        LineString([(100, 0), (200, 0)]),
+                    ],
+                },
+                crs=sample_crs,
+            )
+            .assign(u=["s0", "s1"], v=["s1", "s2"])
+            .set_index(["u", "v"])
+        )
+        transit = (
+            gpd.GeoDataFrame(
+                {"length": [1.0], "geometry": [LineString([(0, 5), (200, 5)])]},
+                crs=sample_crs,
+            )
+            .assign(u=["b0"], v=["b1"])
+            .set_index(["u", "v"])
+        )
+        access = (
+            gpd.GeoDataFrame(
+                {
+                    "length": [1.0, 1.0],
+                    "geometry": [
+                        LineString([(0, 0), (0, 5)]),
+                        LineString([(200, 0), (200, 5)]),
+                    ],
+                },
+                crs=sample_crs,
+            )
+            .assign(u=["s0", "s2"], v=["b0", "b1"])
+            .set_index(["u", "v"])
+        )
+
+        transit_type = ("stop", "is_next_to", "stop")
+        nodes = {"street": street, "stop": stop}
+        edges = {
+            ("street", "connects_to", "street"): walk,
+            transit_type: transit,
+            ("street", "is_nearby", "stop"): access,
+        }
+        common = {
+            "center_point": Point(0, 0),
+            "threshold": 150.0,
+            "edge_attr": "length",
+            "method": "convex_hull",
+        }
+
+        cut = utils.create_isochrone(
+            gdf_to_nx(nodes=nodes, edges=edges),
+            cut_edge_types=[transit_type],
+            **common,
+        )
+        omitted = utils.create_isochrone(
+            nodes=nodes,
+            edges={k: v for k, v in edges.items() if k != transit_type},
+            **common,
+        )
+        everything = utils.create_isochrone(gdf_to_nx(nodes=nodes, edges=edges), **common)
+
+        assert cut.geometry.iloc[0].bounds[2] == pytest.approx(omitted.geometry.iloc[0].bounds[2])
+        assert cut.geometry.iloc[0].area == pytest.approx(omitted.geometry.iloc[0].area)
+        assert everything.geometry.iloc[0].area > cut.geometry.iloc[0].area
+
+    def test_isochrone_cut_edge_types_multigraph_keeps_parallel_edges(
+        self, sample_crs: str
+    ) -> None:
+        """Only the parallel edge of a cut type is removed in a multigraph."""
+        graph = nx.MultiGraph()
+        graph.graph["crs"] = sample_crs
+        graph.add_node(1, pos=(0.0, 0.0))
+        graph.add_node(2, pos=(10.0, 0.0))
+        graph.add_edge(1, 2, key=0, full_edge_type=("transit", "transit", "transit"), length=1.0)
+        graph.add_edge(1, 2, key=1, full_edge_type=("street", "street", "street"), length=5.0)
+
+        filtered = spatial_utils._filter_edges_by_type(graph, [("transit", "transit", "transit")])
+
+        remaining = [d.get("full_edge_type") for _, _, d in filtered.edges(data=True)]
+        assert remaining == [("street", "street", "street")]
 
     def test_isochrone_center_gdf(self, sample_nx_graph: nx.Graph) -> None:
         """Test isochrone creation with GeoDataFrame as center_point."""

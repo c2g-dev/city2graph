@@ -21,6 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 
+## 1.0.1 (2026-08-24)
+
+### Fixed
+- Fixed `create_isochrone()` applying `cut_edge_types` after the reachability search instead of before it. The cut edges were still traversed, so nodes reachable only through them remained inside the isochrone and only the cut edge geometries were dropped from the resulting polygon; with the hull-based methods, which build the polygon from node coordinates alone, the parameter had no effect at all. The listed edge types are now removed before the shortest-path computation, so `cut_edge_types=[t]` produces the same isochrone as never supplying `t` in `edges`. Results obtained with `cut_edge_types` on earlier versions will change: cutting a transit edge type now yields the area reachable without transit rather than the transit-assisted area with the transit lines erased.
+- Fixed `cut_edge_types` removing the wrong edge on multigraphs. Parallel edges between the same node pair were collected as `(u, v)` pairs, and NetworkX removes an arbitrary parallel edge for such a pair, so a walking edge could be removed in place of the transit edge running alongside it. Parallel edges are now matched by key.
+
+### Documentation
+- Documented that `cut_edge_types` removes edges before the reachability search, and that nodes reachable only through those edges therefore fall outside the isochrone.
+- Removed `cut_edge_types` from the walk-plus-transit isochrone cell of the GTFS example notebook. The cell computes a multimodal isochrone but cut the transit edge type, which had no effect on its `concave_hull_knn` output before this release and would now remove the transit reach that the section exists to show.
+- Updated release metadata for `v1.0.1`.
+
+
 ## 1.0.0 (2026-07-31)
 
 First stable release. The public API is now considered settled and will follow
