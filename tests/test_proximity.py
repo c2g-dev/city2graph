@@ -93,6 +93,48 @@ def test_knn_non_string_metric_defaults(small_points: gpd.GeoDataFrame) -> None:
     assert_valid_proximity_result(nodes, edges, len(small_points), allow_empty_edges=False)
 
 
+@pytest.mark.parametrize("metric", ["euclidean", "manhattan"])
+def test_knn_graph_coincident_points_have_no_self_loops(metric: str) -> None:
+    """Coincident points must neighbour each other, never themselves.
+
+    With several nodes at exactly the same location every distance to the query
+    point is zero, so the query point is not necessarily returned first by the
+    neighbour search. The graph must still link the coincident nodes together.
+    """
+    pts = make_points_simple([(0, 0), (0, 0), (0, 0), (5, 5)])
+
+    nodes, edges = knn_graph(pts, k=2, distance_metric=metric)
+
+    assert_valid_proximity_result(nodes, edges, len(pts))
+    pairs = [frozenset(pair) for pair in edges.index]
+    assert all(len(pair) == 2 for pair in pairs), "self-loop found"
+    assert {frozenset({0, 1}), frozenset({0, 2}), frozenset({1, 2})} <= set(pairs)
+    assert sum(3 in pair for pair in pairs) >= 2
+
+
+def test_knn_graph_network_metric_points_sharing_node_have_no_self_loops() -> None:
+    """Points snapped to the same network node must neighbour each other, not themselves."""
+    net = make_network_edges(
+        src_ids=[0, 1, 2],
+        dst_ids=[1, 2, 3],
+        geometries=[
+            LineString([(0, 0), (10, 0)]),
+            LineString([(10, 0), (20, 0)]),
+            LineString([(20, 0), (30, 0)]),
+        ],
+    )
+    # Points 0-2 all snap to the network node at (0, 0); 3 and 4 snap to the next nodes
+    pts = make_points_simple([(0.5, 0.3), (0.6, -0.2), (0.4, 0.1), (10, 1), (20, 1)])
+
+    nodes, edges = knn_graph(pts, k=2, distance_metric="network", network_gdf=net)
+
+    assert_valid_proximity_result(nodes, edges, len(pts))
+    pairs = [frozenset(pair) for pair in edges.index]
+    assert all(len(pair) == 2 for pair in pairs), "self-loop found"
+    # Each co-located point has the other two co-located points as its 2 nearest neighbours
+    assert {frozenset({0, 1}), frozenset({0, 2}), frozenset({1, 2})} <= set(pairs)
+
+
 def test_network_metric_requires_network_gdf(small_points: gpd.GeoDataFrame) -> None:
     """Requesting network metric without network_gdf triggers clear error."""
     assert_network_metric_requires_network_gdf(knn_graph, small_points, k=1)

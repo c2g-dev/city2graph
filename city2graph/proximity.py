@@ -876,14 +876,15 @@ def knn_graph(
 
     if metric.name == "network":
         # Per-source distance rows instead of a dense matrix.
-        # Skip the first sorted entry (self)
+        # Sources snapped to the same network node share one row and are all at distance 0,
+        # so a source is not necessarily first in the ordering: drop it by index, not position.
         n = len(builder.coords)
         selections: list[npt.NDArray[np.intp]] = [np.empty(0, dtype=np.intp)] * n
         for indices, row in metric._iter_network_rows(builder.coords):
-            order = np.argsort(row)[1 : k + 1]
-            sel = order[row[order] < np.inf]
+            nearest = np.argsort(row, kind="stable")[: k + 1]
             for i in indices:
-                selections[i] = sel
+                neighbours = nearest[nearest != i][:k]
+                selections[i] = neighbours[row[neighbours] < np.inf]
         edges = [
             (builder.node_ids[i], builder.node_ids[j]) for i in range(n) for j in selections[i]
         ]
@@ -893,10 +894,12 @@ def knn_graph(
         tree = cKDTree(builder.coords)
         _, idxs = tree.query(builder.coords, k=n_neigh, p=p_norm)
         idxs = idxs.reshape(len(builder.coords), -1)
+        # Coincident points are all at distance 0, so a point is not necessarily its own
+        # first neighbour: drop it by index, not position.
         edges = [
             (builder.node_ids[i], builder.node_ids[j])
             for i, neigh in enumerate(idxs)
-            for j in neigh[1:]
+            for j in neigh[neigh != i][:k]
         ]
 
     builder.add_edges(edges)
