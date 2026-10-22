@@ -130,7 +130,7 @@ one in which City2Graph was installed.
 The core installation includes:
 
 - NetworkX and rustworkx
-- GeoPandas, Shapely, and OSMnx
+- GeoPandas and Shapely
 - DuckDB
 - libpysal and momepy
 - Overture Maps

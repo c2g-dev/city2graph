@@ -29,6 +29,12 @@
 <title>{{ seo_title }}</title>
 {% endblock %}
 
+{% block fonts %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Fira+Code:wght@400;500;600&amp;family=Outfit:wght@400;500;600;700&amp;display=swap">
+{% endblock %}
+
 {% block site_meta %}
 {{ super() }}
 <meta name="readthedocs-addons-api-version" content="1" />

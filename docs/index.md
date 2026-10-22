@@ -44,7 +44,7 @@ can support mapping, spatial network analysis, and machine-learning workflows.
 [open the open-access Version of Record PDF directly](assets/papers/sato2026city2graph.pdf).
 
 <p align="center">
-  <a href="paper.md">
+  <a href="paper.html">
     <img src="assets/figures/CEUS_thumbnail.jpg" alt="City2Graph paper in Computers, Environment and Urban Systems" class="desktop-limit-width">
   </a>
 </p>
@@ -172,7 +172,7 @@ supported Python and CUDA versions, and conda-forge instructions.
     G = c2g.pyg_to_nx(data)
 
     # NetworkX -> rustworkx
-    G_rx = c2g.nx_to_rx(G_nx)
+    G_rx = c2g.nx_to_rx(G)
 
     # rustworkx -> NetworkX
     G_nx = c2g.rx_to_nx(G_rx)

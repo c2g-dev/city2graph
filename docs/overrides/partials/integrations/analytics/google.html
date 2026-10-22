@@ -1,0 +1,40 @@
+{# One configuration and one page view per Material navigation. #}
+<script id="__analytics">
+  function __md_analytics() {
+    if (window.__city2graphAnalytics) return;
+    window.__city2graphAnalytics = true;
+    window.dataLayer = window.dataLayer || [];
+    function track() { window.dataLayer.push(arguments); }
+    track("consent", "default", {
+      ad_storage: "denied",
+      ad_user_data: "denied",
+      ad_personalization: "denied",
+      analytics_storage: "denied"
+    });
+    track("js", new Date());
+    track("config", {{ config.extra.analytics.property | tojson }}, { send_page_view: false });
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "https://www.googletagmanager.com/gtag/js?id=" + {{ config.extra.analytics.property | tojson }};
+    document.head.append(script);
+
+    function watchNavigation() {
+      let previous;
+      document$.subscribe(() => {
+        const path = location.pathname + location.search;
+        if (path === previous) return;
+        previous = path;
+        track("event", "page_view", {
+          page_path: path,
+          page_location: location.href,
+          page_title: document.title
+        });
+      });
+    }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", watchNavigation, { once: true });
+    } else {
+      watchNavigation();
+    }
+  }
+</script>

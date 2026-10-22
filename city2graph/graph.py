@@ -2633,9 +2633,6 @@ def gdf_to_pyg(
     are taken from the GeoDataFrame index. Edge relationships are defined by a
     MultiIndex on the edge GeoDataFrame (source ID, target ID).
 
-    The operation multiplies typed adjacency tables to connect terminal node
-    pairs and can aggregate additional numeric edge attributes along the way.
-
     Parameters
     ----------
     nodes : dict[str, geopandas.GeoDataFrame] or geopandas.GeoDataFrame

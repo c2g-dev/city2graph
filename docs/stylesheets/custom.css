@@ -10,13 +10,6 @@
    ========================================================================== */
 
 /* ==========================================================================
-   1. FONTS
-   Single Google Fonts request for all families; the theme's own font
-   loading is disabled in mkdocs.yml (font: false).
-   ========================================================================== */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
-
-/* ==========================================================================
    2. COLOR SCHEME - Light (default)
    ========================================================================== */
 :root,
@@ -57,13 +50,11 @@
   --doc-bg-color: #ffffff;
   --doc-text-color: #1d1d1f;
   --doc-heading-color: #1d1d1f;
-  --doc-muted-color: #86868b;
-  --link-color: var(--md-primary-fg-color);
+  --doc-muted-color: #69696e;
   --link-hover-color: var(--md-primary-fg-color--dark);
 
   /* Layout */
   --doc-max-width: 60rem;
-  --doc-content-padding: 2.5rem;
 
   /* Components */
   --card-radius: 18px;
@@ -73,7 +64,6 @@
 
   /* Code blocks */
   --code-bg: #f5f5f7;
-  --code-border: rgba(0, 0, 0, 0.05);
   --code-text: #1d1d1f;
   --inline-code-bg: rgba(var(--md-primary-fg-color--rgb), 0.1);
 
@@ -139,7 +129,6 @@
   --doc-text-color: #f5f5f7;
   --doc-heading-color: #ffffff;
   --doc-muted-color: #a1a1a6;
-  --link-color: #93c5fd;
   --link-hover-color: #bfdbfe;
 
   /* Components - dark */
@@ -149,7 +138,6 @@
 
   /* Code blocks - dark */
   --code-bg: #1c1c1e;
-  --code-border: rgba(255, 255, 255, 0.1);
   --code-text: #d4d4d4;
   --inline-code-bg: rgba(255, 255, 255, 0.1);
 
@@ -1083,22 +1071,6 @@ body {
     drop-shadow(-1px -1px 0 #ffffff);
 }
 
-/* --- Feature cards (glass treatment matching the design language) --- */
-.md-typeset .grid.cards.feature-cards > ul > li {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  border-radius: var(--card-radius);
-  box-shadow: var(--card-shadow);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.md-typeset .grid.cards.feature-cards > ul > li:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--card-shadow-hover);
-}
-
 /* ==========================================================================
    15. PAPER PAGE (docs/paper.md)
    ========================================================================== */
@@ -1177,4 +1149,38 @@ body {
     min-height: 30rem;
     border-radius: calc(var(--card-radius) - 6px);
   }
+}
+
+/* Honour the reader's motion preference for custom hover effects. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visible focus rings for links and the version selector. */
+.md-typeset a:focus-visible,
+.md-version__current:focus-visible,
+.md-version__link:focus-visible {
+  outline: 2px solid var(--md-primary-fg-color);
+  outline-offset: 3px;
+}
+
+.md-version[data-open] .md-version__list {
+  max-height: 10rem;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.md-version:not([data-open]) .md-version__list {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-md-color-scheme="city2graph-dark"] .md-typeset .md-button--primary {
+  color: #101827;
 }

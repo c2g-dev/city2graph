@@ -147,7 +147,7 @@ documentation changes:
 
 ```bash
 uv sync --group docs --extra cpu
-uv run mkdocs build
+uv run mkdocs build --strict
 ```
 
 For a local preview, run:
@@ -157,6 +157,23 @@ uv run mkdocs serve
 ```
 
 Then open `http://127.0.0.1:8000/`.
+
+The build checks internal links, anchors, and static assets, including notebook
+images and videos. It also extracts notebook plots and shared stylesheets into
+cacheable files without changing notebook calculations or saved outputs.
+
+To run the Chromium smoke tests used by the documentation CI:
+
+```bash
+uv sync --extra cpu --group dev --group docs
+uv run playwright install chromium
+uv run mkdocs build --strict
+CITY2GRAPH_DOCS_SITE=site uv run pytest -q tests/test_docs.py tests/test_docs_browser.py
+```
+
+These checks cover instant navigation, search, copying code, maths, version
+selection, and mobile and desktop layouts in both colour schemes. The browser
+tests are skipped by the regular test suite unless `CITY2GRAPH_DOCS_SITE` is set.
 
 ## Pull requests
 

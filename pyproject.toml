@@ -110,6 +110,9 @@ explicit = true
 
 [dependency-groups]
 docs = [
+    "beautifulsoup4",
+    "pillow",
+    "playwright",
     "mkdocs",
     "mkdocs-material",
     "mkdocstrings[python]",
