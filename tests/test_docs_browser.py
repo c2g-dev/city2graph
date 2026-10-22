@@ -290,5 +290,5 @@ def test_maths_after_delayed_load_and_instant_navigation(
     page.go_back()
     page.locator("mjx-container").wait_for(timeout=45000)
     assert page.evaluate("window.docsNavigationSentinel") is True
-    assert len([url for url in requests if url.endswith("mathjax@3.2.2/es5/tex-mml-chtml.js")]) == 1
+    assert len([url for url in requests if url.endswith("mathjax@4.1.3/tex-mml-chtml.js")]) == 1
     assert not errors

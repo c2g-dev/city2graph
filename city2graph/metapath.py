@@ -166,7 +166,7 @@ def add_metapaths(
     )
 
 
-def add_metapaths_by_weight(  # noqa: PLR0913
+def add_metapaths_by_weight(  # noqa: PLR0913, PLR0917
     graph: (
         tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]
         | nx.Graph

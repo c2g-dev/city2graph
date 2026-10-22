@@ -37,11 +37,14 @@ updates:
       # Group documentation dependencies
       docs-dependencies:
         patterns:
-          - sphinx*
-          - myst-parser
-          - nbsphinx
-          - numpydoc
-          - pydata-sphinx-theme
+          - mkdocs*
+          - mkdocstrings*
+          - mike
+          - pymdown-extensions
+          - beautifulsoup4
+          - pillow
+          - playwright
+          - black
         update-types:
           - minor
           - patch

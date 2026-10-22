@@ -26,20 +26,20 @@ repos:
         exclude: ^mkdocs\.yml$  # MkDocs uses custom syntax
 
   - repo: https://github.com/numpy/numpydoc
-    rev: v1.10.0
+    rev: v1.11.0
     hooks:
       - id: numpydoc-validation
         files: ^city2graph/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.5
+    rev: v0.17.1
     hooks:
       - id: ruff-check
         args: [--fix]
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
+    rev: v2.4.0
     hooks:
       - id: mypy
         additional_dependencies:

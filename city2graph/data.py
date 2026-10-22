@@ -467,7 +467,7 @@ def _prepare_area_and_bbox(
     return bbox_str, clip_geom
 
 
-def _download_and_process_type(  # noqa: PLR0912, PLR0913, C901
+def _download_and_process_type(  # noqa: PLR0912, PLR0913, PLR0917, C901
     data_type: str,
     bbox_str: str,
     output_dir: str,

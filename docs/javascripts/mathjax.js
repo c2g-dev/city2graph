@@ -21,7 +21,7 @@
     if (!loading) {
       loading = new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js";
+        script.src = "https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js";
         script.async = true;
         script.onload = () => window.MathJax.startup.promise.then(resolve, reject);
         script.onerror = () => {

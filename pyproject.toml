@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "city2graph"
-version = "1.0.0"
+version = "1.0.1"
 description = "A Python library for Geospatial Graph Neural Networks and GeoAI for Urban Analytics with PyTorch Geometric. Convert geospatial data to graphs for spatiotemporal analysis, urban mobility studies, and more."
 authors = [
     {name = "Yuta Sato", email = "y.sato@liverpool.ac.uk"}
@@ -62,6 +62,11 @@ cu130 = [
     "torchvision>=0.28.0",
     "torch_geometric>=2.8.0",
 ]
+cu132 = [
+    "torch>=2.13.0",
+    "torchvision>=0.28.0",
+    "torch_geometric>=2.8.0",
+]
 
 [tool.uv]
 default-groups = []
@@ -70,7 +75,8 @@ conflicts = [
   [ { extra = "cpu" },
     { extra = "cu126" },
     { extra = "cu128" },
-    { extra = "cu130" } ]
+    { extra = "cu130" },
+    { extra = "cu132" } ]
 ]
 
 [tool.uv.sources]
@@ -80,6 +86,14 @@ torch = [
     { index = "pytorch-cu126", extra = "cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'"  },
     { index = "pytorch-cu128", extra = "cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'"  },
     { index = "pytorch-cu130", extra = "cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'"  },
+    { index = "pytorch-cu132", extra = "cu132", marker = "sys_platform == 'linux' or sys_platform == 'win32'"  },
+]
+torchvision = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu126", extra = "cu126", marker = "sys_platform == 'linux' or sys_platform == 'win32'"  },
+    { index = "pytorch-cu128", extra = "cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'"  },
+    { index = "pytorch-cu130", extra = "cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'"  },
+    { index = "pytorch-cu132", extra = "cu132", marker = "sys_platform == 'linux' or sys_platform == 'win32'"  },
 ]
 
 [[tool.uv.index]]
@@ -103,6 +117,11 @@ url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
 [[tool.uv.index]]
+name = "pytorch-cu132"
+url = "https://download.pytorch.org/whl/cu132"
+explicit = true
+
+[[tool.uv.index]]
 name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
@@ -115,6 +134,7 @@ docs = [
     "playwright",
     "mkdocs",
     "mkdocs-material",
+    "mkdocs-autorefs",
     "mkdocstrings[python]",
     "mkdocs-jupyter",
     "mike",
@@ -122,6 +142,7 @@ docs = [
     "mkdocs-minify-plugin",
     "mkdocs-rss-plugin",
     "black",
+    "pymdown-extensions",
 ]
 dev = [
     "pytest",
@@ -223,6 +244,7 @@ line-length = 100
 extend-ignore = [
     "C416",
     "COM812",
+    "CPY001",  # Copyright is recorded in LICENSE rather than per-file headers.
     "DTZ001",
     "DTZ007",
     "FBT001",

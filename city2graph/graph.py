@@ -1679,7 +1679,7 @@ class PyGConverter(BaseGraphConverter):
             if original_ids:
                 num_nodes = obj_data.num_nodes
                 # Ensure list and slice
-                ids_list = (
+                ids_list: list[str | int] = (
                     original_ids if isinstance(original_ids, list) else list(range(num_nodes))
                 )
                 index_values = ids_list[:num_nodes]

@@ -49,7 +49,7 @@ def on_post_page(output: str, page: Page, config: MkDocsConfig) -> str:
             ):
                 state.decompose()
         # nbconvert emits MathJax 2 configuration even when no URL is set.
-        # The site's loader owns MathJax 3 and handles instant navigation.
+        # The site's loader owns MathJax 4 and handles instant navigation.
         for script in article.find_all("script"):
             if script.get("type") == "text/x-mathjax-config" or (
                 "src" in script.attrs and not script.get("src")

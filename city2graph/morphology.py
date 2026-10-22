@@ -150,7 +150,7 @@ def _symmetrize_edge_columns(
 # ============================================================================
 
 
-def morphological_graph(  # noqa: PLR0913
+def morphological_graph(  # noqa: PLR0913, PLR0917
     buildings_gdf: gpd.GeoDataFrame,
     segments_gdf: gpd.GeoDataFrame,
     center_point: gpd.GeoSeries | gpd.GeoDataFrame | None = None,
@@ -361,7 +361,7 @@ def morphological_graph(  # noqa: PLR0913
     return _graph_for_distance(context, distance)
 
 
-def morphological_graphs(  # noqa: PLR0913
+def morphological_graphs(  # noqa: PLR0913, PLR0917
     buildings_gdf: gpd.GeoDataFrame,
     segments_gdf: gpd.GeoDataFrame,
     distances: list[float] | tuple[float, ...],

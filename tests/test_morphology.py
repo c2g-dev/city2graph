@@ -1437,7 +1437,7 @@ class TestMorphologicalGraphBarrierAndFallback(TestMorphologyBase):
         )
 
         morphological_graph(buildings, segments, tessellation_n_jobs=1)
-        assert captured["n_jobs"] == 1
+        assert captured.pop("n_jobs") == 1
 
         morphological_graph(buildings, segments)
         assert captured["n_jobs"] == "absent"

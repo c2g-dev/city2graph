@@ -16,10 +16,11 @@ need PyTorch Geometric tensors and Graph Neural Networks.
 | Goal | Recommended command | Includes PyTorch and PyG? |
 | --- | --- | --- |
 | Spatial graph construction and NetworkX analysis | `pip install city2graph` | No |
-| GNN development on CPU | `pip install "city2graph[cpu]"` | Yes, CPU |
-| GNN training with CUDA 12.6 | `pip install "city2graph[cu126]"` | Yes, GPU |
-| GNN training with CUDA 12.8 | `pip install "city2graph[cu128]"` | Yes, GPU |
-| GNN training with CUDA 13.0 | `pip install "city2graph[cu130]"` | Yes, GPU |
+| GNN development on CPU | Install CPU wheels, then `pip install "city2graph[cpu]"` | Yes, CPU |
+| GNN training with CUDA 12.6 | Install CUDA 12.6 wheels, then `pip install "city2graph[cu126]"` | Yes, GPU |
+| GNN training with CUDA 12.8 | Install CUDA 12.8 wheels, then `pip install "city2graph[cu128]"` | Yes, GPU |
+| GNN training with CUDA 13.0 | Install CUDA 13.0 wheels, then `pip install "city2graph[cu130]"` | Yes, GPU |
+| GNN training with CUDA 13.2 | Install CUDA 13.2 wheels, then `pip install "city2graph[cu132]"` | Yes, GPU |
 | Core package from conda-forge | `conda install -c conda-forge city2graph` | No |
 
 ## Using pip
@@ -40,6 +41,7 @@ This keeps the installation smaller by excluding PyTorch and PyTorch Geometric.
 For PyTorch Geometric conversion and GNN development without a GPU, use:
 
 ```bash
+pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
 pip install "city2graph[cpu]"
 ```
 
@@ -47,16 +49,49 @@ This installs PyTorch and PyTorch Geometric with CPU support.
 
 ### With PyTorch and CUDA (GPU)
 
-Choose the extra that matches the CUDA wheel required by your environment. For
-example, install CUDA 13.0 support with:
+On Linux or Windows, install PyTorch and torchvision from the official index
+for the required CUDA variant, then install the matching City2Graph extra.
+For CUDA 13.2:
 
 ```bash
-pip install "city2graph[cu130]"
+pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cu132
+pip install "city2graph[cu132]"
 ```
 
-Supported extras are `cu126`, `cu128`, and `cu130`. The `cpu`, `cu126`, and
-`cu130` extras use PyTorch 2.13 or newer. Because PyTorch no longer publishes
-CUDA 12.8 wheels past 2.11, `cu128` uses PyTorch 2.11.
+For CUDA 12.6 or 13.0, replace `cu132` in both commands with `cu126` or
+`cu130`. CUDA 12.8 wheels are available only through PyTorch 2.11, so use:
+
+```bash
+pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
+pip install "city2graph[cu128]"
+```
+
+The lockfile resolves the following stable versions. These are the tested
+versions, rather than new minimum requirements for every dependency:
+
+| Extra | PyTorch | torchvision | PyG |
+| --- | --- | --- | --- |
+| `cpu`, `cu126`, `cu130`, `cu132` | 2.14.1 | 0.29.1 | 2.8.1 |
+| `cu128` | 2.11.0 | 0.26.0 | 2.8.1 |
+
+pip does not read this repository's `tool.uv.sources` settings, and an extra
+name alone cannot select a wheel index. Installing the matching PyTorch wheels
+first ensures that pip retains the intended CPU or CUDA build. The CUDA
+instructions apply to Linux and Windows; macOS uses its native PyTorch build.
+
+For a source checkout managed with uv, the index selection is configured for
+both torch and torchvision. Select exactly one extra, for example:
+
+```bash
+uv sync --extra cu132 --group dev
+```
+
+[PyG 2.8's published support matrix](https://github.com/pyg-team/pytorch_geometric/releases/tag/2.8.0)
+lists PyTorch 2.9–2.12. City2Graph verifies its graph conversions with PyTorch
+2.14.1, but optional PyG binary extensions require their own compatible wheels.
+They are not needed for City2Graph's conversions and are not installed by these
+extras. See the [PyG installation guide](https://pytorch-geometric.readthedocs.io/en/stable/install/installation.html)
+before adding them.
 
 ## Using conda-forge
 
@@ -85,15 +120,16 @@ conda install -c conda-forge pytorch pytorch_geometric
 
 ### With PyTorch and CUDA (GPU)
 
-For GPU support, select the appropriate PyTorch version and CUDA build. For
-example, install PyTorch 2.13.0 with CUDA 13.0 support with:
+For GPU support, choose a PyTorch version and CUDA build that are actually
+available from conda-forge. Replace `PYTORCH_VERSION` and `CUDA_VARIANT` with
+values from the files page linked below:
 
 ```bash
 # Install City2Graph
 conda install -c conda-forge city2graph
 
 # Add PyTorch with CUDA support and PyTorch Geometric
-conda install -c conda-forge pytorch=2.13.0=*cuda130*
+conda install -c conda-forge "pytorch=PYTORCH_VERSION=*CUDA_VARIANT*"
 conda install -c conda-forge pytorch_geometric
 ```
 

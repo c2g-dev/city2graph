@@ -47,6 +47,7 @@ This installs the core functionality without PyTorch and PyTorch Geometric.
 If you need the Graph Neural Networks functionality, install with the `cpu` option:
 
 ```bash
+pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
 pip install "city2graph[cpu]"
 ```
 
@@ -54,15 +55,24 @@ This will install PyTorch and PyTorch Geometric with CPU support, suitable for d
 
 #### With PyTorch + CUDA (GPU)
 
-For GPU acceleration, you can install City2Graph with a specific CUDA version extra. For example, for CUDA 13.0:
+Install PyTorch and torchvision from the matching official wheel index before
+installing the City2Graph extra. For example, for CUDA 13.2 on Linux or Windows:
 
 ```bash
-pip install "city2graph[cu130]"
+pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cu132
+pip install "city2graph[cu132]"
 ```
 
-Supported CUDA versions are `cu126`, `cu128`, and `cu130`.
-The `cpu`, `cu126`, and `cu130` extras use PyTorch 2.13 or newer. Because
-PyTorch no longer publishes CUDA 12.8 wheels past 2.11, `cu128` uses PyTorch 2.11.
+Supported CUDA extras are `cu126`, `cu128`, `cu130`, and `cu132`. The current
+lockfile uses PyTorch 2.14.1, torchvision 0.29.1, and PyG 2.8.1 for CPU and all
+CUDA variants except `cu128`, which uses PyTorch 2.11.0 and torchvision 0.26.0.
+For CUDA 12.8, install those older versions from the `cu128` index first.
+An extra name alone does not select a CPU or CUDA wheel index in pip.
+
+PyG's published 2.8 support matrix lists PyTorch through 2.12. City2Graph tests
+its graph conversions with PyTorch 2.14.1; this does not establish compatibility
+for optional PyG binary extensions. See the [installation guide](docs/installation.md)
+for the full commands and compatibility notes.
 
 ### Using conda
 
@@ -90,14 +100,17 @@ conda install -c conda-forge pytorch pytorch_geometric
 
 #### With PyTorch + CUDA (GPU)
 
-For GPU support, you should select the appropriate PyTorch variant by specifying the version and CUDA build string. For example, to install PyTorch 2.13.0 with CUDA 13.0 support:
+For GPU support, select an available CUDA build from the
+[conda-forge PyTorch files page](https://anaconda.org/conda-forge/pytorch/files).
+For example, replace `PYTORCH_VERSION` and `CUDA_VARIANT` below with a version
+and build variant listed there:
 
 ```bash
 # Install city2graph
 conda install -c conda-forge city2graph
 
 # Then install PyTorch with CUDA support
-conda install -c conda-forge pytorch=2.13.0=*cuda130*
+conda install -c conda-forge "pytorch=PYTORCH_VERSION=*CUDA_VARIANT*"
 conda install -c conda-forge pytorch_geometric
 ```
 

@@ -21,6 +21,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 
+## 1.0.1 (2026-10-22)
+
+### Added
+- Added the `cu132` extra for CUDA 13.2 installations, with matching official PyTorch and torchvision wheel indexes.
+
+### Changed
+- Refreshed runtime, development, and documentation dependencies, including DuckDB 2.0, pandas 3.1, GeoPandas 1.2, PyTorch 2.14.1, torchvision 0.29.1, and PyG 2.8.1. CUDA 12.8 remains on PyTorch 2.11.0 and torchvision 0.26.0 because newer CUDA 12.8 wheels are not published.
+- Updated the Ruff, mypy, and numpydoc pre-commit hooks, and explicitly declared the documentation's autorefs and PyMdown Extensions dependencies.
+- Retained upstream-constrained transitive dependencies: GitPython 3.1.62 and tzdata 2025.3 (mkdocs-rss-plugin), mpmath 1.3.0 (SymPy), and pyee 14.0.0 (Playwright).
+- Updated package and citation metadata for `v1.0.1`.
+
+### Fixed
+- Fixed `knn_graph()` creating self-loops and omitting real neighbours when points share coordinates or snap to the same network node. Both coordinate-based and network-based searches now exclude each point by its index.
+- Fixed documentation maths rendering and code-copy controls after instant navigation, stabilised the version selector, and avoided duplicate analytics page views.
+
+### Documentation
+- Updated MathJax to 4.1.3, documented explicit CPU and CUDA wheel selection for pip, and aligned Dependabot's documentation group with the MkDocs toolchain.
+- Reduced generated notebook page sizes by removing unused widget state and externalising embedded assets, and added browser smoke tests for documentation interactions.
+- Added the published article page and discovery metadata, refreshed citation guidance, and added Bing site ownership verification.
+
+
 ## 1.0.0 (2026-07-31)
 
 First stable release. The public API is now considered settled and will follow

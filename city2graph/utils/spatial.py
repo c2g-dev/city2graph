@@ -3032,7 +3032,7 @@ def _create_morphological_tessellation(
     return tessellation
 
 
-def plot_graph(  # noqa: PLR0913
+def plot_graph(  # noqa: PLR0913, PLR0917
     graph: nx.Graph | nx.MultiGraph | None = None,
     nodes: gpd.GeoDataFrame | dict[str, gpd.GeoDataFrame] | None = None,
     edges: gpd.GeoDataFrame | dict[tuple[str, str, str], gpd.GeoDataFrame] | None = None,
