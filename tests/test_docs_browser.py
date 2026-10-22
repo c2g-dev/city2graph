@@ -104,7 +104,11 @@ def test_navigation_search_copy_and_analytics(page: Page, docs_server: str) -> N
     page.wait_for_url("**/installation.html")
     page.get_by_role("heading", name="Install City2Graph", exact=False).first.wait_for()
     assert page.evaluate("window.docsNavigationSentinel") is True
-    page.locator(".md-search__input").fill("morphological_graph")
+    # Material closes search 125 ms after navigation, after the new DOM is visible.
+    # Let that transition finish before focusing the next interaction.
+    page.wait_for_timeout(150)
+    page.locator(".md-search__input").click()
+    page.locator(".md-search__input").press_sequentially("morphological_graph")
     page.locator(".md-search-result__link").first.wait_for()
     assert page.locator(".md-search-result__link").count() > 0
     page.keyboard.press("Escape")
