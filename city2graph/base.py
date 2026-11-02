@@ -728,9 +728,9 @@ class GeoDataProcessor:
         if not non_empty_gdfs:
             return gdfs
 
-        reference_crs = non_empty_gdfs[0].crs
+        reference_crs = getattr(non_empty_gdfs[0], "crs", None)
         for gdf in non_empty_gdfs[1:]:
-            if gdf.crs != reference_crs:
+            if getattr(gdf, "crs", None) != reference_crs:
                 msg = "All GeoDataFrames must have the same CRS"
                 raise ValueError(msg)
 
