@@ -812,6 +812,39 @@ class TestGraphValidation:
         with pytest.raises(ValueError, match="Edge types mismatch"):
             validate_pyg(data)
 
+    @pytest.mark.parametrize("heterogeneous", [False, True])
+    @pytest.mark.parametrize("edge_crs", [4326, None])
+    def test_conversion_rejects_inconsistent_crs(
+        self, heterogeneous: bool, edge_crs: int | None
+    ) -> None:
+        """Non-empty frames must share a CRS before tensors are constructed."""
+        nodes = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], crs=3857)
+        edges = gpd.GeoDataFrame(
+            geometry=[LineString([(0, 0), (1, 0)])],
+            crs=edge_crs,
+            index=pd.MultiIndex.from_tuples([(0, 1)]),
+        )
+        with pytest.raises(ValueError, match="same CRS"):
+            gdf_to_pyg(
+                {"place": nodes} if heterogeneous else nodes,
+                {("place", "road", "place"): edges} if heterogeneous else edges,
+            )
+        assert nodes.crs.to_epsg() == 3857
+        assert edges.crs is None if edge_crs is None else edges.crs.to_epsg() == edge_crs
+
+    def test_heterogeneous_node_crs_and_empty_frames(self) -> None:
+        """Node types are checked, while empty frames follow shared validation policy."""
+        nodes = gpd.GeoDataFrame(geometry=[Point(0, 0)], crs=3857)
+        other = nodes.to_crs(4326)
+        with pytest.raises(ValueError, match="same CRS"):
+            gdf_to_pyg({"place": nodes, "road": other})
+        data = gdf_to_pyg(
+            {"place": nodes, "road": other.iloc[:0].set_crs(None, allow_override=True)}
+        )
+        assert data["road"].num_nodes == 0
+        unreferenced = nodes.set_crs(None, allow_override=True)
+        assert gdf_to_pyg(unreferenced).graph_metadata.crs is None
+
 
 class TestDeviceHandling:
     """Test device and dtype handling."""
