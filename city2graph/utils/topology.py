@@ -632,11 +632,56 @@ def _validate_graph_input(
     raise TypeError(msg)
 
 
+def _restore_filtered_nx_graph(
+    graph: nx.Graph | nx.MultiGraph,
+    nodes: gpd.GeoDataFrame | None,
+    edges: gpd.GeoDataFrame,
+) -> nx.Graph | nx.MultiGraph:
+    """Apply frame filtering to a copy while retaining graph identities.
+
+    Retain original node IDs and edge keys rather than reconstructing a new graph.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+        Original graph whose class, keys and attributes are retained.
+    nodes : geopandas.GeoDataFrame or None
+        Retained node rows, indexed by original node IDs.
+    edges : geopandas.GeoDataFrame
+        Retained edge rows with clipped geometries.
+
+    Returns
+    -------
+    networkx.Graph or networkx.MultiGraph
+        Independent graph with retained nodes and clipped edges.
+    """
+    result = graph.copy()
+    if nodes is not None:
+        retained_nodes = set(nodes.index)
+        result.remove_nodes_from([node for node in graph if node not in retained_nodes])
+    geometries = dict(zip(edges.index, edges.geometry, strict=True))
+    records = (
+        list(result.edges(keys=True, data=True))
+        if result.is_multigraph()
+        else [(u, v, None, attrs) for u, v, attrs in result.edges(data=True)]
+    )
+    removed = []
+    for u, v, key, attrs in records:
+        identity = (u, v, key) if result.is_multigraph() else (u, v)
+        if identity in geometries:
+            attrs["geometry"] = geometries[identity]
+        else:
+            removed.append(identity)
+    result.remove_edges_from(removed)
+    return result
+
+
 def _return_graph_output(
     nodes: gpd.GeoDataFrame | None,
     edges: gpd.GeoDataFrame,
     input_type: str,
     as_nx: bool,
+    original_graph: nx.Graph | nx.MultiGraph | None = None,
 ) -> gpd.GeoDataFrame | tuple[gpd.GeoDataFrame | None, gpd.GeoDataFrame] | nx.Graph:
     """
     Return graph in format matching input type or as NetworkX if requested.
@@ -654,11 +699,16 @@ def _return_graph_output(
     as_nx : bool
         If True, return as NetworkX graph.
 
+    original_graph : networkx.Graph or networkx.MultiGraph or None, optional
+        Original NetworkX input whose graph type and identities are preserved.
+
     Returns
     -------
     GeoDataFrame, tuple, or NetworkX graph
         Graph in the requested output format.
     """
+    if original_graph is not None:
+        return _restore_filtered_nx_graph(original_graph, nodes, edges)
     if as_nx or input_type == "nx":
         return gdf_to_nx(nodes=nodes, edges=edges) if nodes is not None else gdf_to_nx(edges=edges)
     return (nodes, edges) if input_type == "tuple" else edges
@@ -722,11 +772,27 @@ def clip_graph(
     -------
     GeoDataFrame, tuple, or NetworkX graph
         Clipped graph in same format as input, or NetworkX if as_nx=True.
+        NetworkX inputs retain their graph class, node IDs, edge keys and attributes.
+        A clipped edge with disconnected parts retains a MultiLineString geometry.
     """
+    original_graph = graph if isinstance(graph, nx.Graph) else None
     nodes, edges, input_type = _validate_graph_input(graph)
 
+    if original_graph is not None:
+        # Use actual graph IDs and keys, which remain unique even when stored
+        # source indexes contain duplicate rows for parallel edges.
+        if nodes is not None:
+            nodes.index = pd.Index(list(original_graph), tupleize_cols=False)
+        if not edges.empty:
+            edge_ids = (
+                list(original_graph.edges(keys=True))
+                if original_graph.is_multigraph()
+                else list(original_graph.edges())
+            )
+            edges.index = pd.MultiIndex.from_tuples(edge_ids)
+
     if edges.empty:
-        return _return_graph_output(nodes, edges, input_type, as_nx)
+        return _return_graph_output(nodes, edges, input_type, as_nx, original_graph)
 
     # Align clip geometry CRS to edges CRS when area is geospatial tabular input.
     if isinstance(area, (gpd.GeoDataFrame, gpd.GeoSeries)):
@@ -750,8 +816,13 @@ def clip_graph(
         else gpd.clip(edges, clip_geom)
     )
 
-    # Explode MultiLineStrings (created by clipping or existing)
-    if not clipped_edges.empty and "MultiLineString" in clipped_edges.geometry.type.to_numpy():
+    # Preserve multipart geometry on a single NetworkX edge and retain its key.
+    # Tabular outputs retain their existing exploded representation.
+    if (
+        original_graph is None
+        and not clipped_edges.empty
+        and "MultiLineString" in clipped_edges.geometry.type.to_numpy()
+    ):
         clipped_edges = clipped_edges.explode(index_parts=False)
 
     # For strict clipping, keep only nodes inside the boundary and edges whose
@@ -769,7 +840,7 @@ def clip_graph(
     else:
         filtered_nodes = _filter_nodes_by_edges(nodes, clipped_edges)
 
-    return _return_graph_output(filtered_nodes, clipped_edges, input_type, as_nx)
+    return _return_graph_output(filtered_nodes, clipped_edges, input_type, as_nx, original_graph)
 
 
 def remove_isolated_components(
@@ -791,8 +862,16 @@ def remove_isolated_components(
     Returns
     -------
     GeoDataFrame, tuple, or NetworkX graph
-        Graph with only largest component, in same format as input.
+        Graph with only largest component, in same format as input. Directed
+        NetworkX inputs use weak connectivity and retain direction, keys and attributes.
     """
+    if isinstance(graph, nx.Graph):
+        if not graph:
+            return graph.copy()
+        components = (
+            nx.weakly_connected_components if graph.is_directed() else nx.connected_components
+        )
+        return graph.subgraph(max(components(graph), key=len)).copy()
     nodes, edges, input_type = _validate_graph_input(graph)
 
     if edges.empty:
@@ -800,7 +879,7 @@ def remove_isolated_components(
 
     # Build graph for component analysis
     try:
-        nx_graph = gdf_to_nx(edges=edges)
+        nx_graph = gdf_to_nx(edges=edges, multigraph=True)
     except (ValueError, TypeError, KeyError):
         return _return_graph_output(nodes, edges, input_type, as_nx)
 
