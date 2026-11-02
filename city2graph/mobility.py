@@ -103,7 +103,9 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
     weight_cols : Sequence[str] | None
         Edge list weight (flow) columns to preserve. A single column acts as
         the canonical weight. If multiple columns are provided a
-        ``threshold_col`` must be designated in the full implementation.
+        ``threshold_col`` must be designated. If a requested column is named
+        ``weight``, it must be the primary column to avoid overwriting its values.
+        Rename it before selecting a different primary column.
     threshold : float, optional
         Minimum flow retained (>=) applied to ``threshold_col`` (future logic).
     threshold_col : str, optional
@@ -709,7 +711,7 @@ def _empty_edgeframe(*, include_extra_weights: bool, extra_weights: list[str]) -
     cols = ["source", "target", "weight"]
     if include_extra_weights:
         # Preserve provided order
-        cols.extend(extra_weights)
+        cols.extend(c for c in extra_weights if c != "weight")
     return pd.DataFrame(columns=cols)
 
 
@@ -939,11 +941,11 @@ def _normalize_edgelist(
 
     # Build canonical columns and rename source/target for consistency
     out = filtered.rename(columns={source_col: "source", target_col: "target"})
-    out.insert(2, "weight", out[primary])  # canonical weight mirrors primary
+    out["weight"] = out[primary]  # canonical weight mirrors primary
 
     # Ensure canonical ordering: source, target, weight, then other weight columns
     # Keep only specified weight columns (MVP drops other non-weight attributes per 6.6)
-    remaining_weights = [c for c in weight_cols]
+    remaining_weights = [c for c in weight_cols if c != "weight"]
 
     # 'weight' already mirrors primary; still preserve all requested columns
     cols = ["source", "target", "weight", *remaining_weights]
@@ -1104,6 +1106,13 @@ def _validate_weights_threshold(
         raise ValueError(msg)
     if len(weight_cols) == 1 and (threshold_col is not None and threshold_col not in weight_cols):
         msg = "threshold_col not in weight_cols"
+        raise ValueError(msg)
+
+    if "weight" in weight_cols and _resolve_primary(weight_cols, threshold_col) != "weight":
+        msg = (
+            "When weight_cols contains 'weight', threshold_col must be 'weight'; "
+            "rename the input weight column to use a different primary weight"
+        )
         raise ValueError(msg)
 
     # Do not coerce here; coercion happens once in _normalize_edgelist
