@@ -21,11 +21,16 @@ from typing import cast
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+from typing import Literal
+from unittest.mock import Mock
+
 import geopandas as gpd
 import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.spatial.distance import pdist
+from scipy.spatial.distance import squareform
 from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
@@ -40,6 +45,7 @@ from city2graph.proximity import group_nodes
 from city2graph.proximity import knn_graph
 from city2graph.proximity import relative_neighborhood_graph
 from city2graph.proximity import waxman_graph
+from city2graph.utils import nx_to_gdf
 from tests.helpers import assert_network_metric_requires_network_gdf
 from tests.helpers import assert_valid_proximity_result
 from tests.helpers import make_network_edges
@@ -1198,6 +1204,40 @@ def test_network_metric_no_valid_positions() -> None:
 class TestNetworkMetricPublicApis:
     """Public API coverage for network-distance fallback branches."""
 
+    def test_selection_and_geometry_share_searches(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Co-located sources share one traversal and no full path dictionary."""
+        roads = gpd.GeoDataFrame(
+            geometry=[LineString([(i, 0), (i + 1, 0)]) for i in range(30)], crs=3857
+        )
+        points = gpd.GeoDataFrame(geometry=[Point(i, 0) for i in [0, 0, 1, 3, 7]], crs=3857)
+        search = Mock(wraps=nx.dijkstra_predecessor_and_distance)
+        monkeypatch.setattr(nx, "dijkstra_predecessor_and_distance", search)
+        monkeypatch.setattr(
+            nx, "single_source_dijkstra", Mock(side_effect=AssertionError("Full paths retained"))
+        )
+        _, edges = knn_graph(points, k=1, distance_metric="network", network_gdf=roads)
+        assert search.call_count == 4
+        assert len(edges) == 4
+        assert set(edges["weight"]) == {0, 1, 2, 4}
+
+    def test_bridge_searches_are_shared_across_target_layers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Every source traversal serves both destination layers."""
+        roads = gpd.GeoDataFrame(
+            geometry=[LineString([(i, 0), (i + 1, 0)]) for i in range(10)], crs=3857
+        )
+        layers = {
+            str(i): gpd.GeoDataFrame(geometry=[Point(2 * i, 0), Point(2 * i + 1, 0)], crs=3857)
+            for i in range(3)
+        }
+        search = Mock(wraps=nx.dijkstra_predecessor_and_distance)
+        monkeypatch.setattr(nx, "dijkstra_predecessor_and_distance", search)
+        _, edges = bridge_nodes(layers, k=1, distance_metric="network", network_gdf=roads)
+        assert search.call_count == 6
+        assert len(edges) == 6
+        assert all(len(frame) == 2 for frame in edges.values())
+
     def test_knn_graph_uses_position_fallback_for_network_edge_lengths(
         self,
         small_points: gpd.GeoDataFrame,
@@ -1498,3 +1538,125 @@ def test_directed_nonpositive_k(k: int) -> None:
     nodes, edges = knn_graph(frame, k=k, target_gdf=frame)
     assert len(nodes) == 4
     assert edges.empty
+
+
+@pytest.mark.parametrize("metric", ["euclidean", "manhattan"])
+def test_waxman_preserves_dense_seeded_selection_across_batches(
+    metric: Literal["euclidean", "manhattan"],
+) -> None:
+    """Batch boundaries must preserve every random draw and selected distance."""
+    coordinates = np.random.default_rng(42).random((270, 2))
+    points = gpd.GeoDataFrame(geometry=gpd.points_from_xy(*coordinates.T), crs=3857)
+    distance_name = "cityblock" if metric == "manhattan" else metric
+    distances = squareform(pdist(coordinates, metric=distance_name))
+    draws = np.random.default_rng(17).random(distances.shape)
+    selected = np.triu(draws <= 0.01 * np.exp(-distances / 0.7), 1)
+    sources, targets = np.where(selected)
+
+    _, edges = waxman_graph(points, beta=0.01, r0=0.7, seed=17, distance_metric=metric)
+
+    assert list(edges.index) == list(zip(sources, targets, strict=True))
+    np.testing.assert_array_equal(edges["weight"], distances[sources, targets])
+
+
+@pytest.mark.parametrize("metric", ["euclidean", "manhattan", "network"])
+def test_waxman_preserves_last_coordinate_weights_for_duplicate_ids(
+    metric: Literal["euclidean", "manhattan", "network"],
+) -> None:
+    """Sampling uses row positions but edge attributes use the last coordinate per ID."""
+    points = gpd.GeoDataFrame(
+        geometry=[Point(0, 0), Point(1, 0), Point(10, 0)], index=["a", "b", "a"], crs=3857
+    )
+    network = make_network_edges(
+        [0, 1],
+        [1, 2],
+        [LineString([(0, 0), (1, 0)]), LineString([(1, 0), (10, 0)])],
+        crs="EPSG:3857",
+    )
+    nodes, edges = waxman_graph(
+        points, beta=1, r0=1000, seed=17, distance_metric=metric, network_gdf=network
+    )
+    assert list(nodes.index) == ["a", "b"]
+    assert list(edges.index) == [("a", "b"), ("a", "a")]
+    np.testing.assert_array_equal(edges["weight"], [9.0, 0.0])
+    assert edges.loc[("a", "a"), "geometry"].length == 0
+
+
+@pytest.mark.parametrize("duplicate_ids", [False, True])
+def test_manhattan_mst_preserves_equal_weight_edge_order(duplicate_ids: bool) -> None:
+    """Delayed geometry construction preserves legacy Kruskal tie selection."""
+    points = gpd.GeoDataFrame(
+        geometry=[Point(x, y) for x in range(3) for y in range(3)],
+        index=[f"node-{i}" for i in range(9)],
+        crs=3857,
+    )
+    if duplicate_ids:
+        points.index = [*points.index[:-1], points.index[0]]
+    point_lookup = dict(zip(points.index, points.geometry, strict=True))
+    candidates = {(i, j) for i in range(len(points)) for j in range(i + 1, len(points))}
+    named = {(points.index[i], points.index[j]) for i, j in candidates}
+    reference = nx.Graph(crs=points.crs)
+    reference.add_nodes_from(points.index)
+    for u, v in named:
+        a, b = point_lookup[u], point_lookup[v]
+        reference.add_edge(
+            u,
+            v,
+            weight=abs(a.x - b.x) + abs(a.y - b.y),
+            geometry=LineString([(a.x, a.y), (b.x, a.y), (b.x, b.y)]),
+        )
+    expected = nx_to_gdf(nx.minimum_spanning_tree(reference), nodes=False, edges=True)
+    _, actual = euclidean_minimum_spanning_tree(points, distance_metric="manhattan")
+    assert isinstance(expected, gpd.GeoDataFrame)
+    pd.testing.assert_frame_equal(actual, expected)
+
+
+def test_manhattan_mst_preserves_invalid_geometry_filtering() -> None:
+    """MST selection retains the shared input validator's geometry filtering."""
+    points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(float("nan"), 1)], crs=3857)
+    nodes, edges = euclidean_minimum_spanning_tree(points, distance_metric="manhattan")
+    assert list(nodes.index) == [0]
+    assert edges.empty
+
+
+@pytest.mark.parametrize("method", ["knn", "fixed_radius"])
+@pytest.mark.parametrize("empty_side", [None, "source", "target", "both"])
+def test_network_bridge_preserves_cleaned_and_empty_layers(
+    method: str, empty_side: str | None
+) -> None:
+    """Shared searches use the same validated inputs as individual directed calls."""
+    frame = gpd.GeoDataFrame(
+        geometry=[Point(0, 0), None, Point(), Point(1, 0)], index=["a", "b", "c", "d"], crs=3857
+    )
+    source = frame.iloc[:0] if empty_side in {"source", "both"} else frame
+    target = frame.iloc[:0] if empty_side in {"target", "both"} else frame
+    network = gpd.GeoDataFrame(geometry=[LineString([(0, 0), (1, 0)])], crs=3857)
+    layers = {"source": source, "target": target}
+    nodes, edges = bridge_nodes(
+        layers,
+        source_node_types=["source"],
+        proximity_method=method,
+        distance_metric="network",
+        network_gdf=network,
+        k=1,
+        radius=0,
+    )
+    assert nodes is layers
+    result = edges[("source", "is_nearby", "target")]
+    assert list(result.index) == ([] if empty_side else [("a", "a"), ("d", "d")])
+    assert result.crs == frame.crs
+    assert (result["weight"] == 0).all()
+
+
+@pytest.mark.parametrize("k", [0, -1])
+def test_network_bridge_nonpositive_k(k: int) -> None:
+    """Sharing a source traversal does not change non-positive k semantics."""
+    frame = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], crs=3857)
+    network = gpd.GeoDataFrame(geometry=[LineString([(0, 0), (1, 0)])], crs=3857)
+    _, edges = bridge_nodes(
+        {"source": frame, "target": frame},
+        k=k,
+        distance_metric="network",
+        network_gdf=network,
+    )
+    assert all(result.empty for result in edges.values())

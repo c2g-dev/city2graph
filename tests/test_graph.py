@@ -8,6 +8,7 @@ from typing import cast
 
 import geopandas as gpd
 import networkx as nx
+import numpy as np
 import osmnx as ox
 import pandas as pd
 import pytest
@@ -936,6 +937,40 @@ class TestDeviceHandling:
 
 class TestGraphFeatures:
     """Test feature and label extraction logic."""
+
+    def test_mixed_feature_types_keep_legacy_rounding(self) -> None:
+        """A shared intermediate dtype remains observable when casting back to integers."""
+        nodes = gpd.GeoDataFrame(
+            {"large": [2**53 + 1, 2**53 + 3], "float": [1.0, 2.0]},
+            geometry=[Point(0, 0), Point(1, 0)],
+            crs=3857,
+        )
+        data = gdf_to_pyg(nodes, node_feature_cols=["large", "float"], dtype=torch.int64)
+        assert data.x.tolist() == [[2**53, 1], [2**53 + 4, 2]]
+
+    def test_nullable_features_keep_missing_values(self) -> None:
+        """Extension arrays use the original missing-value conversion semantics."""
+        nodes = gpd.GeoDataFrame(
+            {"feature": pd.array([1, None], dtype="Int64")},
+            geometry=[Point(0, 0), Point(1, 0)],
+            crs=3857,
+        )
+        data = gdf_to_pyg(nodes, node_feature_cols=["feature"])
+        assert data.x[0, 0].item() == 1
+        assert torch.isnan(data.x[1, 0])
+
+    def test_feature_tensor_does_not_alias_input(self) -> None:
+        """Direct typed NumPy conversion must still produce owned tensor storage."""
+        nodes = gpd.GeoDataFrame(
+            {"feature": np.array([1, 2], dtype=np.float32)},
+            geometry=[Point(0, 0), Point(1, 0)],
+            crs=3857,
+        )
+        data = gdf_to_pyg(nodes, node_feature_cols=["feature"])
+        data.x[0, 0] = 99
+        assert nodes["feature"].tolist() == [1, 2]
+        nodes.loc[1, "feature"] = 77
+        assert data.x[1, 0].item() == 2
 
     def test_nx_default_feature_naming(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:
         """Test NetworkX conversion with default feature naming."""

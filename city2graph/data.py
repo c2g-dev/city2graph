@@ -8,10 +8,11 @@ operations commonly needed for urban network analysis.
 """
 
 # Standard library imports
-import io
 import json
 import logging
+import shutil
 import subprocess
+import tempfile
 import warnings
 from pathlib import Path
 
@@ -467,7 +468,7 @@ def _prepare_area_and_bbox(
     return bbox_str, clip_geom
 
 
-def _download_and_process_type(  # noqa: PLR0912, PLR0913, PLR0917, C901
+def _download_and_process_type(  # noqa: PLR0912, PLR0913, PLR0917
     data_type: str,
     bbox_str: str,
     output_dir: str,
@@ -550,32 +551,19 @@ def _download_and_process_type(  # noqa: PLR0912, PLR0913, PLR0917, C901
     if save_to_file:
         cmd.extend(["-o", str(output_path)])
 
-    result = subprocess.run(cmd, check=True, capture_output=not save_to_file, text=True)
-
-    output_exists = save_to_file and output_path.exists()
-    if not return_data and not (output_exists and needs_postprocessing):
-        return gpd.GeoDataFrame(geometry=[], crs=WGS84_CRS)
-
-    # Load and clip data if needed
-    if output_exists:
-        gdf = gpd.read_file(output_path, encoding="utf-8")
-    elif not save_to_file and result.stdout and isinstance(result.stdout, str):
-        # Parse GeoJSON from subprocess stdout when not saving to file
-        # The CLI may output warning messages before the GeoJSON, so we need to
-        # find where the actual JSON starts (either { for object or [ for array)
-        stdout = result.stdout
-        json_start = -1
-        for i, char in enumerate(stdout):
-            if char in "{[":
-                json_start = i
-                break
+    if save_to_file:
+        subprocess.run(cmd, check=True, capture_output=False, text=True)
+        output_exists = output_path.exists()
+        if not return_data and not (output_exists and needs_postprocessing):
+            return gpd.GeoDataFrame(geometry=[], crs=WGS84_CRS)
         gdf = (
-            gpd.read_file(io.StringIO(stdout[json_start:]))
-            if json_start >= 0
+            gpd.read_file(output_path, encoding="utf-8")
+            if output_exists
             else gpd.GeoDataFrame(geometry=[], crs=WGS84_CRS)
         )
     else:
-        gdf = gpd.GeoDataFrame(geometry=[], crs=WGS84_CRS)
+        output_exists = False
+        gdf = _read_overture_stdout(cmd, return_data=return_data)
 
     if clip_geom is not None and not gdf.empty:
         clip_gdf = gpd.GeoDataFrame(geometry=[clip_geom], crs=WGS84_CRS)
@@ -612,6 +600,48 @@ def _download_and_process_type(  # noqa: PLR0912, PLR0913, PLR0917, C901
         gdf.to_file(output_path, driver="GeoJSON")
 
     return gdf
+
+
+def _read_overture_stdout(cmd: list[str], *, return_data: bool) -> gpd.GeoDataFrame:
+    """
+    Read Overture output through a temporary GeoJSON file.
+
+    Discard warning prefixes with bounded copies and let GDAL read the file without a complete Python text buffer.
+
+    Parameters
+    ----------
+    cmd : list[str]
+        Overture download command.
+    return_data : bool
+        Whether downloaded features should be loaded.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        Downloaded features, or an empty frame when no JSON is available.
+    """
+    with tempfile.TemporaryDirectory(prefix="city2graph-overture-") as directory:
+        raw_path = Path(directory) / "stdout.geojson"
+        with raw_path.open("w+b") as stream:
+            subprocess.run(cmd, check=True, stdout=stream, stderr=subprocess.PIPE, text=True)
+            if not return_data:
+                return gpd.GeoDataFrame(geometry=[], crs=WGS84_CRS)
+            stream.seek(0)
+            while chunk := stream.read(65536):
+                starts = [
+                    position for marker in (b"{", b"[") if (position := chunk.find(marker)) >= 0
+                ]
+                if starts:
+                    offset = stream.tell() - len(chunk) + min(starts)
+                    if offset:
+                        clean_path = Path(directory) / "features.geojson"
+                        stream.seek(offset)
+                        with clean_path.open("wb") as clean:
+                            shutil.copyfileobj(stream, clean, length=65536)
+                    else:
+                        clean_path = raw_path
+                    return gpd.read_file(clean_path)
+        return gpd.GeoDataFrame(geometry=[], crs=WGS84_CRS)
 
 
 def _split_segments_at_connectors(

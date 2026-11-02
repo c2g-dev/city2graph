@@ -7,6 +7,7 @@ import warnings
 from collections.abc import Callable
 from functools import partial
 from typing import Any
+from unittest.mock import Mock
 
 import geopandas as gpd
 import networkx as nx
@@ -2353,8 +2354,11 @@ class TestMorphologicalGraphMultiDistance(TestMorphologyBase):
         sample_buildings_gdf: gpd.GeoDataFrame,
         sample_segments_gdf: gpd.GeoDataFrame,
         mg_center_point: gpd.GeoSeries,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A list of distances yields a dict of (nodes, edges) keyed by distance."""
+        search = Mock(wraps=nx.multi_source_dijkstra_path_length)
+        monkeypatch.setattr(nx, "multi_source_dijkstra_path_length", search)
         distances = [50.0, 100.0]
 
         result = morphological_graphs(
@@ -2364,6 +2368,7 @@ class TestMorphologicalGraphMultiDistance(TestMorphologyBase):
             center_point=mg_center_point,
         )
 
+        assert search.call_count == 1
         assert isinstance(result, dict)
         assert set(result) == set(distances)
         for nodes, edges in result.values():

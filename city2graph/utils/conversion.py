@@ -3,6 +3,7 @@
 # Standard library imports
 import logging
 import typing
+from collections.abc import Iterable
 from collections.abc import Sequence
 from typing import Any
 from typing import Literal
@@ -15,6 +16,7 @@ import rustworkx as rx
 from shapely.geometry import LineString
 from shapely.geometry import Point
 
+from city2graph._processing import frame_records
 from city2graph.base import BaseGraphConverter
 from city2graph.base import GeoDataProcessor
 from city2graph.base import GraphMetadata
@@ -483,11 +485,11 @@ class NxConverter(BaseGraphConverter):
         centroids = self.processor.compute_centroids(nodes_gdf)
         node_data = nodes_gdf if self.keep_geom else nodes_gdf.drop(columns="geometry")
 
-        # Convert to list of dictionaries for attributes
-        node_attrs_list = node_data.to_dict("records")
+        # Yield bounded batches of attribute dictionaries
+        node_attrs_list = frame_records(node_data)
 
         # Create nodes with attributes
-        nodes_to_add = [
+        nodes_to_add = (
             (
                 idx,
                 {
@@ -499,7 +501,7 @@ class NxConverter(BaseGraphConverter):
             for idx, (orig_idx, attrs, centroid) in enumerate(
                 zip(nodes_gdf.index, node_attrs_list, centroids, strict=False),
             )
-        ]
+        )
 
         graph.add_nodes_from(nodes_to_add)
 
@@ -552,7 +554,7 @@ class NxConverter(BaseGraphConverter):
             end_coords = self.processor.extract_coordinates(edges_gdf, start=False)
             all_coords = pd.concat([start_coords, end_coords]).unique()
 
-            nodes_to_add = [(coord, {"pos": coord}) for coord in all_coords]
+            nodes_to_add = ((coord, {"pos": coord}) for coord in all_coords)
             graph.add_nodes_from(nodes_to_add)
 
             # For implicit nodes, the ID is the coordinate itself
@@ -666,7 +668,7 @@ class NxConverter(BaseGraphConverter):
             centroids = self.processor.compute_centroids(node_gdf)
             node_data = node_gdf if self.keep_geom else node_gdf.drop(columns="geometry")
 
-            nodes_to_add = [
+            nodes_to_add = (
                 (
                     current_offset + idx,
                     {
@@ -677,9 +679,9 @@ class NxConverter(BaseGraphConverter):
                     },
                 )
                 for idx, (orig_idx, attrs, centroid) in enumerate(
-                    zip(node_gdf.index, node_data.to_dict("records"), centroids, strict=False),
+                    zip(node_gdf.index, frame_records(node_data), centroids, strict=False),
                 )
-            ]
+            )
 
             graph.add_nodes_from(nodes_to_add)
             current_offset += len(node_gdf)
@@ -820,7 +822,7 @@ class NxConverter(BaseGraphConverter):
             The type of the edges being added, for heterogeneous graphs.
         """
         attrs_df = edges_gdf if keep_geom else edges_gdf.drop(columns="geometry")
-        edge_attrs = attrs_df.to_dict("records")
+        edge_attrs = frame_records(attrs_df)
 
         if (
             isinstance(graph, nx.MultiGraph)
@@ -851,7 +853,7 @@ class NxConverter(BaseGraphConverter):
         u_nodes: pd.Series,
         v_nodes: pd.Series,
         edges_gdf: gpd.GeoDataFrame,
-        edge_attrs: list[dict[str, Any]],
+        edge_attrs: Iterable[dict[str, Any]],
         edge_type: str | tuple[str, str, str] | None,
     ) -> None:
         """
@@ -880,7 +882,7 @@ class NxConverter(BaseGraphConverter):
             if edges_gdf.index.nlevels == 3
             else range(len(edges_gdf))
         )
-        edges_to_add_multi = [
+        edges_to_add_multi = (
             (
                 u,
                 v,
@@ -899,7 +901,7 @@ class NxConverter(BaseGraphConverter):
                 edge_attrs,
                 strict=True,
             )
-        ]
+        )
         graph.add_edges_from(edges_to_add_multi)
 
     def _add_simple_graph_edges(
@@ -908,7 +910,7 @@ class NxConverter(BaseGraphConverter):
         u_nodes: pd.Series,
         v_nodes: pd.Series,
         edges_gdf: gpd.GeoDataFrame,
-        edge_attrs: list[dict[str, Any]],
+        edge_attrs: Iterable[dict[str, Any]],
         edge_type: str | tuple[str, str, str] | None,
     ) -> None:
         """
@@ -932,7 +934,7 @@ class NxConverter(BaseGraphConverter):
         edge_type : str or tuple, optional
             The type of the edges being added.
         """
-        edges_to_add_simple = [
+        edges_to_add_simple = (
             (
                 u,
                 v,
@@ -949,7 +951,7 @@ class NxConverter(BaseGraphConverter):
                 edge_attrs,
                 strict=True,
             )
-        ]
+        )
         graph.add_edges_from(edges_to_add_simple)
 
     def _create_node_lookup(

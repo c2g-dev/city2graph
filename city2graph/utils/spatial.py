@@ -36,6 +36,8 @@ except ImportError:  # pragma: no cover
 if TYPE_CHECKING:
     import matplotlib.axes
 
+from city2graph._processing import row_batches
+
 from .conversion import NxConverter
 
 __all__ = [
@@ -48,6 +50,7 @@ __all__ = [
 logger = logging.getLogger("city2graph.utils")
 
 _KNN_HULL_MAX_ATTEMPTS = 50
+_HULL_NEIGHBOR_CACHE_BYTES = 8 * 1024 * 1024
 _COARSE_GRID_SIZE: float = 1e-3
 _JITTER_MAGNITUDE: float = 0.01
 
@@ -1062,7 +1065,7 @@ def _concave_hull_knn(
     start_idx = int(np.lexsort((coords[:, 0], coords[:, 1]))[0])
     min_k = max(2, min(int(k), n_points - 1))
     tree = cKDTree(coords)
-    neighbor_cache: dict[int, np.ndarray] = {}
+    neighbor_cache: dict[int, np.ndarray] = _HullNeighborCache()
 
     # Cap the number of k-escalation retries: each retry is a full O(n) hull
     # walk, so an unbounded `range(min_k, n_points)` can degrade to O(n^2) on
@@ -1091,6 +1094,48 @@ def _concave_hull_knn(
             return poly
 
     return _concave_fallback_alpha(coords)
+
+
+class _HullNeighborCache(dict[int, np.ndarray]):
+    """
+    Bound retained neighbours while preserving query sizes and tie ordering.
+
+    Evicted arrays can be recomputed with the same query size, including ties.
+    """
+
+    def __init__(self) -> None:
+        """
+        Initialise cache accounting.
+
+        Query sizes survive eviction so subsequent queries retain their ordering.
+        """
+        super().__init__()
+        self.sizes: dict[int, int] = {}
+        self.nbytes = 0
+
+    def __setitem__(self, key: int, value: np.ndarray) -> None:
+        """
+        Store neighbours within the cache budget.
+
+        Query sizes are recorded even when the corresponding array is evicted.
+
+        Parameters
+        ----------
+        key : int
+            Point position used as a query origin.
+        value : numpy.ndarray
+            Ordered neighbour positions returned by the spatial index.
+        """
+        self.sizes[key] = len(value)
+        previous = self.pop(key, None)
+        if previous is not None:
+            self.nbytes -= previous.nbytes
+        budget = _HULL_NEIGHBOR_CACHE_BYTES
+        while self and self.nbytes + value.nbytes > budget:
+            self.nbytes -= self.pop(next(iter(self))).nbytes
+        if value.nbytes <= budget:
+            super().__setitem__(key, value)
+            self.nbytes += value.nbytes
 
 
 @dataclass(slots=True)
@@ -1426,12 +1471,14 @@ def _find_next_hull_point(
         required = min(current_k + 1, n_points)
 
         if neighbor_indices is None or len(neighbor_indices) < required:
+            previous_size = (
+                neighbor_cache.sizes.get(current_idx, 0)
+                if isinstance(neighbor_cache, _HullNeighborCache)
+                else (len(neighbor_indices) if neighbor_indices is not None else 0)
+            )
             query_k = min(
                 n_points,
-                max(
-                    required,
-                    len(neighbor_indices) * 2 if neighbor_indices is not None else required,
-                ),
+                max(required, previous_size if previous_size >= required else previous_size * 2),
             )
             _, neighbor_indices = tree.query(coords[current_idx], k=query_k)
             neighbor_indices = np.atleast_1d(neighbor_indices)
@@ -1554,6 +1601,39 @@ def _find_best_candidate(
 
 
 def _edges_valid_batch(
+    start: np.ndarray,
+    ends: np.ndarray,
+    closing_mask: np.ndarray,
+    hull_state: _HullWalkState,
+) -> np.ndarray:
+    """
+    Validate hull candidates in bounded batches.
+
+    Candidate blocks retain original order and use the same exact intersection predicates.
+
+    Parameters
+    ----------
+    start : numpy.ndarray
+        Shared candidate start coordinate.
+    ends : numpy.ndarray
+        Candidate endpoint coordinates.
+    closing_mask : numpy.ndarray
+        Whether each edge closes the hull.
+    hull_state : _HullWalkState
+        Previously accepted hull segments.
+
+    Returns
+    -------
+    numpy.ndarray
+        Boolean validity mask in candidate order.
+    """
+    valid = np.empty(len(ends), dtype=bool)
+    for batch in row_batches(len(ends), max(1, hull_state.segment_count * 8)):
+        valid[batch] = _edges_valid_block(start, ends[batch], closing_mask[batch], hull_state)
+    return valid
+
+
+def _edges_valid_block(
     start: np.ndarray,
     ends: np.ndarray,
     closing_mask: np.ndarray,

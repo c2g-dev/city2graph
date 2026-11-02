@@ -182,6 +182,19 @@ class TestGraphStructures(BaseGraphTest):
 class TestNxConversions(BaseConversionTest):
     """Test conversions between GeoDataFrame and NetworkX formats."""
 
+    def test_nullable_attributes_keep_pandas_scalar_boxing(self) -> None:
+        """Lazy attribute records preserve nullable payloads across batches."""
+        nodes = gpd.GeoDataFrame(
+            {"value": pd.array([1, None] * 135, dtype="Int64")},
+            geometry=[Point(i, 0) for i in range(270)],
+            crs=3857,
+        )
+        edges = gpd.GeoDataFrame(geometry=[], index=pd.MultiIndex.from_arrays([[], []]), crs=3857)
+        graph = gdf_to_nx(nodes=nodes, edges=edges)
+        values = [data["value"] for _, data in graph.nodes(data=True)]
+        assert values == [1, None] * 135
+        assert nodes["value"].isna().sum() == 135
+
     def test_homogeneous_roundtrip_conversion(
         self,
         sample_nodes_gdf: gpd.GeoDataFrame,

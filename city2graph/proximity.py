@@ -40,6 +40,8 @@ from scipy.spatial import distance as sdist
 from shapely.geometry import LineString
 
 # Local imports
+from ._processing import frame_records
+from ._processing import row_batches
 from .base import GeoDataProcessor
 from .utils import gdf_to_nx
 from .utils import nx_to_gdf
@@ -196,6 +198,8 @@ class DistanceMetric:
             | None
         ) = None
         self._net_kdtree: cKDTree | None = None
+        self._active_search: tuple[Any, dict[Any, list[Any]], dict[Any, float]] | None = None
+        self._selected_paths: dict[tuple[Any, Any], tuple[float, LineString | None]] = {}
 
     def validate(self, crs: object) -> None:
         """
@@ -356,11 +360,64 @@ class DistanceMetric:
             groups.setdefault(node, []).append(i)
 
         for node, indices in groups.items():
-            lengths = nx.single_source_dijkstra_path_length(
+            predecessors, lengths = nx.dijkstra_predecessor_and_distance(
                 net_nx, node, cutoff=cutoff, weight=weight_attr
             )
+            self._active_search = (node, predecessors, lengths)
             row = np.asarray([lengths.get(dn, np.inf) for dn in dst_nearest], dtype=float)
             yield indices, row
+            self._active_search = None
+
+    def _remember_targets(self, coords: npt.NDArray[np.floating]) -> None:
+        """
+        Retain geometries only for selected network destinations.
+
+        Materialise selected paths while the current predecessor tree is available, then allow the traversal to be released.
+
+        Parameters
+        ----------
+        coords : numpy.ndarray
+            Selected destination coordinates.
+        """
+        assert self._active_search is not None
+        source, predecessors, lengths = self._active_search
+        for target in self._snap_to_network(coords):
+            key = (source, target)
+            if key not in self._selected_paths:
+                self._selected_paths[key] = (
+                    lengths.get(target, float("inf")),
+                    self._path_geometry(source, target, predecessors),
+                )
+
+    def _path_geometry(
+        self, source: object, target: object, predecessors: dict[Any, list[Any]]
+    ) -> LineString | None:
+        """
+        Reconstruct the first shortest network path.
+
+        Use the first predecessor to preserve the path chosen by NetworkX strict distance improvements.
+
+        Parameters
+        ----------
+        source : object
+            Snapped source node ID.
+        target : object
+            Snapped destination node ID.
+        predecessors : dict
+            Predecessor lists from a single Dijkstra traversal.
+
+        Returns
+        -------
+        LineString or None
+            Network geometry, or None for a missing or zero-edge path.
+        """
+        if target == source or target not in predecessors:
+            return None
+        path = [target]
+        while path[-1] != source:
+            path.append(predecessors[path[-1]][0])
+        _graph, positions, _coords, _ids, _weight = self._get_network_support()
+        return LineString([positions[node] for node in reversed(path)])
 
     @staticmethod
     def _normalize_metric(metric: object) -> str:
@@ -528,7 +585,7 @@ class GraphBuilder:
         self.node_ids = list(self.gdf.index)
 
         # Bulk-add nodes
-        attrs_list = self.gdf.to_dict("records")
+        attrs_list = frame_records(self.gdf)
         self.G.add_nodes_from(
             (
                 node_id,
@@ -576,8 +633,11 @@ class GraphBuilder:
         assert self.node_ids is not None
 
         weights, geoms = self._compute_edge_data(edge_list)
-        nx.set_edge_attributes(self.G, dict(zip(edge_list, weights, strict=False)), "weight")
-        nx.set_edge_attributes(self.G, dict(zip(edge_list, geoms, strict=False)), "geometry")
+        # Preserve first insertion order and last value for repeated oriented
+        # pairs, as the previous attribute dictionaries did.
+        attributes = dict(zip(edge_list, zip(weights, geoms, strict=True), strict=True))
+        for (u, v), (weight, geometry) in attributes.items():
+            self.G[u][v].update(weight=weight, geometry=geometry)
 
     def _compute_edge_data(self, edges: list[EdgePair]) -> tuple[list[float], list[LineString]]:
         """
@@ -655,7 +715,7 @@ class GraphBuilder:
         assert self.coords is not None
         assert self.node_ids is not None
 
-        net_nx, pos, _net_coords, _net_ids_list, weight_attr = self.metric._get_network_support()
+        net_nx, _pos, _net_coords, _net_ids_list, weight_attr = self.metric._get_network_support()
 
         snapped = self.metric._snap_to_network(self.coords)
         nearest = {self.node_ids[i]: s for i, s in enumerate(snapped)}
@@ -670,24 +730,28 @@ class GraphBuilder:
         geoms = [LineString()] * len(edges)
 
         for src_nn, indices in edges_by_src_nn.items():
-            dists, paths = nx.single_source_dijkstra(
-                net_nx, src_nn, cutoff=self.network_cutoff, weight=use_weight
+            missing = any(
+                (src_nn, nearest[edges[i][1]]) not in self.metric._selected_paths for i in indices
             )
-
+            if missing:
+                predecessors, dists = nx.dijkstra_predecessor_and_distance(
+                    net_nx, src_nn, cutoff=self.network_cutoff, weight=use_weight
+                )
             for i in indices:
                 u, v = edges[i]
                 dst_nn = nearest[v]
-
-                if self.dm is not None:
-                    weights[i] = self.dm[idx_map[u], idx_map[v]]
+                cached = self.metric._selected_paths.get((src_nn, dst_nn))
+                if cached is None:
+                    distance = dists.get(dst_nn, float("inf"))
+                    geometry = self.metric._path_geometry(src_nn, dst_nn, predecessors)
                 else:
-                    weights[i] = dists.get(dst_nn, float("inf"))
-
-                path_nodes = paths.get(dst_nn)
-                if path_nodes and len(path_nodes) >= 2:
-                    geoms[i] = LineString([pos[p] for p in path_nodes])
-                else:
-                    geoms[i] = LineString([self.coords[idx_map[u]], self.coords[idx_map[v]]])
+                    distance, geometry = cached
+                weights[i] = self.dm[idx_map[u], idx_map[v]] if self.dm is not None else distance
+                geoms[i] = (
+                    geometry
+                    if geometry is not None
+                    else LineString([self.coords[idx_map[u]], self.coords[idx_map[v]]])
+                )
 
         return weights, geoms
 
@@ -886,6 +950,7 @@ def knn_graph(
             for i in indices:
                 neighbours = nearest[nearest != i][:k]
                 selections[i] = neighbours[row[neighbours] < np.inf]
+                metric._remember_targets(builder.coords[selections[i]])
         edges = [
             (builder.node_ids[i], builder.node_ids[j]) for i in range(n) for j in selections[i]
         ]
@@ -1121,14 +1186,50 @@ def gabriel_graph(
     # Gabriel filtering
     kept_edges = set()
     coords = builder.coords
+    tree = cKDTree(coords)
 
     for i, j in delaunay_edges:
-        dots = np.einsum("ij,ij->i", coords[i] - coords, coords[j] - coords)
+        candidates = _nearby_edge_points(tree, coords, i, j)
+        dots = np.einsum("ij,ij->i", coords[i] - candidates, coords[j] - candidates)
         if not np.any(dots < 0.0):
             kept_edges.add((builder.node_ids[i], builder.node_ids[j]))
 
     builder.add_edges(kept_edges)
     return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
+
+
+def _nearby_edge_points(
+    tree: cKDTree, coords: npt.NDArray[np.floating], i: int, j: int
+) -> npt.NDArray[np.floating]:
+    """
+    Prune points using a conservative search envelope.
+
+    The expanded box contains all potential Gabriel-disk and lune witnesses; original predicates decide acceptance.
+
+    Parameters
+    ----------
+    tree : scipy.spatial.cKDTree
+        Spatial index over the coordinates.
+    coords : numpy.ndarray
+        Input point coordinates.
+    i : int
+        First endpoint position.
+    j : int
+        Second endpoint position.
+
+    Returns
+    -------
+    numpy.ndarray
+        Candidate witness coordinates.
+    """
+    # Any witness is closer to i than j is. Expand the L-infinity box to
+    # accommodate rounded coordinate subtraction before applying exact predicates.
+    radius = np.linalg.norm(coords[i] - coords[j])
+    padding = np.finfo(float).eps * max(float(np.max(np.abs(coords[[i, j]]))), radius, 1.0) * 64
+    return cast(
+        "npt.NDArray[np.floating]",
+        coords[tree.query_ball_point(coords[i], radius + padding, p=np.inf)],
+    )
 
 
 def relative_neighborhood_graph(
@@ -1232,15 +1333,17 @@ def relative_neighborhood_graph(
 
     kept_edges = set()
     coords = builder.coords
+    tree = cKDTree(coords)
 
     for i, j in cand_edges:
-        dots = np.einsum("ij,ij->i", coords[i] - coords, coords[j] - coords)
+        candidates = _nearby_edge_points(tree, coords, i, j)
+        dots = np.einsum("ij,ij->i", coords[i] - candidates, coords[j] - candidates)
         if np.any(dots < 0.0):
             continue
         dij2 = np.dot(coords[i] - coords[j], coords[i] - coords[j])
         threshold = dij2 - np.finfo(float).eps * max(dij2, 1.0) * 64.0
-        di2 = np.sum((coords - coords[i]) ** 2, axis=1) < threshold
-        dj2 = np.sum((coords - coords[j]) ** 2, axis=1) < threshold
+        di2 = np.sum((candidates - coords[i]) ** 2, axis=1) < threshold
+        dj2 = np.sum((candidates - coords[j]) ** 2, axis=1) < threshold
         closer_both = np.where(di2 & dj2)[0]
         if len(closer_both) == 0:
             kept_edges.add((builder.node_ids[i], builder.node_ids[j]))
@@ -1367,17 +1470,74 @@ def euclidean_minimum_spanning_tree(
     # Convert to node IDs
     named_edges = {(builder.node_ids[i], builder.node_ids[j]) for i, j in cand_edges}
 
-    # Add all candidate edges; weights are computed per edge without a dense matrix
-    builder.add_edges(named_edges)
+    # Preserve the legacy set iteration and NetworkX adjacency order for ties,
+    # but store only scalar candidates, without a complete attributed graph.
+    del cand_edges
+    _add_minimum_spanning_edges(builder, named_edges)
+    return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
-    # Compute MST
-    mst_G = nx.minimum_spanning_tree(builder.G, weight="weight", algorithm="kruskal")
-    if as_nx:
-        return mst_G
-    nodes, edges = nx_to_gdf(mst_G, nodes=True, edges=True)
-    if duplicate_edges:
-        edges = symmetrize_edges(edges)
-    return nodes, edges
+
+def _add_minimum_spanning_edges(builder: GraphBuilder, candidates: set[EdgePair]) -> None:
+    """
+    Select the minimum spanning tree before constructing geometry.
+
+    Stable Kruskal ordering reproduces the original NetworkX adjacency and equal-weight ordering.
+
+    Parameters
+    ----------
+    builder : GraphBuilder
+        Prepared nodes and metric.
+    candidates : set[tuple]
+        Candidate edges in legacy insertion order; consumed by this helper.
+    """
+    assert builder.node_ids is not None
+    assert builder.coords is not None
+    if not builder.gdf.index.is_unique or not np.isfinite(builder.coords).all():
+        # Duplicate IDs collapse candidate orientations in NetworkX. Preserve
+        # that behaviour and its non-finite weight validation on unusual inputs.
+        builder.add_edges(candidates)
+        builder.G = nx.minimum_spanning_tree(builder.G, weight="weight", algorithm="kruskal")
+        return
+    edges = list(candidates)
+    candidates.clear()
+    index = {node: i for i, node in enumerate(builder.node_ids)}
+    sources = np.asarray([index[u] for u, _v in edges])
+    targets = np.asarray([index[v] for _u, v in edges])
+    weights = np.empty(len(edges))
+    if builder.metric.name == "network":
+        by_source: dict[int, list[int]] = {}
+        for position, source_index in enumerate(sources):
+            by_source.setdefault(int(source_index), []).append(position)
+        for indices, distances in builder.metric._iter_network_rows(builder.coords):
+            for source in indices:
+                positions = by_source.get(source, [])
+                weights[positions] = distances[targets[positions]]
+    else:
+        for batch in row_batches(len(edges), 2):
+            delta = builder.coords[sources[batch]] - builder.coords[targets[batch]]
+            weights[batch] = (
+                np.abs(delta).sum(axis=1)
+                if builder.metric.name == "manhattan"
+                else np.hypot(delta[:, 0], delta[:, 1])
+            )
+    if np.isnan(weights).any():
+        builder.add_edges(edges)
+        builder.G = nx.minimum_spanning_tree(builder.G, weight="weight", algorithm="kruskal")
+        return
+    # Graph.edges iterates in node order, then candidate insertion order.
+    order = np.lexsort((np.arange(len(edges)), sources, weights))
+    components = nx.utils.UnionFind()
+    selected = []
+    selected_weights = []
+    for position in order:
+        u, v = edges[position]
+        if components[u] != components[v]:
+            components.union(u, v)
+            selected.append((u, v))
+            selected_weights.append(weights[position])
+    builder.add_edges(selected)
+    for (u, v), weight in zip(selected, selected_weights, strict=True):
+        builder.G[u][v]["weight"] = weight
 
 
 def fixed_radius_graph(
@@ -1512,6 +1672,7 @@ def fixed_radius_graph(
             within = np.where(row <= radius)[0]
             for i in indices:
                 selections[i] = within[within > i]
+                metric._remember_targets(builder.coords[selections[i]])
         edges = [
             (builder.node_ids[i], builder.node_ids[j]) for i in range(n) for j in selections[i]
         ]
@@ -1627,10 +1788,10 @@ def waxman_graph(
     - The graph stores parameters in G.graph["beta"] and G.graph["r0"]
     - Results are stochastic; use seed parameter for reproducible outputs
     - The graph is undirected with symmetric edge probabilities
-    - Because every node pair is sampled, the implementation deliberately materialises
-      a dense n-by-n distance matrix and an n-by-n random draw ($O(n^2)$ memory,
-      roughly 8 GB for 50,000 nodes each). This keeps the seeded random stream stable
-      and is intended for moderate point counts.
+    - Pairwise probabilities and random draws are processed in bounded batches.
+      All n-by-n random draws are consumed in their original order to preserve
+      seeded results. Computation remains quadratic; output storage depends on
+      the number of selected edges.
 
     References
     ----------
@@ -1660,21 +1821,79 @@ def waxman_graph(
     if len(builder.coords) < 2:
         return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
 
-    builder.compute_distance_matrix()
-    assert builder.dm is not None
-
-    with np.errstate(divide="ignore"):
-        probs = beta * np.exp(-builder.dm / r0)
-    probs[builder.dm == np.inf] = 0
-
-    rand = rng.random(builder.dm.shape)
-    mask = (rand <= probs) & np.triu(np.ones_like(builder.dm, dtype=bool), 1)
-    edge_idx = np.column_stack(np.where(mask))
-    edges = [(builder.node_ids[i], builder.node_ids[j]) for i, j in edge_idx]
-
+    edges: list[EdgePair] = []
+    selected_weights: list[float] = []
+    n = len(builder.coords)
+    if metric.name == "network":
+        # Consume the random stream in original point order, sharing each
+        # row's traversal with geometry construction.
+        snapped = metric._snap_to_network(builder.coords)
+        graph, _pos, _coords, _ids, weight = metric._get_network_support()
+        for i, source in enumerate(snapped):
+            predecessors, lengths = nx.dijkstra_predecessor_and_distance(
+                graph, source, weight=weight
+            )
+            metric._active_search = (source, predecessors, lengths)
+            distances = np.asarray([lengths.get(target, np.inf) for target in snapped])
+            targets = _waxman_targets(distances, rng.random(n), i, beta, r0)
+            metric._remember_targets(builder.coords[targets])
+            edges.extend((builder.node_ids[i], builder.node_ids[j]) for j in targets)
+            selected_weights.extend(distances[targets])
+        metric._active_search = None
+    else:
+        metric_name = "cityblock" if metric.name == "manhattan" else "euclidean"
+        for batch in row_batches(n, n):
+            distances = sdist.cdist(builder.coords[batch], builder.coords, metric=metric_name)
+            random_values = rng.random(distances.shape)
+            for offset, row in enumerate(distances):
+                i = batch.start + offset
+                targets = _waxman_targets(row, random_values[offset], i, beta, r0)
+                edges.extend((builder.node_ids[i], builder.node_ids[j]) for j in targets)
+                selected_weights.extend(row[targets])
     builder.add_edges(edges)
+    if builder.gdf.index.is_unique:
+        for (u, v), selected_weight in zip(edges, selected_weights, strict=True):
+            builder.G[u][v]["weight"] = selected_weight
+    # Repeated IDs retain the builder's last-occurrence coordinate lookup,
+    # including zero-distance self-edges created by distinct input positions.
     builder.G.graph.update({"beta": beta, "r0": r0})
     return builder.to_output(as_nx, duplicate_edges=duplicate_edges)
+
+
+def _waxman_targets(
+    distances: npt.NDArray[np.floating],
+    random_values: npt.NDArray[np.floating],
+    source: int,
+    beta: float,
+    r0: float,
+) -> npt.NDArray[np.intp]:
+    """
+    Select Waxman destinations for one source row.
+
+    Apply the original probability comparison after consuming every random draw, including diagonal and lower-triangle draws.
+
+    Parameters
+    ----------
+    distances : numpy.ndarray
+        Distances to all points.
+    random_values : numpy.ndarray
+        Random values for the complete row.
+    source : int
+        Source position.
+    beta : float
+        Connection probability multiplier.
+    r0 : float
+        Distance decay scale.
+
+    Returns
+    -------
+    numpy.ndarray
+        Selected destination positions in ascending order.
+    """
+    with np.errstate(divide="ignore"):
+        probabilities = beta * np.exp(-distances / r0)
+    probabilities[distances == np.inf] = 0
+    return np.flatnonzero(random_values[source + 1 :] <= probabilities[source + 1 :]) + source + 1
 
 
 def _normalize_layer_types(
@@ -1926,7 +2145,20 @@ def _build_bridge_edges(
         Edge GeoDataFrames keyed by ``(source_type, 'is_nearby', target_type)``.
     """
     edge_dict = {}
+    shared_metric = None
     for src_type in source_types:
+        destinations = [target for target in target_types if target != src_type]
+        if not destinations:
+            continue
+        if shared_metric is None:
+            shared_metric = DistanceMetric(distance_metric, network_gdf, network_weight)
+        selected = (
+            _network_layer_selections(
+                nodes_dict, src_type, destinations, shared_metric, method, param
+            )
+            if shared_metric.name == "network"
+            else {}
+        )
         for dst_type in target_types:
             if src_type == dst_type:
                 continue
@@ -1944,13 +2176,94 @@ def _build_bridge_edges(
                 network_gdf=network_gdf,
                 network_weight=network_weight,
                 return_nodes=False,
+                shared_metric=shared_metric,
+                selected_edges=selected.get(dst_type),
             )
 
             # Strip the ("src", id) and ("dst", id) wrappers to return original IDs
             if not edges_gdf.empty:
                 edges_gdf.index = GeoDataProcessor.unwrap_layer_edge_index(edges_gdf.index)
             edge_dict[(src_type, "is_nearby", dst_type)] = edges_gdf
+        shared_metric._selected_paths.clear()
     return edge_dict
+
+
+def _network_layer_selections(
+    nodes: dict[str, gpd.GeoDataFrame],
+    source_type: str,
+    target_types: list[str],
+    metric: DistanceMetric,
+    method: str,
+    param: float,
+) -> dict[str, list[EdgePair]]:
+    """
+    Share network traversals across destination layers.
+
+    Apply each layer selection independently to the same source distances and retain only selected path geometries.
+
+    Parameters
+    ----------
+    nodes : dict[str, geopandas.GeoDataFrame]
+        Input node layers.
+    source_type : str
+        Source layer key.
+    target_types : list[str]
+        Destination keys in requested order.
+    metric : DistanceMetric
+        Call-local network context.
+    method : str
+        Nearest-neighbour or radius strategy.
+    param : float
+        Neighbour count or distance threshold.
+
+    Returns
+    -------
+    dict[str, list[tuple]]
+        Selected edges for each target layer.
+    """
+    validated_source, _, _ = validate_gdf(nodes_gdf=nodes[source_type])
+    source = cast("gpd.GeoDataFrame", validated_source)
+    metric.validate(source.crs)
+    source_coords = np.column_stack([source.geometry.centroid.x, source.geometry.centroid.y])
+    targets = []
+    target_ids = {}
+    sizes = []
+    for target_type in target_types:
+        validated_target, _, _ = validate_gdf(nodes_gdf=nodes[target_type])
+        target = cast("gpd.GeoDataFrame", validated_target)
+        if source.crs != target.crs:
+            msg = "CRS mismatch between source and target GeoDataFrames"
+            raise ValueError(msg)
+        targets.append(np.column_stack([target.geometry.centroid.x, target.geometry.centroid.y]))
+        target_ids[target_type] = target.index
+        sizes.append(len(target))
+    target_coords = np.concatenate(targets)
+    if source.empty or len(target_coords) == 0 or (method == "knn" and param <= 0):
+        return {target: [] for target in target_types}
+    offsets = np.cumsum([0, *sizes])
+    selections: dict[str, list[npt.NDArray[np.intp]]] = {
+        target: [np.empty(0, dtype=np.intp)] * len(source) for target in target_types
+    }
+    cutoff = None if method == "knn" else param
+    for indices, row in metric._iter_network_rows(source_coords, target_coords, cutoff=cutoff):
+        for position, target in enumerate(target_types):
+            distances = row[offsets[position] : offsets[position + 1]]
+            if method == "knn":
+                top = np.argsort(distances)[: int(param)]
+                selected = np.sort(top[distances[top] < np.inf])
+            else:
+                selected = np.flatnonzero(distances <= param)
+            metric._remember_targets(targets[position][selected])
+            for index in indices:
+                selections[target][index] = selected
+    return {
+        target: [
+            (source.index[i], target_ids[target][j])
+            for i, selected in enumerate(rows)
+            for j in selected
+        ]
+        for target, rows in selections.items()
+    }
 
 
 def group_nodes(
@@ -2304,6 +2617,8 @@ def _directed_graph(
     network_gdf: gpd.GeoDataFrame | None = None,
     network_weight: str | None = None,
     return_nodes: bool = True,
+    shared_metric: DistanceMetric | None = None,
+    selected_edges: list[EdgePair] | None = None,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph:
     """
     Build source-to-target proximity edges between two GeoDataFrames.
@@ -2331,6 +2646,11 @@ def _directed_graph(
     return_nodes : bool, default True
         When False, only the edge GeoDataFrame is produced.
 
+    shared_metric : DistanceMetric or None, optional
+        Call-local network and spatial-index context shared across layer pairs.
+    selected_edges : list[tuple] or None, optional
+        Previously selected edges, in the original source and target order.
+
     Returns
     -------
     tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] or networkx.Graph
@@ -2344,7 +2664,7 @@ def _directed_graph(
         msg = "CRS mismatch between source and target GeoDataFrames"
         raise ValueError(msg)
 
-    metric = DistanceMetric(distance_metric, network_gdf, network_weight)
+    metric = shared_metric or DistanceMetric(distance_metric, network_gdf, network_weight)
     metric.validate(src_gdf.crs)
 
     src_coords = np.column_stack([src_gdf.geometry.centroid.x, src_gdf.geometry.centroid.y])
@@ -2352,8 +2672,12 @@ def _directed_graph(
     src_ids = list(src_gdf.index)
     dst_ids = list(dst_gdf.index)
 
-    edges = _directed_edges(
-        src_coords, dst_coords, src_ids, dst_ids, metric=metric, method=method, param=param
+    edges = (
+        selected_edges
+        if selected_edges is not None
+        else _directed_edges(
+            src_coords, dst_coords, src_ids, dst_ids, metric=metric, method=method, param=param
+        )
     )
 
     # Prepare namespaced IDs
@@ -2551,6 +2875,7 @@ def _directed_edges(
                 sel = np.sort(top[row[top] < np.inf])
             else:  # radius
                 sel = np.where(row <= param)[0]
+            metric._remember_targets(dst_coords[sel])
             for i in indices:
                 selections[i] = sel
         return [(src_ids[i], dst_ids[j]) for i in range(src_n) for j in selections[i]]
@@ -2687,31 +3012,24 @@ def _edges_gdf_from_pairs(
     pt_nodes.index = pt_index
     temp_nodes = pd.concat([poly_nodes, pt_nodes])
 
-    # Use GraphBuilder
     builder = GraphBuilder(temp_nodes, metric, directed=True)
-    builder.prepare_nodes()
-
-    # Build namespaced edge list
-    ns_edge_list = [(("poly", u), ("pt", v)) for u, v in pairs]
-
-    builder.add_edges(ns_edge_list)
-
-    # Extract edge records
-    records: list[dict[str, Any]] = []
-    index_tuples: list[tuple[Any, Any]] = []
-    for u_ns, v_ns, data in builder.G.edges(data=True):
-        u_orig = u_ns[1]
-        v_orig = v_ns[1]
-        index_tuples.append((u_orig, v_orig))
-        records.append({"weight": data.get("weight", np.nan), "geometry": data.get("geometry")})
-
-    edge_index = pd.MultiIndex.from_tuples(
-        index_tuples,
-        names=[polygons_gdf.index.name, points_gdf.index.name],
-    )
+    validate_gdf(nodes_gdf=temp_nodes)
+    metric.validate(temp_nodes.crs)
+    centroids = temp_nodes.geometry.centroid
+    builder.coords = np.column_stack([centroids.x, centroids.y])
+    builder.node_ids = list(temp_nodes.index)
+    grouped: dict[Any, dict[Any, None]] = {}
+    for u, v in pairs:
+        grouped.setdefault(u, {})[v] = None
+    ordered = [(u, v) for u in dict.fromkeys(polygons_gdf.index) for v in grouped.get(u, {})]
+    namespaced = [(("poly", u), ("pt", v)) for u, v in ordered]
+    weights, geometries = builder._compute_edge_data(namespaced)
     return gpd.GeoDataFrame(
-        pd.DataFrame(records, index=edge_index)[["weight"]],
-        geometry=[rec["geometry"] for rec in records],
+        {"weight": weights},
+        geometry=geometries,
+        index=pd.MultiIndex.from_tuples(
+            ordered, names=[polygons_gdf.index.name, points_gdf.index.name]
+        ),
         crs=polygons_gdf.crs,
     )
 

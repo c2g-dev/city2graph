@@ -16,6 +16,8 @@ from typing import cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from collections.abc import Iterable
+    from collections.abc import Iterator
 
 import geopandas as gpd
 import networkx as nx
@@ -25,6 +27,7 @@ from scipy import sparse
 from scipy.sparse import csgraph
 from shapely.geometry import LineString
 
+from city2graph._processing import row_batches
 from city2graph.utils import gdf_to_nx
 from city2graph.utils import nx_to_gdf
 from city2graph.utils import validate_nx
@@ -283,17 +286,17 @@ def add_metapaths_by_weight(  # noqa: PLR0913, PLR0917
         shape=(num_nodes, num_nodes),
     )
 
-    # Run Dijkstra's algorithm
-    dist_matrix = csgraph.dijkstra(
-        csgraph=adj_matrix,
-        directed=directed or (isinstance(graph, nx.Graph) and graph.is_directed()),
-        indices=endpoint_indices,
-        limit=threshold,
+    # Consume bounded source batches before computing the next one.
+    dist_rows = _weighted_distance_rows(
+        adj_matrix,
+        endpoint_indices,
+        directed or (isinstance(graph, nx.Graph) and graph.is_directed()),
+        threshold,
     )
 
     # Extract metapath edges
     new_edges_data = _extract_metapath_edges(
-        dist_matrix,
+        dist_rows,
         endpoint_indices,
         idx_to_node,
         min_threshold,
@@ -758,41 +761,45 @@ def _materialize_metapath(
             )
         frames.append(frame)
 
-    # 2. Join hops, carrying only compact scalar columns; path information is
-    # assembled at most once after the final join (see _aggregate_paths).
-    joined = frames[0]
-    for idx in range(1, len(frames)):
-        joined = joined.merge(
-            frames[idx],
-            left_on=f"dst_{idx - 1}",
-            right_on=f"src_{idx}",
-            how="inner",
-            suffixes=("", "_right"),
+    # Associative directed counts and exact integer attributes can be collapsed
+    # after each hop. Other reducers retain the original path-level semantics.
+    if directed and _can_compact_paths(frames, edge_attrs, aggregation):
+        aggregated = _compact_paths(
+            frames, edge_attrs, aggregation, start_index_name, end_index_name
         )
-        # src_{idx} duplicates dst_{idx - 1}; the dst_* columns are kept as the
-        # intermediate nodes of each path.
-        joined = joined.drop(columns=[f"src_{idx}"])
-
-        if joined.empty:
-            return (
-                edge_key,
-                _empty_metapath_gdf(
-                    nodes, start_type, end_type, edge_attrs, start_index_name, end_index_name
-                ),
-                metadata,
+    else:
+        joined = frames[0]
+        for idx in range(1, len(frames)):
+            joined = joined.merge(
+                frames[idx],
+                left_on=f"dst_{idx - 1}",
+                right_on=f"src_{idx}",
+                how="inner",
+                suffixes=("", "_right"),
             )
+            # src_{idx} duplicates dst_{idx - 1}; the dst_* columns are kept as the
+            # intermediate nodes of each path.
+            joined = joined.drop(columns=[f"src_{idx}"])
 
-    # 3. Aggregate paths
-    aggregated = _aggregate_paths(
-        joined,
-        step_count=len(frames),
-        edge_attrs=edge_attrs,
-        aggregation=aggregation,
-        start_index_name=start_index_name,
-        end_index_name=end_index_name,
-        directed=directed,
-        hop_edge_sigs=hop_edge_sigs,
-    )
+            if joined.empty:
+                return (
+                    edge_key,
+                    _empty_metapath_gdf(
+                        nodes, start_type, end_type, edge_attrs, start_index_name, end_index_name
+                    ),
+                    metadata,
+                )
+
+        aggregated = _aggregate_paths(
+            joined,
+            step_count=len(frames),
+            edge_attrs=edge_attrs,
+            aggregation=aggregation,
+            start_index_name=start_index_name,
+            end_index_name=end_index_name,
+            directed=directed,
+            hop_edge_sigs=hop_edge_sigs,
+        )
 
     if aggregated.empty:
         return (
@@ -806,6 +813,125 @@ def _materialize_metapath(
     # 4. Attach geometry
     result = _attach_metapath_geometry(aggregated, nodes, start_type, end_type)
     return edge_key, result, metadata
+
+
+def _can_compact_paths(
+    frames: list[pd.DataFrame],
+    attrs: list[str] | None,
+    aggregation: _EdgeAttrAggregation,
+) -> bool:
+    """
+    Check whether directed path aggregation can be reassociated.
+
+    Floating cancellation, missing-value means and custom reducers retain the general path enumerator.
+
+    Parameters
+    ----------
+    frames : list[pandas.DataFrame]
+        Canonical tables for each hop.
+    attrs : list[str] or None
+        Attributes requested by the caller.
+    aggregation : _EdgeAttrAggregation
+        Resolved reducers.
+
+    Returns
+    -------
+    bool
+        Whether endpoint aggregation preserves the numeric semantics.
+    """
+    if not attrs:
+        return True
+    if not isinstance(aggregation.tag, str) or set(attrs) & {
+        "weight",
+        "src",
+        "dst",
+        "_path_count",
+    }:
+        return False
+    # Reassociating arbitrary floats changes cancellation and missing-value means.
+    # Use the general reducer unless all attribute sums are exactly representable.
+    max_paths = 1
+    bound = 0.0
+    for i, frame in enumerate(frames):
+        values = _coerce_block_to_numpy(frame[[f"{attr}_step{i}" for attr in attrs]])
+        if not np.all(np.isfinite(values)) or not np.all(values == np.trunc(values)):
+            return False
+        max_paths *= len(frame)
+        bound += float(np.max(np.abs(values)))
+        if max_paths > 2**53 / max(bound, 1):
+            return False
+    return True
+
+
+def _compact_paths(
+    frames: list[pd.DataFrame],
+    attrs: list[str] | None,
+    aggregation: _EdgeAttrAggregation,
+    start_name: str,
+    end_name: str,
+) -> pd.DataFrame:
+    """
+    Compose directed paths through endpoint aggregates.
+
+    Collapse repeated source and current-node pairs after each hop while retaining first-occurrence ordering.
+
+    Parameters
+    ----------
+    frames : list[pandas.DataFrame]
+        Canonical hop tables.
+    attrs : list[str] or None
+        Exactly representable numeric attributes to aggregate.
+    aggregation : _EdgeAttrAggregation
+        Resolved sum or mean reducer.
+    start_name : str
+        Source index name.
+    end_name : str
+        Destination index name.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Terminal pairs with path counts and optional attributes.
+    """
+    attrs = attrs or []
+    counts = "_path_count"
+    # Positional labels cannot collide with caller-supplied attribute names.
+    attribute_columns = list(range(len(attrs)))
+    current = frames[0][["src_0", "dst_0", *[f"{a}_step0" for a in attrs]]].rename(
+        columns={"src_0": "src", "dst_0": "dst", **{f"{a}_step0": j for j, a in enumerate(attrs)}}
+    )
+    if attrs:
+        current[attribute_columns] = _coerce_block_to_numpy(current[attribute_columns])
+    current[counts] = 1.0
+    current = current.groupby(["src", "dst"], sort=False, dropna=False).sum().reset_index()
+    for i, frame in enumerate(frames[1:], 1):
+        hop_columns = list(range(len(attrs), 2 * len(attrs)))
+        hop = frame[[f"src_{i}", f"dst_{i}", *[f"{a}_step{i}" for a in attrs]]].rename(
+            columns={
+                f"src_{i}": "hop_src",
+                f"dst_{i}": "hop_dst",
+                **{f"{a}_step{i}": j + len(attrs) for j, a in enumerate(attrs)},
+            }
+        )
+        if attrs:
+            hop[hop_columns] = _coerce_block_to_numpy(hop[hop_columns])
+        joined = current.merge(hop, left_on="dst", right_on="hop_src", how="inner")
+        if joined.empty:
+            return _empty_metapath_frame(attrs, start_name, end_name)
+        for column, hop_column in zip(attribute_columns, hop_columns, strict=True):
+            joined[column] = joined[column] + joined[counts] * joined[hop_column]
+        current = joined[["src", "hop_dst", counts, *attribute_columns]].rename(
+            columns={"hop_dst": "dst"}
+        )
+        current = current.groupby(["src", "dst"], sort=False, dropna=False).sum().reset_index()
+    current = current.dropna(subset=["src", "dst"]).set_index(["src", "dst"])
+    if attrs and aggregation.tag == "mean":
+        for column in attribute_columns:
+            current[column] = current[column] / (current[counts] * len(frames))
+    result_columns: dict[str | int, str] = {counts: "weight", **dict(enumerate(attrs))}
+    current = current.rename(columns=result_columns)[["weight", *attrs]].astype(float)
+    current.index = current.index.set_names([start_name, end_name])
+    return current
 
 
 def _get_edge_frame(
@@ -1634,8 +1760,42 @@ def _prepare_graph_data_from_nx(
     )
 
 
+def _weighted_distance_rows(
+    adjacency: sparse.csr_matrix,
+    endpoints: list[int],
+    directed: bool,
+    threshold: float,
+) -> Iterator[np.ndarray]:
+    """
+    Yield shortest-path rows from bounded source batches.
+
+    Rows retain endpoint order and the original Dijkstra threshold decisions.
+
+    Parameters
+    ----------
+    adjacency : scipy.sparse.csr_matrix
+        Weighted adjacency matrix.
+    endpoints : list[int]
+        Source node positions.
+    directed : bool
+        Whether to respect edge direction.
+    threshold : float
+        Maximum explored distance.
+
+    Yields
+    ------
+    numpy.ndarray
+        Distances from one endpoint to all nodes.
+    """
+    for batch in row_batches(len(endpoints), adjacency.shape[0]):
+        distances = csgraph.dijkstra(
+            csgraph=adjacency, directed=directed, indices=endpoints[batch], limit=threshold
+        )
+        yield from distances
+
+
 def _extract_metapath_edges(
-    dist_matrix: np.ndarray,
+    dist_matrix: Iterable[np.ndarray],
     endpoint_indices: list[int],
     idx_to_node: dict[int, object],
     min_threshold: float,
@@ -1656,8 +1816,8 @@ def _extract_metapath_edges(
 
     Parameters
     ----------
-    dist_matrix : numpy.ndarray
-        Distance matrix from Dijkstra algorithm.
+    dist_matrix : Iterable[numpy.ndarray]
+        Distance rows yielded in endpoint order by Dijkstra batches.
     endpoint_indices : list[int]
         Indices of endpoint nodes.
     idx_to_node : dict[int, object]
@@ -1684,8 +1844,7 @@ def _extract_metapath_edges(
     endpoint_indices_arr = np.array(endpoint_indices)
     seen_pairs: set[tuple[object, object]] = set()
 
-    for i, start_idx in enumerate(endpoint_indices):
-        dists = dist_matrix[i]
+    for i, (start_idx, dists) in enumerate(zip(endpoint_indices, dist_matrix, strict=True)):
         dists_to_endpoints = dists[endpoint_indices_arr]
 
         valid_mask = (
