@@ -965,6 +965,22 @@ class TestRustworkxConversions:
         nx_G = utils.rx_to_nx(rx_G)
         assert nx_G.edges[i1, i2]["payload"] == "edge_label"
 
+    @pytest.mark.parametrize("graph_cls", [nx.MultiGraph, nx.MultiDiGraph])
+    def test_repeated_conversion_preserves_input(self, graph_cls: type[nx.MultiGraph]) -> None:
+        """Repeated conversions retain keys without consuming source attributes."""
+        graph = graph_cls()
+        graph.add_edge("a", "b", key="road-1", weight=2)
+        graph.add_edge("a", "b", key="road-2", weight=5)
+        source = utils.nx_to_rx(graph)
+        before = {
+            key: (u, v, attrs.copy()) for key, (u, v, attrs) in source.edge_index_map().items()
+        }
+        first = utils.rx_to_nx(source)
+        second = utils.rx_to_nx(source)
+        assert nx.utils.graphs_equal(first, graph)
+        assert nx.utils.graphs_equal(second, graph)
+        assert source.edge_index_map() == before
+
 
 class TestIdentifySourceTargetCols:
     """Test the _identify_source_target_cols function."""
