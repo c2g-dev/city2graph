@@ -644,6 +644,57 @@ class TestClipGraph(BaseGraphTest):
         result = utils.clip_graph(gdf, clip_poly, as_nx=True)
         assert isinstance(result, nx.Graph)
 
+    @pytest.mark.parametrize("graph_cls", [nx.Graph, nx.DiGraph, nx.MultiGraph, nx.MultiDiGraph])
+    def test_preserves_networkx_graph_contract(self, graph_cls: type[nx.Graph]) -> None:
+        """Filtering retains graph direction, node identities, keys and attributes."""
+        graph = graph_cls(crs="EPSG:3857", name="roads")
+        for node, x in [("a", 0), ("b", 1), ("c", 2), ("d", 10), ("e", 11)]:
+            graph.add_node(node, pos=(x, 0), geometry=Point(x, 0), label=node)
+        for u, v in [("a", "b"), ("b", "c"), ("d", "e")]:
+            attrs = {
+                "geometry": LineString([graph.nodes[u]["pos"], graph.nodes[v]["pos"]]),
+                "weight": 2,
+            }
+            if graph.is_multigraph():
+                graph.add_edge(u, v, key="road", **attrs)
+                graph.add_edge(u, v, key="path", **attrs)
+            else:
+                graph.add_edge(u, v, **attrs)
+        result = utils.clip_graph(graph, Polygon([(-1, -1), (3, -1), (3, 1), (-1, 1)]))
+        expected = graph.subgraph(["a", "b", "c"]).copy()
+        assert type(result) is type(graph)
+        assert nx.utils.graphs_equal(result, expected)
+        assert len(graph) == 5
+
+    @pytest.mark.parametrize("directed", [False, True])
+    def test_parallel_edge_geometries_remain_distinct(self, directed: bool) -> None:
+        """Duplicate source indexes and multipart clipping preserve each graph edge."""
+        nodes = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(2, 0)], index=["a", "b"], crs=3857)
+        edges = gpd.GeoDataFrame(
+            geometry=[LineString([(0, 0), (2, 0)]), LineString([(0, 0), (1, 3), (2, 0)])],
+            index=pd.MultiIndex.from_tuples([("a", "b"), ("a", "b")]),
+            crs=3857,
+        )
+        graph = utils.gdf_to_nx(nodes, edges, directed=directed, multigraph=True)
+        area = Polygon([(-1, -1), (3, -1), (3, 1), (-1, 1)])
+        result = utils.clip_graph(graph, area)
+        assert isinstance(result, nx.MultiGraph)
+        assert type(result) is type(graph)
+        assert result.number_of_edges() == 2
+        for u, v, key, attrs in graph.edges(keys=True, data=True):
+            assert result[u][v][key]["geometry"].equals(attrs["geometry"].intersection(area))
+        assert graph[0][1][1]["geometry"].equals(edges.geometry.iloc[1])
+
+    @pytest.mark.parametrize("graph_cls", [nx.Graph, nx.DiGraph, nx.MultiGraph, nx.MultiDiGraph])
+    def test_empty_networkx_preserves_class(self, graph_cls: type[nx.Graph]) -> None:
+        """Empty graphs retain their class and graph attributes."""
+        graph = graph_cls(crs="EPSG:3857", name="empty")
+        area = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+        result = utils.clip_graph(graph, area)
+        assert type(result) is type(graph)
+        assert nx.utils.graphs_equal(result, graph)
+        assert result is not graph
+
 
 class TestRemoveIsolatedComponents(BaseGraphTest):
     """Test remove_isolated_components functionality."""
@@ -757,6 +808,37 @@ class TestRemoveIsolatedComponents(BaseGraphTest):
         # Should handle gracefully
         result = utils.remove_isolated_components(edges)
         assert isinstance(result, gpd.GeoDataFrame)
+
+    @pytest.mark.parametrize("graph_cls", [nx.Graph, nx.DiGraph, nx.MultiGraph, nx.MultiDiGraph])
+    def test_preserves_networkx_graph_contract(self, graph_cls: type[nx.Graph]) -> None:
+        """Filtering retains graph direction, node identities, keys and attributes."""
+        graph = graph_cls(crs="EPSG:3857", name="roads")
+        for node, x in [("a", 0), ("b", 1), ("c", 2), ("d", 10), ("e", 11)]:
+            graph.add_node(node, pos=(x, 0), geometry=Point(x, 0), label=node)
+        for u, v in [("a", "b"), ("b", "c"), ("d", "e")]:
+            attrs = {
+                "geometry": LineString([graph.nodes[u]["pos"], graph.nodes[v]["pos"]]),
+                "weight": 2,
+            }
+            if graph.is_multigraph():
+                graph.add_edge(u, v, key="road", **attrs)
+                graph.add_edge(u, v, key="path", **attrs)
+            else:
+                graph.add_edge(u, v, **attrs)
+        result = utils.remove_isolated_components(graph)
+        expected = graph.subgraph(["a", "b", "c"]).copy()
+        assert type(result) is type(graph)
+        assert nx.utils.graphs_equal(result, expected)
+        assert len(graph) == 5
+
+    @pytest.mark.parametrize("graph_cls", [nx.Graph, nx.DiGraph, nx.MultiGraph, nx.MultiDiGraph])
+    def test_empty_networkx_preserves_class(self, graph_cls: type[nx.Graph]) -> None:
+        """Empty graphs retain their class and graph attributes."""
+        graph = graph_cls(name="empty")
+        result = utils.remove_isolated_components(graph)
+        assert type(result) is type(graph)
+        assert nx.utils.graphs_equal(result, graph)
+        assert result is not graph
 
 
 class TestPublicUtilityBranches(BaseGraphTest):

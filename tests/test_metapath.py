@@ -1209,3 +1209,31 @@ class TestMetapaths:
             as_nx=True,
         )
         assert isinstance(result, nx.Graph)
+
+    @pytest.mark.parametrize("directed", [True, False])
+    @pytest.mark.parametrize("threshold", [3.0, 10.0])
+    def test_parallel_costs_match_across_representations(
+        self, directed: bool, threshold: float
+    ) -> None:
+        """Shortest paths use the cheapest parallel edge for either input format."""
+        nodes = {"place": gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], crs=3857)}
+        edge_type = ("place", "road", "place")
+        edges = {
+            edge_type: gpd.GeoDataFrame(
+                {"cost": [2.0, 5.0]},
+                geometry=[LineString([(0, 0), (1, 0)])] * 2,
+                index=pd.MultiIndex.from_tuples([(0, 1, 0), (0, 1, 1)], names=["u", "v", "key"]),
+                crs=3857,
+            )
+        }
+        graph = gdf_to_nx(nodes, edges, multigraph=True, directed=directed)
+        for source in ((nodes, edges.copy()), graph):
+            _, result = add_metapaths_by_weight(
+                graph=source,
+                weight="cost",
+                threshold=threshold,
+                endpoint_type="place",
+                new_relation_name="reachable",
+                directed=directed,
+            )
+            assert result[("place", "reachable", "place")]["cost"].tolist() == [2.0]
