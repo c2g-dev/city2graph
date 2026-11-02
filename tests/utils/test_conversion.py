@@ -280,7 +280,45 @@ class TestNxConversions(BaseConversionTest):
             for u, v in graph.edges()
         }
         assert original_edges == set(sample_edges_gdf.index)
-        assert "Could not find nodes for 1 edges without geometry" in caplog.text
+        assert "Could not find nodes for 1 edges by endpoint ID" in caplog.text
+
+    @pytest.mark.parametrize("offset", [0.0, 0.001])
+    @pytest.mark.parametrize("multigraph", [False, True])
+    def test_endpoint_ids_override_geometry(self, offset: float, multigraph: bool) -> None:
+        """Explicit IDs distinguish colocated nodes and tolerate offset line geometry."""
+        nodes = gpd.GeoDataFrame(
+            geometry=[Point(0, 0), Point(0, 0), Point(1, 0)],
+            index=["a", "b", "c"],
+            crs=3857,
+        )
+        edges = gpd.GeoDataFrame(
+            {"weight": [7.0]},
+            geometry=[LineString([(offset, 0), (1, 0)])],
+            crs=3857,
+            index=pd.MultiIndex.from_tuples([("a", "c")], names=["u", "v"]),
+        )
+        graph = gdf_to_nx(nodes, edges, multigraph=multigraph, directed=True)
+        assert [
+            (graph.nodes[u]["_original_index"], graph.nodes[v]["_original_index"])
+            for u, v in graph.edges()
+        ] == [("a", "c")]
+        _, restored = nx_to_gdf(graph)
+        assert isinstance(restored, gpd.GeoDataFrame)
+        assert restored.geometry.iloc[0].equals(edges.geometry.iloc[0])
+
+    def test_unknown_endpoint_does_not_fall_back_to_geometry(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A matching line cannot override an unknown endpoint ID."""
+        nodes = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], index=["a", "b"], crs=3857)
+        edges = gpd.GeoDataFrame(
+            geometry=[LineString([(0, 0), (1, 0)])],
+            crs=3857,
+            index=pd.MultiIndex.from_tuples([("a", "missing")]),
+        )
+        graph = gdf_to_nx(nodes, edges)
+        assert graph.number_of_edges() == 0
+        assert "Could not find nodes for 1 edges by endpoint ID" in caplog.text
 
     def test_geometryless_edges_without_multiindex_are_dropped(
         self,
