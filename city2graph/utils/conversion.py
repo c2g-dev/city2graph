@@ -1231,8 +1231,7 @@ class NxConverter(BaseGraphConverter):
                 (n, d) for n, d in graph.nodes(data=True) if d.get("node_type") == node_type
             ]
 
-            node_ids, attrs_list = zip(*type_nodes, strict=False)
-            node_data = dict(zip(node_ids, attrs_list, strict=False))
+            node_data = dict(type_nodes)
 
             records, original_indices = self._create_node_records(node_data)
 
@@ -1244,7 +1243,12 @@ class NxConverter(BaseGraphConverter):
                 typing.cast("Any", metadata.node_index_names), node_type
             )
             index = self._build_node_index(original_indices, index_names)
-            gdf = gpd.GeoDataFrame(records, geometry="geometry", index=index, crs=metadata.crs)
+            gdf = gpd.GeoDataFrame(
+                records or {"geometry": []},
+                geometry="geometry",
+                index=index,
+                crs=metadata.crs,
+            )
 
             nodes_dict[node_type] = gdf
 
