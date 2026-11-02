@@ -532,9 +532,14 @@ class NxConverter(BaseGraphConverter):
         if edges_gdf.empty:
             return
 
-        # Without edge geometries, endpoints cannot be matched by coordinates;
-        # resolve them from the edge index against the original node index.
-        if _edges_lack_geometry(edges_gdf):
+        # Explicit endpoint IDs define connectivity when nodes are supplied.
+        # Geometry is a fallback only when an endpoint index is unavailable.
+        has_endpoint_ids = (
+            nodes_gdf is not None
+            and isinstance(edges_gdf.index, pd.MultiIndex)
+            and edges_gdf.index.nlevels >= 2
+        )
+        if has_endpoint_ids or _edges_lack_geometry(edges_gdf):
             self._add_homogeneous_edges_by_index(graph, edges_gdf)
             return
 
@@ -614,7 +619,7 @@ class NxConverter(BaseGraphConverter):
         valid_mask = u_nodes.notna() & v_nodes.notna()
         if not valid_mask.all():
             logger.warning(
-                "Could not find nodes for %d edges without geometry",
+                "Could not find nodes for %d edges by endpoint ID",
                 int((~valid_mask).sum()),
             )
 
@@ -1793,7 +1798,10 @@ def gdf_to_nx(
         (source_type, relation_type, target_type) to GeoDataFrames.
         Edge relationships are defined by a MultiIndex on the edge
         GeoDataFrame (source ID, target ID). For MultiGraphs, a third level
-        in the index can be used for edge keys.
+        in the index can be used for edge keys. With an explicit node frame,
+        these IDs take precedence over geometry coordinates. Unknown endpoint
+        IDs are skipped with a warning. Without endpoint IDs, homogeneous
+        conversion infers connectivity from geometry coordinates.
     keep_geom : bool, default True
         If True, the geometry of the nodes and edges GeoDataFrames will be
         preserved as attributes in the NetworkX graph.
