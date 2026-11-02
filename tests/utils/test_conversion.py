@@ -632,6 +632,29 @@ class TestNxConversions(BaseConversionTest):
         assert edges_gdf.empty
         assert "geometry" in nodes_gdf.columns
 
+    @pytest.mark.parametrize("all_empty", [True, False])
+    @pytest.mark.parametrize("multiindex", [True, False])
+    def test_empty_heterogeneous_node_types(self, all_empty: bool, multiindex: bool) -> None:
+        """Declared empty types retain their CRS and index structure on round trips."""
+        index = (
+            pd.MultiIndex.from_arrays([[], []], names=["district", "id"])
+            if multiindex
+            else pd.Index([], name="id")
+        )
+        empty = gpd.GeoDataFrame(geometry=[], index=index, crs=3857)
+        populated = gpd.GeoDataFrame(
+            geometry=[Point(0, 0)], index=pd.Index([1], name="id"), crs=3857
+        )
+        nodes = {"empty": empty, "other": empty if all_empty else populated}
+        restored, edges = nx_to_gdf(gdf_to_nx(nodes, {}))
+        assert set(restored) == set(nodes)
+        assert edges == {}
+        for name, original in nodes.items():
+            assert len(restored[name]) == len(original)
+            assert restored[name].crs == original.crs
+            assert restored[name].index.names == original.index.names
+            assert isinstance(restored[name].index, type(original.index))
+
 
 class TestValidation:
     """Test validation functions for GeoDataFrames and NetworkX graphs."""
