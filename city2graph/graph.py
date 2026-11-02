@@ -359,8 +359,8 @@ class PyGConverter(BaseGraphConverter):
     def pyg_to_gdf(
         self,
         data: Data | HeteroData,
-        _node_types: str | list[str] | None = None,
-        _edge_types: str | list[tuple[str, str, str]] | None = None,
+        node_types: str | list[str] | None = None,
+        edge_types: str | list[tuple[str, str, str]] | None = None,
         additional_node_cols: dict[str, list[str]] | list[str] | None = None,
         additional_edge_cols: dict[tuple[str, str, str], list[str]] | list[str] | None = None,
     ) -> (
@@ -377,10 +377,11 @@ class PyGConverter(BaseGraphConverter):
         ----------
         data : Data or HeteroData
             PyTorch Geometric data object.
-        _node_types : str or list[str], optional
-            Node types to extract (unused, kept for API compatibility).
-        _edge_types : str or list[tuple[str, str, str]], optional
-            Edge types to extract (unused, kept for API compatibility).
+        node_types : str or list[str], optional
+            Node types to extract. None selects all; an empty list selects none.
+        edge_types : str or list[tuple[str, str, str]], optional
+            Edge types to extract. A string must identify a unique relation.
+            None selects all original types; an empty list selects none.
         additional_node_cols : dict[str, list[str]] or list[str] or None, optional
             Additional columns to extract from the PyG object attributes.
         additional_edge_cols : dict[str | tuple[str, str, str], list[str]] or list[str] or None, optional
@@ -392,10 +393,55 @@ class PyGConverter(BaseGraphConverter):
             Either homogeneous (nodes_gdf, edges_gdf) or heterogeneous
             (dict of node gdfs, dict of edge gdfs) tuple.
         """
-        return self.reconstruct(
+        metadata = self._extract_metadata(data)
+        if not metadata.is_hetero:
+            if node_types is not None or edge_types is not None:
+                msg = "Type selections are only supported for heterogeneous graphs"
+                raise ValueError(msg)
+            return self.reconstruct(
+                data,
+                additional_node_cols=additional_node_cols,
+                additional_edge_cols=additional_edge_cols,
+            )
+
+        selected_nodes = (
+            metadata.node_types
+            if node_types is None
+            else ([node_types] if isinstance(node_types, str) else node_types)
+        )
+        available_edges = [
+            key
+            for key in (metadata.original_edge_types or metadata.edge_types)
+            if key not in metadata.generated_reverse_edge_types
+        ]
+        if isinstance(edge_types, str):
+            selected_edges = [key for key in available_edges if key[1] == edge_types]
+            if len(selected_edges) != 1:
+                msg = "Edge relation must identify exactly one original edge type"
+                raise ValueError(msg)
+        else:
+            selected_edges = available_edges if edge_types is None else edge_types
+        if set(selected_nodes) - set(metadata.node_types):
+            msg = "Unknown node types requested"
+            raise ValueError(msg)
+        if set(selected_edges) - set(available_edges):
+            msg = "Unknown edge types requested"
+            raise ValueError(msg)
+        return self._reconstruct_heterogeneous(
             data,
-            additional_node_cols=additional_node_cols,
-            additional_edge_cols=additional_edge_cols,
+            metadata,
+            nodes=True,
+            edges=True,
+            additional_node_cols=(
+                additional_node_cols if isinstance(additional_node_cols, dict) else None
+            ),
+            additional_edge_cols=(
+                {key: cols for key, cols in additional_edge_cols.items()}
+                if isinstance(additional_edge_cols, dict)
+                else None
+            ),
+            node_types=selected_nodes,
+            edge_types=selected_edges,
         )
 
     def _validate_homogeneous_columns(
@@ -2314,6 +2360,8 @@ class PyGConverter(BaseGraphConverter):
         edges: bool,
         additional_node_cols: dict[str, list[str]] | None = None,
         additional_edge_cols: dict[str | tuple[str, str, str], list[str]] | None = None,
+        node_types: list[str] | None = None,
+        edge_types: list[tuple[str, str, str]] | None = None,
     ) -> tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]:
         """
         Reconstruct heterogeneous GeoDataFrames.
@@ -2334,6 +2382,10 @@ class PyGConverter(BaseGraphConverter):
             Additional node attributes to extract.
         additional_edge_cols : dict[str | tuple[str, str, str], list[str]] or None, optional
             Additional edge attributes to extract.
+        node_types : list[str] or None, optional
+            Node types to reconstruct; None selects all types.
+        edge_types : list[tuple[str, str, str]] or None, optional
+            Original edge types to reconstruct; None selects all original types.
 
         Returns
         -------
@@ -2344,7 +2396,7 @@ class PyGConverter(BaseGraphConverter):
         edges_dict = {}
 
         if nodes and metadata.node_types:
-            for node_type in metadata.node_types:
+            for node_type in metadata.node_types if node_types is None else node_types:
                 add_cols = (
                     additional_node_cols.get(node_type)
                     if additional_node_cols and isinstance(additional_node_cols, dict)
@@ -2360,7 +2412,9 @@ class PyGConverter(BaseGraphConverter):
             # artefacts and should be skipped during reconstruction.
             gen_reverse = getattr(metadata, "generated_reverse_edge_types", {})
             original_ets = getattr(metadata, "original_edge_types", None)
-            reconstruct_ets = original_ets or metadata.edge_types
+            reconstruct_ets = (
+                (original_ets or metadata.edge_types) if edge_types is None else edge_types
+            )
 
             for edge_type in reconstruct_ets:
                 # Skip any edge type that is a generated reverse
@@ -2802,11 +2856,13 @@ def pyg_to_gdf(
         PyTorch Geometric data object to convert back to GeoDataFrames.
     node_types : str or list[str], optional
         For heterogeneous graphs, specify which node types to reconstruct.
-        If None, reconstructs all available node types.
+        If None, reconstructs all available node types. An empty list selects none.
+        Type selections are only supported for heterogeneous graphs.
     edge_types : str or list[tuple[str, str, str]], optional
         For heterogeneous graphs, specify which edge types to reconstruct.
         Edge types are specified as (source_type, relation_type, target_type) tuples.
-        If None, reconstructs all available edge types.
+        If None, reconstructs all original edge types. An empty list selects none.
+        A string selects a relation name only when it identifies exactly one edge type.
     keep_geom : bool, default True
         Whether to use stored geometries for reconstruction. If True and geometries
         are stored in metadata, uses the original geometries. If False or no stored
