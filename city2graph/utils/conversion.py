@@ -2306,7 +2306,9 @@ def rx_to_nx(graph: rx.PyGraph | rx.PyDiGraph) -> nx.Graph | nx.MultiGraph:
         u_nx = rx_to_nx_mapping[u_rx]
         v_nx = rx_to_nx_mapping[v_rx]
         edge_data = (
-            data if isinstance(data, dict) else ({"payload": data} if data is not None else {})
+            data.copy()
+            if isinstance(data, dict)
+            else ({"payload": data} if data is not None else {})
         )
 
         if is_multigraph:
