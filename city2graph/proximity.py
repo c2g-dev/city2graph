@@ -520,8 +520,9 @@ class GraphBuilder:
         geometry : geopandas.GeoSeries, optional
             Optional point geometries to override centroid-derived positions.
         """
-        validate_gdf(nodes_gdf=self.gdf)
-        geom = geometry if geometry is not None else self.gdf.geometry
+        validated_nodes, _, _ = validate_gdf(nodes_gdf=self.gdf)
+        self.gdf = cast("gpd.GeoDataFrame", validated_nodes)
+        geom = geometry.loc[self.gdf.index] if geometry is not None else self.gdf.geometry
         centroids = geom.centroid
         self.coords = np.column_stack([centroids.x, centroids.y])
         self.node_ids = list(self.gdf.index)
@@ -2335,6 +2336,10 @@ def _directed_graph(
     tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] or networkx.Graph
         Directed graph representation matching the requested format.
     """
+    source, _, _ = validate_gdf(nodes_gdf=src_gdf)
+    target, _, _ = validate_gdf(nodes_gdf=dst_gdf)
+    src_gdf = cast("gpd.GeoDataFrame", source)
+    dst_gdf = cast("gpd.GeoDataFrame", target)
     if src_gdf.crs != dst_gdf.crs:
         msg = "CRS mismatch between source and target GeoDataFrames"
         raise ValueError(msg)
@@ -2532,6 +2537,9 @@ def _directed_edges(
     list[tuple[int, int]]
         Selected directed edges from source to destination identifiers.
     """
+    if len(src_coords) == 0 or len(dst_coords) == 0 or (method == "knn" and param <= 0):
+        return []
+
     if metric.name == "network":
         # Per-source network distance rows instead of a dense (src+dst)^2 matrix
         src_n = len(src_coords)
