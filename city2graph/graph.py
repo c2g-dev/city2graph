@@ -638,6 +638,7 @@ class PyGConverter(BaseGraphConverter):
             msg = "directed must be a bool for homogeneous graphs, not a dict"
             raise TypeError(msg)
         directed_bool: bool = self.directed
+        self.processor.ensure_crs_consistency(nodes, edges)
 
         # Validate column types
         node_feature_cols_homo, node_label_cols_homo, edge_feature_cols_homo = (
@@ -725,9 +726,9 @@ class PyGConverter(BaseGraphConverter):
         """
         metadata = GraphMetadata(is_hetero=False)
         metadata.node_mappings = {"default": mapping_info}
-        metadata.node_feature_cols = node_feature_cols or []
-        metadata.node_label_cols = node_label_cols or []
-        metadata.edge_feature_cols = edge_feature_cols or []
+        metadata.node_feature_cols = self._numeric_feature_columns(nodes, node_feature_cols)
+        metadata.node_label_cols = self._numeric_feature_columns(nodes, node_label_cols)
+        metadata.edge_feature_cols = self._numeric_feature_columns(edges, edge_feature_cols)
 
         # Store index names and values for preservation
         metadata.node_index_names = nodes.index.names if hasattr(nodes.index, "names") else None
@@ -806,6 +807,7 @@ class PyGConverter(BaseGraphConverter):
             msg = "edge_feature_cols must be a dict for heterogeneous graphs"
             raise TypeError(msg)
 
+        self.processor.ensure_crs_consistency(*nodes.values(), *(edges or {}).values())
         data = HeteroData()
 
         # Default empty dicts
@@ -1030,9 +1032,18 @@ class PyGConverter(BaseGraphConverter):
         metadata.node_types = list(nodes_dict.keys())
         metadata.edge_types = list(edges_dict.keys())
         metadata.node_mappings = node_mappings
-        metadata.node_feature_cols = node_feature_cols or {}
-        metadata.node_label_cols = node_label_cols or {}
-        metadata.edge_feature_cols = edge_feature_cols or {}
+        metadata.node_feature_cols = {
+            key: self._numeric_feature_columns(gdf, (node_feature_cols or {}).get(key))
+            for key, gdf in nodes_dict.items()
+        }
+        metadata.node_label_cols = {
+            key: self._numeric_feature_columns(gdf, (node_label_cols or {}).get(key))
+            for key, gdf in nodes_dict.items()
+        }
+        metadata.edge_feature_cols = {
+            key: self._numeric_feature_columns(gdf, (edge_feature_cols or {}).get(key))
+            for key, gdf in edges_dict.items()
+        }
 
         # Store index names for reconstruction
         metadata.node_index_names = {}
@@ -2436,6 +2447,31 @@ class PyGConverter(BaseGraphConverter):
 
         return nodes_dict, edges_dict
 
+    @staticmethod
+    def _numeric_feature_columns(
+        gdf: gpd.GeoDataFrame | None, columns: list[str] | None
+    ) -> list[str]:
+        """Resolve requested columns to the numeric tensor column order.
+
+        Keep metadata and feature tensors aligned when unavailable columns are ignored.
+
+        Parameters
+        ----------
+        gdf : geopandas.GeoDataFrame or None
+            Frame supplying feature values.
+        columns : list[str] or None
+            Requested feature names in tensor order.
+
+        Returns
+        -------
+        list[str]
+            Available numeric column names in the requested order.
+        """
+        if gdf is None or columns is None:
+            return []
+        numeric = gdf.select_dtypes(include=np.number).columns
+        return [column for column in columns if column in numeric]
+
     def _create_features(
         self,
         gdf: gpd.GeoDataFrame,
@@ -2466,22 +2502,14 @@ class PyGConverter(BaseGraphConverter):
             return torch.zeros((len(gdf), 0), dtype=dtype, device=device)
 
         # Find valid columns that exist in the GeoDataFrame
-        valid_cols = list(set(feature_cols) & set(gdf.columns))
+        valid_cols = self._numeric_feature_columns(gdf, feature_cols)
 
         if not valid_cols:
             return torch.zeros((len(gdf), 0), dtype=dtype, device=device)
 
-        # Select only numeric columns from valid_cols to prevent conversion errors
-        # This logic was previously only in _create_edge_features but is good for nodes too
-        numeric_cols = gdf[valid_cols].select_dtypes(include=np.number).columns.tolist()
-
-        # Map torch dtype to numpy dtype for consistency
+        # Convert columns in the same resolved order stored in metadata.
         numpy_dtype = _torch_dtype_to_numpy(dtype)
-
-        # Ensure consistent column order based on feature_cols
-        ordered_cols = [col for col in feature_cols if col in numeric_cols]
-
-        features_array = gdf[ordered_cols].to_numpy().astype(numpy_dtype)
+        features_array = gdf[valid_cols].to_numpy().astype(numpy_dtype)
         return torch.from_numpy(features_array).to(device=device, dtype=dtype)
 
     def _create_node_positions(
@@ -2761,7 +2789,9 @@ def gdf_to_pyg(
     ImportError
         If PyTorch Geometric is not installed.
     ValueError
-        If input GeoDataFrames are invalid or incompatible.
+        If input GeoDataFrames are invalid or incompatible. Non-empty node and
+        edge frames must share the same CRS, including whether it is defined.
+        Empty frames are ignored by this check; no reprojection is performed.
 
     See Also
     --------

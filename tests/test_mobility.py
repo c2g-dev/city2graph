@@ -842,3 +842,46 @@ class TestODMatrixToGraph:
                 matrix_type="edgelist",
                 weight_cols=["flow"],
             )
+
+    @pytest.mark.parametrize("directed", [True, False])
+    @pytest.mark.parametrize("multiple", [True, False])
+    @pytest.mark.parametrize("threshold", [None, 100.0])
+    def test_canonical_weight_column(
+        self,
+        od_zones_gdf: gpd.GeoDataFrame,
+        directed: bool,
+        multiple: bool,
+        threshold: float | None,
+    ) -> None:
+        """An input named weight yields a unique canonical output column."""
+        data = pd.DataFrame(
+            {"source": ["A", "B"], "target": ["B", "A"], "weight": [2.0, 3.0], "flow": [4.0, 6.0]}
+        )
+        _, edges = od_matrix_to_graph(
+            data,
+            od_zones_gdf,
+            zone_id_col="zone_id",
+            weight_cols=["weight", "flow"] if multiple else ["weight"],
+            threshold_col="weight",
+            directed=directed,
+            threshold=threshold,
+        )
+        assert edges.columns.is_unique
+        assert edges["weight"].tolist() == ([] if threshold else [2.0, 3.0] if directed else [5.0])
+        if multiple:
+            assert edges["flow"].tolist() == (
+                [] if threshold else [4.0, 6.0] if directed else [10.0]
+            )
+
+    def test_conflicting_canonical_weight_is_rejected(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
+        """A different primary weight must not overwrite a requested weight column."""
+        data = pd.DataFrame({"source": ["A"], "target": ["B"], "weight": [2.0], "flow": [4.0]})
+        with pytest.raises(ValueError, match="rename the input weight column"):
+            od_matrix_to_graph(
+                data,
+                od_zones_gdf,
+                zone_id_col="zone_id",
+                weight_cols=["weight", "flow"],
+                threshold_col="flow",
+            )
+        assert data["weight"].tolist() == [2.0]

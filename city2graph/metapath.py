@@ -276,7 +276,12 @@ def add_metapaths_by_weight(  # noqa: PLR0913, PLR0917
         return _return_original_graph(graph)
 
     # Build sparse matrix
-    adj_matrix = sparse.csr_matrix((data, (row_indices, col_indices)), shape=(num_nodes, num_nodes))
+    costs = pd.DataFrame({"source": row_indices, "target": col_indices, "cost": data})
+    costs = costs.groupby(["source", "target"], as_index=False, sort=False)[["cost"]].min()
+    adj_matrix = sparse.csr_matrix(
+        (costs["cost"].to_numpy(), (costs["source"].to_numpy(), costs["target"].to_numpy())),
+        shape=(num_nodes, num_nodes),
+    )
 
     # Run Dijkstra's algorithm
     dist_matrix = csgraph.dijkstra(

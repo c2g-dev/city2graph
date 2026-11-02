@@ -280,7 +280,45 @@ class TestNxConversions(BaseConversionTest):
             for u, v in graph.edges()
         }
         assert original_edges == set(sample_edges_gdf.index)
-        assert "Could not find nodes for 1 edges without geometry" in caplog.text
+        assert "Could not find nodes for 1 edges by endpoint ID" in caplog.text
+
+    @pytest.mark.parametrize("offset", [0.0, 0.001])
+    @pytest.mark.parametrize("multigraph", [False, True])
+    def test_endpoint_ids_override_geometry(self, offset: float, multigraph: bool) -> None:
+        """Explicit IDs distinguish colocated nodes and tolerate offset line geometry."""
+        nodes = gpd.GeoDataFrame(
+            geometry=[Point(0, 0), Point(0, 0), Point(1, 0)],
+            index=["a", "b", "c"],
+            crs=3857,
+        )
+        edges = gpd.GeoDataFrame(
+            {"weight": [7.0]},
+            geometry=[LineString([(offset, 0), (1, 0)])],
+            crs=3857,
+            index=pd.MultiIndex.from_tuples([("a", "c")], names=["u", "v"]),
+        )
+        graph = gdf_to_nx(nodes, edges, multigraph=multigraph, directed=True)
+        assert [
+            (graph.nodes[u]["_original_index"], graph.nodes[v]["_original_index"])
+            for u, v in graph.edges()
+        ] == [("a", "c")]
+        _, restored = nx_to_gdf(graph)
+        assert isinstance(restored, gpd.GeoDataFrame)
+        assert restored.geometry.iloc[0].equals(edges.geometry.iloc[0])
+
+    def test_unknown_endpoint_does_not_fall_back_to_geometry(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A matching line cannot override an unknown endpoint ID."""
+        nodes = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], index=["a", "b"], crs=3857)
+        edges = gpd.GeoDataFrame(
+            geometry=[LineString([(0, 0), (1, 0)])],
+            crs=3857,
+            index=pd.MultiIndex.from_tuples([("a", "missing")]),
+        )
+        graph = gdf_to_nx(nodes, edges)
+        assert graph.number_of_edges() == 0
+        assert "Could not find nodes for 1 edges by endpoint ID" in caplog.text
 
     def test_geometryless_edges_without_multiindex_are_dropped(
         self,
@@ -458,6 +496,24 @@ class TestNxConversions(BaseConversionTest):
         self.assert_valid_gdf(nodes_gdf)
         assert len(nodes_gdf) == 2
 
+    @pytest.mark.parametrize("keep_geom", [True, False])
+    def test_heterogeneous_geometryless_edges(self, keep_geom: bool) -> None:
+        """Typed edges use endpoint IDs even when all geometries are missing."""
+        nodes = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], index=["a", "b"], crs=3857)
+        edges = gpd.GeoDataFrame(
+            {"weight": [7.0]},
+            geometry=[None],
+            crs=3857,
+            index=pd.MultiIndex.from_tuples([("a", "b")], names=["source", "target"]),
+        )
+        edge_type = ("place", "connects", "place")
+        graph = gdf_to_nx({"place": nodes}, {edge_type: edges}, keep_geom=keep_geom, directed=True)
+        assert graph.number_of_edges() == 1
+        _, restored = nx_to_gdf(graph)
+        assert restored[edge_type].index.tolist() == [("a", "b")]
+        assert restored[edge_type]["weight"].tolist() == [7.0]
+        assert edges.geometry.isna().all()
+
     def test_heterogeneous_edge_processing(
         self,
         regular_hetero_graph: nx.Graph,
@@ -575,6 +631,29 @@ class TestNxConversions(BaseConversionTest):
         assert nodes_gdf.empty
         assert edges_gdf.empty
         assert "geometry" in nodes_gdf.columns
+
+    @pytest.mark.parametrize("all_empty", [True, False])
+    @pytest.mark.parametrize("multiindex", [True, False])
+    def test_empty_heterogeneous_node_types(self, all_empty: bool, multiindex: bool) -> None:
+        """Declared empty types retain their CRS and index structure on round trips."""
+        index = (
+            pd.MultiIndex.from_arrays([[], []], names=["district", "id"])
+            if multiindex
+            else pd.Index([], name="id")
+        )
+        empty = gpd.GeoDataFrame(geometry=[], index=index, crs=3857)
+        populated = gpd.GeoDataFrame(
+            geometry=[Point(0, 0)], index=pd.Index([1], name="id"), crs=3857
+        )
+        nodes = {"empty": empty, "other": empty if all_empty else populated}
+        restored, edges = nx_to_gdf(gdf_to_nx(nodes, {}))
+        assert set(restored) == set(nodes)
+        assert edges == {}
+        for name, original in nodes.items():
+            assert len(restored[name]) == len(original)
+            assert restored[name].crs == original.crs
+            assert restored[name].index.names == original.index.names
+            assert isinstance(restored[name].index, type(original.index))
 
 
 class TestValidation:
@@ -908,6 +987,22 @@ class TestRustworkxConversions:
 
         nx_G = utils.rx_to_nx(rx_G)
         assert nx_G.edges[i1, i2]["payload"] == "edge_label"
+
+    @pytest.mark.parametrize("graph_cls", [nx.MultiGraph, nx.MultiDiGraph])
+    def test_repeated_conversion_preserves_input(self, graph_cls: type[nx.MultiGraph]) -> None:
+        """Repeated conversions retain keys without consuming source attributes."""
+        graph = graph_cls()
+        graph.add_edge("a", "b", key="road-1", weight=2)
+        graph.add_edge("a", "b", key="road-2", weight=5)
+        source = utils.nx_to_rx(graph)
+        before = {
+            key: (u, v, attrs.copy()) for key, (u, v, attrs) in source.edge_index_map().items()
+        }
+        first = utils.rx_to_nx(source)
+        second = utils.rx_to_nx(source)
+        assert nx.utils.graphs_equal(first, graph)
+        assert nx.utils.graphs_equal(second, graph)
+        assert source.edge_index_map() == before
 
 
 class TestIdentifySourceTargetCols:
