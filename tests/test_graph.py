@@ -638,6 +638,52 @@ class TestGraphConversion:
         assert isinstance(nodes_restored, gpd.GeoDataFrame)
         assert nodes_restored.geometry.isna().all()
 
+    @pytest.mark.parametrize("selection", [None, "a", ["a"], []])
+    def test_heterogeneous_type_selection(self, selection: str | list[str] | None) -> None:
+        """Selections distinguish all types, one type and no types."""
+        frame = gpd.GeoDataFrame(
+            {"value": [1.0, 2.0]}, geometry=[Point(0, 0), Point(1, 0)], crs=3857
+        )
+        edge_frame = gpd.GeoDataFrame(
+            geometry=[LineString([(0, 0), (1, 0)])],
+            crs=3857,
+            index=pd.MultiIndex.from_tuples([(0, 1)]),
+        )
+        key = ("a", "links", "b")
+        data = gdf_to_pyg(
+            {"a": frame, "b": frame}, {key: edge_frame}, node_feature_cols={"a": ["value"]}
+        )
+        nodes, edges = pyg_to_gdf(data, node_types=selection, edge_types=[])
+        assert isinstance(nodes, dict)
+        assert set(nodes) == (
+            {"a", "b"} if selection is None else set() if selection == [] else {"a"}
+        )
+        assert edges == {}
+        nodes, edges = pyg_to_gdf(data, node_types=[], edge_types="links")
+        assert nodes == {}
+        assert isinstance(edges, dict)
+        assert set(edges) == {key}
+        _, selected_edges = pyg_to_gdf(data, edge_types=[key])
+        assert isinstance(selected_edges, dict)
+        assert set(selected_edges) == {key}
+        assert data.node_types == ["a", "b"]
+        for kwargs in (
+            {"node_types": ["missing"]},
+            {"edge_types": [("a", "missing", "b")]},
+            {"edge_types": "missing"},
+        ):
+            with pytest.raises(ValueError, match=r"Unknown|exactly one"):
+                pyg_to_gdf(data, **kwargs)
+        with pytest.raises(ValueError, match="heterogeneous"):
+            pyg_to_gdf(gdf_to_pyg(frame), node_types=[])
+        ambiguous = gdf_to_pyg(
+            {"a": frame, "b": frame},
+            {key: edge_frame, ("b", "links", "a"): edge_frame},
+            directed=True,
+        )
+        with pytest.raises(ValueError, match="exactly one"):
+            pyg_to_gdf(ambiguous, edge_types="links")
+
 
 class TestGraphValidation:
     """Test validation functionality for PyG objects."""
