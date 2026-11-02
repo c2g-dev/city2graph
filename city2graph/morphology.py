@@ -55,6 +55,8 @@ from .utils import filter_graph_by_distance
 from .utils import gdf_to_nx
 from .utils import nx_to_gdf
 from .utils import symmetrize_edges
+from .utils.spatial import _build_reachable_subgraph
+from .utils.spatial import _compute_center_node_distances
 
 if typing.TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
@@ -540,6 +542,8 @@ class _MorphologyContext(typing.NamedTuple):
     tessellation_n_jobs: int
     field: _ReachabilityField | None
     segment_graph: tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | None = None
+    buffer_graph: nx.Graph | None = None
+    buffer_distances: dict[typing.Hashable, float] | None = None
 
 
 def _prepare_morphology(  # noqa: PLR0913
@@ -683,6 +687,14 @@ def _prepare_morphology(  # noqa: PLR0913
     if center_point is not None and has_distance and not segments_gdf.empty:
         field = _network_reachability_field(segment_graph[1], center_point)
 
+    buffer_graph = None
+    buffer_distances = None
+    if center_point is not None and has_distance and not segments_gdf.empty:
+        buffer_graph = gdf_to_nx(nodes=segment_graph[0], edges=segment_graph[1])
+        buffer_distances = _compute_center_node_distances(
+            buffer_graph, center_point=center_point, edge_attr="length", cutoff=math.inf
+        )
+
     return _MorphologyContext(
         buildings=buildings_gdf,
         segments=segments_gdf,
@@ -703,6 +715,8 @@ def _prepare_morphology(  # noqa: PLR0913
         tessellation_n_jobs=tessellation_n_jobs,
         field=field,
         segment_graph=segment_graph,
+        buffer_graph=buffer_graph,
+        buffer_distances=buffer_distances,
     )
 
 
@@ -820,11 +834,16 @@ def _segments_for_distance(
         buffer_radius = (
             distance if math.isinf(context.clipping_buffer) else distance + context.clipping_buffer
         )
-        segments_buffer_graph = filter_graph_by_distance(
-            gdf_to_nx(nodes=segment_nodes, edges=segment_edges),
-            context.center_point,
-            buffer_radius,
-        )
+        if context.buffer_graph is not None and context.buffer_distances is not None:
+            segments_buffer_graph = _build_reachable_subgraph(
+                context.buffer_graph, context.buffer_distances, buffer_radius
+            )
+        else:
+            segments_buffer_graph = filter_graph_by_distance(
+                gdf_to_nx(nodes=segment_nodes, edges=segment_edges),
+                context.center_point,
+                buffer_radius,
+            )
         segments_buffer = nx_to_gdf(segments_buffer_graph, nodes=False, edges=True)
 
     segments_buffer = _append_barrier_context_segments(
@@ -3050,7 +3069,6 @@ def _network_reachability_field(
         return None
 
     source_id = "__city2graph_center__"
-    graph = graph.copy()
     source_edge, source_along, source_access = _connect_point_to_nearest_edge(
         graph,
         source_id,

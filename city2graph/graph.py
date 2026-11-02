@@ -2509,7 +2509,17 @@ class PyGConverter(BaseGraphConverter):
 
         # Convert columns in the same resolved order stored in metadata.
         numpy_dtype = _torch_dtype_to_numpy(dtype)
-        features_array = gdf[valid_cols].to_numpy().astype(numpy_dtype)
+        features = gdf[valid_cols]
+        column_dtypes = features.dtypes
+        mixed_types = len(column_dtypes) > 0 and not (column_dtypes == column_dtypes.iloc[0]).all()
+        if mixed_types or any(
+            isinstance(column_dtype, pd.api.extensions.ExtensionDtype)
+            for column_dtype in column_dtypes
+        ):
+            # Preserve common-dtype rounding and nullable conversion semantics.
+            features_array = features.to_numpy().astype(numpy_dtype)
+        else:
+            features_array = features.to_numpy(dtype=numpy_dtype, copy=True)
         return torch.from_numpy(features_array).to(device=device, dtype=dtype)
 
     def _create_node_positions(

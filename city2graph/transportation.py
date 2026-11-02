@@ -841,14 +841,11 @@ def get_od_pairs(
     if od_pairs_df.empty:
         return pd.DataFrame()
 
-    od_pairs_df["departure_ts"] = od_pairs_df.apply(
-        lambda row: _timestamp(row["departure_time"], row["active_date_str"]),
-        axis=1,  # type: ignore[call-overload]
-    )
-    od_pairs_df["arrival_ts"] = od_pairs_df.apply(
-        lambda row: _timestamp(row["arrival_time"], row["active_date_str"]),
-        axis=1,  # type: ignore[call-overload]
-    )
+    for source, target in (("departure_time", "departure_ts"), ("arrival_time", "arrival_ts")):
+        pairs = pd.MultiIndex.from_arrays([od_pairs_df[source], od_pairs_df["active_date_str"]])
+        codes, unique_pairs = pd.factorize(pairs, sort=False)
+        timestamps = pd.Series([_timestamp(time, date) for time, date in unique_pairs])
+        od_pairs_df[target] = timestamps.take(codes).set_axis(od_pairs_df.index)
 
     od_pairs_df = od_pairs_df.dropna(subset=["departure_ts", "arrival_ts"])
     od_pairs_df["travel_time_sec"] = (

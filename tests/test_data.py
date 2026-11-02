@@ -1,6 +1,9 @@
 """Tests for the data module - refactored version focusing on public API only."""
 
 import subprocess
+from pathlib import Path
+from typing import BinaryIO
+from typing import cast
 from unittest.mock import Mock
 from unittest.mock import patch
 
@@ -88,6 +91,29 @@ class TestConstants:
 
 class TestLoadOvertureData:
     """Tests for the load_overture_data function."""
+
+    @pytest.mark.parametrize("prefix", [b"", b"Warning\n", b"x" * 70000])
+    def test_spooled_stdout_preserves_features(
+        self, prefix: bytes, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Real JSON is loaded after bounded prefix stripping and temp cleanup."""
+        paths = []
+        payload = (
+            b'{"type":"FeatureCollection","features":[{"type":"Feature",'
+            b'"properties":{"name":"sample"},"geometry":{"type":"Point","coordinates":[1,2]}}]}'
+        )
+
+        def download(_cmd: object, **kwargs: object) -> None:
+            stream = cast("BinaryIO", kwargs["stdout"])
+            paths.append(Path(stream.name))
+            stream.write(prefix + payload)
+
+        monkeypatch.setattr("city2graph.data.subprocess.run", download)
+        result = load_overture_data([0, 0, 3, 3], types=["building"], save_to_file=False)
+        frame = result["building"]
+        assert frame["name"].tolist() == ["sample"]
+        assert frame.geometry.iloc[0].equals(Point(1, 2))
+        assert all(not path.exists() for path in paths)
 
     @patch("city2graph.data.subprocess.run")
     @patch("city2graph.data.gpd.read_file")

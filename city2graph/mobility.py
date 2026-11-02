@@ -33,6 +33,8 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import LineString
 
+from city2graph._processing import row_batches
+
 from .base import GeoDataProcessor
 
 # Use city2graph converters for compatibility across the stack
@@ -555,41 +557,6 @@ def _validate_zones_gdf(zones_gdf: gpd.GeoDataFrame, zone_id_col: str | None) ->
 #   - _normalize_edgelist: multi-attribute aggregation and thresholding
 #   - _apply_threshold: common filtering semantics
 # ---------------------------------------------------------------------------
-def _warn_and_clean_adjacency(arr: np.ndarray) -> np.ndarray:
-    """
-    Replace NaNs with 0 and warn on data quality issues (NaNs, negatives).
-
-    Sanitizes adjacency arrays by converting missing values to zeros while
-    preserving negative values, emitting warnings to flag potential issues.
-
-    Parameters
-    ----------
-    arr : numpy.ndarray
-        Adjacency matrix values to sanitize.
-
-    Returns
-    -------
-    numpy.ndarray
-        Array with NaNs replaced by 0.0. Negative values are preserved.
-    """
-    n_nans = int(np.isnan(arr).sum())
-    if n_nans:
-        warnings.warn(
-            f"Adjacency contains {n_nans} NaN values; treating as 0 (requirement 2.3)",
-            UserWarning,
-            stacklevel=2,
-        )
-        arr = np.nan_to_num(arr, nan=0.0)
-
-    if (arr < 0).any():
-        warnings.warn(
-            "Adjacency contains negative weights; keeping values (requirement 5.6)",
-            UserWarning,
-            stacklevel=2,
-        )
-    return arr
-
-
 def _extract_array_and_ids(
     adjacency: pd.DataFrame | np.ndarray,
     zone_ids: pd.Index | None,
@@ -749,20 +716,37 @@ def _adjacency_to_edgelist(
     """
     arr, ids = _extract_array_and_ids(adjacency, zone_ids)
 
-    # Clean and build mask
-    arr = _warn_and_clean_adjacency(arr)
-    mask = _build_adjacency_mask(arr, include_self_loops=include_self_loops, threshold=threshold)
-
-    # Vectorized extraction of (i,j,weight)
-    i, j = np.where(mask)
-
-    return pd.DataFrame(
-        {
-            "source": ids.take(i),
-            "target": ids.take(j),
-            "weight": arr[i, j],
-        }
-    )
+    nans = sum(int(np.isnan(arr[batch]).sum()) for batch in row_batches(len(arr), len(arr)))
+    if nans:
+        warnings.warn(
+            f"Adjacency contains {nans} NaN values; treating as 0 (requirement 2.3)",
+            UserWarning,
+            stacklevel=2,
+        )
+    negative = False
+    parts = []
+    for batch in row_batches(len(arr), len(arr)):
+        block = np.nan_to_num(arr[batch], nan=0.0) if nans else arr[batch]
+        negative = negative or bool((block < 0).any())
+        mask = _build_adjacency_mask(block, include_self_loops=True, threshold=threshold)
+        if not include_self_loops:
+            rows = np.arange(len(block))
+            mask[rows, rows + batch.start] = False
+        i, j = np.where(mask)
+        parts.append(
+            pd.DataFrame(
+                {"source": ids.take(i + batch.start), "target": ids.take(j), "weight": block[i, j]}
+            )
+        )
+    if negative:
+        warnings.warn(
+            "Adjacency contains negative weights; keeping values (requirement 5.6)",
+            UserWarning,
+            stacklevel=2,
+        )
+    if not parts:
+        return pd.DataFrame({"source": ids[:0], "target": ids[:0], "weight": np.empty(0)})
+    return pd.concat(parts, ignore_index=True)
 
 
 def _coerce_weight_columns(

@@ -1209,6 +1209,20 @@ class TestTessellation(BaseGraphTest):
 class TestGraphAnalysis(BaseGraphTest):
     """Test graph analysis operations like filtering and isochrone generation."""
 
+    @pytest.mark.parametrize("cache_bytes", [0, 64])
+    def test_isochrone_neighbor_cache_eviction_preserves_hull(
+        self, cache_bytes: int, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Recomputed neighbour arrays keep equal-distance ordering and geometry."""
+        graph = nx.grid_2d_graph(8, 8)
+        nx.set_node_attributes(graph, {node: node for node in graph}, "pos")
+        graph.graph["crs"] = "EPSG:3857"
+        nx.set_edge_attributes(graph, 1.0, "length")
+        expected = utils.create_isochrone(graph, center_point=Point(0, 0), threshold=20, k=3)
+        monkeypatch.setattr(spatial_utils, "_HULL_NEIGHBOR_CACHE_BYTES", cache_bytes)
+        actual = utils.create_isochrone(graph, center_point=Point(0, 0), threshold=20, k=3)
+        assert actual.geometry.iloc[0].equals_exact(expected.geometry.iloc[0], 0)
+
     @pytest.mark.parametrize(
         ("graph_fixture", "as_nx", "center_fixture", "distance", "expect_empty"),
         [

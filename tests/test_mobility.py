@@ -12,6 +12,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pytest
+from shapely.geometry import Point
 
 from city2graph.mobility import od_matrix_to_graph
 
@@ -21,6 +22,21 @@ if TYPE_CHECKING:
 
 class TestODMatrixToGraph:
     """Tests for od_matrix_to_graph function."""
+
+    def test_adjacency_batch_boundary_and_input_ownership(self) -> None:
+        """Diagonal removal and NaN handling are global across row batches."""
+        n = 270
+        zones = gpd.GeoDataFrame(geometry=[Point(i, 0) for i in range(n)], crs=3857)
+        matrix = np.eye(n)
+        matrix[0, 1] = np.nan
+        matrix[256, 0] = 3
+        matrix[269, 268] = 4
+        original = matrix.copy()
+        with pytest.warns(UserWarning, match="1 NaN"):
+            _, edges = od_matrix_to_graph(matrix, zones, matrix_type="adjacency")
+        assert list(edges.index) == [(256, 0), (269, 268)]
+        assert edges["weight"].tolist() == [3, 4]
+        np.testing.assert_array_equal(matrix, original)
 
     def test_edgelist_single_weight(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """Single weight edgelist thresholding and zero filtering."""

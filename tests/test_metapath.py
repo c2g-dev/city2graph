@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import geopandas as gpd
 import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.sparse import csgraph
 from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
@@ -112,6 +115,139 @@ def sample_weight_graph_data() -> tuple[
 
 class TestMetapaths:
     """Test metapath addition functionality."""
+
+    @pytest.mark.parametrize("aggregation", ["sum", "mean"])
+    @pytest.mark.parametrize("attribute_dtype", [float, str])
+    @pytest.mark.parametrize(
+        "attributes", [["cost"], ["cost", "src_1", "dst_1", "cost_step1", "hop_src", "hop_dst"]]
+    )
+    def test_branching_paths_compose_exact_attributes(
+        self, aggregation: str, attribute_dtype: type, attributes: list[str]
+    ) -> None:
+        """Reconverging paths retain counts, attributes and endpoint ordering."""
+        sizes = [1, 20, 1, 20, 1]
+        nodes = {
+            str(i): gpd.GeoDataFrame(geometry=[Point(j, i) for j in range(n)], crs=3857)
+            for i, n in enumerate(sizes)
+        }
+        edges = {}
+        sequence = []
+        for step in range(4):
+            pairs = [(u, v) for u in range(sizes[step]) for v in range(sizes[step + 1])]
+            key = (str(step), "link", str(step + 1))
+            sequence.append(key)
+            edges[key] = gpd.GeoDataFrame(
+                {
+                    attr: np.full(len(pairs), step + 1).astype(attribute_dtype)
+                    for attr in attributes
+                },
+                geometry=[None] * len(pairs),
+                index=pd.MultiIndex.from_tuples(pairs, names=["u", "v"]),
+                crs=3857,
+            )
+        _, result = add_metapaths(
+            nodes=nodes,
+            edges=edges,
+            sequence=sequence,
+            directed=True,
+            edge_attr=attributes,
+            edge_attr_agg=aggregation,
+        )
+        output = result[("0", "metapath_0", "4")]
+        assert list(output.index) == [(0, 0)]
+        assert output.iloc[0]["weight"] == 400
+        for attr in attributes:
+            assert output.iloc[0][attr] == (4000 if aggregation == "sum" else 2.5)
+        assert output.index.names == ["u", "v"]
+
+    @pytest.mark.parametrize("attribute", [None, "cost"])
+    def test_disconnected_metapath_stops_before_later_id_type_mismatch(
+        self, attribute: str | None
+    ) -> None:
+        """A disconnected prefix keeps the empty schema without joining later hops."""
+        nodes = {str(i): gpd.GeoDataFrame(geometry=[Point(i, 0)], crs=3857) for i in range(4)}
+        sequence = [(str(i), "link", str(i + 1)) for i in range(3)]
+        edges = {
+            key: gpd.GeoDataFrame(
+                {"cost": [1]},
+                geometry=[None],
+                index=pd.MultiIndex.from_tuples([pair], names=["u", "v"]),
+                crs=3857,
+            )
+            for key, pair in zip(sequence, [(0, 1), (2, "x"), (0, 0)], strict=True)
+        }
+        _, result = add_metapaths(
+            nodes=nodes, edges=edges, sequence=sequence, directed=True, edge_attr=attribute
+        )
+        output = result[("0", "metapath_0", "3")]
+        assert output.empty
+        assert output.index.names == ["u", "v"]
+        assert list(output.columns) == ["weight", *([attribute] if attribute else []), "geometry"]
+        assert output.crs == nodes["0"].crs
+
+    @pytest.mark.parametrize("aggregation", ["sum", "mean"])
+    @pytest.mark.parametrize(
+        ("costs", "expected_sum", "expected_mean"),
+        [([np.nan, 2.0], 4.0, 1.25), ([float(2**53), -float(2**53)], 1.0, 0.25)],
+    )
+    def test_directed_metapath_preserves_pathwise_numeric_reduction(
+        self, aggregation: str, costs: list[float], expected_sum: float, expected_mean: float
+    ) -> None:
+        """Missing-value means and cancelling large sums retain pathwise semantics."""
+        nodes = {
+            str(i): gpd.GeoDataFrame(geometry=[Point(j, i) for j in range(n)], crs=3857)
+            for i, n in enumerate([1, 2, 1])
+        }
+        sequence = [("0", "link", "1"), ("1", "link", "2")]
+        edges = {
+            sequence[0]: gpd.GeoDataFrame(
+                {"cost": costs},
+                geometry=[None, None],
+                index=pd.MultiIndex.from_tuples([(0, 0), (0, 1)]),
+                crs=3857,
+            ),
+            sequence[1]: gpd.GeoDataFrame(
+                {"cost": [1.0, 1.0]},
+                geometry=[None, None],
+                index=pd.MultiIndex.from_tuples([(0, 0), (1, 0)]),
+                crs=3857,
+            ),
+        }
+        _, result = add_metapaths(
+            nodes=nodes,
+            edges=edges,
+            sequence=sequence,
+            directed=True,
+            edge_attr="cost",
+            edge_attr_agg=aggregation,
+        )
+        output = result[("0", "metapath_0", "2")]
+        assert list(output.index) == [(0, 0)]
+        assert output.iloc[0]["weight"] == 2
+        assert output.iloc[0]["cost"] == (expected_sum if aggregation == "sum" else expected_mean)
+
+    def test_weighted_sources_cross_batch_boundaries(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Global source positions and undirected deduplication survive batching."""
+        n = 270
+        nodes = {"a": gpd.GeoDataFrame(geometry=[Point(i, 0) for i in range(n)], crs=3857)}
+        edges = {
+            ("a", "link", "a"): gpd.GeoDataFrame(
+                {"weight": np.ones(n - 1)},
+                geometry=[None] * (n - 1),
+                index=pd.MultiIndex.from_arrays([np.arange(n - 1), np.arange(1, n)]),
+                crs=3857,
+            )
+        }
+        search = Mock(wraps=csgraph.dijkstra)
+        monkeypatch.setattr(csgraph, "dijkstra", search)
+        _, result = add_metapaths_by_weight(
+            nodes=nodes, edges=edges, endpoint_type="a", threshold=1, weight="weight"
+        )
+        output = list(result.values())[-1]
+        assert len(output) == n - 1
+        assert (output["weight"] == 1).all()
+        assert search.call_count > 1
+        assert sum(len(call.kwargs["indices"]) for call in search.call_args_list) == n
 
     @pytest.mark.parametrize("agg_mode", ["sum", "mean", "callable", "callable_all_nan"])
     def test_add_metapaths_basic_aggregations(

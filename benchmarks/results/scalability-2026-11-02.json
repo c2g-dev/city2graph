@@ -1,0 +1,568 @@
+{
+  "date": "2026-11-02",
+  "baseline_commit": "8cffe2d960203c6ee31a03e4f17da12ab3aaa44d",
+  "environment": {
+    "python": "3.13.5",
+    "platform": "macOS-26.1-arm64-arm-64bit-Mach-O",
+    "numpy": "2.5.4",
+    "pandas": "3.1.0",
+    "geopandas": "1.2.0"
+  },
+  "notes": [
+    "Times are medians of three uninstrumented runs.",
+    "Traced allocations are from a separate run and exclude some native allocations.",
+    "Peak RSS is process-wide and includes dependencies and input/output storage.",
+    "One process per workload and size; baseline and refactored runs use the same environment.",
+    "The final refactored measurements include upstream fixes through 924f85b; correctness comparisons use that main revision.",
+    "Each weighted-metapath run receives a fresh edge dictionary because the public API adds its output relation to the supplied dictionary."
+  ],
+  "measurements": [
+    {
+      "case": "weighted",
+      "size": 1000,
+      "baseline": {
+        "median_seconds": 0.015943042002618313,
+        "traced_peak_bytes": 8842576,
+        "process_peak_rss_bytes": 553779200,
+        "output_edges": 999,
+        "max_distance_bytes": 8000000,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 0
+      },
+      "refactored": {
+        "median_seconds": 0.01756783299788367,
+        "traced_peak_bytes": 4628125,
+        "process_peak_rss_bytes": 546390016,
+        "output_edges": 999,
+        "max_distance_bytes": 2048000,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 0
+      }
+    },
+    {
+      "case": "weighted",
+      "size": 2000,
+      "baseline": {
+        "median_seconds": 0.03380745799950091,
+        "traced_peak_bytes": 33635014,
+        "process_peak_rss_bytes": 580321280,
+        "output_edges": 1999,
+        "max_distance_bytes": 32000000,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 0
+      },
+      "refactored": {
+        "median_seconds": 0.03548066599978483,
+        "traced_peak_bytes": 9478593,
+        "process_peak_rss_bytes": 556072960,
+        "output_edges": 1999,
+        "max_distance_bytes": 4096000,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 0
+      }
+    },
+    {
+      "case": "weighted",
+      "size": 4000,
+      "baseline": {
+        "median_seconds": 0.08129812500192202,
+        "traced_peak_bytes": 131170622,
+        "process_peak_rss_bytes": 679641088,
+        "output_edges": 3999,
+        "max_distance_bytes": 128000000,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 0
+      },
+      "refactored": {
+        "median_seconds": 0.08469262500148034,
+        "traced_peak_bytes": 18991290,
+        "process_peak_rss_bytes": 567771136,
+        "output_edges": 3999,
+        "max_distance_bytes": 8192000,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 0
+      }
+    },
+    {
+      "case": "paths",
+      "size": 100,
+      "baseline": {
+        "median_seconds": 0.00396645900036674,
+        "traced_peak_bytes": 1672200,
+        "process_peak_rss_bytes": 544276480,
+        "output_edges": 1,
+        "max_distance_bytes": 0,
+        "largest_join": 10000,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 0
+      },
+      "refactored": {
+        "median_seconds": 0.007427083000948187,
+        "traced_peak_bytes": 89848,
+        "process_peak_rss_bytes": 543801344,
+        "output_edges": 1,
+        "max_distance_bytes": 0,
+        "largest_join": 100,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 0
+      }
+    },
+    {
+      "case": "paths",
+      "size": 200,
+      "baseline": {
+        "median_seconds": 0.004481874999328284,
+        "traced_peak_bytes": 6511752,
+        "process_peak_rss_bytes": 546553856,
+        "output_edges": 1,
+        "max_distance_bytes": 0,
+        "largest_join": 40000,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 0
+      },
+      "refactored": {
+        "median_seconds": 0.0077417499996954575,
+        "traced_peak_bytes": 102368,
+        "process_peak_rss_bytes": 544358400,
+        "output_edges": 1,
+        "max_distance_bytes": 0,
+        "largest_join": 200,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 0
+      }
+    },
+    {
+      "case": "paths",
+      "size": 400,
+      "baseline": {
+        "median_seconds": 0.0070100000011734664,
+        "traced_peak_bytes": 25851341,
+        "process_peak_rss_bytes": 562544640,
+        "output_edges": 1,
+        "max_distance_bytes": 0,
+        "largest_join": 160000,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 0
+      },
+      "refactored": {
+        "median_seconds": 0.007227666999824578,
+        "traced_peak_bytes": 141841,
+        "process_peak_rss_bytes": 544620544,
+        "output_edges": 1,
+        "max_distance_bytes": 0,
+        "largest_join": 400,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 0
+      }
+    },
+    {
+      "case": "network",
+      "size": 500,
+      "baseline": {
+        "median_seconds": 0.026050166998174973,
+        "traced_peak_bytes": 2862211,
+        "process_peak_rss_bytes": 548552704,
+        "output_edges": 19,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 40,
+        "max_path_references": 125250,
+        "enriched_edges": 20
+      },
+      "refactored": {
+        "median_seconds": 0.016395499998907326,
+        "traced_peak_bytes": 755562,
+        "process_peak_rss_bytes": 546144256,
+        "output_edges": 19,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 20,
+        "max_path_references": 0,
+        "enriched_edges": 20
+      }
+    },
+    {
+      "case": "network",
+      "size": 1000,
+      "baseline": {
+        "median_seconds": 0.05580904100133921,
+        "traced_peak_bytes": 9563928,
+        "process_peak_rss_bytes": 557137920,
+        "output_edges": 19,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 40,
+        "max_path_references": 500500,
+        "enriched_edges": 20
+      },
+      "refactored": {
+        "median_seconds": 0.026672040999983437,
+        "traced_peak_bytes": 1412110,
+        "process_peak_rss_bytes": 547438592,
+        "output_edges": 19,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 20,
+        "max_path_references": 0,
+        "enriched_edges": 20
+      }
+    },
+    {
+      "case": "network",
+      "size": 2000,
+      "baseline": {
+        "median_seconds": 0.26985537500149803,
+        "traced_peak_bytes": 34967834,
+        "process_peak_rss_bytes": 586727424,
+        "output_edges": 19,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 40,
+        "max_path_references": 2001000,
+        "enriched_edges": 20
+      },
+      "refactored": {
+        "median_seconds": 0.054067333996499656,
+        "traced_peak_bytes": 2668805,
+        "process_peak_rss_bytes": 550813696,
+        "output_edges": 19,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 20,
+        "max_path_references": 0,
+        "enriched_edges": 20
+      }
+    },
+    {
+      "case": "waxman",
+      "size": 1000,
+      "baseline": {
+        "median_seconds": 0.018498000001272885,
+        "traced_peak_bytes": 28498878,
+        "process_peak_rss_bytes": 573685760,
+        "output_edges": 1,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 1
+      },
+      "refactored": {
+        "median_seconds": 0.0218157080016681,
+        "traced_peak_bytes": 8692720,
+        "process_peak_rss_bytes": 550420480,
+        "output_edges": 1,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 1
+      }
+    },
+    {
+      "case": "waxman",
+      "size": 2000,
+      "baseline": {
+        "median_seconds": 0.058075209002709016,
+        "traced_peak_bytes": 112980590,
+        "process_peak_rss_bytes": 675479552,
+        "output_edges": 8,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 8
+      },
+      "refactored": {
+        "median_seconds": 0.0574748750004801,
+        "traced_peak_bytes": 17369395,
+        "process_peak_rss_bytes": 563773440,
+        "output_edges": 8,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 8
+      }
+    },
+    {
+      "case": "waxman",
+      "size": 4000,
+      "baseline": {
+        "median_seconds": 0.21066324999992503,
+        "traced_peak_bytes": 449944014,
+        "process_peak_rss_bytes": 1062649856,
+        "output_edges": 35,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 35
+      },
+      "refactored": {
+        "median_seconds": 0.18033004199969582,
+        "traced_peak_bytes": 34724864,
+        "process_peak_rss_bytes": 583237632,
+        "output_edges": 35,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 35
+      }
+    },
+    {
+      "case": "mst",
+      "size": 100,
+      "baseline": {
+        "median_seconds": 0.030935958999180002,
+        "traced_peak_bytes": 3994815,
+        "process_peak_rss_bytes": 550830080,
+        "output_edges": 99,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 4950
+      },
+      "refactored": {
+        "median_seconds": 0.007354792000114685,
+        "traced_peak_bytes": 1801975,
+        "process_peak_rss_bytes": 544604160,
+        "output_edges": 99,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 99
+      }
+    },
+    {
+      "case": "mst",
+      "size": 200,
+      "baseline": {
+        "median_seconds": 0.1158335830004944,
+        "traced_peak_bytes": 15794686,
+        "process_peak_rss_bytes": 579469312,
+        "output_edges": 199,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 19900
+      },
+      "refactored": {
+        "median_seconds": 0.021750749998318497,
+        "traced_peak_bytes": 7050775,
+        "process_peak_rss_bytes": 552288256,
+        "output_edges": 199,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 199
+      }
+    },
+    {
+      "case": "mst",
+      "size": 400,
+      "baseline": {
+        "median_seconds": 0.636549124999874,
+        "traced_peak_bytes": 55987433,
+        "process_peak_rss_bytes": 688504832,
+        "output_edges": 399,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 79800
+      },
+      "refactored": {
+        "median_seconds": 0.07743595800275216,
+        "traced_peak_bytes": 21079584,
+        "process_peak_rss_bytes": 582729728,
+        "output_edges": 399,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 399
+      }
+    },
+    {
+      "case": "gabriel",
+      "size": 1000,
+      "baseline": {
+        "median_seconds": 0.06723833399883006,
+        "traced_peak_bytes": 2689147,
+        "process_peak_rss_bytes": 548880384,
+        "output_edges": 1968,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 1968
+      },
+      "refactored": {
+        "median_seconds": 0.062062708999292227,
+        "traced_peak_bytes": 2692498,
+        "process_peak_rss_bytes": 550060032,
+        "output_edges": 1968,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 1968
+      }
+    },
+    {
+      "case": "gabriel",
+      "size": 2000,
+      "baseline": {
+        "median_seconds": 0.20681375000276603,
+        "traced_peak_bytes": 5311321,
+        "process_peak_rss_bytes": 554156032,
+        "output_edges": 3851,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 3851
+      },
+      "refactored": {
+        "median_seconds": 0.12091224999676342,
+        "traced_peak_bytes": 5316511,
+        "process_peak_rss_bytes": 555220992,
+        "output_edges": 3851,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 3851
+      }
+    },
+    {
+      "case": "gabriel",
+      "size": 4000,
+      "baseline": {
+        "median_seconds": 0.7275586670002667,
+        "traced_peak_bytes": 10264898,
+        "process_peak_rss_bytes": 568803328,
+        "output_edges": 7787,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 7787
+      },
+      "refactored": {
+        "median_seconds": 0.2508909579992178,
+        "traced_peak_bytes": 10273389,
+        "process_peak_rss_bytes": 571719680,
+        "output_edges": 7787,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 7787
+      }
+    },
+    {
+      "case": "rng",
+      "size": 1000,
+      "baseline": {
+        "median_seconds": 0.12162529100169195,
+        "traced_peak_bytes": 2174535,
+        "process_peak_rss_bytes": 548569088,
+        "output_edges": 1252,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 1252
+      },
+      "refactored": {
+        "median_seconds": 0.07415649999893503,
+        "traced_peak_bytes": 2175866,
+        "process_peak_rss_bytes": 548618240,
+        "output_edges": 1252,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 1252
+      }
+    },
+    {
+      "case": "rng",
+      "size": 2000,
+      "baseline": {
+        "median_seconds": 0.3981350409994775,
+        "traced_peak_bytes": 4415511,
+        "process_peak_rss_bytes": 552288256,
+        "output_edges": 2502,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 2502
+      },
+      "refactored": {
+        "median_seconds": 0.14948754200304393,
+        "traced_peak_bytes": 4416326,
+        "process_peak_rss_bytes": 553336832,
+        "output_edges": 2502,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 2502
+      }
+    },
+    {
+      "case": "rng",
+      "size": 4000,
+      "baseline": {
+        "median_seconds": 1.4380086250021122,
+        "traced_peak_bytes": 8433893,
+        "process_peak_rss_bytes": 560807936,
+        "output_edges": 5035,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 5035
+      },
+      "refactored": {
+        "median_seconds": 0.29525604200171074,
+        "traced_peak_bytes": 8434547,
+        "process_peak_rss_bytes": 563625984,
+        "output_edges": 5035,
+        "max_distance_bytes": 0,
+        "largest_join": 0,
+        "searches": 0,
+        "max_path_references": 0,
+        "enriched_edges": 5035
+      }
+    }
+  ],
+  "refactored_base_commit": "924f85bcd8b9377011763a4aa138aa65005bbc0e"
+}
