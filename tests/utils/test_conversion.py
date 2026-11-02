@@ -496,6 +496,24 @@ class TestNxConversions(BaseConversionTest):
         self.assert_valid_gdf(nodes_gdf)
         assert len(nodes_gdf) == 2
 
+    @pytest.mark.parametrize("keep_geom", [True, False])
+    def test_heterogeneous_geometryless_edges(self, keep_geom: bool) -> None:
+        """Typed edges use endpoint IDs even when all geometries are missing."""
+        nodes = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], index=["a", "b"], crs=3857)
+        edges = gpd.GeoDataFrame(
+            {"weight": [7.0]},
+            geometry=[None],
+            crs=3857,
+            index=pd.MultiIndex.from_tuples([("a", "b")], names=["source", "target"]),
+        )
+        edge_type = ("place", "connects", "place")
+        graph = gdf_to_nx({"place": nodes}, {edge_type: edges}, keep_geom=keep_geom, directed=True)
+        assert graph.number_of_edges() == 1
+        _, restored = nx_to_gdf(graph)
+        assert restored[edge_type].index.tolist() == [("a", "b")]
+        assert restored[edge_type]["weight"].tolist() == [7.0]
+        assert edges.geometry.isna().all()
+
     def test_heterogeneous_edge_processing(
         self,
         regular_hetero_graph: nx.Graph,
