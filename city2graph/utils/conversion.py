@@ -417,10 +417,8 @@ class NxConverter(BaseGraphConverter):
 
         if edges_dict is not None:
             for edge_type, edge_gdf in edges_dict.items():
-                edges_dict[edge_type] = self.processor.validate_gdf(
-                    edge_gdf,
-                    ["LineString", "MultiLineString"],
-                    allow_empty=True,
+                edges_dict[edge_type] = _validate_edge_frame(
+                    self.processor, edge_gdf, allow_empty=True
                 )
 
     def _init_hetero_graph(
@@ -2088,10 +2086,8 @@ def validate_gdf(
                 if not all(isinstance(t, str) for t in edge_type):
                     msg = "All elements in edge type tuples must be strings"
                     raise TypeError(msg)
-                validated_edges[edge_type] = processor.validate_gdf(
-                    edge_gdf,
-                    ["LineString", "MultiLineString"],
-                    allow_empty=allow_empty,
+                validated_edges[edge_type] = _validate_edge_frame(
+                    processor, edge_gdf, allow_empty=allow_empty
                 )
     else:
         # Validate homogeneous inputs
