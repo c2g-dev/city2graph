@@ -592,6 +592,7 @@ class PyGConverter(BaseGraphConverter):
             msg = "directed must be a bool for homogeneous graphs, not a dict"
             raise TypeError(msg)
         directed_bool: bool = self.directed
+        self.processor.ensure_crs_consistency(nodes, edges)
 
         # Validate column types
         node_feature_cols_homo, node_label_cols_homo, edge_feature_cols_homo = (
@@ -760,6 +761,7 @@ class PyGConverter(BaseGraphConverter):
             msg = "edge_feature_cols must be a dict for heterogeneous graphs"
             raise TypeError(msg)
 
+        self.processor.ensure_crs_consistency(*nodes.values(), *(edges or {}).values())
         data = HeteroData()
 
         # Default empty dicts
@@ -2707,7 +2709,9 @@ def gdf_to_pyg(
     ImportError
         If PyTorch Geometric is not installed.
     ValueError
-        If input GeoDataFrames are invalid or incompatible.
+        If input GeoDataFrames are invalid or incompatible. Non-empty node and
+        edge frames must share the same CRS, including whether it is defined.
+        Empty frames are ignored by this check; no reprojection is performed.
 
     See Also
     --------
