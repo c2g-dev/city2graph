@@ -985,6 +985,48 @@ class TestGraphFeatures:
         assert isinstance(edges_restored, gpd.GeoDataFrame)
         assert len(edges_restored) == len(sample_edges_gdf)
 
+    @pytest.mark.parametrize("heterogeneous", [False, True])
+    def test_filtered_feature_names_round_trip(self, heterogeneous: bool) -> None:
+        """Missing and non-numeric selections cannot rename surviving values."""
+        nodes = gpd.GeoDataFrame(
+            {"value": [10.0, 20.0], "label": [1, 2], "text": ["a", "b"]},
+            geometry=[Point(0, 0), Point(1, 0)],
+            crs=3857,
+        )
+        edges = gpd.GeoDataFrame(
+            {"cost": [7.0], "text": ["road"]},
+            geometry=[LineString([(0, 0), (1, 0)])],
+            index=pd.MultiIndex.from_tuples([(0, 1)]),
+            crs=3857,
+        )
+        edge_type = ("place", "road", "place")
+        data = gdf_to_pyg(
+            {"place": nodes} if heterogeneous else nodes,
+            {edge_type: edges} if heterogeneous else edges,
+            node_feature_cols={"place": ["missing", "text", "value"]}
+            if heterogeneous
+            else ["missing", "text", "value"],
+            node_label_cols={"place": ["text", "label"]} if heterogeneous else ["text", "label"],
+            edge_feature_cols={edge_type: ["missing", "text", "cost"]}
+            if heterogeneous
+            else ["missing", "text", "cost"],
+            directed=True,
+        )
+        restored_nodes, restored_edges = pyg_to_gdf(data)
+        if heterogeneous:
+            assert isinstance(restored_nodes, dict)
+            assert isinstance(restored_edges, dict)
+            node_frame, edge_frame = restored_nodes["place"], restored_edges[edge_type]
+        else:
+            assert isinstance(restored_nodes, gpd.GeoDataFrame)
+            assert isinstance(restored_edges, gpd.GeoDataFrame)
+            node_frame, edge_frame = restored_nodes, restored_edges
+        assert node_frame["value"].tolist() == [10.0, 20.0]
+        assert node_frame["label"].tolist() == [1.0, 2.0]
+        assert edge_frame["cost"].tolist() == [7.0]
+        assert set(node_frame.columns) == {"value", "label", "geometry"}
+        assert set(edge_frame.columns) == {"cost", "geometry"}
+
 
 class TestGraphGeometry:
     """Test geometry handling in graph conversions."""
