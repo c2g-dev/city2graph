@@ -1433,3 +1433,68 @@ def test_bridge_nodes_network_fixed_radius_exact_edges() -> None:
         gdf = edges[relation]
         assert set(gdf.index) == pairs
         assert all(w == pytest.approx(1.0) for w in gdf["weight"])
+
+
+@pytest.mark.parametrize("method", ["knn", "radius"])
+@pytest.mark.parametrize("empty_side", ["source", "target", "both"])
+def test_directed_empty_inputs(method: str, empty_side: str) -> None:
+    """Empty layers produce typed empty edges and retain the remaining nodes."""
+    frame = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], index=["a", "b"], crs=3857)
+    source = frame.iloc[:0] if empty_side in {"source", "both"} else frame
+    target = frame.iloc[:0] if empty_side in {"target", "both"} else frame
+    nodes, edges = (
+        knn_graph(source, k=1, target_gdf=target)
+        if method == "knn"
+        else fixed_radius_graph(source, radius=2, target_gdf=target)
+    )
+    assert len(nodes) == len(source) + len(target)
+    assert edges.empty
+    assert isinstance(edges.index, pd.MultiIndex)
+    assert edges.crs == frame.crs
+
+
+@pytest.mark.parametrize("directed", [False, True])
+@pytest.mark.parametrize("method", ["knn", "radius"])
+def test_proximity_uses_cleaned_geometries(directed: bool, method: str) -> None:
+    """Missing and empty geometries are removed before querying neighbours."""
+    frame = gpd.GeoDataFrame(
+        geometry=[Point(0, 0), None, Point(), Point(1, 0)],
+        index=["a", "missing", "empty", "b"],
+        crs=3857,
+    )
+    target = frame if directed else None
+    nodes, edges = (
+        knn_graph(frame, k=1, target_gdf=target)
+        if method == "knn"
+        else fixed_radius_graph(frame, radius=2, target_gdf=target)
+    )
+    assert len(nodes) == (4 if directed else 2)
+    assert not edges.empty
+    assert nodes.geometry.notna().all()
+    assert not nodes.geometry.is_empty.any()
+    assert len(frame) == 4
+
+
+@pytest.mark.parametrize("method", ["knn", "radius"])
+@pytest.mark.parametrize("directed", [False, True])
+def test_proximity_all_invalid_geometries(method: str, directed: bool) -> None:
+    """Cleaning an entirely invalid layer produces an empty graph."""
+    frame = gpd.GeoDataFrame(geometry=[None, Point()], crs=3857)
+    target = frame if directed else None
+    nodes, edges = (
+        knn_graph(frame, k=1, target_gdf=target)
+        if method == "knn"
+        else fixed_radius_graph(frame, radius=2, target_gdf=target)
+    )
+    assert nodes.empty
+    assert edges.empty
+    assert edges.crs == frame.crs
+
+
+@pytest.mark.parametrize("k", [0, -1])
+def test_directed_nonpositive_k(k: int) -> None:
+    """A non-positive neighbour count follows the single-layer empty-edge policy."""
+    frame = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], crs=3857)
+    nodes, edges = knn_graph(frame, k=k, target_gdf=frame)
+    assert len(nodes) == 4
+    assert edges.empty
