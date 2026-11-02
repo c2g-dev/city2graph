@@ -812,6 +812,39 @@ class TestGraphValidation:
         with pytest.raises(ValueError, match="Edge types mismatch"):
             validate_pyg(data)
 
+    @pytest.mark.parametrize("heterogeneous", [False, True])
+    @pytest.mark.parametrize("edge_crs", [4326, None])
+    def test_conversion_rejects_inconsistent_crs(
+        self, heterogeneous: bool, edge_crs: int | None
+    ) -> None:
+        """Non-empty frames must share a CRS before tensors are constructed."""
+        nodes = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], crs=3857)
+        edges = gpd.GeoDataFrame(
+            geometry=[LineString([(0, 0), (1, 0)])],
+            crs=edge_crs,
+            index=pd.MultiIndex.from_tuples([(0, 1)]),
+        )
+        with pytest.raises(ValueError, match="same CRS"):
+            gdf_to_pyg(
+                {"place": nodes} if heterogeneous else nodes,
+                {("place", "road", "place"): edges} if heterogeneous else edges,
+            )
+        assert nodes.crs.to_epsg() == 3857
+        assert edges.crs is None if edge_crs is None else edges.crs.to_epsg() == edge_crs
+
+    def test_heterogeneous_node_crs_and_empty_frames(self) -> None:
+        """Node types are checked, while empty frames follow shared validation policy."""
+        nodes = gpd.GeoDataFrame(geometry=[Point(0, 0)], crs=3857)
+        other = nodes.to_crs(4326)
+        with pytest.raises(ValueError, match="same CRS"):
+            gdf_to_pyg({"place": nodes, "road": other})
+        data = gdf_to_pyg(
+            {"place": nodes, "road": other.iloc[:0].set_crs(None, allow_override=True)}
+        )
+        assert data["road"].num_nodes == 0
+        unreferenced = nodes.set_crs(None, allow_override=True)
+        assert gdf_to_pyg(unreferenced).graph_metadata.crs is None
+
 
 class TestDeviceHandling:
     """Test device and dtype handling."""
@@ -984,6 +1017,48 @@ class TestGraphFeatures:
         _, edges_restored = pyg_to_gdf(data)
         assert isinstance(edges_restored, gpd.GeoDataFrame)
         assert len(edges_restored) == len(sample_edges_gdf)
+
+    @pytest.mark.parametrize("heterogeneous", [False, True])
+    def test_filtered_feature_names_round_trip(self, heterogeneous: bool) -> None:
+        """Missing and non-numeric selections cannot rename surviving values."""
+        nodes = gpd.GeoDataFrame(
+            {"value": [10.0, 20.0], "label": [1, 2], "text": ["a", "b"]},
+            geometry=[Point(0, 0), Point(1, 0)],
+            crs=3857,
+        )
+        edges = gpd.GeoDataFrame(
+            {"cost": [7.0], "text": ["road"]},
+            geometry=[LineString([(0, 0), (1, 0)])],
+            index=pd.MultiIndex.from_tuples([(0, 1)]),
+            crs=3857,
+        )
+        edge_type = ("place", "road", "place")
+        data = gdf_to_pyg(
+            {"place": nodes} if heterogeneous else nodes,
+            {edge_type: edges} if heterogeneous else edges,
+            node_feature_cols={"place": ["missing", "text", "value"]}
+            if heterogeneous
+            else ["missing", "text", "value"],
+            node_label_cols={"place": ["text", "label"]} if heterogeneous else ["text", "label"],
+            edge_feature_cols={edge_type: ["missing", "text", "cost"]}
+            if heterogeneous
+            else ["missing", "text", "cost"],
+            directed=True,
+        )
+        restored_nodes, restored_edges = pyg_to_gdf(data)
+        if heterogeneous:
+            assert isinstance(restored_nodes, dict)
+            assert isinstance(restored_edges, dict)
+            node_frame, edge_frame = restored_nodes["place"], restored_edges[edge_type]
+        else:
+            assert isinstance(restored_nodes, gpd.GeoDataFrame)
+            assert isinstance(restored_edges, gpd.GeoDataFrame)
+            node_frame, edge_frame = restored_nodes, restored_edges
+        assert node_frame["value"].tolist() == [10.0, 20.0]
+        assert node_frame["label"].tolist() == [1.0, 2.0]
+        assert edge_frame["cost"].tolist() == [7.0]
+        assert set(node_frame.columns) == {"value", "label", "geometry"}
+        assert set(edge_frame.columns) == {"cost", "geometry"}
 
 
 class TestGraphGeometry:
