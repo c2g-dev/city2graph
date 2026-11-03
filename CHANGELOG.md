@@ -21,6 +21,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 
+## 1.1.0 (2026-11-03)
+
+### Added
+- Added optional `fill_holes=True` to `create_isochrone(method="buffer")`. It removes interior rings after combining all buffered components, without bridging gaps between separate polygon parts. The default is `False`, so existing calls retain their geometry. `buffer_distance=100`, the default hull method, CRS handling, and independent threshold layers are unchanged.
+
+### Changed
+- Reduced temporary allocations with shared row batching across graph conversion, weighted metapaths, OD matrices, and proximity graphs. Network proximity queries reuse traversals across destinations, morphology reuses its buffer reachability calculation, and concave-hull neighbour caches are bounded.
+- Streamed Overture CLI output through temporary files instead of retaining the complete GeoJSON text in memory, and reused repeated GTFS timestamp conversions.
+- Updated package and citation metadata for `v1.1.0` and added the 1.1.x series to the security support table.
+
+### Fixed
+- Fixed PyG feature metadata alignment when requested columns are missing or non-numeric, validated CRS consistency before conversion, and applied heterogeneous node and edge type selections during reconstruction.
+- Fixed homogeneous NetworkX conversion to respect explicit endpoint IDs, preserved geometry-free heterogeneous edges and empty node types, and avoided modifying rustworkx edge payload dictionaries during conversion.
+- Preserved NetworkX graph classes, node IDs, parallel-edge keys, directions, and attributes when clipping or removing isolated components.
+- Fixed weighted metapaths to use the minimum cost of parallel edges, consistently across NetworkX and GeoDataFrame inputs.
+- Fixed OD inputs whose primary flow column is named `weight`, and rejected conflicting selections rather than overwriting another requested `weight` column.
+- Handled empty and invalid proximity inputs before neighbour queries, including empty directed layers and non-positive neighbour counts.
+
+### Documentation
+- Added a runnable buffer isochrone guide with a before-and-after hole-filling figure, the distinction from `allow_holes`, and an example of clipping after filling to retain excluded areas.
+- Added scalability benchmarks and recorded results for the shared processing changes.
+
+
 ## 1.0.1 (2026-10-22)
 
 ### Added
