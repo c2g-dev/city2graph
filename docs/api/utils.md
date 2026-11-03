@@ -7,6 +7,9 @@ keywords: gdf_to_nx, nx_to_gdf, rustworkx, tessellation, isochrone, dual_graph, 
 
 The utils module provides core utility functions for graph conversion, validation, and visualization.
 
+For buffer isochrones, see [Filling holes in buffer isochrones](../examples/isochrone_holes.md)
+for the optional `fill_holes` setting, a before-and-after figure, and clipping guidance.
+
 ::: city2graph.utils
     options:
       show_root_heading: false
