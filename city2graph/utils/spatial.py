@@ -227,11 +227,23 @@ def create_isochrone(
             hull_ratio : float, default 0.0
                 The ratio for concave hull generation (0.0 to 1.0). Higher values mean tighter fit.
             allow_holes : bool, default False
-                Whether to allow holes in the concave hull.
+                Whether to allow holes in the concave hull. This controls hull
+                construction; ``fill_holes`` instead removes holes after the
+                buffer method has combined its polygons.
 
         For method="buffer":
-            buffer_distance : float, default 100
-                The distance to buffer reachable geometries.
+            buffer_distance : float or None, default 100
+                The distance to buffer reachable geometries, in CRS units.
+                Use a suitable projected CRS for distance-based buffering.
+                None skips this buffering step; degenerate points and lines
+                still receive the existing fallback buffer.
+            fill_holes : bool, default False
+                Remove all interior rings after combining the buffered
+                geometries. Separate polygon parts remain separate unless
+                filling a hole absorbs a part contained inside that hole.
+                This does not join gaps between separate buffers. Unlike
+                ``allow_holes`` for "concave_hull_alpha", this is a
+                post-processing step for "buffer" only.
             cap_style : int, default 1
                 The cap style for buffering. 1=Round, 2=Flat, 3=Square.
             join_style : int, default 1
@@ -250,11 +262,24 @@ def create_isochrone(
     Raises
     ------
     ValueError
-        If required inputs are missing or invalid.
+        If required inputs are missing or invalid, or ``fill_holes`` is not
+        a bool when ``method="buffer"``.
+
+    Notes
+    -----
+    Hole filling can include areas without reachable roads, including water
+    bodies. To respect a study boundary or excluded areas, clip the result
+    after filling, using a boundary in the same CRS. Each threshold layer is
+    processed independently; hole filling does not add cumulative unions
+    between layers or change network reachability.
     """
     valid_methods = {"concave_hull_knn", "concave_hull_alpha", "convex_hull", "buffer"}
     if method not in valid_methods:
         msg = f"Unknown method: {method}. Must be one of {valid_methods}."
+        raise ValueError(msg)
+
+    if method == "buffer" and not isinstance(kwargs.get("fill_holes", False), bool):
+        msg = "fill_holes must be a bool for method='buffer'."
         raise ValueError(msg)
 
     if center_point is None or threshold is None:
@@ -495,6 +520,14 @@ def _build_isochrone_geometry(
 
     if not isinstance(final_geom, (Polygon, MultiPolygon)):
         final_geom = final_geom.buffer(0)
+
+    if method == "buffer" and kwargs.get("fill_holes", False):
+        if isinstance(final_geom, Polygon):
+            final_geom = Polygon(final_geom.exterior)
+        else:
+            # A filled exterior may contain another part that occupied its hole.
+            # Dissolve those overlaps without bridging gaps between exteriors.
+            final_geom = shapely.union_all([Polygon(part.exterior) for part in final_geom.geoms])
 
     return final_geom
 

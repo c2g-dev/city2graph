@@ -5,7 +5,7 @@ description: "Follow City2Graph tutorials for GTFS transit graphs, OD mobility n
 
 # City2Graph tutorials and examples
 
-Each tutorial below is a self-contained Jupyter notebook that starts from open data and ends with a graph you can analyse or feed to a graph neural network. The [case study](#applied-projects) and [workshop](#applied-projects) show the library applied end to end.
+The tutorials include Jupyter notebooks built from open data and focused guides with runnable examples. The [case study](#applied-projects) and [workshop](#applied-projects) show the library applied end to end.
 
 ## Choose a tutorial by task
 
@@ -14,6 +14,7 @@ Each tutorial below is a self-contained Jupyter notebook that starts from open d
 | Model urban form | Overture Maps or OpenStreetMap buildings and streets | Heterogeneous building, tessellation, and street graph | [Morphological graphs](morphological_graph_from_overturemaps.ipynb) |
 | Create public transport feeds | Custom inputs, OSM or Overture | Synthetic GTFS and travel summaries | [Creating GTFS](creating_gtfs.md) |
 | Analyse public transport | London GTFS feed | Stop-to-stop travel-time graph and multimodal isochrones | [GTFS transit graphs](gtfs.ipynb) |
+| Fill isochrone holes | Synthetic road network | Buffer footprints with optional hole filling and clipping | [Buffer isochrone holes](isochrone_holes.md) |
 | Model migration or commuting | OD edge list or adjacency matrix | Weighted mobility graph | [OD matrices](generating_graphs_from_od_matrix.ipynb) |
 | Connect POIs and zones | Points, polygons, and street networks | KNN, Delaunay, Gilbert, Waxman, and contiguity graphs | [Spatial proximity graphs](generating_graphs_by_proximity.ipynb) |
 | Add composite relations | Typed nodes and edges | Metapath-derived edges for heterogeneous GNNs | [Metapath construction](add_metapaths.ipynb) |

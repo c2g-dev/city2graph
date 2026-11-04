@@ -1229,6 +1229,214 @@ class TestTessellation(BaseGraphTest):
 class TestGraphAnalysis(BaseGraphTest):
     """Test graph analysis operations like filtering and isochrone generation."""
 
+    @pytest.fixture
+    def isochrone_ring_graph(self) -> nx.Graph:
+        """Build a square road circuit whose buffer encloses a hole."""
+        graph = nx.cycle_graph(4)
+        graph.graph["crs"] = "EPSG:27700"
+        positions = [(0, 0), (2000, 0), (2000, 2000), (0, 2000)]
+        nx.set_node_attributes(graph, dict(enumerate(positions)), "pos")
+        for source, target in graph.edges:
+            graph.edges[source, target].update(
+                length=1.0,
+                geometry=LineString([positions[source], positions[target]]),
+            )
+        return graph
+
+    @pytest.mark.parametrize("parts", [1, 2])
+    @pytest.mark.parametrize("island", [False, True])
+    def test_isochrone_fill_holes_preserves_separate_parts(
+        self, isochrone_ring_graph: nx.Graph, parts: int, island: bool
+    ) -> None:
+        """Fill each ring without connecting distant parts or leaving overlaps."""
+        graph = isochrone_ring_graph
+        centres = [Point(0, 0)]
+        if parts == 2:
+            second = nx.relabel_nodes(graph, lambda node: node + 4)
+            for data in second.nodes.values():
+                x, y = data["pos"]
+                data["pos"] = (x + 5000, y)
+            for _source, _target, data in second.edges(data=True):
+                data["geometry"] = LineString([(x + 5000, y) for x, y in data["geometry"].coords])
+            graph = nx.compose(graph, second)
+            centres.append(Point(5000, 0))
+        if island:
+            graph.add_node(99, pos=(1000, 1000))
+            centres.append(Point(1000, 1000))
+
+        original = utils.create_isochrone(
+            graph, center_point=centres, threshold=2, edge_attr="length", method="buffer"
+        )
+        result = utils.create_isochrone(
+            graph,
+            center_point=centres,
+            threshold=2,
+            edge_attr="length",
+            method="buffer",
+            fill_holes=True,
+        )
+        before, after = original.geometry.iloc[0], result.geometry.iloc[0]
+        before_parts = list(before.geoms) if isinstance(before, MultiPolygon) else [before]
+        after_parts = list(after.geoms) if isinstance(after, MultiPolygon) else [after]
+        assert sum(len(part.interiors) for part in before_parts) == parts
+        assert len(after_parts) == parts
+        assert all(not part.interiors for part in after_parts)
+        assert after.is_valid
+        assert after.covers(before)
+        assert after.area > before.area
+        assert after.bounds == before.bounds
+        assert list(result.columns) == ["geometry"]
+        assert result.crs == original.crs
+        if parts == 2:
+            assert not after.intersects(Point(3500, 1000))
+
+    def test_isochrone_fill_holes_after_component_union(self) -> None:
+        """A hole formed by separate road buffers must also be removed."""
+        graph = nx.Graph(crs="EPSG:27700")
+        segments = [
+            [(50, 0), (1950, 0)],
+            [(2000, 50), (2000, 1950)],
+            [(1950, 2000), (50, 2000)],
+            [(0, 1950), (0, 50)],
+        ]
+        for index, coords in enumerate(segments):
+            graph.add_node(2 * index, pos=coords[0])
+            graph.add_node(2 * index + 1, pos=coords[1])
+            graph.add_edge(2 * index, 2 * index + 1, length=1, geometry=LineString(coords))
+        centres = [Point(coords[0]) for coords in segments]
+        original = utils.create_isochrone(
+            graph, center_point=centres, threshold=1, edge_attr="length", method="buffer"
+        )
+        result = utils.create_isochrone(
+            graph,
+            center_point=centres,
+            threshold=1,
+            edge_attr="length",
+            method="buffer",
+            fill_holes=True,
+        )
+        before, after = original.geometry.iloc[0], result.geometry.iloc[0]
+        assert len(before.interiors) == 1
+        assert not after.interiors
+        assert after.is_valid
+        assert after.covers(before)
+        assert after.contains(Point(1000, 1000))
+
+    @pytest.mark.parametrize("threshold", [2, [2, 0, 1, 2]])
+    def test_isochrone_fill_holes_defaults_preserve_legacy(
+        self, isochrone_ring_graph: nx.Graph, threshold: float | list[float]
+    ) -> None:
+        """Omitted and disabled filling preserve the original ring footprint."""
+        options: dict[str, Any] = {
+            "center_point": Point(0, 0),
+            "threshold": threshold,
+            "edge_attr": "length",
+            "method": "buffer",
+            "join_style": 2,
+            "cap_style": 3,
+        }
+        original = utils.create_isochrone(isochrone_ring_graph, **options)
+        disabled = utils.create_isochrone(isochrone_ring_graph, fill_holes=False, **options)
+        assert original.geometry.to_wkb().tolist() == disabled.geometry.to_wkb().tolist()
+        expected = Polygon(
+            [(-100, -100), (2100, -100), (2100, 2100), (-100, 2100)],
+            holes=[[(100, 100), (1900, 100), (1900, 1900), (100, 1900)]],
+        )
+        assert original.geometry.iloc[0].equals(expected)
+        if isinstance(threshold, list):
+            assert original["threshold"].tolist() == threshold
+            for value, geometry in zip(threshold, original.geometry, strict=True):
+                scalar = utils.create_isochrone(
+                    isochrone_ring_graph, **{**options, "threshold": value}
+                )
+                assert geometry.wkb == scalar.geometry.iloc[0].wkb
+
+    @pytest.mark.parametrize("as_gdf", [False, True])
+    def test_isochrone_fill_holes_layered_inputs(
+        self, isochrone_ring_graph: nx.Graph, as_gdf: bool
+    ) -> None:
+        """Fill layers independently and retain threshold order and duplicates."""
+        inputs: dict[str, Any] = {"graph": isochrone_ring_graph}
+        if as_gdf:
+            nodes, edges = utils.nx_to_gdf(isochrone_ring_graph)
+            inputs = {"nodes": nodes, "edges": edges}
+        thresholds = [2, 0, 1, 2]
+        result = utils.create_isochrone(
+            **inputs,
+            center_point=Point(0, 0),
+            threshold=thresholds,
+            edge_attr="length",
+            method="buffer",
+            fill_holes=True,
+        )
+        assert result["threshold"].tolist() == thresholds
+        assert list(result.columns) == ["threshold", "geometry"]
+        assert result.crs == isochrone_ring_graph.graph["crs"]
+        for value, geometry in zip(thresholds, result.geometry, strict=True):
+            scalar = utils.create_isochrone(
+                **inputs,
+                center_point=Point(0, 0),
+                threshold=value,
+                edge_attr="length",
+                method="buffer",
+                fill_holes=True,
+            )
+            assert geometry.wkb == scalar.geometry.iloc[0].wkb
+            assert geometry.is_valid
+            assert not geometry.interiors
+
+    @pytest.mark.parametrize("node_count", [0, 1, 2])
+    @pytest.mark.parametrize("buffer_distance", [None, 0, 100])
+    def test_isochrone_fill_holes_degenerate_inputs(
+        self, node_count: int, buffer_distance: float | None
+    ) -> None:
+        """Empty and hole-free inputs retain their original geometry and schema."""
+        graph = nx.path_graph(node_count)
+        graph.graph["crs"] = "EPSG:27700"
+        nx.set_node_attributes(graph, {i: (i * 50, 0) for i in graph}, "pos")
+        for threshold in (2, [2, 0, 2]):
+            options: dict[str, Any] = {
+                "center_point": Point(0, 0),
+                "threshold": threshold,
+                "method": "buffer",
+                "buffer_distance": buffer_distance,
+            }
+            original = utils.create_isochrone(graph, **options)
+            result = utils.create_isochrone(graph, fill_holes=True, **options)
+            assert list(result.columns) == list(original.columns)
+            assert result.crs == original.crs
+            assert len(result) == len(original)
+            assert result.geometry.is_empty.tolist() == original.geometry.is_empty.tolist()
+            assert result.geometry.is_valid.all()
+            for before, after in zip(original.geometry, result.geometry, strict=True):
+                assert before.equals(after)
+
+    @pytest.mark.parametrize("fill_holes", [None, 0, 1, "True", [], np.bool_(1)])
+    @pytest.mark.parametrize("empty", [False, True])
+    def test_isochrone_fill_holes_validation(
+        self, isochrone_ring_graph: nx.Graph, fill_holes: object, empty: bool
+    ) -> None:
+        """Reject non-bool values before any empty-graph early return."""
+        graph = nx.Graph() if empty else isochrone_ring_graph
+        with pytest.raises(ValueError, match="fill_holes must be a bool"):
+            utils.create_isochrone(
+                graph,
+                center_point=Point(0, 0),
+                threshold=2,
+                method="buffer",
+                fill_holes=fill_holes,
+            )
+
+    @pytest.mark.parametrize("method", ["convex_hull", "concave_hull_alpha", "concave_hull_knn"])
+    def test_isochrone_fill_holes_is_buffer_only(
+        self, isochrone_ring_graph: nx.Graph, method: str
+    ) -> None:
+        """Hull methods continue to ignore buffer-specific keyword arguments."""
+        options: dict[str, Any] = {"center_point": Point(0, 0), "threshold": 2, "method": method}
+        original = utils.create_isochrone(isochrone_ring_graph, **options)
+        result = utils.create_isochrone(isochrone_ring_graph, fill_holes="ignored", **options)
+        assert result.geometry.to_wkb().tolist() == original.geometry.to_wkb().tolist()
+
     @pytest.mark.parametrize("cache_bytes", [0, 64])
     def test_isochrone_neighbor_cache_eviction_preserves_hull(
         self, cache_bytes: int, monkeypatch: pytest.MonkeyPatch
