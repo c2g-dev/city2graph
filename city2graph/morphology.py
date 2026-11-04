@@ -3411,7 +3411,9 @@ def _segments_within_network_distance(
 
     A segment is retained when its nearest reachable endpoint lies within
     ``max_distance`` on the same cost field used for buildings and tessellation
-    cells. This keeps segments that straddle the budget boundary (their reachable
+    cells. The source segment is also retained when the centre can reach its
+    projection, even if both endpoints are beyond the budget. This keeps
+    segments that straddle the budget boundary (their reachable
     portion is within budget) instead of dropping them on a binary wholly-in/out
     test, and ensures street and cell acceptance derive from a single
     reachability metric.
@@ -3452,6 +3454,7 @@ def _segments_within_network_distance(
         iloc
         for iloc, geometry in enumerate(segments.geometry)
         if _segment_min_reachable_cost(geometry, field.endpoint_lengths) <= max_distance
+        or (field.source_access <= max_distance and geometry.equals(field.source_edge[2]))
     ]
     return segments.iloc[keep_ilocs]
 

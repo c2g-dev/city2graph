@@ -26,6 +26,18 @@ process_overture_segments = data_module.process_overture_segments
 get_boundaries = data_module.get_boundaries
 
 
+@pytest.fixture
+def test_bbox() -> list[float]:
+    """Standard test bounding box."""
+    return [-74.01, 40.70, -73.99, 40.72]
+
+
+@pytest.fixture
+def test_polygon() -> Polygon:
+    """Standard test polygon."""
+    return Polygon([(-74.01, 40.70), (-73.99, 40.70), (-73.99, 40.72), (-74.01, 40.72)])
+
+
 class UnreachableReleases:
     """Stand-in for ``ALL_RELEASES`` when the STAC catalogue cannot be fetched.
 
@@ -729,8 +741,8 @@ class TestProcessOvertureSegments:
 
         assert "length" in result.columns
         assert all(result["length"] > 0)
-        assert len(result) >= len(segments_gdf)
-        assert "id" in result.columns
+        assert result["id"].tolist() == segments_gdf["id"].tolist()
+        assert result.geometry.equals(segments_gdf.geometry)
 
     def test_with_connectors(self) -> None:
         """Test process_overture_segments with connectors."""
@@ -740,10 +752,10 @@ class TestProcessOvertureSegments:
             geoms_or_coords=[[(0, 0), (4, 0)]],
             connectors=connectors_data,
             level_rules="",
-            crs=WGS84_CRS,
+            crs="EPSG:27700",
         )
         connectors_gdf = make_connectors_gdf(
-            ids=["c1", "c2"], coords=[(1, 0), (3, 0)], crs=WGS84_CRS
+            ids=["c1", "c2"], coords=[(1, 0), (3, 0)], crs="EPSG:27700"
         )
 
         result = process_overture_segments(
@@ -752,10 +764,12 @@ class TestProcessOvertureSegments:
             get_barriers=False,
         )
 
-        split_segments = result[result["id"].str.contains("_")]
-        if not split_segments.empty:
-            assert "split_from" in result.columns
-            assert "split_to" in result.columns
+        assert result["id"].tolist() == ["seg1_1", "seg1_2", "seg1_3"]
+        assert result["split_from"].tolist() == [0.0, 0.25, 0.75]
+        assert result["split_to"].tolist() == [0.25, 0.75, 1.0]
+        assert result["length"].tolist() == pytest.approx([1.0, 2.0, 1.0])
+        assert result.geometry.union_all().equals(segments_gdf.geometry.iloc[0])
+        assert result.crs == segments_gdf.crs
 
     def test_with_barriers(self) -> None:
         """Test process_overture_segments with barrier generation."""

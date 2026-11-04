@@ -10,6 +10,7 @@ from http.server import SimpleHTTPRequestHandler
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -101,7 +102,7 @@ def test_navigation_search_copy_and_analytics(page: Page, docs_server: str) -> N
     assert page.locator('a[href$="paper.html"] img').count() == 1
     assert page.locator('script[src*="mathjax@"]').count() == 0
     page.locator('.md-tabs a[href$="installation.html"]').click()
-    page.wait_for_url("**/installation.html")
+    page.wait_for_url("**/installation.html", wait_until="domcontentloaded")
     page.get_by_role("heading", name="Install City2Graph", exact=False).first.wait_for()
     assert page.evaluate("window.docsNavigationSentinel") is True
     # Material closes search 125 ms after navigation, after the new DOM is visible.
@@ -116,8 +117,8 @@ def test_navigation_search_copy_and_analytics(page: Page, docs_server: str) -> N
     page.wait_for_function(
         "navigator.clipboard.readText().then(text => text.includes('pip install'))"
     )
-    page.go_back()
-    page.wait_for_url(docs_server)
+    page.go_back(wait_until="domcontentloaded")
+    page.wait_for_url(docs_server, wait_until="domcontentloaded")
     page.get_by_role("heading", name="City2Graph: Geospatial Graphs", exact=False).first.wait_for()
     records = page.evaluate("Array.from(window.dataLayer || [], row => Array.from(row))")
     assert [row[0] for row in records[:3]] == ["consent", "js", "config"]
@@ -176,7 +177,7 @@ def test_notebook_copy_after_instant_navigation(page: Page, docs_server: str) ->
     assert page.evaluate("window.docsNavigationSentinel") is True
     page.locator("clipboard-copy").first.click()
     page.wait_for_function("navigator.clipboard.readText().then(text => text.includes('import'))")
-    page.go_back()
+    page.go_back(wait_until="domcontentloaded")
     page.get_by_role("heading", name="City2Graph: Geospatial Graphs", exact=False).first.wait_for()
     page.locator('.examples-gallery a[href$="add_metapaths.html"]').click()
     page.locator("clipboard-copy").first.click()
@@ -287,8 +288,68 @@ def test_maths_after_delayed_load_and_instant_navigation(
         page.locator("mjx-container").wait_for(timeout=45000)
     page.locator('.md-tabs a[href$="installation.html"]').click()
     page.get_by_role("heading", name="Install City2Graph", exact=False).first.wait_for()
-    page.go_back()
+    page.go_back(wait_until="domcontentloaded")
     page.locator("mjx-container").wait_for(timeout=45000)
     assert page.evaluate("window.docsNavigationSentinel") is True
     assert len([url for url in requests if url.endswith("mathjax@4.1.3/tex-mml-chtml.js")]) == 1
+    assert not errors
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_gtfs_flowchart_themes_mobile_and_navigation(
+    page: Page,
+    docs_server: str,
+    scheme: str,
+) -> None:
+    """Render the generator decision flow across themes and instant navigation."""
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    # Material renders Mermaid in a closed shadow root. Open it only in this test
+    # so assertions can inspect the real SVG without altering its shadow styling.
+    page.add_init_script("""(() => {
+      const attach = Element.prototype.attachShadow;
+      Element.prototype.attachShadow = function(options) {
+        return attach.call(this, {...options, mode: 'open'});
+      };
+    })()""")
+    page.emulate_media(color_scheme="dark" if scheme == "dark" else "light")
+    page.goto(docs_server + "examples/creating_gtfs.html", wait_until="domcontentloaded")
+    page.wait_for_function("typeof document$ !== 'undefined'")
+    page.wait_for_function(
+        "performance.getEntriesByType('resource').some(entry => entry.name.endsWith('/sitemap.xml'))"
+    )
+    assert page.locator("body").get_attribute("data-md-color-scheme") == f"city2graph-{scheme}"
+    diagram = page.locator(".mermaid svg")
+    diagram.wait_for()
+    assert "Do you want to set this condition?" in (diagram.text_content() or "")
+    assert "Use the data value" in (diagram.text_content() or "")
+    assert "Use the documented default assumption" in (diagram.text_content() or "")
+    assert page.locator("article").get_by_text("20260103", exact=False).count() > 0
+    for width in (1280, 375):
+        page.set_viewport_size({"width": width, "height": 900})
+        diagram.scroll_into_view_if_needed()
+        box = diagram.bounding_box()
+        assert box
+        assert box["width"] > 100
+        assert box["height"] > 100
+        wrapper = page.locator(".gtfs-flowchart").bounding_box()
+        assert wrapper
+        assert wrapper["width"] <= width
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.evaluate("window.gtfsNavigationSentinel = true")
+    page.locator('.md-tabs a[href$="installation.html"]').click()
+    # Material's scroll tracking can retain a heading fragment during navigation.
+    page.wait_for_url(
+        lambda url: urlsplit(url).path.endswith("/installation.html"),
+        wait_until="domcontentloaded",
+    )
+    page.locator("article h1").filter(has_text="Install City2Graph").wait_for()
+    page.go_back(wait_until="domcontentloaded")
+    page.wait_for_url(
+        lambda url: urlsplit(url).path.endswith("/examples/creating_gtfs.html"),
+        wait_until="domcontentloaded",
+    )
+    page.locator(".mermaid svg").wait_for()
+    assert page.evaluate("window.gtfsNavigationSentinel") is True
     assert not errors

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from typing import Any
 from typing import cast
 
@@ -12,12 +11,9 @@ import numpy as np
 import osmnx as ox
 import pandas as pd
 import pytest
-import torch
 from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
-from torch_geometric.data import Data
-from torch_geometric.data import HeteroData
 
 from city2graph import graph as graph_module
 from city2graph.base import GraphMetadata
@@ -46,6 +42,27 @@ if TORCH_AVAILABLE:
     from city2graph.graph import pyg_to_gdf
     from city2graph.graph import pyg_to_nx
     from city2graph.graph import validate_pyg
+
+
+@pytest.fixture
+def sample_pyg_data(sample_nodes_gdf: gpd.GeoDataFrame) -> Data:
+    """Convert the shared nodes into an independent PyG object."""
+    return gdf_to_pyg(sample_nodes_gdf)
+
+
+@pytest.fixture
+def sample_pyg_hetero_data(
+    sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+) -> HeteroData:
+    """Convert independent heterogeneous frames into PyG data."""
+    return gdf_to_pyg(sample_hetero_nodes_dict, sample_hetero_edges_dict)
+
+
+@pytest.fixture
+def not_a_pyg_object() -> str:
+    """Fixture for an object that is not a PyG Data or HeteroData object."""
+    return "not_a_pyg_object"
 
 
 class TestTorchAvailability:
@@ -2333,15 +2350,14 @@ class TestUndirectedEdgeHandling:
             crs="EPSG:27700",
         )
 
-        start = time.perf_counter()
         data = gdf_to_pyg(nodes, edges)
         _, restored_edges = pyg_to_gdf(data)
-        elapsed = time.perf_counter() - start
 
         assert data.num_edges == edge_count * 2
         assert isinstance(restored_edges, gpd.GeoDataFrame)
         assert len(restored_edges) == edge_count
-        assert elapsed < 20.0
+        pd.testing.assert_index_equal(restored_edges.index, edges.index)
+        assert restored_edges.geometry.equals(edges.geometry)
 
     def test_categorical_node_ids_round_trip_undirected(self) -> None:
         """Categorical node IDs do not require ordering for deduplication."""

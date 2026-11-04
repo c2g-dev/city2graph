@@ -12,6 +12,7 @@ Each tutorial below is a self-contained Jupyter notebook that starts from open d
 | Goal | Data | What you will build | Tutorial |
 | --- | --- | --- | --- |
 | Model urban form | Overture Maps or OpenStreetMap buildings and streets | Heterogeneous building, tessellation, and street graph | [Morphological graphs](morphological_graph_from_overturemaps.ipynb) |
+| Create public transport feeds | Custom inputs, OSM or Overture | Synthetic GTFS and travel summaries | [Creating GTFS](creating_gtfs.md) |
 | Analyse public transport | London GTFS feed | Stop-to-stop travel-time graph and multimodal isochrones | [GTFS transit graphs](gtfs.ipynb) |
 | Model migration or commuting | OD edge list or adjacency matrix | Weighted mobility graph | [OD matrices](generating_graphs_from_od_matrix.ipynb) |
 | Connect POIs and zones | Points, polygons, and street networks | KNN, Delaunay, Gilbert, Waxman, and contiguity graphs | [Spatial proximity graphs](generating_graphs_by_proximity.ipynb) |

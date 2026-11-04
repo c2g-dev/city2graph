@@ -1,0 +1,474 @@
+{
+  "revalidation_date": "2026-11-04",
+  "previous_audit": "benchmarks/results/gtfs-city-audit-2026-11-03.json",
+  "previous_audit_sha256": "9d17d94ee9077a18ea071483b55bf12aa61f89ae75c8e45bd01ffbcc115eb573",
+  "model": "simple-v3",
+  "working_tree": "Four fixes and public API regression tests; no commit or publication.",
+  "code_sha256": {
+    "city2graph/_gtfs.py": "90f80e23a3427954899a63c19a63323ed4bd11341c288b57905c9cec7f99b9e4",
+    "city2graph/_gtfs_model.py": "698fc81af7b3b92f2765d704bd34e11378ad5ff54510c92913b8f7b4cab8a65c",
+    "city2graph/_gtfs_services.py": "1e9da8358e0d5595efb36de41f0d3ba14845d9ea4b2e6fd046f83e95de0d129d",
+    "city2graph/_transport_sources.py": "158882b22552e6b58bedea26e68f778cb8138b80fb75ec442c5163b862ea2d40"
+  },
+  "fixes": [
+    {
+      "id": "F1",
+      "title": "Loaded GTFS stop tables cannot be reused without dropping their binary geometry column",
+      "status": "fixed",
+      "real_data_case": "reuse-loaded-stops",
+      "result": "generated successfully"
+    },
+    {
+      "id": "F2",
+      "title": "Automatic trip IDs collide with explicit IDs in partial service overrides",
+      "status": "fixed",
+      "real_data_case": "explicit-generated-trip-id-collision",
+      "result": "generated successfully"
+    },
+    {
+      "id": "F3",
+      "title": "Valid numeric direction codes are rejected after passing preflight",
+      "status": "fixed",
+      "real_data_case": "float-direction-codes",
+      "result": "generated successfully"
+    },
+    {
+      "id": "F4",
+      "title": "Infinite route_type leaks OverflowError instead of a contextual input error",
+      "status": "fixed",
+      "real_data_case": "invalid-route_type-inf",
+      "result": "contextual ValueError before generation",
+      "error": "Invalid transport data:\n- routes row 0 ('GS'), route_type: expected a finite non-negative integer"
+    }
+  ],
+  "scope": {
+    "reference_cases_passed": 98,
+    "reference_exact_trips_reconstructed": 53,
+    "osm_cities": 8,
+    "osm_relations": 84,
+    "osm_api_cases_passed": 97,
+    "osm_expected_structure_rejections": 61,
+    "osm_unmodified_relations_passed": 41,
+    "osm_relations_requiring_supplement_or_exclusion": 43,
+    "osm_explicit_repairs_passed": 38,
+    "overture_snapshot_cases_passed": 8,
+    "boundary_cases": 13,
+    "boundary_cases_generated": 9,
+    "boundary_cases_expected_ValueError": 4,
+    "new_live_downloads": 0
+  },
+  "comparisons": {
+    "local": {
+      "cases": 98,
+      "outcomes": {
+        "passed": 98
+      },
+      "differences": []
+    },
+    "osm": {
+      "cases": 158,
+      "outcomes": {
+        "passed": 97,
+        "failed": 61
+      },
+      "differences": []
+    },
+    "repairs": {
+      "cases": 38,
+      "outcomes": {
+        "passed": 38
+      },
+      "differences": []
+    },
+    "overture": {
+      "cases": 8,
+      "outcomes": {
+        "passed": 8
+      },
+      "differences": []
+    },
+    "boundaries": {
+      "cases": 13,
+      "outcomes": {
+        "passed": 9,
+        "failed": 4
+      },
+      "differences": [
+        {
+          "case": [
+            null,
+            "reuse-loaded-stops"
+          ],
+          "field": "status",
+          "before": "failed",
+          "after": "passed"
+        },
+        {
+          "case": [
+            null,
+            "float-direction-codes"
+          ],
+          "field": "status",
+          "before": "failed",
+          "after": "passed"
+        },
+        {
+          "case": [
+            null,
+            "explicit-generated-trip-id-collision"
+          ],
+          "field": "status",
+          "before": "failed",
+          "after": "passed"
+        },
+        {
+          "case": [
+            null,
+            "invalid-route_type-inf"
+          ],
+          "field": "error_type",
+          "before": "OverflowError",
+          "after": "ValueError"
+        },
+        {
+          "case": [
+            null,
+            "invalid-route_type-inf"
+          ],
+          "field": "error",
+          "before": "cannot convert float infinity to integer",
+          "after": "Invalid transport data:\n- routes row 0 ('GS'), route_type: expected a finite non-negative integer"
+        }
+      ]
+    }
+  },
+  "city_summary": [
+    {
+      "city": "london",
+      "relations": 8,
+      "unmodified_passed": 5,
+      "expected_structure_rejections": 3,
+      "explicit_repairs_passed": 3,
+      "modes": [
+        "bus",
+        "ferry",
+        "subway",
+        "train"
+      ]
+    },
+    {
+      "city": "paris",
+      "relations": 12,
+      "unmodified_passed": 5,
+      "expected_structure_rejections": 7,
+      "explicit_repairs_passed": 7,
+      "modes": [
+        "bus",
+        "ferry",
+        "funicular",
+        "subway",
+        "train",
+        "tram"
+      ]
+    },
+    {
+      "city": "berlin",
+      "relations": 10,
+      "unmodified_passed": 4,
+      "expected_structure_rejections": 6,
+      "explicit_repairs_passed": 6,
+      "modes": [
+        "bus",
+        "light_rail",
+        "subway",
+        "train",
+        "tram"
+      ]
+    },
+    {
+      "city": "zurich",
+      "relations": 14,
+      "unmodified_passed": 8,
+      "expected_structure_rejections": 6,
+      "explicit_repairs_passed": 6,
+      "modes": [
+        "bus",
+        "ferry",
+        "funicular",
+        "light_rail",
+        "train",
+        "tram",
+        "trolleybus"
+      ]
+    },
+    {
+      "city": "lisbon",
+      "relations": 12,
+      "unmodified_passed": 8,
+      "expected_structure_rejections": 4,
+      "explicit_repairs_passed": 4,
+      "modes": [
+        "bus",
+        "ferry",
+        "funicular",
+        "subway",
+        "train",
+        "tram"
+      ]
+    },
+    {
+      "city": "tokyo",
+      "relations": 10,
+      "unmodified_passed": 1,
+      "expected_structure_rejections": 9,
+      "explicit_repairs_passed": 8,
+      "modes": [
+        "bus",
+        "light_rail",
+        "monorail",
+        "subway",
+        "train"
+      ]
+    },
+    {
+      "city": "sydney",
+      "relations": 10,
+      "unmodified_passed": 8,
+      "expected_structure_rejections": 2,
+      "explicit_repairs_passed": 2,
+      "modes": [
+        "bus",
+        "ferry",
+        "light_rail",
+        "subway",
+        "train"
+      ]
+    },
+    {
+      "city": "hongkong",
+      "relations": 8,
+      "unmodified_passed": 2,
+      "expected_structure_rejections": 6,
+      "explicit_repairs_passed": 2,
+      "modes": [
+        "bus",
+        "ferry",
+        "subway",
+        "tram"
+      ]
+    }
+  ],
+  "reference_feeds": [
+    {
+      "archive": "gtfs_subway.zip",
+      "sha256": "956530776d2d09192329f72906f61f0eb388206ab32760b8d16360e92b5db13d",
+      "service_date": "20251119",
+      "routes": [
+        "GS",
+        "7",
+        "7X",
+        "SI",
+        "A"
+      ],
+      "sampling": "Up to four active trips per route, with full stop sequences; frequency variants deduplicate patterns.",
+      "same_as_previous_audit": true
+    },
+    {
+      "archive": "itm_north_west_gtfs.zip",
+      "sha256": "372c1a13be251701212a35f4bd4d46afb84a3645b480d2f750988a6a07d6842e",
+      "service_date": "20251217",
+      "routes": [
+        "138614",
+        "574051",
+        "138633",
+        "402831",
+        "753",
+        "77",
+        "3804",
+        "90213",
+        "136042"
+      ],
+      "sampling": "Up to four active trips per route, with full stop sequences; frequency variants deduplicate patterns.",
+      "same_as_previous_audit": true
+    }
+  ],
+  "osm_sources": [
+    {
+      "city": "london",
+      "snapshot": "/tmp/gtfs-city-audit-20261103/london-full.json",
+      "sha256": "cf9c619e1ec80ebacd41fa1eada521fa6bbb84ebc0deacb423e8ac6bece0b26e",
+      "same_as_previous_audit": true
+    },
+    {
+      "city": "paris",
+      "snapshot": "/tmp/gtfs-city-audit-20261103/paris-full.json",
+      "sha256": "619e937ccb25eeb028e3a3d3cc7e82ba50f7470d1928ce0e06a57af0accf7579",
+      "same_as_previous_audit": true
+    },
+    {
+      "city": "berlin",
+      "snapshot": "/tmp/gtfs-city-audit-20261103/berlin-full.json",
+      "sha256": "e1a367b0532d198a1a1c7d6cef6c8568ba1913363ef3202d7c6e8448bd936828",
+      "same_as_previous_audit": true
+    },
+    {
+      "city": "zurich",
+      "snapshot": "/tmp/gtfs-city-audit-20261103/zurich-full.json",
+      "sha256": "cefbfbcbeed93a724da641b3cfe817e2554d72f81f3f8f8ab59ec2dc967b2a7d",
+      "same_as_previous_audit": true
+    },
+    {
+      "city": "lisbon",
+      "snapshot": "/tmp/gtfs-city-audit-20261103/lisbon-full.json",
+      "sha256": "dde487bd5361ffa87cf9ebe4edaa00604a028fe02bf512ef229392d9ce9dd48a",
+      "same_as_previous_audit": true
+    },
+    {
+      "city": "tokyo",
+      "snapshot": "/tmp/gtfs-city-audit-20261103/tokyo-full.json",
+      "sha256": "edf95409cd0bd83915afcfeb0845ac20d4d754423143a1f18f8254f26ebd68ee",
+      "same_as_previous_audit": true
+    },
+    {
+      "city": "sydney",
+      "snapshot": "/tmp/gtfs-city-audit-20261103/sydney-full.json",
+      "sha256": "b312601be92e12bf8787d81120448456ffbc8a8c5d94e0d0d7f81fff5e51c42f",
+      "same_as_previous_audit": true
+    },
+    {
+      "city": "hongkong",
+      "snapshot": "/tmp/gtfs-city-audit-20261103/hongkong-full.json",
+      "sha256": "daa7940fb0dd095c5df37f309b512cb91e93597d6a5b7e6b7ccb1842bbd15cc2",
+      "same_as_previous_audit": true
+    }
+  ],
+  "overture_sources": [
+    {
+      "snapshot": "benchmarks/data/gtfs-northwest-alignments.geojson",
+      "sha256": "d87aa51e063d8f63de3fcface1d5c83de46721ca6eea5b02c30bf47f2c56eac0",
+      "release": "2026-10-21.0"
+    },
+    {
+      "snapshot": "benchmarks/data/gtfs-nyc-alignments.geojson",
+      "sha256": "2f774eeb9f88ef171ce2da2ef7bf49bf2354c5df260247c2ff3781856b18fc95",
+      "release": "2026-10-21.0"
+    }
+  ],
+  "minimal_reproductions": [
+    {
+      "case": "control",
+      "outcome": "generated",
+      "trips": 2
+    },
+    {
+      "case": "reuse_loaded_stops",
+      "outcome": "generated",
+      "trips": 2
+    },
+    {
+      "case": "reuse_without_geometry_control",
+      "outcome": "generated",
+      "trips": 2
+    },
+    {
+      "case": "numeric_direction_codes",
+      "outcome": "generated",
+      "trips": 2
+    },
+    {
+      "case": "generated_id_collision",
+      "outcome": "generated",
+      "trips": 2
+    },
+    {
+      "case": "noncolliding_id_control",
+      "outcome": "generated",
+      "trips": 2
+    },
+    {
+      "case": "invalid_route_type_diagnostic",
+      "outcome": "ValueError",
+      "message": "Invalid transport data:\n- routes row 0 ('R'), route_type: expected a finite non-negative integer"
+    }
+  ],
+  "regression_tests": [
+    "tests/test_gtfs.py::TestCreateGtfs::test_reuse_loaded_stop_table",
+    "tests/test_gtfs.py::TestCreateGtfs::test_numeric_direction_codes",
+    "tests/test_gtfs.py::TestCreateGtfs::test_invalid_direction_codes",
+    "tests/test_gtfs.py::TestCreateGtfs::test_nonfinite_route_type",
+    "tests/test_gtfs.py::TestCreateGtfs::test_generated_trip_ids_avoid_all_explicit_ids",
+    "tests/test_transport_sources.py::TestLoadOsmTransport::test_reuse_loaded_stops_as_supplement",
+    "tests/test_transport_sources.py::TestLoadOsmTransport::test_daily_trip_ids_avoid_explicit_ids_and_preserve_shared_periods",
+    "tests/test_transport_sources.py::TestLoadOsmTransport::test_invalid_supplement_cannot_be_skipped",
+    "tests/test_transport_sources.py::TestLoadOvertureTransport::test_reuse_loaded_stops_and_numeric_directions",
+    "tests/test_transport_sources.py::TestLoadOvertureTransport::test_nonfinite_route_type_precedes_network_access"
+  ],
+  "checks": {
+    "focused_public_api_tests": {
+      "passed": 236
+    },
+    "strict_mkdocs_build": {
+      "command": "uv run mkdocs build --strict",
+      "status": "passed"
+    },
+    "full_suite": {
+      "command": "CITY2GRAPH_DOCS_SITE=site uv run pytest -q",
+      "passed": 1311,
+      "warnings": 251,
+      "browser_tests_enabled": true,
+      "total_coverage_percent_rounded": 97
+    },
+    "pre_commit": {
+      "command": "uv run pre-commit run --all-files",
+      "status": "passed",
+      "additional_untracked_files_checked": true
+    },
+    "changed_line_coverage": {
+      "city2graph/_gtfs.py": {
+        "changed_executable_lines": 7,
+        "covered_changed_lines": 7,
+        "uncovered_changed_lines": [],
+        "file_coverage_percent": 89.07
+      },
+      "city2graph/_gtfs_model.py": {
+        "changed_executable_lines": 4,
+        "covered_changed_lines": 4,
+        "uncovered_changed_lines": [],
+        "file_coverage_percent": 97.58
+      },
+      "city2graph/_gtfs_services.py": {
+        "changed_executable_lines": 18,
+        "covered_changed_lines": 18,
+        "uncovered_changed_lines": [],
+        "file_coverage_percent": 97.18
+      },
+      "city2graph/_transport_sources.py": {
+        "changed_executable_lines": 2,
+        "covered_changed_lines": 2,
+        "uncovered_changed_lines": [],
+        "file_coverage_percent": 88.6
+      }
+    },
+    "git_diff_check": "passed"
+  },
+  "limitations": [
+    "Cached real source responses were replayed through the public loaders. Previous live downloads were not repeated.",
+    "The 43 unsupported unmodified OSM relations retain the same diagnostic reasons. Explicit repairs are separately counted and do not constitute automatic inference.",
+    "Reference reconstruction and roundtrip equality test software behaviour, not present-day timetables or the empirical accuracy of assumed speeds and frequencies.",
+    "These are selected route subsets, not exhaustive city networks."
+  ],
+  "reproduce_minimal_cases": "uv run python benchmarks/gtfs_generation_edge_cases.py",
+  "raw_evidence_directory": "/tmp/gtfs-city-audit-20261104",
+  "raw_evidence_note": "Local temporary scripts, full results, generated archives and logs. OSM input snapshots remain in the previous audit cache. They are not redistributed or guaranteed to remain available.",
+  "source_attribution": {
+    "OSM": "OpenStreetMap contributors, ODbL; https://www.openstreetmap.org/copyright",
+    "Overture": "Existing repository snapshots, release 2026-10-21.0; attribution retained in GeoJSON.",
+    "Reference_GTFS": "Existing user-provided local archives; not redistributed."
+  },
+  "archive_comparison": {
+    "archives_compared": 203,
+    "table_content_differences": [],
+    "unmatched_new_archives": []
+  },
+  "comparison_status_note": "Raw diagnostic scripts label caught exceptions as failed; all 61 OSM errors and all four boundary ValueErrors are expected. No unexpected failures remained."
+}

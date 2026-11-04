@@ -74,6 +74,36 @@ Use four spaces for indentation. Prefer the existing public API and established
 module patterns when extending functionality. If a change affects public
 behaviour, update the corresponding docstring and documentation.
 
+## GTFS implementation boundaries
+
+The public GTFS entry points remain in `city2graph.data` and
+`city2graph.transportation`. Their implementation lives in the internal
+`city2graph._gtfs` package:
+
+| Module | Responsibility |
+| --- | --- |
+| `schema` | Input types, configuration, primitive conversions, schemas and the defaults registry |
+| `validation` | Input validation, normalisation, selection and GTFS integrity |
+| `feed` | DuckDB setup, provenance, persistence and report tables |
+| `service` | Calendars, operating conditions, identifiers and agency metadata |
+| `generation` | Generation stages, geometry, travel times and table materialisation |
+| `sources` | OSM/Overture interpretation, retrieval and supplemental inputs |
+
+Dependencies point upwards in this table. Internal modules do not import the
+public facades. The data facade supplies its geographical and download operations
+to the source adapters; the transportation facade shares calendar and edge
+aggregation between graph analysis and generation reports.
+
+Place new functionality with its existing owner. A new internal module needs an
+independent responsibility and a clear dependency justification. Keep preparation
+and reusable indexes local to one generation call so that later changes to caller
+DataFrames or database tables are respected. Resolve an adopted value and its
+provenance together, then carry that decision through generation and reporting.
+
+The initial public generation model is `simple-v1`. Internal refactors preserve
+its operating rules and identifiers. Historical benchmark records retain the
+model labels recorded when they were run.
+
 ## Testing
 
 Tests live under `tests/` and mirror the package layout. Add a new test class

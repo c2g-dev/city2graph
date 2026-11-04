@@ -1,0 +1,529 @@
+{
+  "date": "2026-11-04",
+  "model": "simple-v1",
+  "purpose": "Behaviour-preserving refactor of the unreleased GTFS generation API, with the initial public model label simple-v1.",
+  "scope": {
+    "manual_cases": 1101,
+    "generated_cases": 837,
+    "expected_source_rejections": 264,
+    "additional_setup_generations": 17,
+    "public_generation_calls_compared": 1118,
+    "osm_cities": 47,
+    "osm_relations": 336,
+    "overture_cities": 12,
+    "official_reference_feeds": 2,
+    "unexpected_differences": 0
+  },
+  "implementation": {
+    "implementation_modules": 6,
+    "minimal_package_initialiser": true,
+    "dependencies": {
+      "schema": [],
+      "validation": [
+        "schema"
+      ],
+      "feed": [
+        "schema",
+        "validation"
+      ],
+      "service": [
+        "feed",
+        "schema"
+      ],
+      "generation": [
+        "feed",
+        "schema",
+        "service",
+        "validation"
+      ],
+      "sources": [
+        "feed",
+        "generation",
+        "schema",
+        "validation"
+      ]
+    },
+    "cycles": 0,
+    "prepared_inputs": "Operation-scoped source indexes, numeric stop ordering, lazy stop geometry and evaluated calendars; effective service periods retain their origins and frequency scope."
+  },
+  "comparison": {
+    "jobs": [
+      {
+        "job": "osm",
+        "public_calls": 659,
+        "generated": 456,
+        "source_rejections": 203,
+        "roundoff_only": [],
+        "unexpected_differences": 0
+      },
+      {
+        "job": "previous",
+        "public_calls": 158,
+        "generated": 97,
+        "source_rejections": 61,
+        "roundoff_only": [
+          {
+            "call": 129,
+            "max_travel_time_difference_seconds": 2.842170943040401e-14
+          },
+          {
+            "call": 130,
+            "max_travel_time_difference_seconds": 5.684341886080802e-14
+          }
+        ],
+        "unexpected_differences": 0
+      },
+      {
+        "job": "repairs",
+        "public_calls": 101,
+        "generated": 101,
+        "source_rejections": 0,
+        "roundoff_only": [],
+        "unexpected_differences": 0
+      },
+      {
+        "job": "modes",
+        "public_calls": 9,
+        "generated": 9,
+        "source_rejections": 0,
+        "roundoff_only": [],
+        "unexpected_differences": 0
+      },
+      {
+        "job": "overture",
+        "public_calls": 72,
+        "generated": 72,
+        "source_rejections": 0,
+        "roundoff_only": [],
+        "unexpected_differences": 0
+      },
+      {
+        "job": "reference",
+        "public_calls": 102,
+        "generated": 102,
+        "source_rejections": 0,
+        "roundoff_only": [],
+        "unexpected_differences": 0
+      },
+      {
+        "job": "untimed",
+        "public_calls": 17,
+        "generated": 17,
+        "source_rejections": 0,
+        "roundoff_only": [],
+        "unexpected_differences": 0
+      }
+    ],
+    "gtfs_table_columns_dtypes_values": "Exact match",
+    "provenance": "Exact match after replacing only the current model label; source retrieval clock frozen to 2026-11-04T12:00:00+00:00 in both runs.",
+    "warnings_errors_input_nonmutation": "Matched through public API interception; explicit input frames unchanged.",
+    "reports": "Exact match except the aggregate travel_time_sec roundoff listed in the previous-city cases.",
+    "roundoff_absolute_tolerance_seconds": 1e-12,
+    "roundoff_control": "The unchanged baseline produced the same 2.842170943040401e-14 and 5.684341886080802e-14 second variations across 12 repeated reports of the two Sydney feeds. All other edge columns matched exactly.",
+    "persistence": "Existing replay harness archive/report roundtrips passed; public persistence tests also passed.",
+    "network": "Socket connections blocked. OSM responses and Overture parquet snapshots replayed locally; release catalog fixed to the snapshots' recorded 2026-10-21.0 release."
+  },
+  "performance_method": {
+    "warmups": 1,
+    "measured_repetitions": 7,
+    "statistic": "median",
+    "phases": "generation and report measured separately",
+    "memory": "Peak resident set size of separate worker processes, including imports and verification outputs; macOS ru_maxrss is bytes.",
+    "execution": "Before/after workers run sequentially after replay, tests and pre-commit; imports, input construction, archive verification and the profiler are outside timed phases.",
+    "platform": "macOS-26.1-arm64-arm-64bit-Mach-O",
+    "python": "3.13.5",
+    "machine": "arm64",
+    "regression_limit_ratio": 1.1,
+    "inputs": "BART 1/32/128 complete reference trips represented as patterns, plus the cached ten-pattern Kuala Lumpur OSM selection."
+  },
+  "performance": [
+    {
+      "scenario": "bart-1",
+      "before": {
+        "phase": "before",
+        "scenario": "bart-1",
+        "generation_seconds": [
+          0.12015899999823887,
+          0.11985158300376497,
+          0.14525995799340308,
+          0.11991991600370966,
+          0.11917291600548197,
+          0.11996308299421798,
+          0.1192882499890402
+        ],
+        "report_seconds": [
+          0.04050587500387337,
+          0.05412637499102857,
+          0.044403708991012536,
+          0.04218291699362453,
+          0.040166249993490055,
+          0.04118850000668317,
+          0.04103204199054744
+        ],
+        "generation_median": 0.11991991600370966,
+        "report_median": 0.04118850000668317,
+        "peak_rss_bytes": 608894976,
+        "package": "/tmp/gtfs-refactor-20261104/baseline/city2graph/__init__.py"
+      },
+      "after": {
+        "phase": "after",
+        "scenario": "bart-1",
+        "generation_seconds": [
+          0.13177912500395905,
+          0.11953141700359993,
+          0.11858516700158361,
+          0.12012691699783318,
+          0.12178516699350439,
+          0.11872762499842793,
+          0.12089608400128782
+        ],
+        "report_seconds": [
+          0.03646837499400135,
+          0.036833250007475726,
+          0.03615420899586752,
+          0.0359179170045536,
+          0.03632416599430144,
+          0.03587000000698026,
+          0.03576358300051652
+        ],
+        "generation_median": 0.12012691699783318,
+        "report_median": 0.03615420899586752,
+        "peak_rss_bytes": 607207424,
+        "package": "/Users/yutasato/Projects/research/city2graph/city2graph/__init__.py"
+      },
+      "after_over_before": {
+        "generation_median": 1.0017261602661323,
+        "report_median": 0.877774354249395,
+        "peak_rss_bytes": 0.9972285006996018
+      }
+    },
+    {
+      "scenario": "bart-32",
+      "before": {
+        "phase": "before",
+        "scenario": "bart-32",
+        "generation_seconds": [
+          0.19077704200753942,
+          0.19168108300073072,
+          0.19648108299588785,
+          0.19142591599666048,
+          0.194594207991031,
+          0.24440195799979847,
+          0.20299350000277627
+        ],
+        "report_seconds": [
+          0.06500270900141913,
+          0.06634083300014026,
+          0.0660062920069322,
+          0.06572662499092985,
+          0.06560854100098368,
+          0.06707333300437313,
+          0.0663407499960158
+        ],
+        "generation_median": 0.194594207991031,
+        "report_median": 0.0660062920069322,
+        "peak_rss_bytes": 647413760,
+        "package": "/tmp/gtfs-refactor-20261104/baseline/city2graph/__init__.py"
+      },
+      "after": {
+        "phase": "after",
+        "scenario": "bart-32",
+        "generation_seconds": [
+          0.1439128750062082,
+          0.14261695799359586,
+          0.14797229200485162,
+          0.1416586250124965,
+          0.14049662499746773,
+          0.14065524999750778,
+          0.13886395799636375
+        ],
+        "report_seconds": [
+          0.06338708300609142,
+          0.062427875003777444,
+          0.06456645799335092,
+          0.061763958001392893,
+          0.06169987500470597,
+          0.061375333010801114,
+          0.061179083000752144
+        ],
+        "generation_median": 0.1416586250124965,
+        "report_median": 0.061763958001392893,
+        "peak_rss_bytes": 645922816,
+        "package": "/Users/yutasato/Projects/research/city2graph/city2graph/__init__.py"
+      },
+      "after_over_before": {
+        "generation_median": 0.7279693803580508,
+        "report_median": 0.9357283392756897,
+        "peak_rss_bytes": 0.9976970770593445
+      }
+    },
+    {
+      "scenario": "bart-128",
+      "before": {
+        "phase": "before",
+        "scenario": "bart-128",
+        "generation_seconds": [
+          0.42669516599562485,
+          0.4207330000062939,
+          0.43281295799533837,
+          0.4234043750038836,
+          0.42782229199656285,
+          0.4437074580055196,
+          0.4269769590027863
+        ],
+        "report_seconds": [
+          0.1423241250013234,
+          0.14158658299129456,
+          0.1423378750041593,
+          0.14322704100050032,
+          0.14360437499999534,
+          0.14576558300177567,
+          0.1425792500085663
+        ],
+        "generation_median": 0.4269769590027863,
+        "report_median": 0.1425792500085663,
+        "peak_rss_bytes": 715161600,
+        "package": "/tmp/gtfs-refactor-20261104/baseline/city2graph/__init__.py"
+      },
+      "after": {
+        "phase": "after",
+        "scenario": "bart-128",
+        "generation_seconds": [
+          0.22410979100095574,
+          0.20384200000262354,
+          0.22056787500332575,
+          0.2039441669912776,
+          0.20515208400320262,
+          0.20363770799303893,
+          0.2192727920046309
+        ],
+        "report_seconds": [
+          0.13687766699877102,
+          0.1362797500041779,
+          0.13995245900878217,
+          0.13674720800190698,
+          0.13734699999622535,
+          0.13700750000134576,
+          0.1398018339968985
+        ],
+        "generation_median": 0.20515208400320262,
+        "report_median": 0.13700750000134576,
+        "peak_rss_bytes": 717324288,
+        "package": "/Users/yutasato/Projects/research/city2graph/city2graph/__init__.py"
+      },
+      "after_over_before": {
+        "generation_median": 0.4804757720002963,
+        "report_median": 0.960921732952826,
+        "peak_rss_bytes": 1.0030240549828178
+      }
+    },
+    {
+      "scenario": "kuala_lumpur",
+      "before": {
+        "phase": "before",
+        "scenario": "kuala_lumpur",
+        "generation_seconds": [
+          0.46588095799961593,
+          0.4635605000075884,
+          0.45615483399888035,
+          0.4681010409985902,
+          0.4657337499957066,
+          0.4619241670006886,
+          0.45851862500421703
+        ],
+        "report_seconds": [
+          0.10829712499980815,
+          0.10540225000295322,
+          0.10594433300138917,
+          0.10567087499657646,
+          0.10637229098938406,
+          0.10517879099643324,
+          0.10630595899419859
+        ],
+        "generation_median": 0.4635605000075884,
+        "report_median": 0.10594433300138917,
+        "peak_rss_bytes": 760823808,
+        "package": "/tmp/gtfs-refactor-20261104/baseline/city2graph/__init__.py"
+      },
+      "after": {
+        "phase": "after",
+        "scenario": "kuala_lumpur",
+        "generation_seconds": [
+          0.30889945800299756,
+          0.30989879100525286,
+          0.30824741600372363,
+          0.30338516700430773,
+          0.30242516699945554,
+          0.33813837499474175,
+          0.3019782080082223
+        ],
+        "report_seconds": [
+          0.10297454200917855,
+          0.18153966699901503,
+          0.10075083299307153,
+          0.10166262499114964,
+          0.09954841699800454,
+          0.1018885420053266,
+          0.10038345800421666
+        ],
+        "generation_median": 0.30824741600372363,
+        "report_median": 0.10166262499114964,
+        "peak_rss_bytes": 762347520,
+        "package": "/Users/yutasato/Projects/research/city2graph/city2graph/__init__.py"
+      },
+      "after_over_before": {
+        "generation_median": 0.6649561729238743,
+        "report_median": 0.9595853040088196,
+        "peak_rss_bytes": 1.0020027133535758
+      }
+    }
+  ],
+  "public_api_profile_call_counts": {
+    "before": {
+      "bart-128": {
+        "_source_conditions": 2,
+        "_shape_rows": 2,
+        "_calendar_days": 128,
+        "_normalise_stops": 1,
+        "_records": 541,
+        "_prepare_service_counts": 2,
+        "_build_travel_summary_nodes": 1,
+        "locations": 0
+      },
+      "kuala_lumpur": {
+        "_source_conditions": 4,
+        "_shape_rows": 2,
+        "_calendar_days": 10,
+        "_normalise_stops": 11,
+        "_records": 157,
+        "_prepare_service_counts": 2,
+        "_build_travel_summary_nodes": 1,
+        "locations": 0
+      }
+    },
+    "after": {
+      "bart-128": {
+        "_source_conditions": 1,
+        "_shape_rows": 1,
+        "_calendar_days": 1,
+        "_normalise_stops": 1,
+        "_records": 29,
+        "_prepare_service_counts": 1,
+        "_build_travel_summary_nodes": 0,
+        "locations": 0
+      },
+      "kuala_lumpur": {
+        "_source_conditions": 1,
+        "_shape_rows": 1,
+        "_calendar_days": 1,
+        "_normalise_stops": 2,
+        "_records": 124,
+        "_prepare_service_counts": 1,
+        "_build_travel_summary_nodes": 0,
+        "locations": 1
+      }
+    },
+    "notes": "One calendar evaluation suffices for these inputs. Kuala Lumpur stop normalisation occurs at source validation and generation boundaries; the former previously repeated it for each pattern. Lazy spatial point construction is skipped for exact BART timings."
+  },
+  "checks": {
+    "pytest": "1311 passed, 251 warnings in 119.54s (0:01:59)",
+    "coverage_percent": 96.84357897416317,
+    "gtfs_package_coverage": {
+      "city2graph/_gtfs/__init__.py": {
+        "covered_lines": 0,
+        "num_statements": 0,
+        "percent_covered": 100.0,
+        "percent_covered_display": "100",
+        "missing_lines": 0,
+        "excluded_lines": 0,
+        "percent_statements_covered": 100.0,
+        "percent_statements_covered_display": "100"
+      },
+      "city2graph/_gtfs/feed.py": {
+        "covered_lines": 216,
+        "num_statements": 223,
+        "percent_covered": 96.8609865470852,
+        "percent_covered_display": "97",
+        "missing_lines": 7,
+        "excluded_lines": 4,
+        "percent_statements_covered": 96.8609865470852,
+        "percent_statements_covered_display": "97"
+      },
+      "city2graph/_gtfs/generation.py": {
+        "covered_lines": 305,
+        "num_statements": 326,
+        "percent_covered": 93.55828220858896,
+        "percent_covered_display": "94",
+        "missing_lines": 21,
+        "excluded_lines": 5,
+        "percent_statements_covered": 93.55828220858896,
+        "percent_statements_covered_display": "94"
+      },
+      "city2graph/_gtfs/schema.py": {
+        "covered_lines": 110,
+        "num_statements": 110,
+        "percent_covered": 100.0,
+        "percent_covered_display": "100",
+        "missing_lines": 0,
+        "excluded_lines": 4,
+        "percent_statements_covered": 100.0,
+        "percent_statements_covered_display": "100"
+      },
+      "city2graph/_gtfs/service.py": {
+        "covered_lines": 350,
+        "num_statements": 365,
+        "percent_covered": 95.89041095890411,
+        "percent_covered_display": "96",
+        "missing_lines": 15,
+        "excluded_lines": 0,
+        "percent_statements_covered": 95.89041095890411,
+        "percent_statements_covered_display": "96"
+      },
+      "city2graph/_gtfs/sources.py": {
+        "covered_lines": 578,
+        "num_statements": 635,
+        "percent_covered": 91.02362204724409,
+        "percent_covered_display": "91",
+        "missing_lines": 57,
+        "excluded_lines": 6,
+        "percent_statements_covered": 91.02362204724409,
+        "percent_statements_covered_display": "91"
+      },
+      "city2graph/_gtfs/validation.py": {
+        "covered_lines": 452,
+        "num_statements": 503,
+        "percent_covered": 89.86083499005964,
+        "percent_covered_display": "90",
+        "missing_lines": 51,
+        "excluded_lines": 0,
+        "percent_statements_covered": 89.86083499005964,
+        "percent_statements_covered_display": "90"
+      }
+    },
+    "mkdocs_strict": "passed",
+    "browser_verification": "enabled with CITY2GRAPH_DOCS_SITE=site",
+    "pre_commit_all_files": "passed",
+    "pre_commit_new_package_files": "passed",
+    "wheel_resource_and_installed_api_smoke": "passed",
+    "padded_stop_sequence_and_duplicate_dataframe_index": "matched baseline; input frames preserved"
+  },
+  "code_sha256": {
+    "city2graph/_gtfs/service.py": "c727cee50078d3cf29564f6e9e89f5f99e8e3d7fd5fa60d53e213bee0a3bb00a",
+    "city2graph/_gtfs/generation.py": "3d5b8dec5d9adafcbc705de693ba55a7f0158938a5ef69bdee84567a24d9709c",
+    "city2graph/_gtfs/__init__.py": "cdcef478d28c5c2247aca942287dc18ec84ee72683b73b5e5dea8cadf6f64683",
+    "city2graph/_gtfs/feed.py": "3785f3e6db21164dc50bdf4722e2d16031ff35c63a068b14225205c5cb1f1387",
+    "city2graph/_gtfs/sources.py": "903f27698c8590eced31eca26897faf63aded87207acaf8308af15ed94fcf759",
+    "city2graph/_gtfs/schema.py": "4300aeb1de243f94831abc2dc9681930e807c595076e3cca730fc6d704463ae7",
+    "city2graph/_gtfs/validation.py": "994e6776205c480317555274f0f86382cfc7d635a6cea7d4ec0047e5287b58ea",
+    "city2graph/_gtfs/defaults.json": "3e3b1d374c54c1d08571e20bca738fcb429bb24836e08f70a9de28d0ff4a9f23",
+    "city2graph/data.py": "8ab06fdb7015c875e0e2ab6def97ca7e87408f664a4f5d1cceb56b51f8707f01",
+    "city2graph/transportation.py": "11f88f6ec8305e75606b2396e4712160b46bd2699165818ee9665d87c6a08323"
+  },
+  "previous_audit": "benchmarks/results/gtfs-world-audit-2026-11-04.json",
+  "evidence_directory": "/tmp/gtfs-refactor-20261104",
+  "limitations": [
+    "The replay covers the previously selected route subsets; it does not establish city-wide completeness or timetable realism.",
+    "Performance numbers describe these cached local inputs and this machine, without live service latency.",
+    "Historical benchmark records and saved model labels were preserved; the source and model normalisation applies only to this comparison."
+  ]
+}

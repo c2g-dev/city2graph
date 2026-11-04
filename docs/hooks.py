@@ -5,16 +5,74 @@ import base64
 import binascii
 import hashlib
 import io
+import json
 import re
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from bs4 import BeautifulSoup
+from git import Repo
 from mkdocs.config.defaults import MkDocsConfig
 from mkdocs.plugins import event_priority
+from mkdocs.structure.files import Files
 from mkdocs.structure.pages import Page
 from PIL import Image, UnidentifiedImageError
+
+
+@event_priority(100)  # type: ignore[untyped-decorator]
+def on_files(files: Files, config: MkDocsConfig) -> Files:
+    """Avoid inventing Git revision dates for pages not yet committed."""
+    plugin = config.plugins.get("git-revision-date-localized")
+    if plugin is None:
+        return files
+    root = Path(__file__).parents[1]
+    repo = Repo(root)
+    committed = {item.path for item in repo.head.commit.tree.traverse() if item.type == "blob"}
+    excluded = plugin.config["exclude"]
+    for file in files.documentation_pages():
+        if file.abs_src_path is None:
+            continue
+        source = Path(file.abs_src_path)
+        if (
+            source.is_relative_to(root)
+            and str(source.relative_to(root)) not in committed
+            and file.src_uri not in excluded
+        ):
+            excluded.append(file.src_uri)
+    return files
+
+
+def on_page_markdown(markdown: str, **_kwargs: object) -> str:
+    """Render GTFS default tables from the registry used by the generator."""
+    if "<!-- gtfs-defaults:" not in markdown:
+        return markdown
+    registry = json.loads(
+        (Path(__file__).parents[1] / "city2graph/_gtfs/defaults.json").read_text(encoding="utf-8")
+    )
+    speeds = [
+        "| Mode (`route_type`) | Average speed (km/h) | Extended route types |",
+        "|---|---:|---|",
+    ]
+    speeds.extend(
+        f"| {registry['mode_names'][mode]} ({mode}) | {speed} | "
+        + ", ".join(str(code) for code in registry["extended_route_types"].get(mode, []))
+        + " |"
+        for mode, speed in registry["speeds_kph"].items()
+    )
+    settings = [
+        "| Setting | Default and unit | Applies to | Reason and evidence status | Override |",
+        "|---|---|---|---|---|",
+    ]
+    for field, entry in registry["settings"].items():
+        value = json.dumps(entry["value"]) if isinstance(entry["value"], bool) else str(entry["value"])
+        settings.append(
+            f"| `{field}` | `{value}` ({entry['unit']}) | {entry['scope']} | "
+            f"{entry['reason']} **{entry['evidence']}.** | `{entry['override']}` |"
+        )
+    return markdown.replace(
+        "<!-- gtfs-defaults:speeds -->", "\n".join(speeds)
+    ).replace("<!-- gtfs-defaults:settings -->", "\n".join(settings))
 
 
 def _asset(data: bytes, suffix: str, config: MkDocsConfig) -> str:

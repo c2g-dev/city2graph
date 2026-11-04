@@ -249,72 +249,49 @@ class TestMetapaths:
         assert search.call_count > 1
         assert sum(len(call.kwargs["indices"]) for call in search.call_args_list) == n
 
-    @pytest.mark.parametrize("agg_mode", ["sum", "mean", "callable", "callable_all_nan"])
+    @pytest.mark.parametrize(
+        ("aggregation", "values", "expected"),
+        [
+            pytest.param("sum", [10.0, 20.0, 30.0, 5.0], [15.0, 25.0], id="sum"),
+            pytest.param("mean", [10.0, 20.0, 30.0, 5.0], [7.5, 12.5], id="mean"),
+            pytest.param(np.nanmax, [10.0, 20.0, 30.0, 5.0], [10.0, 20.0], id="callable"),
+            pytest.param(np.nanmax, [np.nan] * 4, [np.nan] * 2, id="callable-all-nan"),
+        ],
+    )
     def test_add_metapaths_basic_aggregations(
         self,
-        agg_mode: str,
+        aggregation: object,
+        values: list[float],
+        expected: list[float],
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
         sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
     ) -> None:
-        """Exercise aggregation choices: sum, mean, callable, and all-NaN callable path."""
-        # NOTE: travel_time arrays must match the row count of the corresponding
-        # fixture GeoDataFrames. The road->road edge fixture only has a single
-        # row because the new undirected-edge validation in gdf_to_pyg rejects
-        # bidirectional pairs like (r1, r2) + (r2, r1).
-        travel_time_values = {
-            ("building", "connects_to", "road"): [10.0, 20.0, 30.0],
-            ("road", "links_to", "road"): [5.0],
-        }
-        edges_with_attr = {k: v.copy() for k, v in sample_hetero_edges_dict.items()}
-        for ek, vals in travel_time_values.items():
-            if ek in edges_with_attr:
-                edges_with_attr[ek]["travel_time"] = vals
-
-        if agg_mode == "sum":
-            nodes_out, edges_out = add_metapaths(
-                (sample_hetero_nodes_dict, edges_with_attr),
-                sequence=METAPATH,
-                edge_attr="travel_time",
-                edge_attr_agg="sum",
+        """Each two-hop path preserves its endpoints, count and aggregate value."""
+        edges_with_attr = {key: frame.copy() for key, frame in sample_hetero_edges_dict.items()}
+        edges_with_attr[METAPATH[0]]["travel_time"] = values[:3]
+        edges_with_attr[METAPATH[1]]["travel_time"] = values[3:]
+        nodes, edges = add_metapaths(
+            (sample_hetero_nodes_dict, edges_with_attr),
+            sequence=METAPATH,
+            edge_attr="travel_time",
+            edge_attr_agg=aggregation,
+        )
+        result = edges[RESULT_KEY].sort_index()
+        assert nodes is sample_hetero_nodes_dict
+        # Only r1 -> r2 is supplied, so b3 -> r2 cannot complete this sequence.
+        assert list(result.index) == [("b1", "r2"), ("b2", "r2")]
+        assert result["weight"].tolist() == [1, 1]
+        assert pd.api.types.is_integer_dtype(result["weight"].dtype)
+        np.testing.assert_allclose(result["travel_time"], expected, equal_nan=True)
+        assert result.crs == sample_hetero_nodes_dict["building"].crs
+        for (source, target), geometry in result.geometry.items():
+            expected_geometry = LineString(
+                [
+                    sample_hetero_nodes_dict["building"].loc[source, "geometry"],
+                    sample_hetero_nodes_dict["road"].loc[target, "geometry"],
+                ]
             )
-            assert nodes_out is sample_hetero_nodes_dict
-            result = edges_out[RESULT_KEY]
-            assert "weight" in result.columns
-            assert pd.api.types.is_integer_dtype(result["weight"].dtype)
-            assert "travel_time" in result.columns
-            assert "geometry" in result.columns
-        elif agg_mode == "mean":
-            _, edges_out = add_metapaths(
-                (sample_hetero_nodes_dict, edges_with_attr),
-                sequence=METAPATH,
-                edge_attr="travel_time",
-                edge_attr_agg="mean",
-            )
-            assert (edges_out[RESULT_KEY]["travel_time"] > 0).all()
-        elif agg_mode == "callable":
-            _, edges_out = add_metapaths(
-                (sample_hetero_nodes_dict, edges_with_attr),
-                sequence=METAPATH,
-                edge_attr="travel_time",
-                edge_attr_agg=np.nanmax,
-            )
-            assert all(
-                isinstance(v, float) for v in edges_out[RESULT_KEY]["travel_time"].to_numpy()
-            )
-        else:
-            # callable_all_nan
-            edges_nan_attr = {k: v.copy() for k, v in sample_hetero_edges_dict.items()}
-            for ek in list(edges_nan_attr):
-                edges_nan_attr[ek]["travel_time"] = np.nan
-            _, edges_out = add_metapaths(
-                (sample_hetero_nodes_dict, edges_nan_attr),
-                sequence=METAPATH,
-                edge_attr="travel_time",
-                edge_attr_agg=np.nanmax,
-            )
-            result = edges_out[RESULT_KEY]
-            if not result.empty:
-                assert result["travel_time"].isna().all()
+            assert geometry.equals(expected_geometry)
 
     def test_add_metapaths_edge_attr_list(
         self,
@@ -335,8 +312,10 @@ class TestMetapaths:
 
         result = edges_out[RESULT_KEY]
         assert "travel_time" in result.columns
-        if not result.empty:
-            assert (result["travel_time"] > 0).all()
+        assert result["travel_time"].to_dict() == {
+            ("b1", "r2"): 2.0,
+            ("b2", "r2"): 2.0,
+        }
 
     @pytest.mark.parametrize("mode", ["as_nx", "networkx_input", "metadata_merge"])
     def test_add_metapaths_return_formats(

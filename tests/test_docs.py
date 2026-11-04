@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import base64
+import json
+import re
+import warnings
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import cast
 
+import duckdb
 import pytest
+
+import city2graph as c2g
 
 if TYPE_CHECKING:
     from mkdocs.config.defaults import MkDocsConfig
@@ -59,6 +66,89 @@ def render(html: str, config: SimpleNamespace, *, nested: bool = False) -> str:
 
 class TestDocumentationHooks:
     """Exercise transformations and validation through public MkDocs events."""
+
+    def test_git_dates_only_apply_to_committed_pages(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Keep strict builds of new guides free from fictitious revision dates."""
+        from mkdocs.structure.files import File  # noqa: PLC0415
+        from mkdocs.structure.files import Files  # noqa: PLC0415
+
+        root = Path(__file__).parents[1]
+        tree = SimpleNamespace(
+            traverse=lambda: [SimpleNamespace(path="docs/existing.md", type="blob")]
+        )
+        monkeypatch.setattr(
+            hooks,
+            "Repo",
+            lambda _root: SimpleNamespace(head=SimpleNamespace(commit=SimpleNamespace(tree=tree))),
+        )
+        plugin = SimpleNamespace(config={"exclude": []})
+        config = SimpleNamespace(plugins={"git-revision-date-localized": plugin})
+        files = Files(
+            [
+                File(name, str(root / "docs"), str(tmp_path), use_directory_urls=False)
+                for name in ("existing.md", "new.md")
+            ]
+        )
+        assert hooks.on_files(files, cast("MkDocsConfig", config)) is files
+        assert plugin.config["exclude"] == ["new.md"]
+        hooks.on_files(files, cast("MkDocsConfig", config))
+        assert plugin.config["exclude"] == ["new.md"]
+        assert hooks.on_files(files, cast("MkDocsConfig", SimpleNamespace(plugins={}))) is files
+
+    def test_gtfs_registry_tables_and_executable_examples(self, tmp_path: Path) -> None:
+        """Keep published defaults and copyable offline examples aligned with runtime."""
+        root = Path(__file__).parents[1]
+        registry = json.loads((root / "city2graph/_gtfs/defaults.json").read_text())
+        guide = (root / "docs/examples/creating_gtfs.md").read_text()
+        output = hooks.on_page_markdown(guide)
+        assert "<!-- gtfs-defaults:" not in output
+        for entry in registry["settings"].values():
+            value = (
+                json.dumps(entry["value"])
+                if isinstance(entry["value"], bool)
+                else str(entry["value"])
+            )
+            assert f"`{value}` ({entry['unit']})" in output
+        assert registry["model"] in output
+        namespace: dict[str, Any] = {"__name__": "__docs_example__"}
+        blocks = re.findall(
+            r"<!-- gtfs-example:offline -->\n```python\n(.*?)```", guide, flags=re.DOTALL
+        )
+        assert blocks, "The GTFS guide must contain executable offline examples"
+        assert len(blocks) == guide.count("<!-- gtfs-example:offline -->")
+        blocks = [
+            block.replace('Path("synthetic.zip")', repr(str(tmp_path / "synthetic.zip"))).replace(
+                'Path("minimal.zip")', repr(str(tmp_path / "minimal.zip"))
+            )
+            for block in blocks
+        ]
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", c2g.GTFSGenerationWarning)
+                for index, block in enumerate(blocks):
+                    exec(compile(block, f"creating_gtfs_example_{index}", "exec"), namespace)  # noqa: S102
+                    if index == 0:
+                        report = c2g.gtfs_generation_report(namespace["con"])
+                        adopted = report["assumptions"]
+                        assert set(adopted.query("field == 'speed_kph'")["value"]) == {
+                            str(registry["speeds_kph"]["3"])
+                        }
+                        assert set(report["services"]["headway_secs"]) == {
+                            registry["settings"]["group_headway_secs"]["value"] * 2
+                        }
+                        assert (
+                            report["services"].date.min()
+                            == registry["settings"]["service_date"]["value"]
+                        )
+                        assert report["edges"].frequency.eq(448).all()
+            assert (tmp_path / "minimal.zip").is_file()
+            assert (tmp_path / "synthetic.zip").is_file()
+        finally:
+            for value in namespace.values():
+                if isinstance(value, duckdb.DuckDBPyConnection):
+                    value.close()
 
     @pytest.mark.parametrize("nested", [False, True])
     def test_notebook_images_are_cacheable_and_lossless(
