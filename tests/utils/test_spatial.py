@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import warnings
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import cast
 from unittest import mock
@@ -26,13 +27,40 @@ from city2graph.utils import spatial as spatial_utils
 from tests import helpers
 from tests.utils.helpers import BaseGraphTest
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 try:
     import matplotlib.pyplot as plt
+    from matplotlib.axes import Axes
 
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     plt = None  # type: ignore[assignment]
     MATPLOTLIB_AVAILABLE = False
+
+
+@pytest.fixture(autouse=True)
+def close_figures() -> Iterator[None]:
+    """Release figures even when a plotting assertion fails."""
+    yield
+    if plt is not None:
+        plt.close("all")
+
+
+@pytest.fixture
+def single_point_geom_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Fixture for single point geometry that might cause tessellation issues."""
+    return gpd.GeoDataFrame({"geometry": [Point(0, 0)]}, crs=sample_crs)
+
+
+@pytest.fixture
+def tessellation_barriers_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Fixture for barriers in tessellation testing."""
+    return gpd.GeoDataFrame(
+        {"geometry": [LineString([(0, 0), (1, 1)])]},
+        crs=sample_crs,
+    )
 
 
 class TestTessellation(BaseGraphTest):
@@ -57,20 +85,12 @@ class TestTessellation(BaseGraphTest):
         geometry = request.getfixturevalue(geometry_fixture)
         barriers = request.getfixturevalue(barriers_fixture) if barriers_fixture else None
 
-        try:
-            tessellation = utils.create_tessellation(geometry, primary_barriers=barriers)
-        except (UnboundLocalError, TypeError, ValueError) as e:
-            pytest.skip(f"Skipping due to incomplete implementation: {e}")
+        tessellation = utils.create_tessellation(geometry, primary_barriers=barriers)
 
         self.assert_valid_gdf(tessellation, expect_empty)
         if not expect_empty:
             helpers.assert_has_columns(tessellation, ["tess_id"])
             assert tessellation.crs == geometry.crs
-
-    def test_tessellation_handles_empty_geometry(self, empty_gdf: gpd.GeoDataFrame) -> None:
-        """Empty input should return an empty GeoDataFrame with expected columns."""
-        result = utils.create_tessellation(empty_gdf)
-        self.assert_valid_gdf(result, expected_empty=True)
 
     def test_tessellation_handles_degenerate_inputs(
         self,
@@ -1741,6 +1761,51 @@ class TestGraphAnalysis(BaseGraphTest):
         assert len(result) == 3
         assert mock_compute.call_count == 1
 
+    @pytest.mark.parametrize("graph_class", [nx.Graph, nx.MultiDiGraph])
+    @pytest.mark.parametrize("threshold", [10, [5, 10]])
+    def test_isochrone_cuts_remove_isolated_stations_and_preserve_walks(
+        self, graph_class: type[nx.Graph], threshold: int | list[int], sample_crs: str
+    ) -> None:
+        """Transport may enable walking reach without leaving station-only circles."""
+        graph = graph_class(crs=sample_crs)
+        positions = {0: (0, 0), 1: (100, 0), 2: (1000, 0), 3: (1100, 0), 4: (1200, 0), 5: (2000, 0)}
+        for node, position in positions.items():
+            graph.add_node(node, pos=position)
+        rail = ("station", "ride", "station")
+        walk = ("street", "walk", "street")
+        if graph.is_multigraph():
+            graph.add_edge(
+                0, 1, cost=1, edge_type=rail, geometry=LineString([(0, 0), (0, 500), (100, 0)])
+            )
+        for u, v, edge_type in [
+            (0, 1, walk),
+            (1, 2, rail),
+            (2, 3, rail),
+            (3, 4, walk),
+            (2, 5, rail),
+        ]:
+            graph.add_edge(
+                u, v, cost=1, edge_type=edge_type, geometry=LineString([positions[u], positions[v]])
+            )
+        original_edges = graph.number_of_edges()
+        result = utils.create_isochrone(
+            graph,
+            center_point=Point(0, 0),
+            threshold=threshold,
+            edge_attr="cost",
+            cut_edge_types=[rail],
+            method="buffer",
+            buffer_distance=10,
+        )
+        for polygon in result.geometry:
+            assert polygon.covers(Point(50, 0))
+            assert polygon.covers(Point(1150, 0))
+            assert not polygon.covers(Point(1000, 0))
+            assert not polygon.covers(Point(2000, 0))
+            assert not polygon.covers(Point(0, 250))
+        assert graph.number_of_edges() == original_edges
+        assert len(graph) == len(positions)
+
     def test_isochrone_with_cut_edge_types(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
@@ -1771,20 +1836,6 @@ class TestGraphAnalysis(BaseGraphTest):
             buffer_distance=1.0,
             cut_edge_types=[cut_type],
         )
-
-        # The cut isochrone should be smaller or empty if all edges are cut
-        # In the sample, we only have one edge type. If we cut it, we have no edges.
-        # But nodes are still there?
-        # create_isochrone with method="buffer" uses edges.
-        # If all edges are removed, it returns empty or just nodes?
-        # _extract_isochrone_geometries adds nodes AND edges for buffer?
-        # Let's check _extract_isochrone_geometries implementation.
-        # It adds node positions first, THEN edges if method="buffer".
-        # So if edges are removed, it will buffer the nodes.
-
-        # Full isochrone: nodes + edges buffered.
-        # Cut isochrone: nodes buffered (edges removed).
-        # So area should be smaller.
 
         assert not iso_full.empty
         assert not iso_cut.empty
@@ -2206,22 +2257,47 @@ class TestGraphAnalysis(BaseGraphTest):
         )
         assert not iso.empty
 
+    @pytest.mark.parametrize(
+        ("coords", "method"),
+        [
+            pytest.param([(0, 0)], "concave_hull_knn", id="knn-single-point"),
+            pytest.param([(0, 0), (1, 1)], "concave_hull_knn", id="knn-two-points"),
+            pytest.param([(0, 0), (1, 1), (2, 2)], "concave_hull_knn", id="knn-collinear"),
+            pytest.param([(0, 0), (1, 1)], "concave_hull_alpha", id="alpha-two-points"),
+        ],
+    )
+    def test_isochrone_buffers_degenerate_hulls(
+        self,
+        coords: list[tuple[int, int]],
+        method: str,
+        sample_crs: str,
+    ) -> None:
+        """Degenerate reachable sets produce the specified buffer around their hull."""
+        graph = nx.path_graph(len(coords))
+        graph.graph["crs"] = sample_crs
+        nx.set_node_attributes(graph, dict(enumerate(coords)), "pos")
+        nx.set_edge_attributes(graph, 1.0, "length")
+        result = utils.create_isochrone(
+            graph,
+            center_point=Point(coords[0]),
+            threshold=10,
+            method=method,
+            degenerate_buffer_distance=0.25,
+        )
+        expected = Point(coords[0]) if len(coords) == 1 else LineString([coords[0], coords[-1]])
+        assert len(result) == 1
+        assert result.crs == sample_crs
+        assert result.geometry.iloc[0].equals(expected.buffer(0.25))
+
     def test_concave_hull_knn_degenerate_triangle(self) -> None:
-        """Test concave hull with exactly 3 points (triangle)."""
+        """Retain list-input compatibility; public isochrones pass coordinate arrays."""
         points = [Point(0, 0), Point(1, 0), Point(0, 1)]
         poly = spatial_utils._concave_hull_knn(points, k=3)
         assert isinstance(poly, Polygon)
         assert poly.area == 0.5
 
-    def test_concave_hull_knn_collinear(self) -> None:
-        """Test concave hull with collinear points."""
-        points = [Point(0, 0), Point(1, 1), Point(2, 2)]
-        # Should return LineString or fallback to convex hull (which is LineString for collinear)
-        geom = spatial_utils._concave_hull_knn(points, k=3)
-        assert isinstance(geom, LineString)
-
     def test_prepare_isochrone_graph_dict_edges_missing_attr(self, sample_crs: str) -> None:
-        """Test _prepare_isochrone_graph with dict edges missing the edge attribute."""
+        """Isochrones infer missing edge lengths from heterogeneous edge geometries."""
         nodes = {
             "node_type": gpd.GeoDataFrame(
                 {"geometry": [Point(0, 0), Point(1, 1)]},
@@ -2242,23 +2318,23 @@ class TestGraphAnalysis(BaseGraphTest):
         }
 
         # Should calculate length automatically
-        graph = spatial_utils._prepare_isochrone_graph(
-            graph=None, nodes=nodes, edges=edges, edge_attr="length"
+        result = utils.create_isochrone(
+            nodes=nodes,
+            edges=edges,
+            center_point=Point(0, 0),
+            threshold=2,
+            edge_attr="length",
+            method="convex_hull",
+            degenerate_buffer_distance=0.25,
         )
-        assert isinstance(graph, (nx.Graph, nx.MultiGraph))
-
-        # Check that at least one edge has length > 0
-        found_length = False
-        for _, _, data in graph.edges(data=True):
-            if "length" in data and data["length"] > 0:
-                found_length = True
-                break
-        assert found_length, "Edge length was not calculated"
+        assert len(result) == 1
+        assert result.geometry.iloc[0].equals(LineString([(0, 0), (1, 1)]).buffer(0.25))
+        assert result.crs == sample_crs
 
     def test_find_best_candidate_no_valid(self) -> None:
         """Test _find_best_candidate when no valid candidate exists."""
-        # Scenario: 3 points, but the only candidate would cause self-intersection
-        # We can test the helper directly to hit the "return None" branch
+        # Retain zero-length candidate handling: public hulls deduplicate these
+        # coordinates before tracing, so this defensive branch is not reachable.
         coords = np.array([(0, 0), (1, 0), (0, 1)])
         current_idx = 0
         candidates = [1, 2]
@@ -2281,7 +2357,7 @@ class TestGraphAnalysis(BaseGraphTest):
         assert best_degenerate is None
 
     def test_is_valid_edge_intersection(self) -> None:
-        """Test _is_valid_edge detects intersections."""
+        """Retain the Shapely fallback; public tracing supplies cached coordinate arrays."""
         # Construct a hull that is about to self-intersect
         coords = np.array([(0, 0), (10, 0), (10, 10), (0, 10), (5, 5)])
         # Hull: (0,0) -> (10,0) -> (10,10) -> (0,10)
@@ -2330,8 +2406,8 @@ class TestGraphAnalysis(BaseGraphTest):
         assert iso.empty
         assert "geometry" in iso.columns
 
-    def test_filter_edges_by_type_coverage(self, sample_crs: str) -> None:
-        """Test _filter_edges_by_type with actual removal."""
+    def test_isochrone_all_edges_cut(self, sample_crs: str) -> None:
+        """Removing every edge leaves no reachable street geometry to draw."""
         G = nx.Graph()
         G.graph["crs"] = sample_crs
         G.add_edge(1, 2, full_edge_type=("a", "b", "c"), length=1)
@@ -2345,20 +2421,19 @@ class TestGraphAnalysis(BaseGraphTest):
             cut_edge_types=[("a", "b", "c")],
             method="convex_hull",
         )
-        # Edge removed, nodes remain.
-        # Output is always Polygon or MultiPolygon (buffered from remaining geometries)
-        assert not iso.empty
-        assert iso.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
+        assert iso.empty
+        assert len(G) == 2
+        assert G.number_of_edges() == 1
 
     def test_prepare_isochrone_graph_errors(self) -> None:
-        """Test error conditions in _prepare_isochrone_graph."""
+        """Isochrones require a graph or both node and edge layers."""
         with pytest.raises(
             ValueError, match="Either 'graph' or 'nodes' and 'edges' must be provided"
         ):
-            spatial_utils._prepare_isochrone_graph(None, None, None, None)
+            utils.create_isochrone(center_point=Point(0, 0), threshold=10)
 
     def test_process_component_empty(self, sample_crs: str) -> None:
-        """Test _process_component with empty/invalid inputs."""
+        """Retain the empty-component guard bypassed by public empty-graph handling."""
         # Empty component
         G = nx.Graph()
         assert spatial_utils._process_component(G, "convex_hull", sample_crs) is None
@@ -2406,16 +2481,29 @@ class TestGraphAnalysis(BaseGraphTest):
         )
         assert not iso.empty
 
-    def test_concave_hull_knn_retries_with_larger_k(self) -> None:
+    @pytest.mark.parametrize(
+        "walk",
+        [
+            pytest.param([0, 1, 3, 2], id="valid-retry"),
+            pytest.param([0, 1, 2, 3], id="self-intersection-fallback"),
+        ],
+    )
+    def test_concave_hull_knn_retries_with_larger_k(self, walk: list[int]) -> None:
         """concave_hull_knn should retry the full walk with a larger neighborhood."""
-        points = np.array([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)], dtype=float)
-
+        graph = nx.cycle_graph(4)
+        graph.graph["crs"] = "EPSG:27700"
+        nx.set_node_attributes(graph, dict(enumerate([(0, 0), (1, 0), (1, 1), (0, 1)])), "pos")
+        nx.set_edge_attributes(graph, 1.0, "length")
         with mock.patch("city2graph.utils.spatial._trace_concave_hull_once") as mock_trace:
-            mock_trace.side_effect = [None, [0, 1, 2, 3]]
-
-            poly = spatial_utils._concave_hull_knn(points, k=2)
-
-        assert isinstance(poly, Polygon)
+            mock_trace.side_effect = [None, walk]
+            result = utils.create_isochrone(
+                graph,
+                center_point=Point(0, 0),
+                threshold=10,
+                method="concave_hull_knn",
+                k=2,
+            )
+        assert result.geometry.iloc[0].equals(Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]))
         assert [call.args[2] for call in mock_trace.call_args_list] == [2, 3]
 
     def test_concave_hull_knn_fallback(self, sample_nx_graph: nx.Graph) -> None:
@@ -2560,6 +2648,23 @@ class TestGraphAnalysis(BaseGraphTest):
         assert not iso2.empty
         assert iso2.geometry.iloc[0].area < 4.0  # Small buffer around point
 
+    def test_isochrone_buffer_returns_non_polygon(self) -> None:
+        """Test create_isochrone handles non-polygon geometry from buffer."""
+        # Create a simple graph that might result in a geometry collection
+        G = nx.Graph()
+        G.add_node(1, pos=(0, 0), geometry=Point(0, 0))
+        G.graph = {"crs": "EPSG:27700"}
+
+        result = utils.create_isochrone(
+            G,
+            center_point=Point(0, 0),
+            threshold=10,
+            method="buffer",
+            buffer_distance=0.01,
+        )
+        # Result should always be Polygon or MultiPolygon
+        assert result.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
+
 
 class TestPlotting(BaseGraphTest):
     """Test plotting functionality."""
@@ -2572,7 +2677,10 @@ class TestPlotting(BaseGraphTest):
         # Mock plt.show to avoid display
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("matplotlib.pyplot.show", lambda: None)
-            utils.plot_graph(sample_nx_graph)
+            ax = utils.plot_graph(sample_nx_graph)
+        assert isinstance(ax, Axes)
+        assert len(ax.collections) == 2
+        assert ax.get_aspect() == 1
 
     def test_plot_graph_hetero_subplots(
         self,
@@ -2628,16 +2736,6 @@ class TestPlotting(BaseGraphTest):
                 graph=regular_hetero_graph,
                 subplots=False,
             )
-
-    def test_plot_graph_save(self, sample_nx_graph: nx.Graph) -> None:
-        """Test plotting without showing (for saving to file)."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("matplotlib.pyplot.show", lambda: None)
-            # Plot without auto-display (caller can save the figure)
-            utils.plot_graph(sample_nx_graph)
 
     def test_plot_graph_no_matplotlib(self, sample_nx_graph: nx.Graph) -> None:
         """Test error when matplotlib is missing."""
@@ -2866,7 +2964,9 @@ class TestPlotting(BaseGraphTest):
         """Test _plot_gdf with empty GeoDataFrame (line 3246)."""
         # This should not raise and should return early
         fig, ax = plt.subplots()
-        spatial_utils._plot_gdf(empty_gdf, ax)
+        returned = utils.plot_graph(nodes=empty_gdf, edges=empty_gdf, ax=ax)
+        assert returned is ax
+        assert not ax.collections
         plt.close(fig)
 
     @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
@@ -2921,12 +3021,14 @@ class TestPlotting(BaseGraphTest):
 
         # This should return early without creating a plot
         fig, _ax = plt.subplots()
-        spatial_utils._plot_hetero_subplots(
-            sample_hetero_nodes_dict,
-            empty_edges_dict,
+        result = utils.plot_graph(
+            nodes=sample_hetero_nodes_dict,
+            edges=empty_edges_dict,
+            subplots=True,
             figsize=(10, 10),
             bgcolor="white",
         )
+        assert result is None
         plt.close(fig)
 
     @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
@@ -2951,48 +3053,6 @@ class TestPlotting(BaseGraphTest):
             ncols=2,  # Force 2 columns for 1 item
         )
         plt.close("all")
-
-
-class TestRemoveIsolatedComponents(BaseGraphTest):
-    """Test remove_isolated_components functionality."""
-
-    def test_concave_hull_knn_two_points(self) -> None:
-        """Test concave_hull_knn with 2 points returns LineString (covers line 3000)."""
-        points = [Point(0, 0), Point(1, 1)]
-        result = spatial_utils._concave_hull_knn(points, k=10)
-        # With 2 points, should return a LineString
-        assert result.geom_type == "LineString"
-
-    def test_concave_hull_knn_one_point(self) -> None:
-        """Test concave_hull_knn with 1 point returns Point (covers line 3000)."""
-        points = [Point(0, 0)]
-        result = spatial_utils._concave_hull_knn(points, k=10)
-        # With 1 point, should return a Point
-        assert result.geom_type == "Point"
-
-    def test_concave_hull_alpha_degenerate(self) -> None:
-        """Test _concave_hull_alpha with 2 points (covers line 3300)."""
-        points = [Point(0, 0), Point(1, 1)]
-        result = spatial_utils._concave_hull_alpha(points, ratio=0.5, allow_holes=False)
-        # Should fallback to convex hull
-        assert result.geom_type in ["Polygon", "LineString", "Point"]
-
-    def test_isochrone_buffer_returns_non_polygon(self) -> None:
-        """Test create_isochrone handles non-polygon geometry from buffer."""
-        # Create a simple graph that might result in a geometry collection
-        G = nx.Graph()
-        G.add_node(1, pos=(0, 0), geometry=Point(0, 0))
-        G.graph = {"crs": "EPSG:27700"}
-
-        result = utils.create_isochrone(
-            G,
-            center_point=Point(0, 0),
-            threshold=10,
-            method="buffer",
-            buffer_distance=0.01,
-        )
-        # Result should always be Polygon or MultiPolygon
-        assert result.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
 
 
 class TestPublicUtilityBranches(BaseGraphTest):

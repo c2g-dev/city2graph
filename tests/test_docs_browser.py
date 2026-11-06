@@ -10,6 +10,7 @@ from http.server import SimpleHTTPRequestHandler
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -101,7 +102,7 @@ def test_navigation_search_copy_and_analytics(page: Page, docs_server: str) -> N
     assert page.locator('a[href$="paper.html"] img').count() == 1
     assert page.locator('script[src*="mathjax@"]').count() == 0
     page.locator('.md-tabs a[href$="installation.html"]').click()
-    page.wait_for_url("**/installation.html")
+    page.wait_for_url("**/installation.html", wait_until="domcontentloaded")
     page.get_by_role("heading", name="Install City2Graph", exact=False).first.wait_for()
     assert page.evaluate("window.docsNavigationSentinel") is True
     # Material closes search 125 ms after navigation, after the new DOM is visible.
@@ -116,8 +117,8 @@ def test_navigation_search_copy_and_analytics(page: Page, docs_server: str) -> N
     page.wait_for_function(
         "navigator.clipboard.readText().then(text => text.includes('pip install'))"
     )
-    page.go_back()
-    page.wait_for_url(docs_server)
+    page.go_back(wait_until="domcontentloaded")
+    page.wait_for_url(docs_server, wait_until="domcontentloaded")
     page.get_by_role("heading", name="City2Graph: Geospatial Graphs", exact=False).first.wait_for()
     records = page.evaluate("Array.from(window.dataLayer || [], row => Array.from(row))")
     assert [row[0] for row in records[:3]] == ["consent", "js", "config"]
@@ -176,7 +177,7 @@ def test_notebook_copy_after_instant_navigation(page: Page, docs_server: str) ->
     assert page.evaluate("window.docsNavigationSentinel") is True
     page.locator("clipboard-copy").first.click()
     page.wait_for_function("navigator.clipboard.readText().then(text => text.includes('import'))")
-    page.go_back()
+    page.go_back(wait_until="domcontentloaded")
     page.get_by_role("heading", name="City2Graph: Geospatial Graphs", exact=False).first.wait_for()
     page.locator('.examples-gallery a[href$="add_metapaths.html"]').click()
     page.locator("clipboard-copy").first.click()
@@ -200,6 +201,9 @@ def test_site_payload_budget_and_exclusions() -> None:
     assert not (root / "overrides").exists()
     assert not (root / "hooks.py").exists()
     assert not (root / "examples/data").exists()
+    assert not list(root.rglob("*.json.gz"))
+    assert not list(root.rglob("*.geojson.gz"))
+    assert (root / "assets/examples/synthetic_gtfs_world_isochrones.png").is_file()
     assert not list(root.rglob("*.psd"))
     assert not list(root.rglob("*.pyc"))
     assert not list(root.rglob(".DS_Store"))
@@ -287,8 +291,211 @@ def test_maths_after_delayed_load_and_instant_navigation(
         page.locator("mjx-container").wait_for(timeout=45000)
     page.locator('.md-tabs a[href$="installation.html"]').click()
     page.get_by_role("heading", name="Install City2Graph", exact=False).first.wait_for()
-    page.go_back()
+    page.go_back(wait_until="domcontentloaded")
     page.locator("mjx-container").wait_for(timeout=45000)
     assert page.evaluate("window.docsNavigationSentinel") is True
     assert len([url for url in requests if url.endswith("mathjax@4.1.3/tex-mml-chtml.js")]) == 1
     assert not errors
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_gtfs_flowchart_themes_mobile_and_navigation(
+    page: Page,
+    docs_server: str,
+    scheme: str,
+) -> None:
+    """Render the generator decision flow across themes and instant navigation."""
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    # Material renders Mermaid in a closed shadow root. Open it only in this test
+    # so assertions can inspect the real SVG without altering its shadow styling.
+    page.add_init_script("""(() => {
+      const attach = Element.prototype.attachShadow;
+      Element.prototype.attachShadow = function(options) {
+        return attach.call(this, {...options, mode: 'open'});
+      };
+    })()""")
+    page.emulate_media(color_scheme="dark" if scheme == "dark" else "light")
+    page.goto(docs_server + "examples/creating_gtfs.html", wait_until="domcontentloaded")
+    page.wait_for_function("typeof document$ !== 'undefined'")
+    page.wait_for_function(
+        "performance.getEntriesByType('resource').some(entry => entry.name.endsWith('/sitemap.xml'))"
+    )
+    assert page.locator("body").get_attribute("data-md-color-scheme") == f"city2graph-{scheme}"
+    diagrams = page.locator(".mermaid svg")
+    diagram = diagrams.first
+    diagram.wait_for()
+    assert "User value specified?" in (diagram.text_content() or "")
+    assert "Use source value" in (diagram.text_content() or "")
+    assert "Use default" in (diagram.text_content() or "")
+    assert page.get_by_text("These are the only custom operating values", exact=False).is_visible()
+    assert diagrams.count() == 1
+    assert page.locator("article img").count() == 4
+    for atlas in page.locator('article img[src$="synthetic_gtfs_world_isochrones.png"]').all():
+        atlas.scroll_into_view_if_needed()
+        assert atlas.evaluate(
+            "async image => { await image.decode(); return image.naturalWidth === 4800; }"
+        )
+    figure = page.locator('article img[src$="synthetic_gtfs_osm_quickstart.png"]')
+    figure.scroll_into_view_if_needed()
+    assert figure.is_visible()
+    figure.evaluate("image => image.decode()")
+    assert figure.evaluate("image => image.naturalWidth > 1000")
+    for width in (1280, 375):
+        page.set_viewport_size({"width": width, "height": 900})
+        diagram.scroll_into_view_if_needed()
+        box = diagram.bounding_box()
+        assert box
+        assert min(box["width"], box["height"]) > 100
+        wrapper = page.locator(".gtfs-flowchart").bounding_box()
+        assert wrapper
+        assert wrapper["width"] <= width
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.evaluate("window.gtfsNavigationSentinel = true")
+    page.locator('.md-tabs a[href$="installation.html"]').click()
+    # Material's scroll tracking can retain a heading fragment during navigation.
+    page.wait_for_url(
+        lambda url: urlsplit(url).path.endswith("/installation.html"),
+        wait_until="domcontentloaded",
+    )
+    page.locator("article h1").filter(has_text="Install City2Graph").wait_for()
+    page.go_back(wait_until="domcontentloaded")
+    page.wait_for_url(
+        lambda url: urlsplit(url).path.endswith("/examples/creating_gtfs.html"),
+        wait_until="domcontentloaded",
+    )
+    page.locator(".mermaid svg").first.wait_for()
+    assert page.evaluate("window.gtfsNavigationSentinel") is True
+    assert not errors
+
+
+@pytest.mark.parametrize(
+    ("filename", "image_path", "width"),
+    [
+        (
+            "examples/creating_gtfs.html",
+            "examples/synthetic_gtfs_world_isochrones_thumbnail.png",
+            "1600",
+        ),
+        ("installation.html", "logos/social_preview_city2graph.png", "1280"),
+    ],
+)
+def test_page_social_images(filename: str, image_path: str, width: str) -> None:
+    """Use the selected figure for GTFS pages and preserve the site-wide fallback."""
+    from bs4 import BeautifulSoup  # noqa: PLC0415
+
+    assert SITE
+    page = BeautifulSoup(Path(SITE, filename).read_text(), "html.parser")
+    image_url = f"https://city2graph.net/latest/assets/{image_path}"
+    for selector in ('meta[property="og:image"]', 'meta[name="twitter:image"]'):
+        element = page.select_one(selector)
+        assert element
+        assert element.get("content") == image_url
+    dimensions = page.select_one('meta[property="og:image:width"]')
+    assert dimensions
+    assert dimensions.get("content") == width
+
+
+@pytest.mark.parametrize("width", [1280, 375])
+def test_gtfs_introductory_maps_precede_configuration(
+    page: Page, docs_server: str, width: int
+) -> None:
+    """Present the first map before readers reach configuration details."""
+    page.set_viewport_size({"width": width, "height": 1000})
+    page.goto(docs_server + "examples/creating_gtfs.html", wait_until="domcontentloaded")
+    assert page.get_by_role("heading", name="Parameters you can set", exact=True).count() == 0
+    assert "service.json" not in page.locator("article").inner_text()
+    assert "json.loads" not in page.locator("article").inner_text()
+    assert page.locator(".tabbed-set").count() == 0
+    inspection = page.locator("h3#inspect-the-generated-feed")
+    assert inspection.count() == 1
+    assert not inspection.locator("xpath=ancestor::details").count()
+    assert page.locator("h2#create-a-feed-from-your-own-tables").count() == 0
+    assert (
+        "Overture Maps is currently unsupported for GTFS generation"
+        in page.locator("article").inner_text()
+    )
+    atlases = page.locator('article img[src$="synthetic_gtfs_world_isochrones.png"]')
+    assert atlases.count() == 2
+    assert atlases.first.evaluate(
+        "image => Boolean(image.compareDocumentPosition(document.querySelector('#start-with-a-place')) & Node.DOCUMENT_POSITION_FOLLOWING)"
+    )
+    assert page.locator(".gtfs-flowchart").evaluate(
+        "chart => Boolean(chart.compareDocumentPosition("
+        "document.getElementById('5-override-only-the-necessary-fields')) & Node.DOCUMENT_POSITION_FOLLOWING)"
+    )
+    figure = page.locator('article img[src$="synthetic_gtfs_osm_quickstart.png"]')
+    figure.scroll_into_view_if_needed()
+    assert figure.is_visible()
+    figure.evaluate("image => image.decode()")
+    assert figure.evaluate("image => image.naturalWidth > 1000")
+    assert figure.evaluate(
+        "image => Boolean(image.compareDocumentPosition(document.querySelector('#generate-a-feed')) & Node.DOCUMENT_POSITION_FOLLOWING)"
+    )
+    assert not page.locator("article details[open]").count()
+    isochrones = page.locator('article img[src$="synthetic_gtfs_tokyo_isochrones.png"]')
+    isochrones.scroll_into_view_if_needed()
+    isochrones.evaluate("image => image.decode()")
+    assert isochrones.evaluate("image => image.naturalWidth > 1000")
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+
+
+@pytest.mark.parametrize("width", [375, 1280])
+def test_gtfs_reference_flow_and_details(page: Page, docs_server: str, width: int) -> None:
+    """Keep the main flow visible and the detailed examples accessible."""
+    page.add_init_script("""(() => {
+      const attach = Element.prototype.attachShadow;
+      Element.prototype.attachShadow = function(options) {
+        return attach.call(this, {...options, mode: 'open'});
+      };
+    })()""")
+    page.set_viewport_size({"width": width, "height": 1000})
+    page.goto(docs_server + "api/gtfs_generation.html", wait_until="domcontentloaded")
+    assert page.locator("article h2").count() == 4
+    diagram = page.locator(".gtfs-flowchart .mermaid svg")
+    diagram.wait_for()
+    assert "User value" in (diagram.text_content() or "")
+    assert "Usable source" in (diagram.text_content() or "")
+    assert not page.locator("article details[open]").count()
+    calendar = page.locator("details#windows-and-dates")
+    calendar.locator("summary").click()
+    assert calendar.locator("table").count() == 4
+    assert calendar.locator("table").last.is_visible()
+    assert "exception_type" in calendar.inner_text()
+    calendar.locator("summary").click()
+    structure = page.locator("details#gtfs-structure")
+    structure.locator("summary").click()
+    structure.locator(".mermaid svg").wait_for()
+    assert "stop_times.txt" in structure.inner_text()
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+
+
+def test_gtfs_tutorial_structured_data() -> None:
+    """Publish valid article and FAQ markup that matches the visible questions."""
+    import json  # noqa: PLC0415
+
+    from bs4 import BeautifulSoup  # noqa: PLC0415
+
+    assert SITE
+    page = BeautifulSoup(Path(SITE, "examples/creating_gtfs.html").read_text(), "html.parser")
+    blocks = [
+        json.loads(tag.string or "") for tag in page.select('script[type="application/ld+json"]')
+    ]
+    by_type = {block["@type"]: block for block in blocks}
+    assert {"BreadcrumbList", "TechArticle", "FAQPage"} <= by_type.keys()
+    article = by_type["TechArticle"]
+    assert article["headline"] == page.title.get_text()
+    assert article["dateModified"] >= article["datePublished"]
+    visible = page.select_one("article")
+    assert visible
+    visible_headings = {
+        heading.get_text(strip=True).removesuffix("¶") for heading in visible.select("h3")
+    }
+    questions = [item["name"] for item in by_type["FAQPage"]["mainEntity"]]
+    assert questions
+    for question in questions:
+        assert question in visible_headings
+    description = page.select_one('meta[name="description"]')
+    assert description
+    assert 70 <= len(str(description.get("content"))) <= 160

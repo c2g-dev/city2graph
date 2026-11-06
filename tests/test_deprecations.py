@@ -39,11 +39,11 @@ from city2graph.proximity import knn_graph
 from city2graph.proximity import relative_neighborhood_graph
 from city2graph.proximity import waxman_graph
 from city2graph.transportation import travel_summary_graph
+from tests.helpers import GtfsConnectionFactory
 from tests.helpers import make_grid_polygons_gdf
 from tests.helpers import make_points_simple
 from tests.helpers import make_poly_points_pair
 from tests.helpers import make_segments_gdf
-from tests.test_transportation import dict_to_con
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -173,8 +173,10 @@ class TestAsNxDeprecation:
     ) -> None:
         """Passing ``as_nx`` explicitly warns, for both True and False."""
         args, kwargs = build_args()
-        with pytest.warns(DeprecationWarning, match=DEPRECATION_MATCH):
+        with pytest.warns(DeprecationWarning, match=DEPRECATION_MATCH) as record:
             func(*args, **kwargs, as_nx=as_nx)
+        assert len(record) == 1
+        assert record[0].filename == __file__
 
     @pytest.mark.parametrize(("func", "build_args"), BUILDER_PARAMS)
     def test_default_as_nx_is_silent(
@@ -195,24 +197,13 @@ class TestAsNxDeprecation:
         deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
         assert deprecations == [], [str(w.message) for w in deprecations]
 
-    @pytest.mark.parametrize(("func", "build_args"), BUILDER_PARAMS)
-    def test_warning_points_at_caller(
-        self,
-        func: Callable[..., Any],
-        build_args: Callable[[], Any],
-    ) -> None:
-        """``stacklevel`` attributes the warning to the caller, not to city2graph."""
-        args, kwargs = build_args()
-        with pytest.warns(DeprecationWarning, match=DEPRECATION_MATCH) as record:
-            func(*args, **kwargs, as_nx=False)
-        assert record[0].filename == __file__
-
     def test_travel_summary_graph_deprecation(
         self,
+        gtfs_connection: GtfsConnectionFactory,
         sample_gtfs_dict: dict[str, pd.DataFrame],
     ) -> None:
         """``travel_summary_graph`` warns on explicit use and stays silent by default."""
-        con = dict_to_con(sample_gtfs_dict)
+        con = gtfs_connection(sample_gtfs_dict)
 
         with pytest.warns(DeprecationWarning, match=DEPRECATION_MATCH) as record:
             travel_summary_graph(con, as_nx=False)

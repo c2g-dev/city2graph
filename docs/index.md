@@ -206,6 +206,14 @@ supported Python and CUDA versions, and conda-forge instructions.
 
 <div class="grid cards examples-gallery" markdown>
 
+- ![Public transport networks and blue street-based isochrones across eight cities](assets/examples/synthetic_gtfs_world_isochrones_thumbnail.png){ .card-img }
+
+    **[No GTFS? Create It from OpenStreetMap](examples/creating_gtfs.md)**
+
+    ---
+
+    Generate a synthetic GTFS feed from OpenStreetMap for any city, build a public transport graph, and map accessibility along walking streets.
+
 - ![Walkable street networks of eight city centres extracted from Overture Maps](assets/examples/overture_osmnx.jpg){ .card-img }
 
     **[How to Use Overture Maps Like OSMnx](https://medium.com/@yuta.sato.now/how-to-use-overture-maps-like-osmnx-by-city2graph-7e01d38f9f61)**
@@ -317,6 +325,7 @@ workflows. The two libraries are complementary.
 | --- | --- | --- | --- | --- |
 | Buildings, streets, and tessellations | Heterogeneous urban morphology graph | [`morphological_graph`](api/morphology.md) | Urban form, walkability, GNN embeddings | [Morphology tutorial](examples/morphological_graph_from_overturemaps.ipynb) |
 | GTFS public transport feed | Stop-to-stop travel-time graph | [`travel_summary_graph`](api/transportation.md) | Accessibility, centrality, multimodal routing | [GTFS tutorial](examples/gtfs.ipynb) |
+| OpenStreetMap public transport routes (no GTFS feed needed) | Synthetic GTFS feed, then a stop-to-stop travel-time graph | [`load_osm_transport`](api/transportation.md) | Transit accessibility in cities without an open feed | [Create GTFS from OpenStreetMap](examples/creating_gtfs.md) |
 | GBFS shared-mobility JSON feeds | DuckDB tables with station or vehicle point geometry | [`load_gbfs`](api/transportation.md) | Bike-share and shared-mobility preprocessing | [Transportation API](api/transportation.md) |
 | OD matrix or flow edge list | Weighted mobility graph | [`od_matrix_to_graph`](api/mobility.md) | Migration, commuting, bike-sharing flows | [OD matrix tutorial](examples/generating_graphs_from_od_matrix.ipynb) |
 | Points, polygons, or graph layers | Proximity, contiguity, bridge, or containment graph | [`knn_graph`](api/proximity.md), [`contiguity_graph`](api/proximity.md) | POI access, spatial interaction, zonal adjacency | [Proximity tutorial](examples/generating_graphs_by_proximity.ipynb) |

@@ -1,15 +1,16 @@
 """
 GTFS transportation network utilities.
 
-The functions in this module load GTFS feeds into DuckDB, derive stop-to-stop
-origin/destination records, and aggregate those records into transport summary
-graphs for downstream network analysis.
+The functions in this module generate, inspect, save and load GTFS feeds,
+retrieve transport service from OSM, and derive stop-to-stop
+origin/destination records and transport summary graphs for analysis.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import shutil
 import tempfile
 import warnings
 import zipfile
@@ -17,21 +18,58 @@ from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Literal
+from typing import Unpack
 
 import duckdb
 import geopandas as gpd
 import pandas as pd
 from shapely import wkt
 
+from . import data as _data
+from .gtfs.feed import _INCLUDE_METADATA
+from .gtfs.feed import _ensure_graph_sql_support
+from .gtfs.feed import save_gtfs
+from .gtfs.generation import create_gtfs
+from .gtfs.metadata import _report_metadata
+from .gtfs.metadata import _restore_metadata
+from .gtfs.report import _generation_report
+from .gtfs.schema import _METADATA_FILENAME
+from .gtfs.schema import GenerationOptions
+from .gtfs.schema import GTFSGenerationWarning
+from .gtfs.schema import TransportData
+from .gtfs.schema import _time_to_seconds as _time_to_seconds  # noqa: PLC0414 - retain analysis helper export
+from .gtfs.sources import _OSM_ENDPOINT
+from .gtfs.sources import _OSM_TIMEOUT
+from .gtfs.sources import _OVERWRITE_SOURCE
+from .gtfs.sources import _USE_SOURCE_TAGS
+from .gtfs.sources import _load_osm_transport
+from .gtfs.sources import _SourceIO
 from .utils import gdf_to_nx
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from collections.abc import Sequence
+
     import networkx as nx
+    from shapely.geometry import MultiPolygon
+    from shapely.geometry import Polygon
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-__all__ = ["get_od_pairs", "load_gbfs", "load_gtfs", "travel_summary_graph"]
+__all__ = [
+    "GTFSGenerationWarning",
+    "TransportData",
+    "create_gtfs",
+    "get_gtfs_summary",
+    "get_od_pairs",
+    "load_gbfs",
+    "load_gtfs",
+    "load_osm_transport",
+    "save_gtfs",
+    "travel_summary_graph",
+]
 
 _ACTIVE_DATES_TABLE_SQL = """
     CREATE OR REPLACE TEMP TABLE _active_dates (
@@ -213,49 +251,6 @@ def _table_columns(
     return {row[1] for row in con.execute(f"PRAGMA table_info('{table_name}')").fetchall()}
 
 
-def _ensure_graph_sql_support(con: duckdb.DuckDBPyConnection) -> None:
-    """
-    Ensure SQL features required by transport graph queries are available.
-
-    The function loads DuckDB spatial support and registers the
-    ``time_to_seconds`` scalar UDF when missing.
-
-    Parameters
-    ----------
-    con : duckdb.DuckDBPyConnection
-        Open DuckDB connection.
-
-    Returns
-    -------
-    None
-        The function mutates runtime SQL capabilities in ``con``.
-
-    Raises
-    ------
-    RuntimeError
-        If the DuckDB spatial extension cannot be loaded or installed.
-    """
-    try:
-        con.execute("LOAD spatial;")
-    except duckdb.Error:
-        try:
-            con.execute("INSTALL spatial; LOAD spatial;")
-        except duckdb.Error as error:
-            msg = "DuckDB spatial extension is required to build transport graph geometries."
-            raise RuntimeError(msg) from error
-
-    registered = con.execute(
-        "SELECT count(*) FROM duckdb_functions() WHERE function_name = 'time_to_seconds'"
-    ).fetchone()
-    if registered is None or not registered[0]:
-        con.create_function(
-            "time_to_seconds",
-            _time_to_seconds,
-            [duckdb.sqltype("VARCHAR")],
-            duckdb.sqltype("DOUBLE"),
-        )
-
-
 def _ensure_stops_geometry(con: duckdb.DuckDBPyConnection) -> None:
     """
     Create a temp relation named _stops_for_graph with a geometry column.
@@ -311,6 +306,46 @@ def _ensure_stops_geometry(con: duckdb.DuckDBPyConnection) -> None:
     )
 
 
+def _feed_date_bounds(
+    con: duckdb.DuckDBPyConnection, tables: set[str]
+) -> tuple[datetime | None, datetime | None]:
+    """Read date bounds across weekly calendars and date exceptions.
+
+    Empty calendar tables contribute no bounds.
+
+    Parameters
+    ----------
+    con : duckdb.DuckDBPyConnection
+        Feed connection.
+    tables : set of str
+        Available table names.
+
+    Returns
+    -------
+    tuple of datetime or None
+        Earliest and latest declared dates, or two missing values.
+    """
+    bounds: list[tuple[datetime, datetime]] = []
+    for name, start, end in (
+        ("calendar", "start_date", "end_date"),
+        ("calendar_dates", "date", "date"),
+    ):
+        if name in tables:
+            row = con.execute(
+                f"SELECT MIN({start}), MAX({end}) FROM {name}"  # noqa: S608 - fixed table and column names
+            ).fetchone()
+            if row and row[0] and row[1]:
+                bounds.append(
+                    (
+                        datetime.strptime(str(row[0]), "%Y%m%d"),
+                        datetime.strptime(str(row[1]), "%Y%m%d"),
+                    )
+                )
+    if not bounds:
+        return None, None
+    return min(start for start, _ in bounds), max(end for _, end in bounds)
+
+
 def _resolve_service_window(
     con: duckdb.DuckDBPyConnection,
     *,
@@ -359,40 +394,14 @@ def _resolve_service_window(
             raise ValueError(msg)
         return None, None, False
 
-    bounds: list[tuple[datetime, datetime]] = []
-
-    if has_calendar:
-        row = con.execute(
-            "SELECT MIN(start_date), MAX(end_date), COUNT(*) FROM calendar"
-        ).fetchone()
-        if row and row[2] and row[0] and row[1]:
-            bounds.append(
-                (
-                    datetime.strptime(str(row[0]), "%Y%m%d"),
-                    datetime.strptime(str(row[1]), "%Y%m%d"),
-                )
-            )
-
-    if has_calendar_dates:
-        row = con.execute("SELECT MIN(date), MAX(date), COUNT(*) FROM calendar_dates").fetchone()
-        if row and row[2] and row[0] and row[1]:
-            bounds.append(
-                (
-                    datetime.strptime(str(row[0]), "%Y%m%d"),
-                    datetime.strptime(str(row[1]), "%Y%m%d"),
-                )
-            )
-
-    if not bounds:
+    gtfs_start, gtfs_end = _feed_date_bounds(con, tables)
+    if gtfs_start is None or gtfs_end is None:
         if calendar_start or calendar_end:
             msg = (
                 "calendar_start/calendar_end specified but calendar tables contain no usable dates"
             )
             raise ValueError(msg)
         return None, None, False
-
-    gtfs_start = min(start for start, _ in bounds)
-    gtfs_end = max(end for _, end in bounds)
 
     try:
         user_start = datetime.strptime(calendar_start, "%Y%m%d") if calendar_start else None
@@ -424,52 +433,6 @@ def _resolve_service_window(
         resolved_end.strftime("%Y%m%d"),
         True,
     )
-
-
-def _time_to_seconds(value: str | float | None) -> float:
-    """
-    Convert a GTFS time value into seconds from midnight.
-
-    GTFS may contain values beyond 24 hours (for trips after midnight), and this
-    helper preserves those values as absolute seconds.
-
-    String values must be in ``HH:MM:SS`` format. Invalid string
-    representations like ``""``, ``"nan"``, ``"None"``, and bare numeric
-    strings (e.g. ``"3600"``) are rejected with a ``ValueError``.
-
-    Parameters
-    ----------
-    value : str | float | None
-        GTFS time value, must be ``HH:MM:SS`` when a string is provided.
-
-    Returns
-    -------
-    float
-        Seconds from midnight.
-
-    Raises
-    ------
-    ValueError
-        If a string value is not in valid ``HH:MM:SS`` format.
-    """
-    if value is None or (isinstance(value, float) and pd.isna(value)):
-        return 0.0
-    if not isinstance(value, str):
-        return float(value)
-    value = str(value).strip()
-    if not value or value.lower() in {"nan", "none"}:
-        msg = f"Invalid GTFS time value: {value!r}. Expected HH:MM:SS format."
-        raise ValueError(msg)
-    parts = value.split(":")
-    if len(parts) != 3:
-        msg = f"Invalid GTFS time value: {value!r}. Expected HH:MM:SS format."
-        raise ValueError(msg)
-    try:
-        h, m, s = int(parts[0]), int(parts[1]), int(parts[2])
-    except ValueError as error:
-        msg = f"Invalid GTFS time value: {value!r}. Expected HH:MM:SS format."
-        raise ValueError(msg) from error
-    return h * 3600 + m * 60 + s
 
 
 def _timestamp(gtfs_time: str | float | None, service_date: datetime | str) -> datetime | None:
@@ -508,7 +471,9 @@ def _timestamp(gtfs_time: str | float | None, service_date: datetime | str) -> d
         return None
 
 
-def load_gtfs(path: str | Path) -> duckdb.DuckDBPyConnection:
+def load_gtfs(
+    path: str | Path, *, include_metadata: bool = _INCLUDE_METADATA
+) -> duckdb.DuckDBPyConnection:
     """
     Load a GTFS ZIP archive into an in-memory DuckDB database.
 
@@ -520,6 +485,9 @@ def load_gtfs(path: str | Path) -> duckdb.DuckDBPyConnection:
     ----------
     path : str | Path
         Path to a GTFS ``.zip`` file.
+    include_metadata : bool, default True
+        Restore embedded ``city2graph_metadata.json`` when present.
+        Set False to load only the GTFS tables.
 
     Returns
     -------
@@ -527,48 +495,52 @@ def load_gtfs(path: str | Path) -> duckdb.DuckDBPyConnection:
         In-memory DuckDB connection containing imported GTFS tables.
     """
     con = duckdb.connect(":memory:")
-    con.execute("INSTALL spatial; LOAD spatial;")
-
-    # Register a scalar UDF used by SQL queries in this module.
-    con.create_function(
-        "time_to_seconds",
-        _time_to_seconds,
-        [duckdb.sqltype("VARCHAR")],
-        duckdb.sqltype("DOUBLE"),
-    )
-
-    tmp_dir = tempfile.mkdtemp()
-    has_files = False
-
     try:
-        with zipfile.ZipFile(path) as zf:
-            for name in zf.namelist():
-                if name.endswith(".txt") and not name.endswith("/"):
-                    has_files = True
-                    zf.extract(name, tmp_dir)
-                    table_name = name.rsplit("/", 1)[-1].replace(".txt", "")
-                    file_path = str(Path(tmp_dir) / name)
-                    con.read_csv(file_path, all_varchar=True, auto_detect=True).create(table_name)
-    except (OSError, zipfile.BadZipFile, duckdb.Error):
-        logger.exception("Failed to read GTFS archive at %s", path)
+        _ensure_graph_sql_support(con)
+
+        has_files = False
+        embedded_metadata = None
+
+        try:
+            with tempfile.TemporaryDirectory() as tmp_dir, zipfile.ZipFile(path) as zf:
+                if include_metadata and _METADATA_FILENAME in zf.namelist():
+                    embedded_metadata = zf.read(_METADATA_FILENAME)
+                for name in zf.namelist():
+                    if name.endswith(".txt") and not name.endswith("/"):
+                        has_files = True
+                        table_name = name.rsplit("/", 1)[-1].replace(".txt", "")
+                        file_path = str(Path(tmp_dir) / "table.csv")
+                        with zf.open(name) as source, Path(file_path).open("wb") as target:
+                            shutil.copyfileobj(source, target)
+                        con.read_csv(file_path, all_varchar=True, auto_detect=True).create(
+                            table_name
+                        )
+        except (OSError, zipfile.BadZipFile, duckdb.Error):
+            logger.exception("Failed to read GTFS archive at %s", path)
+            return con
+
+        if not has_files:
+            logger.warning("No GTFS files found in %s", path)
+            return con
+
+        tables = sorted(_list_tables(con))
+
+        if "stops" in tables:
+            # Build point geometries while guarding against empty coordinate strings.
+            con.execute("""
+                ALTER TABLE stops ADD COLUMN geometry GEOMETRY;
+                UPDATE stops SET geometry = ST_Point(CAST(NULLIF(stop_lon, '') AS DOUBLE), CAST(NULLIF(stop_lat, '') AS DOUBLE))
+                WHERE try_cast(NULLIF(stop_lon, '') as DOUBLE) IS NOT NULL AND try_cast(NULLIF(stop_lat, '') as DOUBLE) IS NOT NULL;
+            """)
+
+        if embedded_metadata is not None:
+            _restore_metadata(con, embedded_metadata)
+
+        logger.info("GTFS loaded: %s", ", ".join(tables))
         return con
-
-    if not has_files:
-        logger.warning("No GTFS files found in %s", path)
-        return con
-
-    tables = sorted(_list_tables(con))
-
-    if "stops" in tables:
-        # Build point geometries while guarding against empty coordinate strings.
-        con.execute("""
-            ALTER TABLE stops ADD COLUMN geometry GEOMETRY;
-            UPDATE stops SET geometry = ST_Point(CAST(NULLIF(stop_lon, '') AS DOUBLE), CAST(NULLIF(stop_lat, '') AS DOUBLE))
-            WHERE try_cast(NULLIF(stop_lon, '') as DOUBLE) IS NOT NULL AND try_cast(NULLIF(stop_lat, '') as DOUBLE) IS NOT NULL;
-        """)
-
-    logger.info("GTFS loaded: %s", ", ".join(tables))
-    return con
+    except Exception:
+        con.close()
+        raise
 
 
 def load_gbfs(path: str | Path) -> duckdb.DuckDBPyConnection:
@@ -614,8 +586,8 @@ def load_gbfs(path: str | Path) -> duckdb.DuckDBPyConnection:
                 continue
             has_files = True
             table_name = file_path.stem.replace("-", "_").lower()
-            df = pd.DataFrame(rows)
-            con.register("_gbfs_tmp", df)
+            frame = pd.DataFrame(rows)
+            con.register("_gbfs_tmp", frame)
             con.execute(f"""
                 CREATE OR REPLACE TABLE {table_name} AS
                 SELECT *
@@ -647,72 +619,62 @@ def load_gbfs(path: str | Path) -> duckdb.DuckDBPyConnection:
     return con
 
 
-def _build_frequency_multipliers(
+def _build_frequency_periods(
     con: duckdb.DuckDBPyConnection,
     *,
     tables: set[str],
+    use_frequencies: bool,
 ) -> None:
     """
-    Build a temporary table of per-trip frequency multipliers from ``frequencies.txt``.
+    Prepare numeric frequency periods without expanding individual departures.
 
-    For trips listed in ``frequencies.txt``, the multiplier is the total number
-    of departures implied by the headway within its defined time window:
-    ``floor((end_time - start_time) / headway_secs)``.
-
-    Trips not in ``frequencies.txt`` get a multiplier of 1.
+    Retain period boundaries so each graph leg can apply its own time offsets.
 
     Parameters
     ----------
     con : duckdb.DuckDBPyConnection
-        Open DuckDB connection.
+        Open DuckDB connection containing GTFS tables.
     tables : set[str]
-        Available GTFS table names.
-
-    Returns
-    -------
-    None
-        Creates or replaces the ``_freq_multipliers`` temp table.
+        GTFS tables represented as string-valued DataFrames.
+    use_frequencies : bool
+        Interpret frequency periods when True; otherwise retain template counts.
     """
-    if "frequencies" not in tables:
-        con.execute(
-            """
-            CREATE OR REPLACE TEMP TABLE _freq_multipliers AS
-            SELECT DISTINCT trip_id, 1 AS multiplier
-            FROM trips
-            """
+    con.execute("""
+        CREATE OR REPLACE TEMP TABLE _frequency_periods (
+            trip_id VARCHAR, start_sec DOUBLE, end_sec DOUBLE,
+            headway DOUBLE, exact_times DOUBLE
         )
+    """)
+    if not use_frequencies or "frequencies" not in tables:
         return
-
-    # frequencies.txt has: trip_id, start_time, end_time, headway_secs, [exact_times]
-    # Compute total departures per trip from frequency entries.
-    con.execute(
-        """
-        CREATE OR REPLACE TEMP TABLE _freq_multipliers AS
-        WITH freq_trips AS (
-            SELECT
-                trip_id,
-                SUM(
-                    GREATEST(1, CAST(FLOOR(
-                        (time_to_seconds(CAST(end_time AS VARCHAR))
-                         - time_to_seconds(CAST(start_time AS VARCHAR)))
-                        / CAST(NULLIF(headway_secs, '0') AS DOUBLE)
-                    ) AS BIGINT))
-                ) AS multiplier
-            FROM frequencies
-            WHERE try_cast(headway_secs AS DOUBLE) IS NOT NULL
-              AND try_cast(headway_secs AS DOUBLE) > 0
-            GROUP BY trip_id
-        ),
-        non_freq_trips AS (
-            SELECT DISTINCT trip_id, 1 AS multiplier
-            FROM trips
-            WHERE trip_id NOT IN (SELECT trip_id FROM freq_trips)
-        )
-        SELECT * FROM freq_trips
-        UNION ALL
-        SELECT * FROM non_freq_trips
-        """
+    columns = _table_columns(con, "frequencies")
+    exact = (
+        "CASE WHEN exact_times IS NULL OR trim(CAST(exact_times AS VARCHAR)) = '' "
+        "THEN 0 ELSE try_cast(exact_times AS DOUBLE) END"
+        if "exact_times" in columns
+        else "0"
     )
+    con.execute(f"""
+        INSERT INTO _frequency_periods
+        SELECT trip_id, time_to_seconds(CAST(start_time AS VARCHAR)),
+            time_to_seconds(CAST(end_time AS VARCHAR)),
+            try_cast(headway_secs AS DOUBLE), {exact}
+        FROM frequencies
+    """)  # noqa: S608
+    invalid = con.execute("""
+        SELECT trip_id FROM _frequency_periods
+        WHERE headway IS NULL OR NOT isfinite(headway) OR headway <= 0
+            OR headway != floor(headway) OR end_sec <= start_sec
+            OR exact_times IS NULL OR exact_times NOT IN (0, 1)
+        UNION ALL
+        SELECT trip_id FROM (
+            SELECT *, lag(end_sec) OVER (PARTITION BY trip_id ORDER BY start_sec) AS previous_end
+            FROM _frequency_periods
+        ) WHERE start_sec < previous_end
+    """).fetchall()
+    if invalid:
+        msg = f"Invalid or overlapping frequency periods for trips: {invalid}"
+        raise ValueError(msg)
 
 
 def get_od_pairs(
@@ -728,16 +690,19 @@ def get_od_pairs(
     For each ``trip_id``, consecutive stops are paired into directed legs with
     departure/arrival timestamps and per-leg travel time in seconds. Service
     activity is derived from ``calendar`` and optionally adjusted using
-    ``calendar_dates``.
+    ``calendar_dates``. Frequency-based trips remain template legs, not actual
+    departures; their timestamps must not be used to infer connections.
 
     Parameters
     ----------
     con : duckdb.DuckDBPyConnection
         DuckDB connection with GTFS tables loaded.
     start_date : str | None, default=None
-        Inclusive start date (``YYYYMMDD``). Optional when ``calendar`` exists.
+        Inclusive start date (``YYYYMMDD``). Defaults to the earliest date in
+        calendar or calendar_dates.
     end_date : str | None, default=None
-        Inclusive end date (``YYYYMMDD``). Optional when ``calendar`` exists.
+        Inclusive end date (``YYYYMMDD``). Defaults to the latest date in
+        calendar or calendar_dates.
     include_geometry : bool, default=True
         If ``True`` and stop geometries are available, include a line geometry
         for each OD pair.
@@ -759,17 +724,13 @@ def get_od_pairs(
 
     has_cal = "calendar" in tables
 
-    if has_cal:
-        cal_df = con.execute(
-            "SELECT MIN(start_date) as s, MAX(end_date) as e FROM calendar"
-        ).fetchone()
-        s_dt = start_date or (cal_df[0] if cal_df else None)
-        e_dt = end_date or (cal_df[1] if cal_df else None)
-    else:
-        if not start_date or not end_date:
-            return pd.DataFrame()
-        s_dt = start_date
-        e_dt = end_date
+    s_dt, e_dt = start_date, end_date
+    if not s_dt or not e_dt:
+        first, last = _feed_date_bounds(con, tables)
+        s_dt = s_dt or (first.strftime("%Y%m%d") if first else None)
+        e_dt = e_dt or (last.strftime("%Y%m%d") if last else None)
+    if not s_dt or not e_dt:
+        return pd.DataFrame()
 
     _build_active_dates(
         con,
@@ -1009,16 +970,7 @@ def _prepare_summary_graph_support(
     None
         The function creates or replaces temporary support tables.
     """
-    if use_frequencies:
-        _build_frequency_multipliers(con, tables=tables)
-    else:
-        con.execute(
-            """
-            CREATE OR REPLACE TEMP TABLE _freq_multipliers AS
-            SELECT DISTINCT trip_id, 1 AS multiplier
-            FROM trips
-            """
-        )
+    _build_frequency_periods(con, tables=tables, use_frequencies=use_frequencies)
 
 
 def _build_travel_summary_edges(
@@ -1079,31 +1031,50 @@ def _build_travel_summary_edges(
             FROM stop_times
             WHERE try_cast(stop_sequence AS INTEGER) IS NOT NULL
         ),
-        st_filtered AS (
-            SELECT *
-            FROM st
-            WHERE next_stop_id IS NOT NULL
-              AND departure_time_sec IS NOT NULL
-              AND next_arrival_time_sec IS NOT NULL
-              AND (? IS NULL OR departure_time_sec >= ?)
-              AND (? IS NULL OR next_arrival_time_sec <= ?)
+        trip_origins AS (
+            SELECT trip_id, arg_min(departure_time_sec, CAST(stop_sequence AS INTEGER)) AS origin
+            FROM (
+                SELECT trip_id, stop_sequence,
+                    time_to_seconds(CAST(departure_time AS VARCHAR)) AS departure_time_sec
+                FROM stop_times
+                WHERE departure_time IS NOT NULL
+                  AND lower(trim(CAST(departure_time AS VARCHAR))) NOT IN ('', 'nan', 'none')
+                  AND try_cast(stop_sequence AS INTEGER) IS NOT NULL
+            ) GROUP BY trip_id
         ),
-        valid_pairs AS (
-            SELECT
-                st.stop_id,
-                st.next_stop_id,
+        bounds AS (SELECT ?::DOUBLE AS lower_time, ?::DOUBLE AS upper_time),
+        weighted AS (
+            SELECT st.stop_id, st.next_stop_id,
                 st.next_arrival_time_sec - st.departure_time_sec AS travel_time,
-                sc.sc * fm.multiplier AS service_count
-            FROM st_filtered st
-            JOIN trips t
-              ON st.trip_id = t.trip_id
-            JOIN _service_counts sc
-              ON t.service_id = sc.service_id
-            JOIN _freq_multipliers fm
-              ON st.trip_id = fm.trip_id
-            WHERE (st.next_arrival_time_sec - st.departure_time_sec) > 0
-              AND sc.sc > 0
+                sc.sc * CASE
+                    WHEN f.trip_id IS NULL THEN
+                        CASE WHEN (b.lower_time IS NULL OR st.departure_time_sec >= b.lower_time)
+                            AND (b.upper_time IS NULL OR st.next_arrival_time_sec <= b.upper_time)
+                        THEN 1.0 ELSE 0.0 END
+                    WHEN f.exact_times = 0 THEN
+                        greatest(0.0,
+                            least(f.end_sec, coalesce(b.upper_time - (st.next_arrival_time_sec - o.origin), f.end_sec))
+                            - greatest(f.start_sec, coalesce(b.lower_time - (st.departure_time_sec - o.origin), f.start_sec))
+                        ) / f.headway
+                    ELSE greatest(0.0,
+                        least(ceil((f.end_sec - f.start_sec) / f.headway) - 1,
+                            coalesce(floor((b.upper_time - (st.next_arrival_time_sec - o.origin) - f.start_sec) / f.headway),
+                                ceil((f.end_sec - f.start_sec) / f.headway) - 1))
+                        - greatest(0.0, coalesce(ceil((b.lower_time - (st.departure_time_sec - o.origin) - f.start_sec) / f.headway), 0.0))
+                        + 1.0)
+                END AS service_count
+            FROM st
+            JOIN trips t ON st.trip_id = t.trip_id
+            JOIN _service_counts sc ON t.service_id = sc.service_id
+            JOIN trip_origins o ON st.trip_id = o.trip_id
+            LEFT JOIN _frequency_periods f ON st.trip_id = f.trip_id
+            CROSS JOIN bounds b
+            WHERE st.next_stop_id IS NOT NULL
+                AND st.departure_time_sec IS NOT NULL
+                AND st.next_arrival_time_sec > st.departure_time_sec
+                AND sc.sc > 0
         ),
+        valid_pairs AS (SELECT * FROM weighted WHERE service_count > 0),
         agg_pairs AS (
             SELECT
                 stop_id,
@@ -1117,7 +1088,7 @@ def _build_travel_summary_edges(
             a.stop_id AS from_stop_id,
             a.next_stop_id AS to_stop_id,
             a.travel_time_sec,
-            CAST(a.frequency AS BIGINT) AS frequency,
+            a.frequency,
             ST_AsText(
                 CASE
                     WHEN s1.geometry IS NOT NULL AND s2.geometry IS NOT NULL
@@ -1135,7 +1106,7 @@ def _build_travel_summary_edges(
 
     edges_df = con.execute(
         edge_query,
-        [min_departure_sec, min_departure_sec, max_arrival_sec, max_arrival_sec],
+        [min_departure_sec, max_arrival_sec],
     ).df()
     edges_df = _convert_wkt_column(edges_df)
 
@@ -1192,6 +1163,72 @@ def _build_travel_summary_nodes(con: duckdb.DuckDBPyConnection) -> gpd.GeoDataFr
     return nodes_gdf
 
 
+def _travel_summary_edges(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    calendar_start: str | None = None,
+    calendar_end: str | None = None,
+    directed: bool = False,
+    use_frequencies: bool = True,
+) -> gpd.GeoDataFrame:
+    """
+    Prepare one calendar aggregation and build summary edges.
+
+    Both public graph analysis and generation reports use this aggregation path.
+
+    Parameters
+    ----------
+    con : duckdb.DuckDBPyConnection
+        Open DuckDB connection containing GTFS tables.
+    start_time : str | None
+        Optional inclusive lower departure bound in extended-hour GTFS time.
+    end_time : str | None
+        Optional inclusive upper arrival bound in extended-hour GTFS time.
+    calendar_start : str | None
+        Optional calendar window start in YYYYMMDD form.
+    calendar_end : str | None
+        Optional calendar window end in YYYYMMDD form.
+    directed : bool
+        Whether to preserve edge direction.
+    use_frequencies : bool
+        Whether frequency periods contribute expanded trip counts.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        Aggregated stop-pair edges over the requested time and calendar window.
+    """
+    tables = _list_tables(con)
+    required = {"stop_times", "stops", "trips"}
+    if not required.issubset(tables):
+        missing = sorted(required - tables)
+        msg = f"GTFS must contain stop_times, stops, and trips. Missing: {', '.join(missing)}"
+        raise ValueError(msg)
+
+    _ensure_graph_sql_support(con)
+    _ensure_stops_geometry(con)
+    min_departure_sec, max_arrival_sec = _resolve_time_bounds(start_time, end_time)
+    _prepare_service_counts(
+        con,
+        tables=tables,
+        calendar_start=calendar_start,
+        calendar_end=calendar_end,
+    )
+    _prepare_summary_graph_support(
+        con,
+        tables=tables,
+        use_frequencies=use_frequencies,
+    )
+    return _build_travel_summary_edges(
+        con,
+        min_departure_sec=min_departure_sec,
+        max_arrival_sec=max_arrival_sec,
+        directed=directed,
+    )
+
+
 def travel_summary_graph(
     con: duckdb.DuckDBPyConnection,
     start_time: str | None = None,
@@ -1214,11 +1251,14 @@ def travel_summary_graph(
         Service-weighted average travel time in seconds across all trips
         serving this stop pair.
     ``frequency``
-        Total number of scheduled leg traversals in the resolved calendar
+        Total number of leg traversals in the resolved calendar
         window.  When ``use_frequencies=True`` and ``frequencies.txt`` is
         present, headway-based services are expanded into effective trip
         counts.  For example, a trip running every 10 minutes for 1 hour
-        contributes 6 traversals per active service day.
+        contributes 6 traversals per active service day. Non-exact frequency
+        service uses expected counts (which may be fractional); exact service
+        counts departures in the half-open frequency period. Time bounds apply
+        to each leg, accounting for offsets from the first stop.
 
     Edge geometry
     ~~~~~~~~~~~~~
@@ -1275,32 +1315,14 @@ def travel_summary_graph(
         )
     as_nx = bool(as_nx)
 
-    tables = _list_tables(con)
-    required = {"stop_times", "stops", "trips"}
-    if not required.issubset(tables):
-        missing = sorted(required - tables)
-        msg = f"GTFS must contain stop_times, stops, and trips. Missing: {', '.join(missing)}"
-        raise ValueError(msg)
-
-    _ensure_graph_sql_support(con)
-    _ensure_stops_geometry(con)
-    min_departure_sec, max_arrival_sec = _resolve_time_bounds(start_time, end_time)
-    _prepare_service_counts(
+    edges_gdf = _travel_summary_edges(
         con,
-        tables=tables,
+        start_time=start_time,
+        end_time=end_time,
         calendar_start=calendar_start,
         calendar_end=calendar_end,
-    )
-    _prepare_summary_graph_support(
-        con,
-        tables=tables,
-        use_frequencies=use_frequencies,
-    )
-    edges_gdf = _build_travel_summary_edges(
-        con,
-        min_departure_sec=min_departure_sec,
-        max_arrival_sec=max_arrival_sec,
         directed=directed,
+        use_frequencies=use_frequencies,
     )
     nodes_gdf = _build_travel_summary_nodes(con)
 
@@ -1308,3 +1330,164 @@ def travel_summary_graph(
         return nodes_gdf, edges_gdf
 
     return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf, directed=directed)
+
+
+def get_gtfs_summary(con: duckdb.DuckDBPyConnection) -> dict[str, pd.DataFrame]:
+    """
+    Summarise generated GTFS service and inspect its recorded assumptions.
+
+    The report uses persisted generation records and survives GTFS save/load.
+    Edge counts are directed and cover all active service days in the feed.
+
+    Parameters
+    ----------
+    con : duckdb.DuckDBPyConnection
+        Generated feed, optionally restored with embedded metadata.
+
+    Returns
+    -------
+    dict of str to pandas.DataFrame
+        ``summary`` contains one row with model, start_date, end_date,
+        service_days, route_count, pattern_count, stop_count,
+        expected_departures, mean_daily_departures, min_speed_kph,
+        max_speed_kph, specified_pattern_count, completed_pattern_count and
+        excluded_relation_count. Daily averages include closed dates between
+        the bounds. Speed bounds cover adopted speeds for untimed legs only.
+        ``assumptions`` lists adopted values and ignored source information;
+        ``services`` lists each date and service period with its activity and
+        number of departures; ``edges`` gives combined stop-to-stop traversals
+        with start_date and end_date identifying the frequency aggregation period.
+        Frequency-based departures are expected counts unless exact_times is 1.
+        Service columns and their order are stable. Non-applicable frequency
+        fields are null for fixed departures. Counts and seconds are numeric,
+        integer fields are nullable Int64, and IDs, dates and clocks are strings.
+
+    Raises
+    ------
+    ValueError
+        If generation metadata is unavailable or predates effective records.
+    """
+    metadata = _report_metadata(con)
+    edges = _travel_summary_edges(con, directed=True)
+    return _generation_report(con, metadata, edges)
+
+
+def load_osm_transport(  # noqa: PLR0913 - source selection and shared generation options
+    services: pd.DataFrame | None = None,
+    *,
+    agency: pd.DataFrame | None = None,
+    area: list[float] | Polygon | MultiPolygon | gpd.GeoSeries | gpd.GeoDataFrame | None = None,
+    place_name: str | None = None,
+    route_name: str | None = None,
+    route_ref: str | None = None,
+    relation_ids: list[int] | None = None,
+    modes: str | Sequence[str] | None = None,
+    pattern_ids: str | Sequence[str] | None = None,
+    stop_level: Literal["station", "platform"] = "station",
+    on_invalid: Literal["raise", "skip"] = "skip",
+    data: TransportData | Mapping[str, pd.DataFrame] | None = None,
+    overwrite_source: bool = _OVERWRITE_SOURCE,
+    endpoint: str = _OSM_ENDPOINT,
+    timeout: float = _OSM_TIMEOUT,
+    use_source_tags: bool = _USE_SOURCE_TAGS,
+    **gtfs_options: Unpack[GenerationOptions],
+) -> duckdb.DuckDBPyConnection:
+    """
+    Retrieve OSM public transport relations and create a GTFS feed.
+
+    Relation IDs identify patterns as ``osm:relation:<id>``. Ordered PTv2 stop
+    members are retained, including stops outside the selection boundary.
+    Operating conditions are passed to the shared create_gtfs implementation.
+
+    Parameters
+    ----------
+    services : pandas.DataFrame, optional
+        Optional operating conditions referring to the OSM pattern identifiers.
+        Omit the table for all patterns with source-first completion; omit
+        pattern_id to apply supplied periods to every selected pattern.
+    agency : pandas.DataFrame, optional
+        Explicit agency metadata. Missing metadata uses available source fields,
+        unique geographical timezone inference and warned placeholders.
+    area : list, Polygon, MultiPolygon, GeoSeries or GeoDataFrame, optional
+        WGS84 bounding box or polygon selection. Exclusive with place_name.
+        May be omitted when relation_ids is supplied.
+    place_name : str, optional
+        Place boundary to resolve with get_boundaries.
+    route_name : str, optional
+        Exact route-name filter. Ambiguous matches require relation_ids.
+    route_ref : str, optional
+        Exact route reference filter within the selected area.
+    relation_ids : list of int, optional
+        Explicit route relation IDs. These select complete relations.
+    modes : str or sequence of str, optional
+        Select tram (including light_rail), subway, train, bus, trolleybus,
+        ferry, monorail or funicular. Defaults to all supported modes.
+        Combined with relation_ids and pattern_ids by intersection.
+        Also filters supplemental routes by their effective route_type.
+        Documented extended GTFS types use the corresponding mode group;
+        original route_type values are preserved.
+    pattern_ids : str or sequence of str, optional
+        Additional explicit pattern selection. Intersects modes and relation_ids.
+        Unlisted service patterns otherwise remain in the generated feed.
+        Applies to supplemental patterns too. Mode-excluded source IDs are known
+        from candidate tags, without downloading their member geometry.
+    stop_level : {"station", "platform"}, default "station"
+        Use named OSM stop areas to consolidate their boarding elements. Ambiguous
+        or missing stop-area membership retains individual source IDs. Platform
+        mode preserves every source boarding ID. Station grouping adds no transfer
+        time or platform accessibility information.
+    on_invalid : {"raise", "skip"}, default "skip"
+        Report all invalid source relations together, or explicitly exclude them
+        with a warning and persisted reasons. Network and explicit-input errors
+        are never skipped; an empty result always raises an error.
+    data : mapping of str to pandas.DataFrame, optional
+        Supplemental routes, stops, patterns or stop_sequences using common IDs.
+        Supplied values are validated before retrieval, including excluded rows.
+        Missing source route names and stop information may be completed here.
+    overwrite_source : bool, default False
+        Allow explicit replacement of source fields and stopping sequences.
+    endpoint : str, default "https://overpass-api.de/api/interpreter"
+        Configurable Overpass endpoint.
+    timeout : float, default 180
+        HTTP and Overpass timeout in seconds.
+    use_source_tags : bool, default True
+        Adopt supported interval, opening_hours, duration and interval:conditional
+        tags below explicit overrides. Unambiguous parent metadata can be inherited.
+        Unsupported tags and rejection reasons remain in the generation report.
+    **gtfs_options
+        Calendar, timing, headway, representative-date and optional-table
+        overrides forwarded to create_gtfs, including group_headway_secs and
+        pattern selection. Missing values use simple-v1. Unlisted service patterns remain.
+
+    Returns
+    -------
+    duckdb.DuckDBPyConnection
+        Generated feed ready for analysis and save_gtfs.
+
+    Raises
+    ------
+    ValueError
+        If selection is empty, ambiguous or cannot supply the required inputs.
+    RuntimeError
+        If Overpass fails or returns an incomplete response.
+    """
+    return _load_osm_transport(
+        _SourceIO(_data._prepare_area_and_bbox, _data.get_boundaries),
+        services=services,
+        agency=agency,
+        area=area,
+        place_name=place_name,
+        route_name=route_name,
+        route_ref=route_ref,
+        relation_ids=relation_ids,
+        modes=modes,
+        pattern_ids=pattern_ids,
+        on_invalid=on_invalid,
+        stop_level=stop_level,
+        data=data,
+        overwrite_source=overwrite_source,
+        endpoint=endpoint,
+        timeout=timeout,
+        use_source_tags=use_source_tags,
+        **gtfs_options,
+    )

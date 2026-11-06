@@ -74,6 +74,51 @@ Use four spaces for indentation. Prefer the existing public API and established
 module patterns when extending functionality. If a change affects public
 behaviour, update the corresponding docstring and documentation.
 
+## GTFS implementation boundaries
+
+The public GTFS entry points live in `city2graph.transportation`. Their implementation lives in the internal
+`city2graph.gtfs` package:
+
+| Module | Responsibility |
+| --- | --- |
+| `schema` | Input types, configuration, primitive conversions, schemas and the defaults registry |
+| `validation` | Input validation, normalisation, selection and GTFS integrity |
+| `metadata` | Source records, adopted conditions, validation and JSON serialisation |
+| `report` | Summary tables derived from recorded conditions |
+| `feed` | DuckDB setup and GTFS ZIP persistence |
+| `service` | Calendars, operating conditions, identifiers and agency metadata |
+| `generation` | Generation stages, geometry, travel times and table materialisation |
+| `sources` | OSM interpretation, retrieval and supplemental inputs |
+
+Dependencies point upwards in this table. Internal modules do not import the
+public facades. The transportation facade supplies geographical and download operations from
+`city2graph.data` to the source adapters and shares calendar and edge aggregation
+between graph analysis and generated-feed summaries. The data module has no
+dependency on the GTFS package.
+
+Place new functionality with its existing owner. A new internal module needs an
+independent responsibility and a clear dependency justification. Keep preparation
+and reusable indexes local to one generation call so that later changes to caller
+DataFrames or database tables are respected. Resolve an adopted value and its
+metadata together, then carry that decision through generation and reporting.
+
+The initial public generation model is `simple-v1`. Internal refactors preserve
+its operating rules and identifiers. Benchmarks record the model and conditions used for each run.
+
+## Transport data and generated outputs
+
+Keep downloaded GTFS archives, OSM responses, regional extracts, boundaries,
+walking graphs and intermediate analysis outputs outside Git. Use the ignored
+`docs/examples/data/` and `benchmarks/data/` directories, or an external data
+location. Benchmark results belong under the ignored `benchmarks/results/`.
+
+Tests construct the smallest synthetic inputs that exercise the public API.
+Share source fixtures through `tests/conftest.py` and create temporary archives
+with pytest's `tmp_path`; avoid city-scale snapshots and fixed real-network counts.
+The tutorial contains the maintained example code. Retain only figures used by
+published pages, with source attribution. One-off acquisition, rendering and audit
+scripts belong in a separate research workspace.
+
 ## Testing
 
 Tests live under `tests/` and mirror the package layout. Add a new test class

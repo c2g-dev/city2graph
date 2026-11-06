@@ -14,7 +14,11 @@
   {% set seo_description = config.site_description %}
 {% endif %}
 
-{% set social_image = config.site_url ~ "assets/logos/social_preview_city2graph.png" %}
+{% set social_image_path = page.meta.social_image if page and page.meta.social_image else "assets/logos/social_preview_city2graph.png" %}
+{% set social_image = config.site_url.rstrip('/') ~ '/' ~ social_image_path %}
+{% set social_image_alt = page.meta.social_image_alt if page and page.meta.social_image_alt else "City2Graph geospatial graph construction workflow" %}
+{% set social_image_width = page.meta.social_image_width if page and page.meta.social_image_width else 1280 %}
+{% set social_image_height = page.meta.social_image_height if page and page.meta.social_image_height else 640 %}
 {% set paper_title = "City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial analysis in urban systems" %}
 {% set paper_abstract = "City2Graph is an open-source Python library that streamlines workflows for heterogeneous Graph Neural Networks (GNNs) in urban systems. Cities are complex systems of diverse spatial relations long modelled as graphs in network science, and recent advances in GNNs have further enabled the identification of non-linear patterns of urban complexity. Unlike homogeneous graphs with a single node and edge type, heterogeneous graphs with multiple types are receiving growing attention to accommodate richer information in GNNs. However, their diffusion remains constrained by fragmented graph construction processes across different data domains, and by the lack of a unified framework for converting constructed graphs into GNN-ready tensors. City2Graph standardises graph construction across domains of morphology, transportation, mobility, and proximity. The library supports conversions between spatial geometries, network topologies, and tensors for spatial analysis with visualisation, network analysis, and GNN training, respectively. City2Graph also supports metapath construction, capturing higher-order connections across node and edge types (e.g., areas linked via multimodal transit). The library’s efficacy was demonstrated through a case study on clustering urban functions in Liverpool, UK, using Graph Autoencoder models with three relation types: spatial contiguity, walk-based accessibility, and multimodal accessibility between census units. Compared with the homogeneous model, heterogeneous models identified spatially coherent clusters that aligned more closely with defined accessibility patterns. City2Graph enables reproducible workflows for heterogeneous GNNs and model interpretation, fostering comprehensive understanding of urban systems across disciplines. The library is released under the BSD 3-Clause License on GitHub." %}
 {% set paper_url = config.site_url ~ "paper.html" %}
@@ -45,17 +49,17 @@
 <meta property="og:title" content="{{ seo_title }}" />
 <meta property="og:description" content="{{ seo_description }}" />
 <meta property="og:image" content="{{ social_image }}" />
-<meta property="og:image:alt" content="City2Graph geospatial graph construction workflow" />
+<meta property="og:image:alt" content="{{ social_image_alt }}" />
 <meta property="og:image:type" content="image/png" />
-<meta property="og:image:width" content="1280" />
-<meta property="og:image:height" content="640" />
+<meta property="og:image:width" content="{{ social_image_width }}" />
+<meta property="og:image:height" content="{{ social_image_height }}" />
 <meta property="og:url" content="{{ page.canonical_url }}" />
 
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="{{ seo_title }}" />
 <meta name="twitter:description" content="{{ seo_description }}" />
 <meta name="twitter:image" content="{{ social_image }}" />
-<meta name="twitter:image:alt" content="City2Graph geospatial graph construction workflow" />
+<meta name="twitter:image:alt" content="{{ social_image_alt }}" />
 
 {% if page and page.url == "paper.html" %}
 <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
@@ -285,5 +289,53 @@
   ]
 }
 </script>
+{% if page.meta.date_published %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "@id": {{ (page.canonical_url ~ "#article") | tojson }},
+  "headline": {{ seo_title | tojson }},
+  "description": {{ seo_description | tojson }},
+  "url": {{ page.canonical_url | tojson }},
+  "mainEntityOfPage": {{ page.canonical_url | tojson }},
+  "image": {{ social_image | tojson }},
+  "inLanguage": "en",
+  "isAccessibleForFree": true,
+  "datePublished": {{ page.meta.date_published | tojson }},
+  "dateModified": {{ (page.meta.date_modified or page.meta.date_published) | tojson }},
+  "author": {
+    "@type": "Person",
+    "name": "Yuta Sato",
+    "sameAs": "https://orcid.org/0009-0004-7052-7163"
+  },
+  "isPartOf": {"@id": "https://city2graph.net/latest/#website"}
+  {% if page.meta.about %},
+  "about": [
+    {% for topic in page.meta.about %}
+    {"@type": "Thing", "name": {{ topic | tojson }}}{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+  {% endif %}
+}
+</script>
+{% endif %}
+{% if page.meta.faq %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {% for item in page.meta.faq %}
+    {
+      "@type": "Question",
+      "name": {{ item.question | tojson }},
+      "acceptedAnswer": {"@type": "Answer", "text": {{ item.answer | tojson }}}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
+{% endif %}
 {% endif %}
 {% endblock %}

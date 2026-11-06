@@ -85,6 +85,17 @@ def test_knn_and_fixed_radius_basic(small_points: gpd.GeoDataFrame, metric: str)
 
     nodes_r, edges_r = fixed_radius_graph(small_points, radius=1.5, distance_metric=metric)
     assert_valid_proximity_result(nodes_r, edges_r, len(small_points))
+    assert {frozenset(pair) for pair in edges.index} == {
+        frozenset(pair) for pair in [(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)]
+    }
+    expected_radius = [(0, 1), (0, 2)]
+    if metric == "euclidean":
+        expected_radius.append((1, 2))
+    assert {frozenset(pair) for pair in edges_r.index} == {
+        frozenset(pair) for pair in expected_radius
+    }
+    expected_weights = [1, 1, 2**0.5] if metric == "euclidean" else [1, 1]
+    assert sorted(edges_r["weight"]) == pytest.approx(expected_weights)
 
     if metric == "manhattan" and not edges.empty:
         # Manhattan edges have 3 coordinate points (L path) unless aligned
@@ -149,16 +160,6 @@ def test_network_metric_requires_network_gdf(small_points: gpd.GeoDataFrame) -> 
 # ---------------------------------------------------------------------------
 # Triangulation based generators
 # ---------------------------------------------------------------------------
-
-
-def test_delaunay_and_subgraphs(small_points: gpd.GeoDataFrame) -> None:
-    """Gabriel and RNG are subgraphs of Delaunay (edge count monotonicity)."""
-    # Delaunay needs >=3 points; we already have 4
-    _, d_edges = delaunay_graph(small_points)
-    _, g_edges = gabriel_graph(small_points)
-    _, r_edges = relative_neighborhood_graph(small_points)
-    assert len(g_edges) <= len(d_edges)
-    assert len(r_edges) <= len(d_edges)
 
 
 def test_triangulation_hierarchy_matches_brute_force() -> None:

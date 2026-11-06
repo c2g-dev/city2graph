@@ -39,7 +39,11 @@ from shapely.ops import substring
 from .utils import clip_graph
 
 # Public API definition
-__all__ = ["get_boundaries", "load_overture_data", "process_overture_segments"]
+__all__ = [
+    "get_boundaries",
+    "load_overture_data",
+    "process_overture_segments",
+]
 
 logger = logging.getLogger(__name__)
 

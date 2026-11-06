@@ -20,6 +20,12 @@ from city2graph.utils import topology as topology_utils
 from tests.utils.helpers import BaseGraphTest
 
 
+@pytest.fixture
+def segments_gdf_no_crs(sample_segments_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Sample segments GDF with CRS removed."""
+    return sample_segments_gdf.set_crs(None, allow_override=True)
+
+
 class TestGraphStructures(BaseGraphTest):
     """Test graph structure operations like dual graph and segments conversion."""
 
@@ -89,6 +95,82 @@ class TestGraphStructures(BaseGraphTest):
 
             if keep_geom:
                 assert "original_geometry" in dual_nodes.columns
+
+    @pytest.mark.parametrize(
+        ("placement", "names", "explicit"),
+        [
+            pytest.param("columns", ("u", "v"), False, id="uv-columns"),
+            pytest.param("columns", ("source", "target"), False, id="source-target-columns"),
+            pytest.param("columns", ("start", "end"), True, id="explicit-columns"),
+            pytest.param("levels", ("start", "end"), True, id="explicit-index-levels"),
+            pytest.param("levels", ("from_node_id", "to_node_id"), False, id="named-index-levels"),
+            pytest.param("levels", ("level_0", "level_1"), False, id="positional-index-levels"),
+            pytest.param("columns", ("col1", "col2"), False, id="positional-columns"),
+            pytest.param("source-index", ("start", "end"), True, id="single-named-index"),
+        ],
+    )
+    def test_dual_graph_resolves_endpoint_representations(
+        self,
+        placement: str,
+        names: tuple[str, str],
+        explicit: bool,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Column and index representations produce the same dual adjacency."""
+        source, target = names
+        edges = gpd.GeoDataFrame(
+            {source: [1, 2], target: [2, 3], "edge_id": ["a", "b"], "weight": [2, 4]},
+            geometry=[LineString([(0, 0), (1, 1)]), LineString([(1, 1), (2, 2)])],
+            crs=sample_nodes_gdf.crs,
+        )
+        if placement == "levels":
+            edges = edges.set_index(list(names))
+        elif placement == "source-index":
+            edges = edges.set_index(source)
+        original = edges.copy(deep=True)
+        nodes, dual_edges = utils.dual_graph(
+            (sample_nodes_gdf, edges),
+            edge_id_col="edge_id",
+            source_col=source if explicit else None,
+            target_col=target if explicit else None,
+        )
+        assert list(nodes.index) == ["a", "b"]
+        assert nodes["weight"].tolist() == [2, 4]
+        assert list(dual_edges.index) == [("a", "b")]
+        assert dual_edges.geometry.iloc[0].equals(LineString([(0.5, 0.5), (1.5, 1.5)]))
+        assert nodes.crs == dual_edges.crs == sample_nodes_gdf.crs
+        pd.testing.assert_frame_equal(edges, original)
+
+    @pytest.mark.parametrize(
+        ("source", "target"),
+        [
+            pytest.param("missing", "v", id="missing-source"),
+            pytest.param("u", "missing", id="missing-target"),
+        ],
+    )
+    def test_dual_graph_rejects_missing_endpoint_columns(
+        self,
+        source: str,
+        target: str,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Explicit endpoint names must refer to existing columns or levels."""
+        edges = gpd.GeoDataFrame(
+            {"u": [1], "v": [2]},
+            geometry=[LineString([(0, 0), (1, 1)])],
+            crs=sample_nodes_gdf.crs,
+        )
+        with pytest.raises(ValueError, match=r"Source/Target column\(s\) not found: missing"):
+            utils.dual_graph((sample_nodes_gdf, edges), source_col=source, target_col=target)
+
+    def test_dual_graph_rejects_unidentifiable_endpoints(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Geometry alone does not identify the topology of the primal graph."""
+        edges = gpd.GeoDataFrame(geometry=[LineString([(0, 0), (1, 1)])], crs=sample_nodes_gdf.crs)
+        with pytest.raises(ValueError, match="Could not identify source and target"):
+            utils.dual_graph((sample_nodes_gdf, edges))
 
     def test_dual_graph_invalid_edge_id_col(
         self,
@@ -792,20 +874,6 @@ class TestRemoveIsolatedComponents(BaseGraphTest):
         edges.index = pd.Index(["edge1"], name="weird_id")
 
         # Should handle the error gracefully
-        result = utils.remove_isolated_components(edges)
-        assert isinstance(result, gpd.GeoDataFrame)
-
-    def test_remove_isolated_invalid_graph_structure(self, sample_crs: str) -> None:
-        """Test remove_isolated_components with edges that fail graph conversion."""
-        # Create a GeoDataFrame with geometry but non-standard index
-        edges = gpd.GeoDataFrame(
-            {"geometry": [LineString([(0, 0), (1, 0)])]},
-            crs=sample_crs,
-        )
-        # No MultiIndex, just a simple index that won't convert to graph properly
-        edges.index = pd.Index(["edge1"], name="weird_id")
-
-        # Should handle gracefully
         result = utils.remove_isolated_components(edges)
         assert isinstance(result, gpd.GeoDataFrame)
 

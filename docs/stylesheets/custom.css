@@ -1184,3 +1184,15 @@ body {
 [data-md-color-scheme="city2graph-dark"] .md-typeset .md-button--primary {
   color: #101827;
 }
+
+
+/* Keep decision labels readable without widening narrow documentation pages. */
+.md-typeset .gtfs-flowchart {
+  max-width: 100%;
+  overflow-x: auto;
+  padding-block: 0.25rem;
+}
+
+.md-typeset .gtfs-flowchart .mermaid {
+  min-width: 28rem;
+}

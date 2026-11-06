@@ -1,8 +1,4 @@
-"""Tests for mobility/OD matrix to graph, including undirected support.
-
-This refactor centralizes fixtures (zones) into conftest and condenses
-repeated patterns via parametrization, while preserving coverage.
-"""
+"""Tests for mobility/OD matrix to graph, including undirected support."""
 
 from typing import TYPE_CHECKING
 from typing import Any
@@ -18,6 +14,23 @@ from city2graph.mobility import od_matrix_to_graph
 
 if TYPE_CHECKING:
     import networkx as nx
+
+
+@pytest.fixture
+def od_zones_gdf() -> gpd.GeoDataFrame:
+    """Small zones GeoDataFrame for OD/mobility tests.
+
+    Provides three point-like zones with ids 'A','B','C' in WGS84, matching
+    the previous local helper used in mobility tests.
+    """
+    return gpd.GeoDataFrame(
+        {
+            "zone_id": ["A", "B", "C"],
+            "value": [1, 2, 3],
+            "geometry": [Point(0, 0), Point(1, 0), Point(1, 1)],
+        },
+        crs="EPSG:4326",
+    )
 
 
 class TestODMatrixToGraph:
@@ -61,7 +74,7 @@ class TestODMatrixToGraph:
         assert getattr(edges.index, "nlevels", 1) == 2
         # nodes index aligns with original zone ids
         assert list(nodes.index) == list(od_zones_gdf["zone_id"])  # preserves order
-        assert (edges["weight"] >= 1).all()
+        assert edges["weight"].to_dict() == {("A", "B"): 5, ("B", "C"): 2, ("C", "A"): 1}
         assert len(nodes) == 3
 
     def test_edgelist_multi_weight_threshold_col(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
@@ -106,7 +119,7 @@ class TestODMatrixToGraph:
         )
         assert len(nodes) == 3
         # edges where weight>=1
-        assert set(edges["weight"]) == {3, 4, 1}
+        assert edges["weight"].to_dict() == {("A", "B"): 3, ("B", "C"): 4, ("C", "A"): 1}
 
     def test_networkx_output(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """NetworkX output contains expected nodes and edges."""
@@ -225,7 +238,7 @@ class TestODMatrixToGraph:
         """Non-numeric threshold and invalid matrix_type should raise ValueError."""
         E = pd.DataFrame({"source": ["A"], "target": ["B"], "flow": [1]})
         # threshold must be numeric
-        try:
+        with pytest.raises(ValueError, match="threshold must be numeric"):
             od_matrix_to_graph(
                 E,
                 od_zones_gdf,
@@ -234,14 +247,9 @@ class TestODMatrixToGraph:
                 weight_cols=["flow"],
                 threshold="x",  # type: ignore[arg-type]
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError for non-numeric threshold"
-            raise AssertionError(msg)
 
         # matrix_type must be valid
-        try:
+        with pytest.raises(ValueError, match="matrix_type must be"):
             od_matrix_to_graph(
                 E,
                 od_zones_gdf,
@@ -249,11 +257,6 @@ class TestODMatrixToGraph:
                 matrix_type="oops",  # type: ignore[arg-type]
                 weight_cols=["flow"],
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError for invalid matrix_type"
-            raise AssertionError(msg)
 
     def test_edgelist_missing_weight_cols_raises_and_multiple_weights_require_threshold_col(
         self, od_zones_gdf: gpd.GeoDataFrame
@@ -261,17 +264,12 @@ class TestODMatrixToGraph:
         """Edgelist without weights and multi-weight without threshold_col should fail."""
         # missing weight_cols
         E = pd.DataFrame({"source": ["A"], "target": ["B"]})
-        try:
+        with pytest.raises(ValueError, match="weight_cols must be provided"):
             od_matrix_to_graph(E, od_zones_gdf, zone_id_col="zone_id", matrix_type="edgelist")
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError when weight_cols is missing"
-            raise AssertionError(msg)
 
         # multi-weight requires threshold_col
         E2 = pd.DataFrame({"s": ["A"], "t": ["B"], "w1": [1], "w2": [2]})
-        try:
+        with pytest.raises(ValueError, match="valid threshold_col"):
             od_matrix_to_graph(
                 E2,
                 od_zones_gdf,
@@ -281,11 +279,6 @@ class TestODMatrixToGraph:
                 target_col="t",
                 weight_cols=["w1", "w2"],
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError when threshold_col missing with multiple weights"
-            raise AssertionError(msg)
 
     def test_zone_id_col_none_uses_index_and_geometry_toggle(
         self, od_zones_gdf: gpd.GeoDataFrame
@@ -346,7 +339,7 @@ class TestODMatrixToGraph:
         assert ("A", "B") in edges.index
         # All invalid -> raise
         E2 = pd.DataFrame({"source": ["X"], "target": ["Y"], "flow": [1]})
-        try:
+        with pytest.raises(ValueError, match="No overlapping zone IDs between edgelist"):
             od_matrix_to_graph(
                 E2,
                 od_zones_gdf,
@@ -354,11 +347,6 @@ class TestODMatrixToGraph:
                 matrix_type="edgelist",
                 weight_cols=["flow"],
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError when no overlapping IDs remain"
-            raise AssertionError(msg)
 
     def test_empty_after_threshold_yields_empty_edgeframe_schema(
         self, od_zones_gdf: gpd.GeoDataFrame
@@ -397,56 +385,36 @@ class TestODMatrixToGraph:
         """zones_gdf validation: missing column and duplicate/NaN IDs raise."""
         E = pd.DataFrame({"source": ["A"], "target": ["B"], "flow": [1]})
         # missing zone_id_col
-        try:
+        with pytest.raises(ValueError, match=r"zone_id_col.*not found"):
             od_matrix_to_graph(
                 E, od_zones_gdf, zone_id_col="missing", matrix_type="edgelist", weight_cols=["flow"]
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError for missing zone_id_col"
-            raise AssertionError(msg)
 
         # duplicate IDs
         zones_dup = od_zones_gdf.copy()
         zones_dup.loc[1, "zone_id"] = zones_dup.loc[0, "zone_id"]
-        try:
+        with pytest.raises(ValueError, match="zone_id_col values must be unique"):
             od_matrix_to_graph(
                 E, zones_dup, zone_id_col="zone_id", matrix_type="edgelist", weight_cols=["flow"]
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError for duplicate zone_id values"
-            raise AssertionError(msg)
 
     def test_validate_adjacency_dataframe_errors(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """Adjacency validator raises for non-square and mismatched labels."""
         # non-square
         A_bad = pd.DataFrame([[0, 1, 0]], index=["A"], columns=["A", "B", "C"])
-        try:
+        with pytest.raises(ValueError, match="Adjacency DataFrame must be square"):
             od_matrix_to_graph(A_bad, od_zones_gdf, zone_id_col="zone_id", matrix_type="adjacency")
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError for non-square adjacency DataFrame"
-            raise AssertionError(msg)
 
         # square but columns != index
         A = pd.DataFrame(np.zeros((3, 3)), index=["A", "B", "C"], columns=["A", "C", "B"])
-        try:
+        with pytest.raises(ValueError, match="index and columns must match exactly"):
             od_matrix_to_graph(A, od_zones_gdf, zone_id_col="zone_id", matrix_type="adjacency")
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError when index and columns mismatch"
-            raise AssertionError(msg)
 
     def test_validate_edgelist_errors(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """Edgelist validator: missing basic cols and weight col names."""
         # missing target column
         E_missing_target = pd.DataFrame({"source": ["A"], "flow": [1]})
-        try:
+        with pytest.raises(ValueError, match="missing required columns: target"):
             od_matrix_to_graph(
                 E_missing_target,
                 od_zones_gdf,
@@ -454,15 +422,10 @@ class TestODMatrixToGraph:
                 matrix_type="edgelist",
                 weight_cols=["flow"],
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError for missing target column"
-            raise AssertionError(msg)
 
         # weight_cols references missing column
         E_ok = pd.DataFrame({"source": ["A"], "target": ["B"], "flow": [1]})
-        try:
+        with pytest.raises(ValueError, match="weight_cols contain columns not present"):
             od_matrix_to_graph(
                 E_ok,
                 od_zones_gdf,
@@ -470,14 +433,9 @@ class TestODMatrixToGraph:
                 matrix_type="edgelist",
                 weight_cols=["flow", "w2"],
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError when weight_cols contain missing column"
-            raise AssertionError(msg)
 
         # threshold_col not in weight_cols
-        try:
+        with pytest.raises(ValueError, match="threshold_col not in weight_cols"):
             od_matrix_to_graph(
                 E_ok,
                 od_zones_gdf,
@@ -486,17 +444,12 @@ class TestODMatrixToGraph:
                 weight_cols=["flow"],
                 threshold_col="wX",
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError when threshold_col not in weight_cols"
-            raise AssertionError(msg)
 
     def test_coerce_weight_columns_errors(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """Coercion errors: all non-numeric and mixed invalid values raise."""
         # all non-numeric -> cannot coerce
         E1 = pd.DataFrame({"source": ["A"], "target": ["B"], "flow": ["x"]})
-        try:
+        with pytest.raises(ValueError, match="all values are non-numeric"):
             od_matrix_to_graph(
                 E1,
                 od_zones_gdf,
@@ -504,15 +457,10 @@ class TestODMatrixToGraph:
                 matrix_type="edgelist",
                 weight_cols=["flow"],
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError when weight col is fully non-numeric"
-            raise AssertionError(msg)
 
         # mixed numeric and invalid -> introduces new NaNs
         E2 = pd.DataFrame({"source": ["A", "A"], "target": ["B", "B"], "flow": [1, "x"]})
-        try:
+        with pytest.raises(ValueError, match="contains non-numeric values"):
             od_matrix_to_graph(
                 E2,
                 od_zones_gdf,
@@ -520,22 +468,12 @@ class TestODMatrixToGraph:
                 matrix_type="edgelist",
                 weight_cols=["flow"],
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError when non-numeric introduces new NaNs"
-            raise AssertionError(msg)
 
     def test_align_adjacency_zones_no_overlap_raises(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """Alignment of adjacency with disjoint labels raises ValueError."""
         A = pd.DataFrame(np.eye(2), index=["X", "Y"], columns=["X", "Y"])
-        try:
+        with pytest.raises(ValueError, match="No overlapping zone IDs between adjacency"):
             od_matrix_to_graph(A, od_zones_gdf, zone_id_col="zone_id", matrix_type="adjacency")
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError when no overlapping zone IDs exist"
-            raise AssertionError(msg)
 
     def test_missing_centroid_edges_dropped_in_geometry_creation(
         self, od_zones_gdf: gpd.GeoDataFrame
@@ -573,31 +511,21 @@ class TestODMatrixToGraph:
         """Non-square and size-mismatch ndarray inputs raise ValueError."""
         # non-square
         arr_bad = np.zeros((2, 3))
-        try:
+        with pytest.raises(ValueError, match="Adjacency ndarray must be 2D square"):
             od_matrix_to_graph(
                 arr_bad, od_zones_gdf, zone_id_col="zone_id", matrix_type="adjacency"
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError for non-square ndarray"
-            raise AssertionError(msg)
 
         # square but wrong size vs zones
         arr_wrong = np.zeros((2, 2))
-        try:
+        with pytest.raises(ValueError, match="ndarray size must match"):
             od_matrix_to_graph(
                 arr_wrong, od_zones_gdf, zone_id_col="zone_id", matrix_type="adjacency"
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError for ndarray size != number of zones"
-            raise AssertionError(msg)
 
     def test_edgelist_wrong_type_raises(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """Passing non-DataFrame for edgelist raises TypeError."""
-        try:
+        with pytest.raises(TypeError, match="od_data must be a pandas DataFrame"):
             od_matrix_to_graph(
                 np.array([[0, 1], [0, 0]]),
                 od_zones_gdf,
@@ -605,25 +533,15 @@ class TestODMatrixToGraph:
                 matrix_type="edgelist",
                 weight_cols=["flow"],
             )
-        except TypeError:
-            pass
-        else:
-            msg = "Expected TypeError for non-DataFrame edgelist"
-            raise AssertionError(msg)
 
     def test_zones_gdf_wrong_type_raises(self) -> None:
         """zones_gdf must be a GeoDataFrame (TypeError path)."""
         zones_bad = pd.DataFrame({"zone_id": ["A"], "geometry": [(0, 0)]})
         E = pd.DataFrame({"source": ["A"], "target": ["A"], "flow": [1]})
-        try:
+        with pytest.raises(TypeError, match="zones_gdf must be a GeoDataFrame"):
             od_matrix_to_graph(
                 E, zones_bad, zone_id_col="zone_id", matrix_type="edgelist", weight_cols=["flow"]
             )
-        except TypeError:
-            pass
-        else:
-            msg = "Expected TypeError for non-GeoDataFrame zones_gdf"
-            raise AssertionError(msg)
 
     def test_weight_column_nan_and_negative_handling(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """NaN values are filled with 0 (warns) and negatives retained (but dropped by threshold semantics)."""
@@ -638,7 +556,7 @@ class TestODMatrixToGraph:
             E, od_zones_gdf, zone_id_col="zone_id", matrix_type="edgelist", weight_cols=["flow"]
         )
         # NaN->0 then drop zeros; negative retained but threshold None drops values <=0
-        assert (edges["weight"] > 0).all()
+        assert edges["weight"].to_dict() == {("B", "C"): 0.5}
 
     ## Internal-helper tests removed per guidance.
 
@@ -669,9 +587,8 @@ class TestODMatrixToGraph:
             A, od_zones_gdf, zone_id_col="zone_id", matrix_type="adjacency"
         )
         # Only edges among A,B retained
-        if not edges.empty:
-            assert set(edges.index.get_level_values(0)).issubset({"A", "B"})
-            assert set(edges.index.get_level_values(1)).issubset({"A", "B"})
+        assert list(edges.index) == [("A", "B")]
+        assert edges["weight"].tolist() == [2]
 
     def test_missing_crs_emits_warning(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """When zones have no CRS, a warning is emitted and code continues."""
@@ -694,32 +611,22 @@ class TestODMatrixToGraph:
         zones = od_zones_gdf.copy()
         zones.loc[1, "zone_id"] = np.nan
         E = pd.DataFrame({"source": ["A"], "target": ["C"], "flow": [1]})
-        try:
+        with pytest.raises(ValueError, match="zone_id_col contains null values"):
             od_matrix_to_graph(
                 E, zones, zone_id_col="zone_id", matrix_type="edgelist", weight_cols=["flow"]
             )
-        except ValueError:
-            pass
-        else:
-            msg = "Expected ValueError for NaN in zone_id_col"
-            raise AssertionError(msg)
 
     def test_adjacency_wrong_type_raises(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """Passing an unsupported type for adjacency matrix raises TypeError."""
         bad = [[0, 1, 0], [0, 0, 0], [0, 0, 0]]  # list, not DataFrame/ndarray
         bad_input: Any = bad
-        try:
+        with pytest.raises(TypeError, match="od_data must be a pandas DataFrame or numpy ndarray"):
             od_matrix_to_graph(
                 bad_input,
                 od_zones_gdf,
                 zone_id_col="zone_id",
                 matrix_type="adjacency",
             )
-        except TypeError:
-            pass
-        else:
-            msg = "Expected TypeError for unsupported adjacency type"
-            raise AssertionError(msg)
 
     def test_undirected_multi_weight_sums_all_columns(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
         """Undirected mode sums canonical weight and additional weight columns."""

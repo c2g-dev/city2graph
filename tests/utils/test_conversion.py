@@ -12,6 +12,7 @@ import pytest
 import rustworkx as rx
 from shapely.geometry import LineString
 from shapely.geometry import Point
+from shapely.geometry import Polygon
 
 from city2graph import morphology
 from city2graph import utils
@@ -24,11 +25,286 @@ from city2graph.utils import nx_to_gdf
 from city2graph.utils import spatial as spatial_utils
 from city2graph.utils import topology as topology_utils
 from tests import helpers
+from tests.helpers import make_nx_graph
 from tests.utils.helpers import BaseConversionTest
 from tests.utils.helpers import BaseGraphTest
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+@pytest.fixture
+def sample_nx_graph_no_crs(sample_nx_graph: nx.Graph) -> nx.Graph:
+    """Return an independent graph without CRS metadata."""
+    graph = sample_nx_graph.copy()
+    del graph.graph["crs"]
+    return graph
+
+
+@pytest.fixture
+def sample_nx_graph_no_pos(sample_crs: str) -> nx.Graph:
+    """Fixture for a NetworkX graph with no position data."""
+    return make_nx_graph(
+        nx.Graph,
+        nodes=[
+            (1, {"feature1": 10.0, "label1": 0}),
+            (2, {"feature1": 20.0, "label1": 1}),
+        ],
+        edges=[(1, 2, {"edge_feature1": 0.5})],
+        graph_attrs={"crs": sample_crs, "is_hetero": False},
+    )
+
+
+@pytest.fixture
+def segments_invalid_geom_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Provide a polygon where a street segment is expected."""
+    return gpd.GeoDataFrame(
+        {"seg_id": ["InvalidPolyGeom"]},
+        geometry=[Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])],
+        crs=sample_crs,
+    )
+
+
+@pytest.fixture
+def not_a_gdf() -> pd.DataFrame:
+    """Return a regular DataFrame for testing error cases."""
+    return pd.DataFrame({"col1": [1, 2], "col2": [3, 4]})
+
+
+@pytest.fixture
+def sample_nx_multigraph(sample_crs: str) -> nx.MultiGraph:
+    """Fixture for a NetworkX MultiGraph."""
+    return make_nx_graph(
+        nx.MultiGraph,
+        nodes=[
+            (1, {"feature1": 10.0, "label1": 0, "pos": (0, 0), "geometry": Point(0, 0)}),
+            (2, {"feature1": 20.0, "label1": 1, "pos": (1, 1), "geometry": Point(1, 1)}),
+        ],
+        edges=[
+            (1, 2, 0, {"edge_feature1": 0.5, "geometry": LineString([(0, 0), (1, 1)])}),
+            (1, 2, 1, {"edge_feature1": 0.8, "geometry": LineString([(0, 0), (1, 1)])}),
+        ],
+        graph_attrs={"crs": sample_crs, "is_hetero": False},
+    )
+
+
+@pytest.fixture
+def all_invalid_geom_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Fixture for GeoDataFrame with all invalid geometries."""
+    return gpd.GeoDataFrame(
+        {
+            "id": [1, 2],
+            "geometry": [None, Point(0, 0).buffer(0).buffer(-1)],  # All invalid
+        },
+        crs=sample_crs,
+    )
+
+
+@pytest.fixture
+def invalid_geom_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Fixture for GeoDataFrame with mixed valid/invalid geometries."""
+    return gpd.GeoDataFrame(
+        {
+            "id": [1, 2, 3, 4],
+            "geometry": [
+                Point(0, 0),
+                None,
+                Point(0, 0).buffer(0).buffer(-1),
+                Point(1, 1),
+            ],  # Mixed
+        },
+        crs=sample_crs,
+    )
+
+
+@pytest.fixture
+def multiindex_nodes_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Fixture for nodes GeoDataFrame with MultiIndex."""
+    return gpd.GeoDataFrame(
+        {
+            "geometry": [Point(0, 0), Point(1, 1)],
+        },
+        index=pd.MultiIndex.from_tuples(
+            [("type1", 0), ("type1", 1)],
+            names=["node_type", "node_id"],
+        ),
+        crs=sample_crs,
+    )
+
+
+@pytest.fixture
+def single_name_index_nodes_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Fixture for nodes GeoDataFrame with single-level named index."""
+    return gpd.GeoDataFrame(
+        {
+            "geometry": [Point(0, 0), Point(1, 1)],
+        },
+        index=pd.Index([0, 1], name="single_name"),
+        crs=sample_crs,
+    )
+
+
+@pytest.fixture
+def simple_edges_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Fixture for simple edges GeoDataFrame."""
+    return gpd.GeoDataFrame(
+        {
+            "geometry": [LineString([(0, 0), (1, 1)])],
+        },
+        crs=sample_crs,
+    )
+
+
+@pytest.fixture
+def directed_multigraph_edges_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Fixture for edges suitable for directed multigraph testing."""
+    return gpd.GeoDataFrame(
+        {
+            "geometry": [LineString([(0, 0), (1, 1)])],
+        },
+        crs=sample_crs,
+    )
+
+
+@pytest.fixture
+def graph_missing_crs() -> nx.Graph:
+    """Fixture for NetworkX graph missing CRS metadata."""
+    graph = nx.Graph()
+    graph.add_node(1, pos=(0, 0))
+    graph.add_edge(1, 2)
+    graph.graph = {"is_hetero": False}  # Missing crs
+    return graph
+
+
+@pytest.fixture
+def hetero_graph_no_node_types(sample_crs: str) -> nx.Graph:
+    """Fixture for heterogeneous graph missing node_types."""
+    graph = nx.Graph()
+    graph.add_node(1, pos=(0, 0))
+    graph.add_edge(1, 2)
+    graph.graph = {"crs": sample_crs, "is_hetero": True}
+    return graph
+
+
+@pytest.fixture
+def hetero_graph_no_edge_types(sample_crs: str) -> nx.Graph:
+    """Fixture for heterogeneous graph missing edge_types."""
+    graph = nx.Graph()
+    graph.add_node(1, pos=(0, 0))
+    graph.add_edge(1, 2)
+    graph.graph = {"crs": sample_crs, "is_hetero": True, "node_types": ["type1"]}
+    return graph
+
+
+@pytest.fixture
+def graph_no_pos_geom(sample_crs: str) -> nx.Graph:
+    """Fixture for graph with nodes missing pos/geometry."""
+    graph = nx.Graph()
+    graph.add_node(1)  # No pos or geometry
+    graph.add_edge(1, 2)
+    graph.graph = {"crs": sample_crs, "is_hetero": False}
+    return graph
+
+
+@pytest.fixture
+def hetero_graph_no_node_type(sample_crs: str) -> nx.Graph:
+    """Fixture for heterogeneous graph with nodes missing node_type."""
+    graph = nx.Graph()
+    graph.add_node(1, pos=(0, 0))  # No node_type
+    graph.add_edge(1, 2)
+    graph.graph = {
+        "crs": sample_crs,
+        "is_hetero": True,
+        "node_types": ["type1"],
+        "edge_types": [("type1", "connects", "type1")],
+    }
+    return graph
+
+
+@pytest.fixture
+def hetero_graph_no_edge_type(sample_crs: str) -> nx.Graph:
+    """Fixture for heterogeneous graph with edges missing edge_type."""
+    graph = nx.Graph()
+    graph.add_node(1, pos=(0, 0), node_type="type1")
+    graph.add_node(2, pos=(1, 1), node_type="type1")
+    graph.add_edge(1, 2)  # No edge_type
+    graph.graph = {
+        "crs": sample_crs,
+        "is_hetero": True,
+        "node_types": ["type1"],
+        "edge_types": [("type1", "connects", "type1")],
+    }
+    return graph
+
+
+@pytest.fixture
+def empty_hetero_graph(sample_crs: str) -> nx.Graph:
+    """Fixture for heterogeneous graph with no edges."""
+    graph = nx.Graph()
+    graph.add_node(1, pos=(0, 0), node_type="building")
+    graph.graph = {
+        "crs": sample_crs,
+        "is_hetero": True,
+        "node_types": ["building"],
+        "edge_types": [("building", "connects", "road")],
+    }
+    return graph
+
+
+@pytest.fixture
+def nodes_dict_bad_keys(sample_crs: str) -> dict[int, gpd.GeoDataFrame]:
+    """Fixture for nodes dict with invalid keys."""
+    return {123: gpd.GeoDataFrame({"geometry": [Point(0, 0)]}, crs=sample_crs)}
+
+
+@pytest.fixture
+def edges_dict_bad_tuple(sample_crs: str) -> dict[str, gpd.GeoDataFrame]:
+    """Fixture for edges dict with invalid tuple keys."""
+    return {"not_a_tuple": gpd.GeoDataFrame({"geometry": []}, crs=sample_crs)}
+
+
+@pytest.fixture
+def edges_dict_bad_elements(
+    sample_crs: str,
+) -> dict[tuple[int, str, str], gpd.GeoDataFrame]:
+    """Fixture for edges dict with invalid tuple elements."""
+    return {
+        (123, "connects", "type2"): gpd.GeoDataFrame({"geometry": []}, crs=sample_crs),
+    }
+
+
+@pytest.fixture
+def edges_dict_for_hetero(
+    sample_crs: str,
+) -> dict[tuple[str, str, str], gpd.GeoDataFrame]:
+    """Fixture for edges dict for heterogeneous testing."""
+    return {
+        ("type1", "connects", "type2"): gpd.GeoDataFrame(
+            {"geometry": []},
+            crs=sample_crs,
+        ),
+    }
+
+
+@pytest.fixture
+def duplicate_segments_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Fixture for duplicate segments test data."""
+    return gpd.GeoDataFrame(
+        {
+            "geometry": [
+                LineString([(0, 0), (1, 1)]),
+                LineString([(0, 0), (1, 1)]),
+            ],  # Duplicates
+            "road_type": ["primary", "secondary"],
+        },
+        crs=sample_crs,
+    )
+
+
+@pytest.fixture
+def simple_nodes_dict_type1(sample_crs: str) -> dict[str, gpd.GeoDataFrame]:
+    """Fixture for simple nodes dict with type1."""
+    return {"type1": gpd.GeoDataFrame({"geometry": [Point(0, 0)]}, crs=sample_crs)}
 
 
 class TestGraphStructures(BaseGraphTest):
@@ -564,16 +840,9 @@ class TestNxConversions(BaseConversionTest):
         assert isinstance(nodes_gdf, gpd.GeoDataFrame)
 
     def test_build_edge_index_empty(self) -> None:
-        """Test _build_edge_index with empty original_indices (line 1225)."""
+        """Retain the legacy empty-index branch bypassed by public empty-graph handling."""
         converter = NxConverter()
         result = converter._build_edge_index([], None)
-        assert isinstance(result, pd.Index)
-        assert len(result) == 0
-
-    def test_build_node_index_empty(self) -> None:
-        """Test _build_node_index with empty original_indices (line 1243)."""
-        converter = NxConverter()
-        result = converter._build_node_index([], None)
         assert isinstance(result, pd.Index)
         assert len(result) == 0
 
@@ -628,11 +897,35 @@ class TestNxConversions(BaseConversionTest):
         assert nodes_gdf.index.names == ["id", "type"]
         assert len(nodes_gdf) == 2
 
-    def test_coerce_name_sequence_string(self) -> None:
-        """Test _coerce_name_sequence with string input."""
-        assert conversion_utils._coerce_name_sequence("index_name") == ["index_name"]
-        assert conversion_utils._coerce_name_sequence(["a", "b"]) == ["a", "b"]
-        assert conversion_utils._coerce_name_sequence(None) is None
+    @pytest.mark.parametrize(
+        ("names", "node_id", "expected"),
+        [
+            pytest.param("index_name", 7, pd.Index([7], name="index_name"), id="string-name"),
+            pytest.param(
+                ["a", "b"],
+                (7, "x"),
+                pd.MultiIndex.from_tuples([(7, "x")], names=["a", "b"]),
+                id="multiple-names",
+            ),
+            pytest.param(None, 7, pd.Index([7]), id="unnamed"),
+        ],
+    )
+    def test_nx_to_gdf_legacy_index_names(
+        self,
+        names: str | list[str] | None,
+        node_id: int | tuple[int, str],
+        expected: pd.Index,
+        sample_crs: str,
+    ) -> None:
+        """Conversion restores index names stored by older NetworkX graphs."""
+        graph = nx.Graph(crs=sample_crs, is_hetero=False, node_index_names=names)
+        graph.add_node(0, pos=(0, 0), _original_index=node_id)
+        nodes, edges = utils.nx_to_gdf(graph)
+        assert isinstance(nodes, gpd.GeoDataFrame)
+        assert isinstance(edges, gpd.GeoDataFrame)
+        pd.testing.assert_index_equal(nodes.index, expected)
+        assert nodes.geometry.iloc[0].equals(Point(0, 0))
+        assert edges.empty
 
     def test_nx_to_gdf_empty_graph_no_nodes(self, sample_crs: str) -> None:
         """Test nx_to_gdf with a completely empty graph (no nodes)."""
@@ -643,6 +936,8 @@ class TestNxConversions(BaseConversionTest):
         assert isinstance(edges_gdf, gpd.GeoDataFrame)
         assert nodes_gdf.empty
         assert edges_gdf.empty
+        pd.testing.assert_index_equal(nodes_gdf.index, pd.Index([]))
+        assert nodes_gdf.crs == sample_crs
         assert "geometry" in nodes_gdf.columns
 
     @pytest.mark.parametrize("all_empty", [True, False])
@@ -667,6 +962,21 @@ class TestNxConversions(BaseConversionTest):
             assert restored[name].crs == original.crs
             assert restored[name].index.names == original.index.names
             assert isinstance(restored[name].index, type(original.index))
+
+    def test_nx_to_gdf_pos_from_xy_attributes(self) -> None:
+        """Node x/y attributes reconstruct indexed point geometries and CRS."""
+        G = nx.Graph()
+        G.add_node(1, x=0.0, y=0.0)
+        G.add_node(2, x=1.0, y=1.0)
+        G.add_edge(1, 2)
+        G.graph = {"crs": "EPSG:27700", "is_hetero": False}
+
+        # Should populate 'pos' from x/y when calling nx_to_gdf
+        nodes_gdf = nx_to_gdf(G, nodes=True, edges=False)
+        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
+        assert list(nodes_gdf.index) == [1, 2]
+        assert nodes_gdf.geometry.tolist() == [Point(0, 0), Point(1, 1)]
+        assert nodes_gdf.crs == "EPSG:27700"
 
 
 class TestValidation:
@@ -1018,107 +1328,6 @@ class TestRustworkxConversions:
         assert source.edge_index_map() == before
 
 
-class TestIdentifySourceTargetCols:
-    """Test the _identify_source_target_cols function."""
-
-    @pytest.fixture
-    def basic_edges(self) -> gpd.GeoDataFrame:
-        """Create basic edges fixture for testing."""
-        return gpd.GeoDataFrame(
-            {"u": [1, 2], "v": [2, 3], "weight": [1.0, 2.0]},
-            geometry=[LineString([(0, 0), (1, 1)]), LineString([(1, 1), (2, 2)])],
-        )
-
-    def test_explicit_columns(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test explicit column specification."""
-        u, v = conversion_utils._identify_source_target_cols(
-            basic_edges, source_col="u", target_col="v"
-        )
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_explicit_index_levels(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test explicit index level specification."""
-        edges = basic_edges.set_index(["u", "v"])
-        u, v = conversion_utils._identify_source_target_cols(edges, source_col="u", target_col="v")
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_implicit_columns_u_v(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test implicit detection of 'u' and 'v' columns."""
-        u, v = conversion_utils._identify_source_target_cols(basic_edges)
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_implicit_columns_source_target(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test implicit detection of 'source' and 'target' columns."""
-        edges = basic_edges.rename(columns={"u": "source", "v": "target"})
-        u, v = conversion_utils._identify_source_target_cols(edges)
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_implicit_index_from_to_node_id(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test implicit detection of 'from_node_id' and 'to_node_id' index levels."""
-        edges = basic_edges.rename(columns={"u": "from_node_id", "v": "to_node_id"})
-        edges = edges.set_index(["from_node_id", "to_node_id"])
-        u, v = conversion_utils._identify_source_target_cols(edges)
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_implicit_index_generic(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test implicit detection from first two index levels."""
-        edges = basic_edges.set_index(["u", "v"])
-        # Rename levels to something generic
-        edges.index.names = ["level_0", "level_1"]
-        u, v = conversion_utils._identify_source_target_cols(edges)
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_fallback_first_two_columns(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test fallback to first two columns."""
-        edges = basic_edges.rename(columns={"u": "col1", "v": "col2"})
-        # Ensure col1 and col2 are first
-        edges = edges[["col1", "col2", "weight", "geometry"]]
-        u, v = conversion_utils._identify_source_target_cols(edges)
-        assert (u == [1, 2]).all()
-        assert (v == [2, 3]).all()
-
-    def test_error_missing_explicit(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test error when explicit columns are missing."""
-        with pytest.raises(ValueError, match=r"Source/Target column\(s\) not found: missing"):
-            conversion_utils._identify_source_target_cols(
-                basic_edges, source_col="missing", target_col="v"
-            )
-
-    def test_error_unable_to_identify(self) -> None:
-        """Test error when unable to identify columns."""
-        edges = gpd.GeoDataFrame(geometry=[LineString([(0, 0), (1, 1)])])
-        with pytest.raises(ValueError, match="Could not identify source and target"):
-            conversion_utils._identify_source_target_cols(edges)
-
-    def test_only_source_missing_target(self, basic_edges: gpd.GeoDataFrame) -> None:
-        """Test error when only source is found but target is missing."""
-        # This tests line 1647 - missing target column error
-        edges = basic_edges.copy()
-        with pytest.raises(
-            ValueError, match="Source/Target column\\(s\\) not found: missing_target"
-        ):
-            conversion_utils._identify_source_target_cols(
-                edges, source_col="u", target_col="missing_target"
-            )
-
-    def test_standard_index_name_matching(self) -> None:
-        """Test _get_col_or_level with standard index name matching (line 1600)."""
-        # Create DataFrame with named index
-        frame = pd.DataFrame(
-            {"col1": [1, 2, 3]},
-            index=pd.Index([10, 20, 30], name="my_index"),
-        )
-        result = conversion_utils._get_col_or_level(frame, "my_index")
-        assert result is not None
-        assert (result == [10, 20, 30]).all()
-
-
 class TestPublicUtilityExports:
     """Verify compatibility exports and focused public submodules."""
 
@@ -1170,20 +1379,3 @@ class TestPublicUtilityExports:
         """Previously importable compatibility names should remain accessible."""
         assert utils.NxConverter is conversion_utils.NxConverter
         assert utils.MATPLOTLIB_AVAILABLE is spatial_utils.MATPLOTLIB_AVAILABLE
-
-
-class TestRemoveIsolatedComponents(BaseGraphTest):
-    """Test remove_isolated_components functionality."""
-
-    def test_nx_to_gdf_pos_from_xy_attributes(self) -> None:
-        """Test nx_to_gdf with pos populated from x/y attributes (covers line 2237)."""
-        G = nx.Graph()
-        G.add_node(1, x=0.0, y=0.0)
-        G.add_node(2, x=1.0, y=1.0)
-        G.add_edge(1, 2)
-        G.graph = {"crs": "EPSG:27700", "is_hetero": False}
-
-        # Should populate 'pos' from x/y when calling nx_to_gdf
-        nodes_gdf = nx_to_gdf(G, nodes=True, edges=False)
-        assert isinstance(nodes_gdf, gpd.GeoDataFrame)
-        assert len(nodes_gdf) == 2

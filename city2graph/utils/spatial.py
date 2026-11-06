@@ -201,8 +201,10 @@ def create_isochrone(
         The edge attribute to use for distance calculation (e.g., 'length',
         'travel_time'). If None, the function will use the default edge attribute.
     cut_edge_types : list[tuple[str, str, str]] | None, default None
-        List of edge types to remove from the graph before processing (e.g.,
-        [("bus_stop", "is_next_to", "bus_stop")]).
+        Edge types to omit from polygon construction after calculating travel
+        distances (e.g., [("bus_stop", "is_next_to", "bus_stop")]). Nodes left
+        isolated by these removals are omitted too; the excluded edges still
+        contribute to reachability.
     method : str, default "concave_hull_knn"
         The method to generate the isochrone polygon. Options are:
 
@@ -596,8 +598,8 @@ def _filter_edges_by_type(
     """
     Remove edges of specified types from the graph.
 
-    Iterates through the graph edges and removes those that match any of the
-    specified types in `cut_edge_types`.
+    Remove matching edges by key and their newly isolated endpoints. Original
+    isolated nodes remain eligible for point-based isochrones.
 
     Parameters
     ----------
@@ -612,13 +614,24 @@ def _filter_edges_by_type(
         The graph with specified edges removed.
     """
     graph = graph.copy()
-    edges_to_remove = [
-        (u, v)
-        for u, v, d in graph.edges(data=True)
-        if (d.get("full_edge_type") or d.get("edge_type")) in cut_edge_types
-    ]
-    if edges_to_remove:
-        graph.remove_edges_from(edges_to_remove)
+    affected_nodes: set[Any] = set()
+    if isinstance(graph, nx.MultiGraph):
+        keyed_edges = [
+            (u, v, key)
+            for u, v, key, data in graph.edges(keys=True, data=True)
+            if (data.get("full_edge_type") or data.get("edge_type")) in cut_edge_types
+        ]
+        affected_nodes.update(node for u, v, _ in keyed_edges for node in (u, v))
+        graph.remove_edges_from(keyed_edges)
+    else:
+        edges = [
+            (u, v)
+            for u, v, data in graph.edges(data=True)
+            if (data.get("full_edge_type") or data.get("edge_type")) in cut_edge_types
+        ]
+        affected_nodes.update(node for edge in edges for node in edge)
+        graph.remove_edges_from(edges)
+    graph.remove_nodes_from(node for node in affected_nodes if graph.degree(node) == 0)
     return graph
 
 

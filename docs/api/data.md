@@ -7,6 +7,9 @@ keywords: Overture Maps, load_overture_data, buildings, roads, places, segments,
 
 The data module provides functions for loading and processing geospatial data from various sources, with a focus on [Overture Maps](https://overturemaps.org/) data.
 
+Public transport loaders and GTFS generation are documented in the
+[Transportation module](transportation.md).
+
 ::: city2graph.data
     options:
       show_root_heading: false

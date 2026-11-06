@@ -38,6 +38,8 @@ dependencies = [
     "rustworkx >=0.17.1",
     "scipy >=1.10.0",
     "geopy >=2.4.0",
+    "timezonefinder>=9.1,<10",
+    "timezonefinder-data==4.2026.6",
 ]
 
 [project.optional-dependencies]
