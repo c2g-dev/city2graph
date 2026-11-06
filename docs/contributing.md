@@ -191,14 +191,19 @@ Install the documentation dependencies and build the site before submitting
 documentation changes:
 
 ```bash
-uv sync --group docs --extra cpu
-uv run mkdocs build --strict
+uv sync --extra cpu --group dev --group docs
+uv run --no-sync mkdocs build --strict
 ```
+
+Sync both groups once. `default-groups` is empty, so a plain `uv sync --group docs`
+removes the `dev` packages, and the next test run reinstalls them. Alternating
+the two commands rebuilds the environment on every switch. `--no-sync` skips the
+environment check on each documentation command.
 
 For a local preview, run:
 
 ```bash
-uv run mkdocs serve
+uv run --no-sync mkdocs serve
 ```
 
 Then open `http://127.0.0.1:8000/`.
@@ -210,10 +215,9 @@ cacheable files without changing notebook calculations or saved outputs.
 To run the Chromium smoke tests used by the documentation CI:
 
 ```bash
-uv sync --extra cpu --group dev --group docs
-uv run playwright install chromium
-uv run mkdocs build --strict
-CITY2GRAPH_DOCS_SITE=site uv run pytest -q tests/test_docs.py tests/test_docs_browser.py
+uv run --no-sync playwright install chromium
+uv run --no-sync mkdocs build --strict
+CITY2GRAPH_DOCS_SITE=site uv run --no-sync pytest -q tests/test_docs.py tests/test_docs_browser.py
 ```
 
 These checks cover instant navigation, search, copying code, maths, version

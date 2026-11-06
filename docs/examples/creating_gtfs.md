@@ -576,7 +576,7 @@ c2g.save_gtfs(configured_con, "synthetic.zip")
 
 ## Related { #related }
 
-- [GTFS generation reference](../api/gtfs_generation.md): precedence of user settings, source tags and defaults, and every table field.
+- [GTFS generation guide](../api/gtfs_generation.md): precedence of user settings, source tags and defaults, and every table field.
 - [Transportation API](../api/transportation.md): `load_osm_transport`, `create_gtfs`, `save_gtfs`, `get_gtfs_summary` and `travel_summary_graph`.
 - [GTFS to public transit graphs](gtfs.ipynb): the same graph and isochrone workflow from an official London feed.
 - [Filling holes in buffer isochrones](isochrone_holes.md): the buffer method used above.

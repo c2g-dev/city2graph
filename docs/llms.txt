@@ -78,7 +78,7 @@ under the BSD 3-Clause License on GitHub.
 - [Data](https://city2graph.net/latest/api/data.html): Load Overture Maps data and place boundaries.
 - [Morphology](https://city2graph.net/latest/api/morphology.html): Build building, tessellation, and street relations.
 - [Transportation](https://city2graph.net/latest/api/transportation.html): Load GTFS or GBFS data, generate GTFS from OpenStreetMap, and build travel-summary graphs.
-- [GTFS generation reference](https://city2graph.net/latest/api/gtfs_generation.html): How user settings, OpenStreetMap tags and defaults produce each GTFS operating condition.
+- [Transportation: GTFS generation guide](https://city2graph.net/latest/api/gtfs_generation.html): How user settings, OpenStreetMap tags and defaults produce each GTFS operating condition.
 - [Mobility](https://city2graph.net/latest/api/mobility.html): Convert origin–destination data to weighted graphs.
 - [Proximity](https://city2graph.net/latest/api/proximity.html): Build proximity, contiguity, bridge, grouping, and directed graphs.
 - [Metapath](https://city2graph.net/latest/api/metapath.html): Materialise metapath-derived relations.
