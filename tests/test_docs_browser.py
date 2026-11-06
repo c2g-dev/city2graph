@@ -469,3 +469,33 @@ def test_gtfs_reference_flow_and_details(page: Page, docs_server: str, width: in
     structure.locator(".mermaid svg").wait_for()
     assert "stop_times.txt" in structure.inner_text()
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+
+
+def test_gtfs_tutorial_structured_data() -> None:
+    """Publish valid article and FAQ markup that matches the visible questions."""
+    import json  # noqa: PLC0415
+
+    from bs4 import BeautifulSoup  # noqa: PLC0415
+
+    assert SITE
+    page = BeautifulSoup(Path(SITE, "examples/creating_gtfs.html").read_text(), "html.parser")
+    blocks = [
+        json.loads(tag.string or "") for tag in page.select('script[type="application/ld+json"]')
+    ]
+    by_type = {block["@type"]: block for block in blocks}
+    assert {"BreadcrumbList", "TechArticle", "FAQPage"} <= by_type.keys()
+    article = by_type["TechArticle"]
+    assert article["headline"] == page.title.get_text()
+    assert article["dateModified"] >= article["datePublished"]
+    visible = page.select_one("article")
+    assert visible
+    visible_headings = {
+        heading.get_text(strip=True).removesuffix("¶") for heading in visible.select("h3")
+    }
+    questions = [item["name"] for item in by_type["FAQPage"]["mainEntity"]]
+    assert questions
+    for question in questions:
+        assert question in visible_headings
+    description = page.select_one('meta[name="description"]')
+    assert description
+    assert 70 <= len(str(description.get("content"))) <= 160

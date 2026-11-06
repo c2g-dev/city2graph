@@ -289,5 +289,53 @@
   ]
 }
 </script>
+{% if page.meta.date_published %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "@id": {{ (page.canonical_url ~ "#article") | tojson }},
+  "headline": {{ seo_title | tojson }},
+  "description": {{ seo_description | tojson }},
+  "url": {{ page.canonical_url | tojson }},
+  "mainEntityOfPage": {{ page.canonical_url | tojson }},
+  "image": {{ social_image | tojson }},
+  "inLanguage": "en",
+  "isAccessibleForFree": true,
+  "datePublished": {{ page.meta.date_published | tojson }},
+  "dateModified": {{ (page.meta.date_modified or page.meta.date_published) | tojson }},
+  "author": {
+    "@type": "Person",
+    "name": "Yuta Sato",
+    "sameAs": "https://orcid.org/0009-0004-7052-7163"
+  },
+  "isPartOf": {"@id": "https://city2graph.net/latest/#website"}
+  {% if page.meta.about %},
+  "about": [
+    {% for topic in page.meta.about %}
+    {"@type": "Thing", "name": {{ topic | tojson }}}{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+  {% endif %}
+}
+</script>
+{% endif %}
+{% if page.meta.faq %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {% for item in page.meta.faq %}
+    {
+      "@type": "Question",
+      "name": {{ item.question | tojson }},
+      "acceptedAnswer": {"@type": "Answer", "text": {{ item.answer | tojson }}}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
+{% endif %}
 {% endif %}
 {% endblock %}

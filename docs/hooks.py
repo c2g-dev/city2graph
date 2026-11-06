@@ -45,8 +45,22 @@ def on_files(files: Files, config: MkDocsConfig) -> Files:
     return files
 
 
-def on_page_markdown(markdown: str, **_kwargs: object) -> str:
-    """Render GTFS default tables from the registry used by the generator."""
+def _render_faq(markdown: str, page: Page | None) -> str:
+    """Replace the FAQ marker with the questions declared in the page front matter."""
+    faq = page.meta.get("faq") if page is not None else None
+    if not faq or "<!-- faq -->" not in markdown:
+        return markdown
+    identifier = re.compile(r"\b[a-z]+(?:_[a-z]+)+\b")
+    entries = []
+    for item in faq:
+        answer = identifier.sub(lambda match: f"`{match.group(0)}`", item["answer"])
+        entries.append(f"### {item['question']}\n\n{answer}")
+    return markdown.replace("<!-- faq -->", "\n\n".join(entries))
+
+
+def on_page_markdown(markdown: str, *, page: Page | None = None, **_kwargs: object) -> str:
+    """Render page FAQs and the GTFS default tables from their registered sources."""
+    markdown = _render_faq(markdown, page)
     if "<!-- gtfs-defaults:" not in markdown:
         return markdown
     registry = json.loads(

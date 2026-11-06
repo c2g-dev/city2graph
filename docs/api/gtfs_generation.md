@@ -1,5 +1,5 @@
 ---
-description: Follow GTFS generation from network inputs through user settings, source values and defaults to the resulting feed.
+description: Reference for generating synthetic GTFS from OpenStreetMap or your own tables, showing how user settings, source tags and defaults produce each value.
 ---
 
 # GTFS generation reference
@@ -8,7 +8,7 @@ City2Graph needs a network of routes and ordered stops. It then completes each
 operating condition from your settings, interpreted source values, or a default.
 The four sections below follow that process.
 
-[Tokyo walkthrough](../examples/creating_gtfs.md) · [Function signatures](transportation.md)
+[Create GTFS from OpenStreetMap tutorial](../examples/creating_gtfs.md) · [Function signatures](transportation.md)
 
 ## 1. How a feed is generated { #generation-flow }
 

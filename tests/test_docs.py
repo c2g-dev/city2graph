@@ -393,6 +393,33 @@ class TestDocumentationHooks:
                 if isinstance(value, duckdb.DuckDBPyConnection):
                     value.close()
 
+    def test_faq_marker_renders_front_matter_questions(self) -> None:
+        """Render every declared question once and leave pages without an FAQ unchanged."""
+        faq = [
+            {"question": "Can it run offline?", "answer": "Yes. Call create_gtfs with tables."},
+            {"question": "Which modes exist?", "answer": "Tram and subway."},
+        ]
+        page = cast("Page", SimpleNamespace(meta={"faq": faq}))
+        output = hooks.on_page_markdown("Intro\n\n<!-- faq -->\n", page=page)
+        assert "<!-- faq -->" not in output
+        assert "### Can it run offline?\n\nYes. Call `create_gtfs` with tables." in output
+        assert "### Which modes exist?\n\nTram and subway." in output
+        plain = cast("Page", SimpleNamespace(meta={}))
+        assert hooks.on_page_markdown("<!-- faq -->", page=plain) == "<!-- faq -->"
+        assert hooks.on_page_markdown("<!-- faq -->") == "<!-- faq -->"
+
+    def test_gtfs_tutorial_front_matter_is_search_ready(self) -> None:
+        """Keep the tutorial title and description within search snippet limits."""
+        guide = (Path(__file__).parents[1] / "docs/examples/creating_gtfs.md").read_text()
+        front_matter = guide.split("---\n")[1]
+        title = re.search(r'^seo_title: "(.*)"$', front_matter, flags=re.MULTILINE)
+        description = re.search(r'^description: "(.*)"$', front_matter, flags=re.MULTILINE)
+        assert title
+        assert description
+        assert len(title.group(1)) <= 60
+        assert 70 <= len(description.group(1)) <= 160
+        assert guide.count("<!-- faq -->") == 1
+
     @pytest.mark.parametrize("nested", [False, True])
     def test_notebook_images_are_cacheable_and_lossless(
         self, docs_config: SimpleNamespace, nested: bool

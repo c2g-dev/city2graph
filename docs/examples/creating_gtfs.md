@@ -1,29 +1,71 @@
 ---
-seo_title: "How to approximate GTFS from OpenStreetMap with City2Graph"
-description: "Generate synthetic GTFS feeds from OpenStreetMap in Python, build public transport graphs, and calculate multi-modal accessibility as isochrones with City2Graph and OSMnx."
+seo_title: "No GTFS? Create It from OpenStreetMap by City2Graph"
+description: "No GTFS feed? Generate synthetic GTFS from OpenStreetMap in Python, then analyse transit graphs and accessibility in cities worldwide."
 social_image: assets/examples/synthetic_gtfs_world_isochrones_thumbnail.png
 social_image_alt: "Public transport networks and street-based isochrones in Tokyo, London, Paris, New York, Melbourne, Berlin, Seoul and Amsterdam"
 social_image_width: 1600
 social_image_height: 900
+date_published: "2026-11-06"
+date_modified: "2026-11-06"
+about:
+  - "GTFS"
+  - "OpenStreetMap"
+  - "Public transport accessibility"
+  - "Isochrone"
+faq:
+  - question: "Can I analyse public transport without a GTFS feed?"
+    answer: "Yes. load_osm_transport reads public transport route relations from OpenStreetMap for a place name or boundary and generates a synthetic GTFS feed in a DuckDB connection. The same connection builds travel-summary graphs and origin-destination tables, supports isochrone workflows, and can be saved as a GTFS ZIP."
+  - question: "Does it work for cities outside Europe and North America?"
+    answer: "The workflow depends on how completely OpenStreetMap maps the public transport routes and their ordered stops. It has no regional restriction. The eight-city figure includes Tokyo, Seoul and Melbourne. Run get_gtfs_summary on the result to see how many patterns were generated and which relations were skipped."
+  - question: "How accurate are the synthetic schedules?"
+    answer: "Stop order and station locations come from OpenStreetMap. Each operating condition takes your setting first, then a supported OpenStreetMap tag, then a documented default. The result is a modelled service. It has not been validated against operator timetables or passenger counts, so use it for network structure, relative service levels and accessibility, and inspect the adopted values before drawing conclusions."
+  - question: "Which transport modes can City2Graph generate?"
+    answer: "Tram, subway, train, bus, trolleybus, ferry, light rail, monorail and funicular routes. Pass one or more of them to the modes argument."
+  - question: "Can I use my own routes instead of OpenStreetMap?"
+    answer: "Yes. create_gtfs accepts explicit routes, stops, patterns and stop sequences as tables, and operating conditions you do not specify are completed from defaults."
+  - question: "Can I save the generated feed as a GTFS file?"
+    answer: "Yes. save_gtfs writes the feed as a GTFS ZIP, and the connection can be reloaded later. The generator writes a subset of the GTFS Schedule files, described in the generation reference."
+  - question: "Is Overture Maps supported for GTFS generation?"
+    answer: "Not currently. Overture Maps transportation data describes physical infrastructure and does not provide complete public transport routes with ordered station calls and operating patterns. Use OpenStreetMap route relations or supply your own tables."
 ---
 
-# How to approximate GTFS from OpenStreetMap with City2Graph
+# No GTFS? Create It from OpenStreetMap by City2Graph
 
-City2Graph generates synthetic GTFS feeds from OpenStreetMap (OSM) public
-transport routes and converts them into public transport graphs in Python.
-This example models subway, train and light-rail services in Tokyo's 23 wards,
-then combines the rail graph with an OSMnx walking network to calculate
-multi-modal accessibility as 10-, 20- and 30-minute isochrones. Start from a place
-name, inspect the generated service assumptions, and customise operating
-conditions for your accessibility analysis.
+City2Graph creates GTFS from OpenStreetMap (OSM) in Python. Pass a place name to
+`load_osm_transport` and it reads the mapped public transport routes and stops,
+generates a synthetic GTFS feed, and returns it as a DuckDB connection. From
+there you can build a transit graph, calculate multi-modal accessibility
+isochrones, or save a GTFS ZIP. No operator feed is required, so the same
+workflow serves any transit system that OSM maps, in any city worldwide.
 
-[![Public transport networks and street-based isochrones in Tokyo, London, Paris, New York, Melbourne, Berlin, Seoul and Amsterdam](../assets/examples/synthetic_gtfs_world_isochrones.png)](../assets/examples/synthetic_gtfs_world_isochrones.png)
+[![Public transport networks and street-based isochrones in eight cities: Tokyo, London, Paris, New York, Melbourne, Berlin, Seoul and Amsterdam, each generated from OpenStreetMap without an operator GTFS feed](../assets/examples/synthetic_gtfs_world_isochrones.png)](../assets/examples/synthetic_gtfs_world_isochrones.png)
 
 <small> © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) · ODbL 1.0. Water context: [OpenFreeMap](https://openfreemap.org/) / [OpenMapTiles](https://openmaptiles.org/).</small>
 
-## 1. Generate a rail graph { #start-with-a-place }
+## Why generate GTFS from OpenStreetMap? { #why-osm }
 
-Load the mapped rail services to generate a feed:
+[GTFS](https://gtfs.org/documentation/schedule/reference/) is the standard
+format for public transport schedules, but analysis that needs it stalls where
+no operator publishes an open feed. OSM maps transit routes and ordered stops in
+a consistent, openly licensed structure
+([public transport tagging](https://wiki.openstreetmap.org/wiki/Public_transport)),
+so one method can cover cities that have no feed and cities that do.
+
+| | Operator GTFS feed | Synthetic GTFS from OSM |
+|---|---|---|
+| Source | Published by an agency or aggregator | OSM public transport route relations, retrieved on demand from Overpass |
+| Availability | Depends on whether an operator publishes an open feed | Wherever routes and stops are mapped in OSM |
+| Timetable | Scheduled trips from the operator | Modelled departures from OSM interval tags, your settings, or defaults |
+| Suited to | Analysis that needs the published timetable | Network structure, service levels and accessibility, compared across cities with one method |
+| Output | The feed as published | DuckDB feed, GTFS ZIP and transit graph |
+
+Use an official feed with [`load_gtfs`](gtfs.ipynb) when you have one and need
+its timetable. Generate a feed from OSM when you have none, or when you want the
+same assumptions in every city you compare.
+
+## 1. How to create GTFS from OpenStreetMap { #start-with-a-place }
+
+One call loads the mapped rail services and generates a feed:
 
 <!-- gtfs-quick:osm -->
 ```python
@@ -109,7 +151,19 @@ nodes, edges = c2g.travel_summary_graph(con)
     plt.show()
     ```
 
-### Calculate multi-modal accessibility as isochrones { #walk-and-rail-isochrones-from-tokyo-station }
+### What OpenStreetMap data is used { #osm-data }
+
+The loader queries OSM through Overpass for
+[public transport route relations](https://wiki.openstreetmap.org/wiki/Relation:route)
+in the selected place or boundary and keeps their ordered stop members, following
+[Public Transport Version 2](https://wiki.openstreetmap.org/wiki/Public_transport)
+(PTv2) tagging. It supports these `modes`: `tram`, `subway`, `train`, `bus`,
+`trolleybus`, `ferry`, `light_rail`, `monorail` and `funicular`. Omit `modes` to
+load every supported mode. Replace `place_name` with `area` to supply your own
+boundary, or use `relation_ids` to select specific routes. To analyse another
+city, change `place_name` and the projected CRS in the isochrone example below.
+
+### Calculate transit accessibility isochrones from the generated feed { #walk-and-rail-isochrones-from-tokyo-station }
 
 Combine the generated rail service with walking streets to calculate 10-, 20-
 and 30-minute reach from Tokyo Station.
@@ -312,11 +366,41 @@ workflow. Inferring service from track connectivity or station proximity can int
 incorrect station connections and arbitrary service counts. Use OSM's mapped
 transport relations or supply explicit transport tables with `create_gtfs`.
 
-The next section changes the operating conditions while keeping the same mapped
-network. The [generation reference](../api/gtfs_generation.md#generation-flow)
-explains how user settings, OSM tags and defaults produce each value.
+The same steps apply to other cities, shown next. The section after that changes
+the operating conditions while keeping the same mapped network. The
+[generation reference](../api/gtfs_generation.md#generation-flow) explains how
+user settings, OSM tags and defaults produce each value.
 
-## 2. Set the operating conditions { #generate-a-feed }
+## 2. The same workflow in eight cities { #across-eight-cities }
+
+The Tokyo accessibility panel uses the same recorded feed, origin, projected
+coordinate system and ward boundary as the worked example, with thresholds
+extended to one-minute intervals.
+The other cities use their selected synthetic feeds and local walking networks.
+
+[![Public transport networks and street-based isochrones in eight cities: Tokyo, London, Paris, New York, Melbourne, Berlin, Seoul and Amsterdam](../assets/examples/synthetic_gtfs_world_isochrones.png)](../assets/examples/synthetic_gtfs_world_isochrones.png)
+
+© OpenStreetMap contributors.
+
+| Region | Cities |
+|---|---|
+| Asia | Tokyo, Seoul |
+| Europe | London, Paris, Berlin, Amsterdam |
+| North America | New York |
+| Oceania | Melbourne |
+
+These cities are examples. The method needs OSM route relations with ordered
+stops, so results depend on how completely local transit is mapped. Check
+`c2g.get_gtfs_summary(con)` for the generated pattern count and the relations
+that were skipped before comparing cities.
+
+The figures are static illustrations based on source data retrieved in November
+2026. Running the examples retrieves current OSM data, so network coverage and
+results can change. Raw downloads, generated GTFS archives and intermediate
+graphs are kept outside Git. The code in this tutorial is the maintained workflow;
+the repository retains the published PNGs and small synthetic test inputs.
+
+## 3. Set the operating conditions { #generate-a-feed }
 
 <span id="2-decide-what-to-enter-and-what-to-leave-automatic"></span>
 
@@ -486,19 +570,14 @@ Save the generated feed as a GTFS ZIP with one call:
 c2g.save_gtfs(configured_con, "synthetic.zip")
 ```
 
-## 3. Across eight cities { #across-eight-cities }
+## Frequently asked questions { #faq }
 
-The Tokyo accessibility panel uses the same recorded feed, origin, projected
-coordinate system and ward boundary as the worked example, with thresholds
-extended to one-minute intervals.
-The other cities use their selected synthetic feeds and local walking networks.
+<!-- faq -->
 
-[![Public transport networks and street-based isochrones in Tokyo, London, Paris, New York, Melbourne, Berlin, Seoul and Amsterdam](../assets/examples/synthetic_gtfs_world_isochrones.png)](../assets/examples/synthetic_gtfs_world_isochrones.png)
+## Related { #related }
 
-© OpenStreetMap contributors.
-
-The figures are static illustrations based on source data retrieved in November
-2026. Running the examples retrieves current OSM data, so network coverage and
-results can change. Raw downloads, generated GTFS archives and intermediate
-graphs are kept outside Git. The code in this tutorial is the maintained workflow;
-the repository retains the published PNGs and small synthetic test inputs.
+- [GTFS generation reference](../api/gtfs_generation.md): precedence of user settings, source tags and defaults, and every table field.
+- [Transportation API](../api/transportation.md): `load_osm_transport`, `create_gtfs`, `save_gtfs`, `get_gtfs_summary` and `travel_summary_graph`.
+- [GTFS to public transit graphs](gtfs.ipynb): the same graph and isochrone workflow from an official London feed.
+- [Filling holes in buffer isochrones](isochrone_holes.md): the buffer method used above.
+- [Public transport tagging in OpenStreetMap](https://wiki.openstreetmap.org/wiki/Public_transport) and the [GTFS Schedule reference](https://gtfs.org/documentation/schedule/reference/).

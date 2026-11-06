@@ -67,6 +67,7 @@ under the BSD 3-Clause License on GitHub.
 
 - [Urban morphology from Overture Maps and OpenStreetMap](https://city2graph.net/latest/examples/morphological_graph_from_overturemaps.html): Build heterogeneous graphs from buildings, tessellations, and streets.
 - [GTFS public transport graphs](https://city2graph.net/latest/examples/gtfs.html): Build stop-to-stop travel-time graphs and multimodal isochrones.
+- [No GTFS? Create it from OpenStreetMap](https://city2graph.net/latest/examples/creating_gtfs.html): Generate a synthetic GTFS feed from OpenStreetMap route relations for any mapped city, then build transit graphs and accessibility isochrones.
 - [OD matrices and mobility graphs](https://city2graph.net/latest/examples/generating_graphs_from_od_matrix.html): Convert edge lists and adjacency matrices into weighted spatial graphs.
 - [Spatial proximity graphs](https://city2graph.net/latest/examples/generating_graphs_by_proximity.html): Construct KNN, Delaunay, Gilbert, Waxman, and contiguity graphs.
 - [Metapaths for heterogeneous GNNs](https://city2graph.net/latest/examples/add_metapaths.html): Add composite typed relations to heterogeneous graphs.
@@ -76,7 +77,8 @@ under the BSD 3-Clause License on GitHub.
 - [Graph conversion](https://city2graph.net/latest/api/graph.html): Convert between GeoDataFrames, NetworkX, and PyTorch Geometric.
 - [Data](https://city2graph.net/latest/api/data.html): Load Overture Maps data and place boundaries.
 - [Morphology](https://city2graph.net/latest/api/morphology.html): Build building, tessellation, and street relations.
-- [Transportation](https://city2graph.net/latest/api/transportation.html): Load GTFS or GBFS data and build travel-summary graphs.
+- [Transportation](https://city2graph.net/latest/api/transportation.html): Load GTFS or GBFS data, generate GTFS from OpenStreetMap, and build travel-summary graphs.
+- [GTFS generation reference](https://city2graph.net/latest/api/gtfs_generation.html): How user settings, OpenStreetMap tags and defaults produce each GTFS operating condition.
 - [Mobility](https://city2graph.net/latest/api/mobility.html): Convert origin–destination data to weighted graphs.
 - [Proximity](https://city2graph.net/latest/api/proximity.html): Build proximity, contiguity, bridge, grouping, and directed graphs.
 - [Metapath](https://city2graph.net/latest/api/metapath.html): Materialise metapath-derived relations.

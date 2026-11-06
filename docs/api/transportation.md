@@ -12,7 +12,7 @@ archives and local
 derives stop-to-stop origin–destination records and aggregates GTFS schedules
 into transportation network graphs.
 
-See the [generation tutorial](../examples/creating_gtfs.md) for a first feed and
+See the [tutorial on creating GTFS from OpenStreetMap](../examples/creating_gtfs.md) for a first feed and
 the [generation reference](gtfs_generation.md) for field precedence, source-tag
 interpretation, partial service tables and default values.
 
