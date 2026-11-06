@@ -1,8 +1,12 @@
 ---
-description: Reference for generating synthetic GTFS from OpenStreetMap or your own tables, showing how user settings, source tags and defaults produce each value.
+description: Guide to generating synthetic GTFS from OpenStreetMap or your own tables, showing how user settings, source tags and defaults produce each value.
 ---
 
-# GTFS generation reference
+# GTFS generation guide
+
+This guide belongs to the [Transportation module](transportation.md) and explains
+the behaviour of `create_gtfs` and `load_osm_transport`. The module page lists
+the function signatures.
 
 City2Graph needs a network of routes and ordered stops. It then completes each
 operating condition from your settings, interpreted source values, or a default.

@@ -30,7 +30,7 @@ from the top-level package, so the examples use `import city2graph as c2g`.
 | [Graph](graph.md) | Conversion between GeoDataFrames, NetworkX, and PyTorch Geometric |
 | [Data](data.md) | Overture Maps downloads, place boundaries, and geospatial preprocessing |
 | [Morphology](morphology.md) | Buildings, tessellations, street segments, and urban form relations |
-| [Transportation](transportation.md) | GTFS and GBFS loading, OD pairs, and travel-summary graphs |
+| [Transportation](transportation.md) | GTFS and GBFS loading, OD pairs, and travel-summary graphs. The [GTFS generation guide](gtfs_generation.md) explains how each feed value is chosen |
 | [Mobility](mobility.md) | OD edge lists and adjacency matrices |
 | [Proximity](proximity.md) | Proximity, contiguity, bridge, grouping, and directed graph builders |
 | [Metapath](metapath.md) | Metapath-derived relations in heterogeneous graphs |

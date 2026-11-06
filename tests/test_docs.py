@@ -20,6 +20,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
+import yaml
 
 import city2graph as c2g
 
@@ -407,6 +408,17 @@ class TestDocumentationHooks:
         plain = cast("Page", SimpleNamespace(meta={}))
         assert hooks.on_page_markdown("<!-- faq -->", page=plain) == "<!-- faq -->"
         assert hooks.on_page_markdown("<!-- faq -->") == "<!-- faq -->"
+
+    def test_gtfs_generation_guide_is_nested_under_transportation(self) -> None:
+        """Keep the narrative GTFS guide under Transportation, apart from module references."""
+        root = Path(__file__).parents[1]
+        config = yaml.load((root / "mkdocs.yml").read_text(), Loader=yaml.BaseLoader)  # noqa: S506
+        api = next(item["API Reference"] for item in config["nav"] if "API Reference" in item)
+        top_level = [path for item in api for path in item.values() if isinstance(path, str)]
+        transportation = next(item["Transportation"] for item in api if "Transportation" in item)
+        nested = [path for item in transportation for path in item.values()]
+        assert "api/gtfs_generation.md" not in top_level
+        assert nested == ["api/transportation.md", "api/gtfs_generation.md"]
 
     def test_gtfs_tutorial_front_matter_is_search_ready(self) -> None:
         """Keep the tutorial title and description within search snippet limits."""

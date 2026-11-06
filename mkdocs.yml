@@ -174,8 +174,9 @@ plugins:
   - mkdocs-jupyter:
       # Markdown pages contain MkDocs directives, not Jupytext notebooks.
       include: ['*.ipynb']
+      # No page links to the notebook files, so skip copying them (47 MB) into the site.
       ignore: ['*.md', '*.py']
-      include_source: true
+      include_source: false
       ignore_h1_titles: true
       theme: dark
 
@@ -233,8 +234,9 @@ nav:
       - Graph: api/graph.md
       - Metapath: api/metapath.md
       - Morphology: api/morphology.md
-      - Transportation: api/transportation.md
-      - GTFS Generation: api/gtfs_generation.md
+      - Transportation:
+          - Module reference: api/transportation.md
+          - GTFS generation guide: api/gtfs_generation.md
       - Mobility: api/mobility.md
       - Proximity: api/proximity.md
       - Data: api/data.md
