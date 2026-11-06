@@ -1,4 +1,4 @@
-"""Resolve calendars, service periods and agency metadata with their provenance."""
+"""Resolve calendars, service periods and agency details with recorded assumptions."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfoNotFoundError
 
 import pandas as pd
 
-from .feed import _assumption
+from .metadata import _assumption
 from .schema import _MODEL
 from .schema import _REGISTRY
 from .schema import TransportData
@@ -65,7 +65,7 @@ def _timezone_points(points: tuple[tuple[float, float], ...]) -> tuple[str | Non
     tuple
         Unique timezone and the lookup dataset description.
     """
-    from timezonefinder import TimezoneFinder  # noqa: PLC0415
+    from timezonefinder import TimezoneFinder  # noqa: PLC0415 - load the lookup dataset only when required
 
     zones: set[str] = set()
     description = (
@@ -181,12 +181,14 @@ def _feed_timezone(
         Timezone, origin kind, origin name and explanation.
     """
     source_zones: set[str] = set()
+    source_origins: set[str] = set()
     for fields in metadata:
         if "agency_timezone" in fields:
             zone, origin = fields["agency_timezone"]
             try:
                 ZoneInfo(zone)
                 source_zones.add(zone)
+                source_origins.add(origin)
             except (ZoneInfoNotFoundError, ValueError):
                 _assumption(
                     records,
@@ -202,7 +204,7 @@ def _feed_timezone(
         zone = next(iter(source_zones))
         zone_kind, zone_source, reason = (
             "source",
-            "OpenStreetMap:timezone",
+            ", ".join(sorted(source_origins)),
             "Unambiguous source timezone",
         )
     else:
@@ -415,7 +417,7 @@ class _ServicePeriod:
 
 
 def _calendar_days(config: _GenerationConfig, identifier: str) -> dict[str, bool]:
-    """Evaluate declared calendars or construct the fixed representative week.
+    """Evaluate declared calendars or construct a week from the generation date.
 
     Explicit calendar exceptions override weekly eligibility on the same date.
 
@@ -432,7 +434,7 @@ def _calendar_days(config: _GenerationConfig, identifier: str) -> dict[str, bool
         Declared dates and their activity, including explicit removals.
     """
     if config.calendar is None and config.calendar_dates is None:
-        first = datetime.strptime(config.service_date or str(_default("service_date")), "%Y%m%d")
+        first = datetime.strptime(config.service_date or config.generation_date, "%Y%m%d")
         count = 1 if config.service_date is not None else int(_default("service_days"))
         return {(first + timedelta(days=day)).strftime("%Y%m%d"): True for day in range(count)}
     days: dict[str, bool] = {}
@@ -738,7 +740,7 @@ def _record_service(
     context : _ServiceContext
         Resolved pattern/calendar context and generation-local ID reservations.
     records : list[dict[str, object]]
-        Provenance records to extend in generation order.
+        Metadata records to extend in generation order.
     index : int
         Stable service-row position used to allocate generated identifiers.
     date : str
@@ -815,9 +817,9 @@ def _record_service(
             records,
             scope,
             "direction_resolution",
-            "unresolved parent; one shared departure budget",
+            "unresolved group direction; one shared departure budget",
             "estimated",
-            "OpenStreetMap:route_master",
+            "patterns.service_group_direction",
             "No directional service split is inferred",
         )
     return resolved
@@ -883,7 +885,7 @@ def _resolved_row(
                 "Explicit service windows or departures override source conditions",
             )
     selected_days = (
-        list(days.items()) if split else [(next(iter(days), str(_default("service_date"))), True)]
+        list(days.items()) if split else [(next(iter(days), config.generation_date), True)]
     )
     output: list[dict[str, Any]] = []
     exceptions: list[dict[str, object]] = []
@@ -965,6 +967,18 @@ def _resolve_services(
         msg = f"pattern_id: unknown IDs {sorted(unknown)}"
         raise ValueError(msg)
     completed = selected - specified
+    for identifier in sorted(selected):
+        _assumption(
+            records,
+            f"pattern:{identifier}",
+            "service_input",
+            "completed" if services is None or identifier in completed else "specified",
+            "generated",
+            "input selection",
+            "No service row supplied; operating conditions completed"
+            if services is None or identifier in completed
+            else "Service rows supplied for this selected pattern, including broadcast rows",
+        )
     if completed:
         frame = pd.concat(
             [

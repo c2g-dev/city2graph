@@ -1,9 +1,9 @@
 """
 GTFS transportation network utilities.
 
-The functions in this module load GTFS feeds into DuckDB, derive stop-to-stop
-origin/destination records, and aggregate those records into transport summary
-graphs for downstream network analysis.
+The functions in this module generate, inspect, save and load GTFS feeds,
+retrieve transport service from OSM, and derive stop-to-stop
+origin/destination records and transport summary graphs for analysis.
 """
 
 from __future__ import annotations
@@ -18,39 +18,55 @@ from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
+from typing import Literal
+from typing import Unpack
 
 import duckdb
 import geopandas as gpd
 import pandas as pd
 from shapely import wkt
 
-from ._gtfs.feed import _ensure_graph_sql_support
-from ._gtfs.feed import _generation_report
-from ._gtfs.feed import _report_provenance
-from ._gtfs.feed import _restore_provenance
-from ._gtfs.feed import save_gtfs
-from ._gtfs.generation import create_gtfs
-from ._gtfs.schema import GTFSGenerationWarning
-from ._gtfs.schema import TransportData
-from ._gtfs.schema import _default
-from ._gtfs.schema import _time_to_seconds as _time_to_seconds  # noqa: PLC0414 - retain analysis helper export
+from . import data as _data
+from .gtfs.feed import _INCLUDE_METADATA
+from .gtfs.feed import _ensure_graph_sql_support
+from .gtfs.feed import save_gtfs
+from .gtfs.generation import create_gtfs
+from .gtfs.metadata import _report_metadata
+from .gtfs.metadata import _restore_metadata
+from .gtfs.report import _generation_report
+from .gtfs.schema import _METADATA_FILENAME
+from .gtfs.schema import GenerationOptions
+from .gtfs.schema import GTFSGenerationWarning
+from .gtfs.schema import TransportData
+from .gtfs.schema import _time_to_seconds as _time_to_seconds  # noqa: PLC0414 - retain analysis helper export
+from .gtfs.sources import _OSM_ENDPOINT
+from .gtfs.sources import _OSM_TIMEOUT
+from .gtfs.sources import _OVERWRITE_SOURCE
+from .gtfs.sources import _USE_SOURCE_TAGS
+from .gtfs.sources import _load_osm_transport
+from .gtfs.sources import _SourceIO
 from .utils import gdf_to_nx
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from collections.abc import Sequence
+
     import networkx as nx
+    from shapely.geometry import MultiPolygon
+    from shapely.geometry import Polygon
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-_PROVENANCE_PATH = str(_default("provenance_path"))
 
 __all__ = [
     "GTFSGenerationWarning",
     "TransportData",
     "create_gtfs",
+    "get_gtfs_summary",
     "get_od_pairs",
-    "gtfs_generation_report",
     "load_gbfs",
     "load_gtfs",
+    "load_osm_transport",
     "save_gtfs",
     "travel_summary_graph",
 ]
@@ -290,6 +306,46 @@ def _ensure_stops_geometry(con: duckdb.DuckDBPyConnection) -> None:
     )
 
 
+def _feed_date_bounds(
+    con: duckdb.DuckDBPyConnection, tables: set[str]
+) -> tuple[datetime | None, datetime | None]:
+    """Read date bounds across weekly calendars and date exceptions.
+
+    Empty calendar tables contribute no bounds.
+
+    Parameters
+    ----------
+    con : duckdb.DuckDBPyConnection
+        Feed connection.
+    tables : set of str
+        Available table names.
+
+    Returns
+    -------
+    tuple of datetime or None
+        Earliest and latest declared dates, or two missing values.
+    """
+    bounds: list[tuple[datetime, datetime]] = []
+    for name, start, end in (
+        ("calendar", "start_date", "end_date"),
+        ("calendar_dates", "date", "date"),
+    ):
+        if name in tables:
+            row = con.execute(
+                f"SELECT MIN({start}), MAX({end}) FROM {name}"  # noqa: S608 - fixed table and column names
+            ).fetchone()
+            if row and row[0] and row[1]:
+                bounds.append(
+                    (
+                        datetime.strptime(str(row[0]), "%Y%m%d"),
+                        datetime.strptime(str(row[1]), "%Y%m%d"),
+                    )
+                )
+    if not bounds:
+        return None, None
+    return min(start for start, _ in bounds), max(end for _, end in bounds)
+
+
 def _resolve_service_window(
     con: duckdb.DuckDBPyConnection,
     *,
@@ -338,40 +394,14 @@ def _resolve_service_window(
             raise ValueError(msg)
         return None, None, False
 
-    bounds: list[tuple[datetime, datetime]] = []
-
-    if has_calendar:
-        row = con.execute(
-            "SELECT MIN(start_date), MAX(end_date), COUNT(*) FROM calendar"
-        ).fetchone()
-        if row and row[2] and row[0] and row[1]:
-            bounds.append(
-                (
-                    datetime.strptime(str(row[0]), "%Y%m%d"),
-                    datetime.strptime(str(row[1]), "%Y%m%d"),
-                )
-            )
-
-    if has_calendar_dates:
-        row = con.execute("SELECT MIN(date), MAX(date), COUNT(*) FROM calendar_dates").fetchone()
-        if row and row[2] and row[0] and row[1]:
-            bounds.append(
-                (
-                    datetime.strptime(str(row[0]), "%Y%m%d"),
-                    datetime.strptime(str(row[1]), "%Y%m%d"),
-                )
-            )
-
-    if not bounds:
+    gtfs_start, gtfs_end = _feed_date_bounds(con, tables)
+    if gtfs_start is None or gtfs_end is None:
         if calendar_start or calendar_end:
             msg = (
                 "calendar_start/calendar_end specified but calendar tables contain no usable dates"
             )
             raise ValueError(msg)
         return None, None, False
-
-    gtfs_start = min(start for start, _ in bounds)
-    gtfs_end = max(end for _, end in bounds)
 
     try:
         user_start = datetime.strptime(calendar_start, "%Y%m%d") if calendar_start else None
@@ -442,7 +472,7 @@ def _timestamp(gtfs_time: str | float | None, service_date: datetime | str) -> d
 
 
 def load_gtfs(
-    path: str | Path, *, provenance_path: str | Path | None = _PROVENANCE_PATH
+    path: str | Path, *, include_metadata: bool = _INCLUDE_METADATA
 ) -> duckdb.DuckDBPyConnection:
     """
     Load a GTFS ZIP archive into an in-memory DuckDB database.
@@ -455,9 +485,9 @@ def load_gtfs(
     ----------
     path : str | Path
         Path to a GTFS ``.zip`` file.
-    provenance_path : str or pathlib.Path, optional
-        Defaults to "auto", restoring an adjacent <path>.provenance.json when
-        present. Pass None to skip provenance, or supply an explicit JSON path.
+    include_metadata : bool, default True
+        Restore embedded ``city2graph_metadata.json`` when present.
+        Set False to load only the GTFS tables.
 
     Returns
     -------
@@ -465,50 +495,52 @@ def load_gtfs(
         In-memory DuckDB connection containing imported GTFS tables.
     """
     con = duckdb.connect(":memory:")
-    _ensure_graph_sql_support(con)
-
-    has_files = False
-
     try:
-        with tempfile.TemporaryDirectory() as tmp_dir, zipfile.ZipFile(path) as zf:
-            for name in zf.namelist():
-                if name.endswith(".txt") and not name.endswith("/"):
-                    has_files = True
-                    table_name = name.rsplit("/", 1)[-1].replace(".txt", "")
-                    file_path = str(Path(tmp_dir) / "table.csv")
-                    with zf.open(name) as source, Path(file_path).open("wb") as target:
-                        shutil.copyfileobj(source, target)
-                    con.read_csv(file_path, all_varchar=True, auto_detect=True).create(table_name)
-    except (OSError, zipfile.BadZipFile, duckdb.Error):
-        logger.exception("Failed to read GTFS archive at %s", path)
-        return con
+        _ensure_graph_sql_support(con)
 
-    if not has_files:
-        logger.warning("No GTFS files found in %s", path)
-        return con
+        has_files = False
+        embedded_metadata = None
 
-    tables = sorted(_list_tables(con))
-
-    if "stops" in tables:
-        # Build point geometries while guarding against empty coordinate strings.
-        con.execute("""
-            ALTER TABLE stops ADD COLUMN geometry GEOMETRY;
-            UPDATE stops SET geometry = ST_Point(CAST(NULLIF(stop_lon, '') AS DOUBLE), CAST(NULLIF(stop_lat, '') AS DOUBLE))
-            WHERE try_cast(NULLIF(stop_lon, '') as DOUBLE) IS NOT NULL AND try_cast(NULLIF(stop_lat, '') as DOUBLE) IS NOT NULL;
-        """)
-
-    if provenance_path == "auto":
-        adjacent = Path(str(path) + ".provenance.json")
-        provenance_path = adjacent if adjacent.exists() else None
-    if provenance_path is not None:
         try:
-            _restore_provenance(con, provenance_path)
-        except (OSError, ValueError, duckdb.Error):
-            con.close()
-            raise
+            with tempfile.TemporaryDirectory() as tmp_dir, zipfile.ZipFile(path) as zf:
+                if include_metadata and _METADATA_FILENAME in zf.namelist():
+                    embedded_metadata = zf.read(_METADATA_FILENAME)
+                for name in zf.namelist():
+                    if name.endswith(".txt") and not name.endswith("/"):
+                        has_files = True
+                        table_name = name.rsplit("/", 1)[-1].replace(".txt", "")
+                        file_path = str(Path(tmp_dir) / "table.csv")
+                        with zf.open(name) as source, Path(file_path).open("wb") as target:
+                            shutil.copyfileobj(source, target)
+                        con.read_csv(file_path, all_varchar=True, auto_detect=True).create(
+                            table_name
+                        )
+        except (OSError, zipfile.BadZipFile, duckdb.Error):
+            logger.exception("Failed to read GTFS archive at %s", path)
+            return con
 
-    logger.info("GTFS loaded: %s", ", ".join(tables))
-    return con
+        if not has_files:
+            logger.warning("No GTFS files found in %s", path)
+            return con
+
+        tables = sorted(_list_tables(con))
+
+        if "stops" in tables:
+            # Build point geometries while guarding against empty coordinate strings.
+            con.execute("""
+                ALTER TABLE stops ADD COLUMN geometry GEOMETRY;
+                UPDATE stops SET geometry = ST_Point(CAST(NULLIF(stop_lon, '') AS DOUBLE), CAST(NULLIF(stop_lat, '') AS DOUBLE))
+                WHERE try_cast(NULLIF(stop_lon, '') as DOUBLE) IS NOT NULL AND try_cast(NULLIF(stop_lat, '') as DOUBLE) IS NOT NULL;
+            """)
+
+        if embedded_metadata is not None:
+            _restore_metadata(con, embedded_metadata)
+
+        logger.info("GTFS loaded: %s", ", ".join(tables))
+        return con
+    except Exception:
+        con.close()
+        raise
 
 
 def load_gbfs(path: str | Path) -> duckdb.DuckDBPyConnection:
@@ -554,8 +586,8 @@ def load_gbfs(path: str | Path) -> duckdb.DuckDBPyConnection:
                 continue
             has_files = True
             table_name = file_path.stem.replace("-", "_").lower()
-            df = pd.DataFrame(rows)
-            con.register("_gbfs_tmp", df)
+            frame = pd.DataFrame(rows)
+            con.register("_gbfs_tmp", frame)
             con.execute(f"""
                 CREATE OR REPLACE TABLE {table_name} AS
                 SELECT *
@@ -666,9 +698,11 @@ def get_od_pairs(
     con : duckdb.DuckDBPyConnection
         DuckDB connection with GTFS tables loaded.
     start_date : str | None, default=None
-        Inclusive start date (``YYYYMMDD``). Optional when ``calendar`` exists.
+        Inclusive start date (``YYYYMMDD``). Defaults to the earliest date in
+        calendar or calendar_dates.
     end_date : str | None, default=None
-        Inclusive end date (``YYYYMMDD``). Optional when ``calendar`` exists.
+        Inclusive end date (``YYYYMMDD``). Defaults to the latest date in
+        calendar or calendar_dates.
     include_geometry : bool, default=True
         If ``True`` and stop geometries are available, include a line geometry
         for each OD pair.
@@ -690,17 +724,13 @@ def get_od_pairs(
 
     has_cal = "calendar" in tables
 
-    if has_cal:
-        cal_df = con.execute(
-            "SELECT MIN(start_date) as s, MAX(end_date) as e FROM calendar"
-        ).fetchone()
-        s_dt = start_date or (cal_df[0] if cal_df else None)
-        e_dt = end_date or (cal_df[1] if cal_df else None)
-    else:
-        if not start_date or not end_date:
-            return pd.DataFrame()
-        s_dt = start_date
-        e_dt = end_date
+    s_dt, e_dt = start_date, end_date
+    if not s_dt or not e_dt:
+        first, last = _feed_date_bounds(con, tables)
+        s_dt = s_dt or (first.strftime("%Y%m%d") if first else None)
+        e_dt = e_dt or (last.strftime("%Y%m%d") if last else None)
+    if not s_dt or not e_dt:
+        return pd.DataFrame()
 
     _build_active_dates(
         con,
@@ -1302,9 +1332,9 @@ def travel_summary_graph(
     return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf, directed=directed)
 
 
-def gtfs_generation_report(con: duckdb.DuckDBPyConnection) -> dict[str, pd.DataFrame]:
+def get_gtfs_summary(con: duckdb.DuckDBPyConnection) -> dict[str, pd.DataFrame]:
     """
-    Inspect effective assumptions, pattern services and shared-section counts.
+    Summarise generated GTFS service and inspect its recorded assumptions.
 
     The report uses persisted generation records and survives GTFS save/load.
     Edge counts are directed and cover all active service days in the feed.
@@ -1312,26 +1342,152 @@ def gtfs_generation_report(con: duckdb.DuckDBPyConnection) -> dict[str, pd.DataF
     Parameters
     ----------
     con : duckdb.DuckDBPyConnection
-        Generated feed, optionally restored with its provenance sidecar.
+        Generated feed, optionally restored with embedded metadata.
 
     Returns
     -------
     dict of str to pandas.DataFrame
+        ``summary`` contains one row with model, start_date, end_date,
+        service_days, route_count, pattern_count, stop_count,
+        expected_departures, mean_daily_departures, min_speed_kph,
+        max_speed_kph, specified_pattern_count, completed_pattern_count and
+        excluded_relation_count. Daily averages include closed dates between
+        the bounds. Speed bounds cover adopted speeds for untimed legs only.
         ``assumptions`` lists adopted values and ignored source information;
         ``services`` lists each date and service period with its activity and
-        number of departures; ``edges`` gives combined stop-to-stop traversals.
-        Legacy reports without daily provenance retain their original aggregate.
+        number of departures; ``edges`` gives combined stop-to-stop traversals
+        with start_date and end_date identifying the frequency aggregation period.
         Frequency-based departures are expected counts unless exact_times is 1.
         Service columns and their order are stable. Non-applicable frequency
         fields are null for fixed departures. Counts and seconds are numeric,
         integer fields are nullable Int64, and IDs, dates and clocks are strings.
-        Missing legacy fields remain null rather than being reconstructed.
 
     Raises
     ------
     ValueError
-        If generation provenance is unavailable or predates effective records.
+        If generation metadata is unavailable or predates effective records.
     """
-    provenance = _report_provenance(con)
+    metadata = _report_metadata(con)
     edges = _travel_summary_edges(con, directed=True)
-    return _generation_report(con, provenance, edges)
+    return _generation_report(con, metadata, edges)
+
+
+def load_osm_transport(  # noqa: PLR0913 - source selection and shared generation options
+    services: pd.DataFrame | None = None,
+    *,
+    agency: pd.DataFrame | None = None,
+    area: list[float] | Polygon | MultiPolygon | gpd.GeoSeries | gpd.GeoDataFrame | None = None,
+    place_name: str | None = None,
+    route_name: str | None = None,
+    route_ref: str | None = None,
+    relation_ids: list[int] | None = None,
+    modes: str | Sequence[str] | None = None,
+    pattern_ids: str | Sequence[str] | None = None,
+    stop_level: Literal["station", "platform"] = "station",
+    on_invalid: Literal["raise", "skip"] = "skip",
+    data: TransportData | Mapping[str, pd.DataFrame] | None = None,
+    overwrite_source: bool = _OVERWRITE_SOURCE,
+    endpoint: str = _OSM_ENDPOINT,
+    timeout: float = _OSM_TIMEOUT,
+    use_source_tags: bool = _USE_SOURCE_TAGS,
+    **gtfs_options: Unpack[GenerationOptions],
+) -> duckdb.DuckDBPyConnection:
+    """
+    Retrieve OSM public transport relations and create a GTFS feed.
+
+    Relation IDs identify patterns as ``osm:relation:<id>``. Ordered PTv2 stop
+    members are retained, including stops outside the selection boundary.
+    Operating conditions are passed to the shared create_gtfs implementation.
+
+    Parameters
+    ----------
+    services : pandas.DataFrame, optional
+        Optional operating conditions referring to the OSM pattern identifiers.
+        Omit the table for all patterns with source-first completion; omit
+        pattern_id to apply supplied periods to every selected pattern.
+    agency : pandas.DataFrame, optional
+        Explicit agency metadata. Missing metadata uses available source fields,
+        unique geographical timezone inference and warned placeholders.
+    area : list, Polygon, MultiPolygon, GeoSeries or GeoDataFrame, optional
+        WGS84 bounding box or polygon selection. Exclusive with place_name.
+        May be omitted when relation_ids is supplied.
+    place_name : str, optional
+        Place boundary to resolve with get_boundaries.
+    route_name : str, optional
+        Exact route-name filter. Ambiguous matches require relation_ids.
+    route_ref : str, optional
+        Exact route reference filter within the selected area.
+    relation_ids : list of int, optional
+        Explicit route relation IDs. These select complete relations.
+    modes : str or sequence of str, optional
+        Select tram (including light_rail), subway, train, bus, trolleybus,
+        ferry, monorail or funicular. Defaults to all supported modes.
+        Combined with relation_ids and pattern_ids by intersection.
+        Also filters supplemental routes by their effective route_type.
+        Documented extended GTFS types use the corresponding mode group;
+        original route_type values are preserved.
+    pattern_ids : str or sequence of str, optional
+        Additional explicit pattern selection. Intersects modes and relation_ids.
+        Unlisted service patterns otherwise remain in the generated feed.
+        Applies to supplemental patterns too. Mode-excluded source IDs are known
+        from candidate tags, without downloading their member geometry.
+    stop_level : {"station", "platform"}, default "station"
+        Use named OSM stop areas to consolidate their boarding elements. Ambiguous
+        or missing stop-area membership retains individual source IDs. Platform
+        mode preserves every source boarding ID. Station grouping adds no transfer
+        time or platform accessibility information.
+    on_invalid : {"raise", "skip"}, default "skip"
+        Report all invalid source relations together, or explicitly exclude them
+        with a warning and persisted reasons. Network and explicit-input errors
+        are never skipped; an empty result always raises an error.
+    data : mapping of str to pandas.DataFrame, optional
+        Supplemental routes, stops, patterns or stop_sequences using common IDs.
+        Supplied values are validated before retrieval, including excluded rows.
+        Missing source route names and stop information may be completed here.
+    overwrite_source : bool, default False
+        Allow explicit replacement of source fields and stopping sequences.
+    endpoint : str, default "https://overpass-api.de/api/interpreter"
+        Configurable Overpass endpoint.
+    timeout : float, default 180
+        HTTP and Overpass timeout in seconds.
+    use_source_tags : bool, default True
+        Adopt supported interval, opening_hours, duration and interval:conditional
+        tags below explicit overrides. Unambiguous parent metadata can be inherited.
+        Unsupported tags and rejection reasons remain in the generation report.
+    **gtfs_options
+        Calendar, timing, headway, representative-date and optional-table
+        overrides forwarded to create_gtfs, including group_headway_secs and
+        pattern selection. Missing values use simple-v1. Unlisted service patterns remain.
+
+    Returns
+    -------
+    duckdb.DuckDBPyConnection
+        Generated feed ready for analysis and save_gtfs.
+
+    Raises
+    ------
+    ValueError
+        If selection is empty, ambiguous or cannot supply the required inputs.
+    RuntimeError
+        If Overpass fails or returns an incomplete response.
+    """
+    return _load_osm_transport(
+        _SourceIO(_data._prepare_area_and_bbox, _data.get_boundaries),
+        services=services,
+        agency=agency,
+        area=area,
+        place_name=place_name,
+        route_name=route_name,
+        route_ref=route_ref,
+        relation_ids=relation_ids,
+        modes=modes,
+        pattern_ids=pattern_ids,
+        on_invalid=on_invalid,
+        stop_level=stop_level,
+        data=data,
+        overwrite_source=overwrite_source,
+        endpoint=endpoint,
+        timeout=timeout,
+        use_source_tags=use_source_tags,
+        **gtfs_options,
+    )

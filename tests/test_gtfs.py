@@ -3,8 +3,11 @@
 # ruff: noqa: D101, D102
 
 import json
+import shutil
 import warnings
 from contextlib import ExitStack
+from datetime import date
+from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -12,6 +15,7 @@ from typing import Literal
 from typing import cast
 from zipfile import ZipFile
 
+import duckdb
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
@@ -19,6 +23,8 @@ from shapely.geometry import Point
 
 import city2graph as c2g
 from city2graph import TransportData
+from city2graph import data
+from city2graph import transportation
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -30,6 +36,166 @@ pytestmark = pytest.mark.filterwarnings("ignore::city2graph.GTFSGenerationWarnin
 
 
 class TestCreateGtfs:
+    def test_failed_materialisation_closes_connection(
+        self, transport_input: TransportData, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        connection = duckdb.connect(":memory:")
+        connection.execute("CREATE TABLE routes (route_id VARCHAR)")
+        monkeypatch.setattr("city2graph.gtfs.feed.duckdb.connect", lambda _database: connection)
+        with pytest.raises(duckdb.CatalogException, match="already exists"):
+            c2g.create_gtfs(transport_input, service_date="20000103")
+        with pytest.raises(duckdb.ConnectionException):
+            connection.execute("SELECT 1")
+
+    def test_default_week_starts_on_generation_date(
+        self, transport_input: TransportData, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # Repeated calls after midnight must resolve a new date without reimporting.
+        current_date = date(2026, 12, 31)
+
+        class GenerationDate(date):
+            @classmethod
+            def today(cls) -> "GenerationDate":
+                return cls(current_date.year, current_date.month, current_date.day)
+
+        monkeypatch.setattr("city2graph.gtfs.schema.date", GenerationDate)
+        for current_date in (date(2026, 12, 31), date(2027, 1, 1)):
+            with c2g.create_gtfs(transport_input) as con:
+                report = c2g.get_gtfs_summary(con)
+                expected = [(current_date + timedelta(days=i)).strftime("%Y%m%d") for i in range(7)]
+                assert sorted(report["services"]["date"].unique()) == expected
+                adopted = report["assumptions"].query("field == 'service_date'")
+                assert adopted["value"].eq(expected[0]).all()
+                assert adopted["kind"].eq("default").all()
+                assert not adopted.empty
+                archive = c2g.save_gtfs(con, tmp_path / f"{expected[0]}.zip")
+
+        current_date = date(2027, 2, 1)
+        with c2g.load_gtfs(archive) as restored:
+            assert_frame_equal(c2g.get_gtfs_summary(restored)["services"], report["services"])
+        with c2g.create_gtfs(transport_input, service_date="20261104") as explicit:
+            assert c2g.get_gtfs_summary(explicit)["services"]["date"].eq("20261104").all()
+
+    def test_transportation_public_entry_points(self, transport_input: TransportData) -> None:
+        for name in ("load_osm_transport", "get_gtfs_summary"):
+            assert getattr(c2g, name) is getattr(transportation, name)
+            assert not hasattr(data, name)
+        assert not hasattr(c2g, "gtfs_generation_report")
+        with transportation.create_gtfs(transport_input) as con:
+            assert transportation.get_gtfs_summary(con)["summary"].loc[0, "pattern_count"] == 2
+
+    @pytest.mark.parametrize(
+        ("field", "correct"),
+        [
+            ("travel_time_sec", "travel_time_secs"),
+            ("dwell_time_sec", "dwell_time_secs"),
+            ("speed_kmh", "speed_kph"),
+        ],
+    )
+    def test_unknown_timing_column(
+        self, transport_input: TransportData, field: str, correct: str
+    ) -> None:
+        transport_input["stop_sequences"][field] = 600
+        with pytest.raises(ValueError, match=rf"stop_sequences.*{field}.*did you mean '{correct}'"):
+            c2g.create_gtfs(transport_input)
+
+    def test_supplied_leg_time_and_optional_columns(self, transport_input: TransportData) -> None:
+        transport_input["stop_sequences"] = transport_input["stop_sequences"].assign(
+            travel_time_secs=600,
+            pickup_type=0,
+            drop_off_type=1,
+            stop_headsign="East",
+            timepoint=1,
+        )
+        with c2g.create_gtfs(transport_input, service_date="20261104") as con:
+            times = con.table("stop_times").df()
+            assert times["pickup_type"].eq("0").all()
+            assert times["drop_off_type"].eq("1").all()
+            assert times["stop_headsign"].eq("East").all()
+            assert times["timepoint"].eq("1").all()
+            assert c2g.get_od_pairs(con)["travel_time_sec"].eq(600).all()
+            summary = c2g.get_gtfs_summary(con)["summary"]
+            assert summary[["min_speed_kph", "max_speed_kph"]].isna().all().all()
+
+    @pytest.mark.parametrize("service_date", [None, "20261104"])
+    @pytest.mark.parametrize("fixed", [False, True])
+    def test_generated_feed_od_dates(
+        self, transport_input: TransportData, service_date: str | None, fixed: bool
+    ) -> None:
+        services = pd.DataFrame([{"departure_time": "08:00:00"}]) if fixed else None
+        with c2g.create_gtfs(transport_input, services, service_date=service_date) as con:
+            result = c2g.get_od_pairs(con, directed=True)
+            assert len(result) == 3 * (1 if service_date else 7)
+            assert result["date"].nunique() == (1 if service_date else 7)
+            if fixed:
+                assert result["departure_ts"].dt.hour.eq(8).all()
+
+    @pytest.mark.parametrize(
+        ("rows", "selection", "specified", "completed", "departures"),
+        [
+            (None, None, 0, 2, 64),
+            ([{"pattern_id": "local", "departure_time": "08:00:00"}], None, 1, 1, 33),
+            ([{"headway_secs": 900}], None, 2, 0, 128),
+            ([{"pattern_id": "local", "departure_time": "08:00:00"}], "local", 1, 0, 1),
+            ([{"pattern_id": "local", "departure_time": "08:00:00"}], "express", 0, 1, 64),
+        ],
+    )
+    def test_summary_service_selection(
+        self,
+        transport_input: TransportData,
+        rows: list[dict[str, Any]] | None,
+        selection: str | None,
+        specified: int,
+        completed: int,
+        departures: int,
+    ) -> None:
+        services = None if rows is None else pd.DataFrame(rows)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", c2g.GTFSGenerationWarning)
+            with c2g.create_gtfs(
+                transport_input, services, pattern_ids=selection, service_date="20261104"
+            ) as con:
+                report = c2g.get_gtfs_summary(con)
+                summary = report["summary"].iloc[0]
+                assert summary["specified_pattern_count"] == specified
+                assert summary["completed_pattern_count"] == completed
+                assert summary["pattern_count"] == specified + completed
+                assert summary["expected_departures"] == departures
+                assert summary["mean_daily_departures"] == departures
+                assert summary["service_days"] == 1
+                assert summary["excluded_relation_count"] == 0
+                assert report["edges"]["start_date"].eq("20261104").all()
+                assert report["edges"]["end_date"].eq("20261104").all()
+        if completed:
+            assert any(
+                f"completed service rows for {completed} patterns" in str(w.message) for w in caught
+            )
+
+    def test_summary_includes_closed_dates(self, transport_input: TransportData) -> None:
+        dates = pd.DataFrame(
+            {
+                "service_id": ["study"] * 3,
+                "date": ["20261102", "20261104", "20261106"],
+                "exception_type": [1, 2, 1],
+            }
+        )
+        transport_input["stop_sequences"] = transport_input["stop_sequences"].drop(
+            columns="travel_time_secs"
+        )
+        with c2g.create_gtfs(transport_input, calendar_dates=dates, speed_kph=30) as con:
+            report = c2g.get_gtfs_summary(con)
+            summary = report["summary"].iloc[0]
+            assert summary["start_date"] == "20261102"
+            assert summary["end_date"] == "20261106"
+            assert summary["service_days"] == 5
+            assert summary["route_count"] == 1
+            assert summary["stop_count"] == 3
+            assert summary["expected_departures"] == 128
+            assert summary["mean_daily_departures"] == 25.6
+            assert summary["min_speed_kph"] == summary["max_speed_kph"] == 30
+            assert report["services"].query("date == '20261104'")["departures"].eq(0).all()
+            assert report["services"]["departures"].sum() == summary["expected_departures"]
+
     def test_reuse_loaded_stop_table(self, transport_input: TransportData, tmp_path: Path) -> None:
         with c2g.create_gtfs(transport_input, service_date="20261103") as original:
             expected = original.table("stop_times").df()
@@ -41,10 +207,10 @@ class TestCreateGtfs:
         transport_input["stops"] = stops
         with c2g.create_gtfs(transport_input, service_date="20261103") as regenerated:
             assert_frame_equal(expected, regenerated.table("stop_times").df())
-            report = c2g.gtfs_generation_report(regenerated)
+            report = c2g.get_gtfs_summary(regenerated)
             archive = c2g.save_gtfs(regenerated, tmp_path / "regenerated.zip")
         with c2g.load_gtfs(archive) as restored:
-            restored_report = c2g.gtfs_generation_report(restored)
+            restored_report = c2g.get_gtfs_summary(restored)
             assert restored_report.keys() == report.keys()
             for name, frame in report.items():
                 assert_frame_equal(frame, restored_report[name])
@@ -60,7 +226,7 @@ class TestCreateGtfs:
         before = transport_input["patterns"].copy(deep=True)
         with c2g.create_gtfs(transport_input, service_date="20261103") as con:
             assert con.table("trips").df()["direction_id"].tolist() == ["0", "1"]
-            report = c2g.gtfs_generation_report(con)["services"]
+            report = c2g.get_gtfs_summary(con)["services"]
             assert report["direction_id"].tolist() == [0, 1]
             assert report["service_group_id"].nunique() == 2
             assert report["departures"].sum() == 128
@@ -92,7 +258,7 @@ class TestCreateGtfs:
             trips = con.table("trips").df()
             assert trips["trip_id"].is_unique
             assert set(services["trip_id"]) < set(trips["trip_id"])
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"].groupby("pattern_id")["departures"].sum().to_dict() == {
                 "local": 2,
                 "express": 32,
@@ -101,7 +267,7 @@ class TestCreateGtfs:
         with c2g.create_gtfs(transport_input, services, service_date="20261103") as repeated:
             assert_frame_equal(trips, repeated.table("trips").df())
         with c2g.load_gtfs(archive) as restored:
-            restored_report = c2g.gtfs_generation_report(restored)
+            restored_report = c2g.get_gtfs_summary(restored)
             assert restored_report.keys() == report.keys()
             for name, frame in report.items():
                 assert_frame_equal(frame, restored_report[name])
@@ -118,7 +284,7 @@ class TestCreateGtfs:
             for name, frame in cast("Mapping[str, pd.DataFrame]", transport_input).items()
         }
         with c2g.create_gtfs(transport_input, services, service_date="20261103") as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             rows = report["services"].set_index("pattern_id")
             assert rows["departures"].to_dict() == {"local": 1, "express": 32}
             assert pd.isna(rows.loc["local", "headway_secs"])
@@ -129,7 +295,7 @@ class TestCreateGtfs:
         with c2g.create_gtfs(
             transport_input, services, pattern_ids="express", service_date="20261103"
         ) as con:
-            rows = c2g.gtfs_generation_report(con)["services"]
+            rows = c2g.get_gtfs_summary(con)["services"]
             assert rows["pattern_id"].tolist() == ["express"]
             assert rows["departures"].tolist() == [64]
             assert rows.columns.tolist() == report["services"].columns.tolist()
@@ -149,7 +315,7 @@ class TestCreateGtfs:
         self, transport_input: TransportData, options: dict[str, Any], count: int, headway: int
     ) -> None:
         with c2g.create_gtfs(transport_input, service_date="20261103", **options) as con:
-            rows = c2g.gtfs_generation_report(con)["services"]
+            rows = c2g.get_gtfs_summary(con)["services"]
             assert rows["departures"].sum() == count
             assert rows["headway_secs"].eq(headway).all()
             assert str(rows["headway_secs"].dtype) == "Int64"
@@ -164,7 +330,7 @@ class TestCreateGtfs:
         with c2g.create_gtfs(
             transport_input, services, group_headway_secs=900, service_date="20261103"
         ) as con:
-            rows = c2g.gtfs_generation_report(con)["services"].set_index("pattern_id")
+            rows = c2g.get_gtfs_summary(con)["services"].set_index("pattern_id")
             assert rows["headway_secs"].to_dict() == {"local": 600, "express": 1800}
 
     @pytest.mark.parametrize(
@@ -257,9 +423,15 @@ class TestCreateGtfs:
             name: frame.copy(deep=True)
             for name, frame in cast("Mapping[str, pd.DataFrame]", transport_input).items()
         }
+        today = date.today()  # noqa: DTZ011 - generation uses the local calendar date
         with c2g.create_gtfs(transport_input) as con:
-            report = c2g.gtfs_generation_report(con)
-            assert set(report) == {"assumptions", "services", "edges"}
+            report = c2g.get_gtfs_summary(con)
+            assert set(report) == {"summary", "assumptions", "services", "edges"}
+            summary = report["summary"].iloc[0]
+            assert summary["service_days"] == 7
+            assert summary["expected_departures"] == 448
+            assert summary["mean_daily_departures"] == 64
+            assert summary["min_speed_kph"] == summary["max_speed_kph"] == speed
             services = report["services"]
             assert set(services["headway_secs"]) == {headway}
             assert set(services["start_time"]) == {"06:00:00"}
@@ -273,7 +445,7 @@ class TestCreateGtfs:
             assert set(assumptions[assumptions["field"].eq("trip_id")]["kind"]) == {"generated"}
             assert set(assumptions[assumptions["field"].eq("exact_times")]["kind"]) == {"default"}
             assert con.sql("SELECT DISTINCT date FROM calendar_dates ORDER BY date").fetchall() == [
-                (f"202601{day:02d}",) for day in range(3, 10)
+                ((today + timedelta(days=day)).strftime("%Y%m%d"),) for day in range(7)
             ]
             assert len(services) == 14
             assert services.groupby("date")["departures"].sum().eq(64).all()
@@ -295,13 +467,13 @@ class TestCreateGtfs:
             [local.assign(pattern_id=f"p{i}") for i in range(patterns)], ignore_index=True
         )
         with c2g.create_gtfs(transport_input) as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"].groupby("date")["departures"].sum().eq(64).all()
             assert report["edges"]["frequency"].to_numpy() == pytest.approx(448)
             assert set(report["services"]["headway_secs"]) == {900 * patterns}
         transport_input["patterns"]["service_group_id"] = transport_input["patterns"]["pattern_id"]
         with c2g.create_gtfs(transport_input, service_date="20260103") as con:
-            assert c2g.gtfs_generation_report(con)["edges"]["frequency"].eq(64 * patterns).all()
+            assert c2g.get_gtfs_summary(con)["edges"]["frequency"].eq(64 * patterns).all()
 
     def test_summary_warning_and_explicit_case(
         self,
@@ -343,10 +515,74 @@ class TestCreateGtfs:
             with pytest.warns(c2g.GTFSGenerationWarning):
                 con = connections.enter_context(c2g.create_gtfs(transport_input))
             assert con.sql("SELECT agency_timezone FROM agency").fetchall() == [("UTC",)]
-            assumptions = c2g.gtfs_generation_report(con)["assumptions"]
+            assumptions = c2g.get_gtfs_summary(con)["assumptions"]
             zone = assumptions.query("field == 'agency_timezone'")
             assert set(zone["kind"]) == {"default"}
             assert zone["reason"].str.contains("timezone", case=False).all()
+
+    @pytest.mark.parametrize(
+        ("headway", "source_kind", "expected"),
+        [(300, "source", 300), (None, "source", 600), (None, "ignored", 900), (None, None, 900)],
+    )
+    def test_custom_source_fallback_order(
+        self,
+        transport_input: TransportData,
+        headway: int | None,
+        source_kind: str | None,
+        expected: int,
+    ) -> None:
+        if source_kind is not None:
+            transport_input["metadata"] = pd.DataFrame(
+                [
+                    {
+                        "table_name": "operation_source",
+                        "record_id": "local",
+                        "field": "headway_secs",
+                        "value": "600",
+                        "kind": source_kind,
+                        "source": "survey:interval",
+                        "details": "{}",
+                    }
+                ]
+            )
+        with c2g.create_gtfs(
+            transport_input,
+            pattern_ids="local",
+            headway_secs=headway,
+            service_date="20261104",
+        ) as con:
+            services = c2g.get_gtfs_summary(con)["services"]
+            assert services["headway_secs"].tolist() == [expected]
+
+    def test_custom_source_metadata_is_not_labelled_osm(
+        self,
+        transport_input: TransportData,
+    ) -> None:
+        transport_input["metadata"] = pd.DataFrame(
+            [
+                {
+                    "table_name": "operation_source",
+                    "record_id": "local",
+                    "field": "agency_timezone",
+                    "value": "Europe/Paris",
+                    "kind": "source",
+                    "source": "survey:agency_timezone",
+                    "details": "{}",
+                }
+            ]
+        )
+        transport_input["patterns"] = transport_input["patterns"].assign(
+            service_group_id="survey:line",
+            service_group_direction="unresolved",
+        )
+        with c2g.create_gtfs(transport_input, pattern_ids="local", service_date="20261104") as con:
+            assert con.table("agency").df()["agency_timezone"].tolist() == ["Europe/Paris"]
+            assumptions = c2g.get_gtfs_summary(con)["assumptions"]
+            timezone = assumptions.query("field == 'agency_timezone' and kind == 'source'")
+            assert set(timezone["source"]) == {"survey:agency_timezone"}
+            direction = assumptions.query("field == 'direction_resolution'")
+            assert direction["source"].tolist() == ["patterns.service_group_direction"]
+            assert not assumptions["source"].str.contains("OpenStreetMap", na=False).any()
 
     def test_partial_services_and_global_overrides(self, transport_input: TransportData) -> None:
         transport_input["stop_sequences"] = transport_input["stop_sequences"].drop(
@@ -368,7 +604,7 @@ class TestCreateGtfs:
             dwell_time_secs=5,
             service_date="20261102",
         ) as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"]["departures"].tolist() == [6]
             assert report["services"]["start_time"].tolist() == ["08:30:00"]
             assert report["services"]["headway_secs"].tolist() == [300]
@@ -403,7 +639,7 @@ class TestCreateGtfs:
             headway_secs=600,
         ) as con:
             assert "frequencies" not in {row[0] for row in con.sql("SHOW TABLES").fetchall()}
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"]["departures"].tolist() == [1]
             assert report["services"]["service_id"].tolist() == ["weekday"]
             assert report["services"]["headway_secs"].isna().all()
@@ -422,7 +658,7 @@ class TestCreateGtfs:
             headway_secs=600,
             service_date="20260105",
         ) as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"]["departures"].tolist() == [6, 6]
             assert set(report["edges"]["frequency"]) == {12}
 
@@ -440,12 +676,12 @@ class TestCreateGtfs:
             headway_secs=600,
             service_date="20260105",
         ) as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"]["departures"].tolist() == [expected]
             assert set(report["edges"]["frequency"]) == {expected}
-            con.execute("DELETE FROM _city2graph_provenance WHERE table_name='assumptions'")
+            con.execute("DELETE FROM _city2graph_metadata WHERE table_name='assumptions'")
             with pytest.raises(ValueError, match="no effective assumptions"):
-                c2g.gtfs_generation_report(con)
+                c2g.get_gtfs_summary(con)
 
     def test_reversed_shape_and_zero_distance(self, transport_input: TransportData) -> None:
         transport_input["stop_sequences"] = transport_input["stop_sequences"].drop(
@@ -455,7 +691,7 @@ class TestCreateGtfs:
         patterns.geometry = patterns.geometry.reverse()
         with c2g.create_gtfs(transport_input) as con:
             assert (
-                c2g.gtfs_generation_report(con)["assumptions"]
+                c2g.get_gtfs_summary(con)["assumptions"]
                 .query("kind == 'estimated' and field == 'travel_time_secs'")["details"]
                 .str.contains("geodesic stop-to-stop")
                 .all()
@@ -478,7 +714,7 @@ class TestCreateGtfs:
                 c2g.create_gtfs(transport_input, distance_method=method)
             return
         with c2g.create_gtfs(transport_input, distance_method=method) as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert (
                 report["assumptions"]
                 .query("kind == 'estimated' and field == 'travel_time_secs'")["details"]
@@ -548,9 +784,7 @@ class TestCreateGtfs:
             assert set(edges.index) == {("001", "002"), ("002", "003"), ("001", "003")}
             assert len(c2g.get_od_pairs(con, start_date="20261102", end_date="20261102")) == 3
             archive = c2g.save_gtfs(con, tmp_path / "synthetic.zip")
-            with c2g.load_gtfs(
-                archive, provenance_path=str(archive) + ".provenance.json"
-            ) as restored:
+            with c2g.load_gtfs(archive) as restored:
                 for table in (
                     "agency",
                     "routes",
@@ -558,7 +792,7 @@ class TestCreateGtfs:
                     "stop_times",
                     "shapes",
                     "calendar_dates",
-                    "_city2graph_provenance",
+                    "_city2graph_metadata",
                 ):
                     assert_frame_equal(con.table(table).df(), restored.table(table).df())
                 _, after = c2g.travel_summary_graph(
@@ -568,7 +802,7 @@ class TestCreateGtfs:
             assert_frame_equal(original, transport_input["stop_sequences"])
 
     @pytest.mark.parametrize("method", ["shape", "geodesic"])
-    def test_estimated_times_and_provenance(
+    def test_estimated_times_and_metadata(
         self,
         transport_input: TransportData,
         agency: pd.DataFrame,
@@ -588,7 +822,7 @@ class TestCreateGtfs:
             dwell_time_secs=0,
             distance_method=method,
         ) as con:
-            estimated = con.sql("SELECT * FROM _city2graph_provenance WHERE kind='estimated'").df()
+            estimated = con.sql("SELECT * FROM _city2graph_metadata WHERE kind='estimated'").df()
             assert len(estimated) == 3
             assert estimated["details"].str.contains('"speed_kph": 36.0').all()
             assert con.sql(
@@ -975,84 +1209,141 @@ class TestCreateGtfs:
 
 
 class TestSaveGtfs:
-    def test_recorded_values_survive_missing_group_metadata(
-        self, transport_input: TransportData, tmp_path: Path
+    @pytest.mark.parametrize("failure", ["setup", "metadata", "metadata_table", "geometry"])
+    def test_loading_failure_closes_connection(
+        self,
+        transport_input: TransportData,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        failure: str,
     ) -> None:
-        with c2g.create_gtfs(transport_input) as con:
-            expected = c2g.gtfs_generation_report(con)["services"]
-            path = c2g.save_gtfs(con, tmp_path / "recorded.zip")
-        sidecar = Path(str(path) + ".provenance.json")
-        payload = json.loads(sidecar.read_text())
-        payload["records"] = [
-            row for row in payload["records"] if row["field"] != "group_headway_secs"
-        ]
-        for row in payload["records"]:
-            if row["field"] == "model":
-                row["value"] = "recorded-model"
-            if row["source"] == "simple-v1":
-                row["source"] = "recorded-model"
-        sidecar.write_text(json.dumps(payload))
-        with c2g.load_gtfs(path) as con:
-            report = c2g.gtfs_generation_report(con)
-            assert report["assumptions"].query("field == 'model'")["value"].tolist() == [
-                "recorded-model"
-            ]
-            assert report["services"]["group_headway_secs"].isna().all()
-            columns = ["date", "headway_secs", "departures"]
-            assert_frame_equal(expected[columns], report["services"][columns])
-            saved = c2g.save_gtfs(con, tmp_path / "recorded-again.zip")
-        with c2g.load_gtfs(saved) as con:
-            restored_report = c2g.gtfs_generation_report(con)
-            assert restored_report.keys() == report.keys()
-            for key, frame in report.items():
-                assert_frame_equal(frame, restored_report[key])
+        with c2g.create_gtfs(transport_input, service_date="20000103") as con:
+            path = c2g.save_gtfs(con, tmp_path / "feed.zip", include_metadata=False)
+        with ZipFile(path) as archive:
+            files = {name: archive.read(name) for name in archive.namelist()}
+        if failure == "metadata":
+            files["city2graph_metadata.json"] = b'{"version": 2, "records": []}'
+        elif failure == "metadata_table":
+            files["city2graph_metadata.json"] = b'{"version": 1, "records": []}'
+            files["_city2graph_metadata.txt"] = b"field\nexisting\n"
+        elif failure == "geometry":
+            files["stops.txt"] = b"stop_id,stop_name,stop_lat\nA,A,51.5\n"
+        with ZipFile(path, "w") as archive:
+            for name, content in files.items():
+                archive.writestr(name, content)
+        connection = duckdb.connect(":memory:")
+        monkeypatch.setattr(
+            "city2graph.transportation.duckdb.connect", lambda _database: connection
+        )
+        if failure == "setup":
 
-    def test_missing_daily_history_retains_saved_counts(
+            def unavailable(_con: duckdb.DuckDBPyConnection) -> None:
+                raise RuntimeError
+
+            monkeypatch.setattr("city2graph.transportation._ensure_graph_sql_support", unavailable)
+        with pytest.raises((RuntimeError, ValueError, duckdb.Error)):
+            c2g.load_gtfs(path)
+        with pytest.raises(duckdb.ConnectionException):
+            connection.execute("SELECT 1")
+
+    def test_metadata_input_is_preserved(
         self,
         transport_input: TransportData,
         tmp_path: Path,
     ) -> None:
-        with c2g.create_gtfs(transport_input, service_date="20000103", headway_secs=900) as con:
-            path = c2g.save_gtfs(con, tmp_path / "legacy.zip")
-        sidecar = Path(str(path) + ".provenance.json")
-        payload = json.loads(sidecar.read_text())
-        payload["records"] = [row for row in payload["records"] if row["field"] != "service_dates"]
-        sidecar.write_text(json.dumps(payload))
+        transport_input["metadata"] = pd.DataFrame(
+            [
+                {
+                    "table_name": "routes",
+                    "record_id": "001",
+                    "field": "route_type",
+                    "kind": "source",
+                    "source": "example",
+                    "value": "3",
+                    "details": "Recorded input",
+                }
+            ]
+        )
+        supplied = cast("Mapping[str, pd.DataFrame]", transport_input)
+        before = {name: frame.copy(deep=True) for name, frame in supplied.items()}
+        with c2g.create_gtfs(transport_input, service_date="20000103") as con:
+            path = c2g.save_gtfs(con, tmp_path / "metadata.zip")
+        for name, frame in before.items():
+            assert_frame_equal(frame, supplied[name])
         with c2g.load_gtfs(path) as restored:
-            report = c2g.gtfs_generation_report(restored)
-            assert report["assumptions"].query("field == 'model'")["value"].tolist() == [
-                "simple-v1"
-            ]
-            assert report["services"]["date"].isna().all()
-            assert report["services"]["departures"].tolist() == [64, 64]
-            assert restored.sql("SELECT DISTINCT date FROM calendar_dates").fetchall() == [
-                ("20000103",)
-            ]
-            saved = c2g.save_gtfs(restored, tmp_path / "legacy-again.zip")
-        with c2g.load_gtfs(saved) as restored:
-            restored_report = c2g.gtfs_generation_report(restored)
-            assert restored_report.keys() == report.keys()
-            for name, frame in report.items():
-                assert_frame_equal(frame, restored_report[name])
+            recorded = restored.table("_city2graph_metadata").df()
+        original = recorded.query("table_name == 'routes' and field == 'route_type'")
+        assert original["source"].tolist() == ["example"]
+        assert original["value"].tolist() == ["3"]
 
-    def test_report_roundtrip_and_automatic_provenance(
+    def test_archive_copy_and_rename_preserves_summary(
         self, transport_input: TransportData, tmp_path: Path
     ) -> None:
         with c2g.create_gtfs(transport_input) as con:
-            before = c2g.gtfs_generation_report(con)
+            expected = c2g.get_gtfs_summary(con)
+            path = c2g.save_gtfs(con, tmp_path / "original.zip")
+        assert list(tmp_path.iterdir()) == [path]
+        copied = tmp_path / "copy.zip"
+        shutil.copyfile(path, copied)
+        renamed = copied.rename(tmp_path / "renamed.zip")
+        with c2g.load_gtfs(renamed) as con:
+            actual = c2g.get_gtfs_summary(con)
+            for name, frame in expected.items():
+                assert_frame_equal(frame, actual[name])
+
+    @pytest.mark.parametrize(
+        "metadata", ["{bad", '{"version":2,"records":[]}', '{"version":1,"records":[{}]}']
+    )
+    def test_invalid_embedded_metadata(
+        self, transport_input: TransportData, tmp_path: Path, metadata: str
+    ) -> None:
+        with c2g.create_gtfs(transport_input) as con:
+            path = c2g.save_gtfs(con, tmp_path / "feed.zip", include_metadata=False)
+        with ZipFile(path, "a") as archive:
+            archive.writestr("city2graph_metadata.json", metadata)
+        with pytest.raises(ValueError, match=r"Expecting property name|Unsupported metadata"):
+            c2g.load_gtfs(path)
+        with c2g.load_gtfs(path, include_metadata=False) as con:
+            assert not c2g.get_od_pairs(con).empty
+
+    def test_report_roundtrip_and_automatic_metadata(
+        self, transport_input: TransportData, tmp_path: Path
+    ) -> None:
+        with c2g.create_gtfs(transport_input) as con:
+            before = c2g.get_gtfs_summary(con)
             path = c2g.save_gtfs(con, tmp_path / "feed.zip")
         with c2g.load_gtfs(path) as restored:
-            after = c2g.gtfs_generation_report(restored)
+            after = c2g.get_gtfs_summary(restored)
             for name in before:
                 assert_frame_equal(before[name], after[name])
         with (
-            c2g.load_gtfs(path, provenance_path=None) as without,
-            pytest.raises(ValueError, match="provenance is unavailable"),
+            c2g.load_gtfs(path, include_metadata=False) as without,
+            pytest.raises(ValueError, match="metadata is unavailable"),
         ):
-            c2g.gtfs_generation_report(without)
-        Path(str(path) + ".provenance.json").write_text("{bad", encoding="utf-8")
-        with pytest.raises(ValueError, match="Expecting property name"):
-            c2g.load_gtfs(path)
+            c2g.get_gtfs_summary(without)
+        sidecar = Path(str(path) + ".metadata.json")
+        sidecar.write_text("{bad", encoding="utf-8")
+        with c2g.load_gtfs(path) as restored:
+            assert_frame_equal(before["summary"], c2g.get_gtfs_summary(restored)["summary"])
+
+    @pytest.mark.parametrize("field", ["service_dates", "service_input", "excluded_relation_count"])
+    def test_incomplete_generation_history_requires_regeneration(
+        self, transport_input: TransportData, tmp_path: Path, field: str
+    ) -> None:
+        """Require the current daily records before constructing a generation summary."""
+        with c2g.create_gtfs(transport_input) as con:
+            path = c2g.save_gtfs(con, tmp_path / "feed.zip")
+            with ZipFile(path) as archive:
+                payload = json.loads(archive.read("city2graph_metadata.json"))
+            c2g.save_gtfs(con, path, overwrite=True, include_metadata=False)
+        payload["records"] = [row for row in payload["records"] if row["field"] != field]
+        with ZipFile(path, "a") as archive:
+            archive.writestr("city2graph_metadata.json", json.dumps(payload))
+        with (
+            c2g.load_gtfs(path) as restored,
+            pytest.raises(ValueError, match=r"incomplete.*regenerate"),
+        ):
+            c2g.get_gtfs_summary(restored)
 
     def test_overwrite_and_exclusions(
         self,
@@ -1072,13 +1363,17 @@ class TestSaveGtfs:
             c2g.travel_summary_graph(con)
             path = c2g.save_gtfs(con, tmp_path / "feed.zip")
             with ZipFile(path) as archive:
-                assert "_city2graph_provenance.txt" not in archive.namelist()
+                assert "_city2graph_metadata.txt" not in archive.namelist()
                 assert all(not name.startswith("_") for name in archive.namelist())
                 assert "geometry" not in archive.read("stops.txt").decode().splitlines()[0]
             with pytest.raises(FileExistsError):
                 c2g.save_gtfs(con, path)
-            c2g.save_gtfs(con, path, overwrite=True, include_provenance=False)
-            assert not Path(str(path) + ".provenance.json").exists()
+            adjacent = Path(str(path) + ".metadata.json")
+            adjacent.write_text("unrelated file")
+            c2g.save_gtfs(con, path, overwrite=True, include_metadata=False)
+            with ZipFile(path) as archive:
+                assert "city2graph_metadata.json" not in archive.namelist()
+            assert adjacent.read_text() == "unrelated file"
             con.execute("CREATE TABLE fares (fare_id VARCHAR)")
             with pytest.raises(ValueError, match="Unsupported"):
                 c2g.save_gtfs(con, tmp_path / "unsupported.zip")
@@ -1106,6 +1401,9 @@ class TestSaveGtfs:
             ("UPDATE stops SET stop_lat='91'", "stop_lat"),
             ("UPDATE stops SET location_type='1'", "boarding"),
             ("UPDATE routes SET route_short_name=NULL", "route_short_name"),
+            ("UPDATE routes SET route_type='inf'", "route_type"),
+            ("UPDATE routes SET route_type='-inf'", "route_type"),
+            ("UPDATE routes SET route_type='NaN'", "route_type"),
             ("UPDATE shapes SET shape_pt_lat='NaN'", "coordinate"),
             ("UPDATE calendar_dates SET date='20260230'", "invalid date"),
             ("UPDATE calendar_dates SET exception_type='3'", "exception_type"),
@@ -1159,27 +1457,6 @@ class TestSaveGtfs:
                     )
                 },
             )
-
-    def test_explicit_provenance_validation(
-        self,
-        transport_input: TransportData,
-        agency: pd.DataFrame,
-        service_dates: pd.DataFrame,
-        departures: pd.DataFrame,
-        tmp_path: Path,
-    ) -> None:
-        with c2g.create_gtfs(
-            transport_input,
-            departures,
-            agency=agency,
-            calendar_dates=service_dates,
-            dwell_time_secs=0,
-        ) as con:
-            path = c2g.save_gtfs(con, tmp_path / "feed.zip")
-        metadata = tmp_path / "invalid.json"
-        metadata.write_text('{"version": 999, "records": []}', encoding="utf-8")
-        with pytest.raises(ValueError, match="provenance"):
-            c2g.load_gtfs(path, provenance_path=metadata)
 
     def test_preserves_blank_intermediate_stop_times(
         self,

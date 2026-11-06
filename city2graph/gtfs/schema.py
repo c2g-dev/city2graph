@@ -6,6 +6,8 @@ import json
 import math
 import re
 from dataclasses import dataclass
+from dataclasses import field
+from datetime import date
 from importlib.resources import files
 from typing import TYPE_CHECKING
 from typing import Any
@@ -20,7 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 _REGISTRY: dict[str, Any] = json.loads(
-    files("city2graph._gtfs").joinpath("defaults.json").read_text(encoding="utf-8")
+    files("city2graph.gtfs").joinpath("defaults.json").read_text(encoding="utf-8")
 )
 
 
@@ -52,7 +54,7 @@ def _default(field: str) -> str | int | float | bool:
 class GTFSGenerationWarning(UserWarning):
     """Warn that generated service uses estimates, assumptions or placeholders.
 
-    Inspect ``gtfs_generation_report`` for adopted values and rejection reasons.
+    Inspect ``get_gtfs_summary`` for adopted values and rejection reasons.
     Standard Python warning filters can promote this warning to an error.
     """
 
@@ -68,13 +70,14 @@ class TransportData(TypedDict):
     stops: pd.DataFrame
     patterns: pd.DataFrame
     stop_sequences: pd.DataFrame
-    provenance: NotRequired[pd.DataFrame]
+    metadata: NotRequired[pd.DataFrame]
 
 
-_PROVENANCE = "_city2graph_provenance"
+_METADATA = "_city2graph_metadata"
+_METADATA_FILENAME = "city2graph_metadata.json"
 
 
-_PROVENANCE_COLUMNS = ["table_name", "record_id", "field", "kind", "source", "value", "details"]
+_METADATA_COLUMNS = ["table_name", "record_id", "field", "kind", "source", "value", "details"]
 
 
 _REQUIRED = {
@@ -292,9 +295,6 @@ def _records(frame: pd.DataFrame) -> list[dict[str, Any]]:
 _MODEL = str(_REGISTRY["model"])
 
 
-_SERVICE_DATE = str(_default("service_date"))
-
-
 @dataclass
 class _GenerationConfig:
     """
@@ -314,6 +314,8 @@ class _GenerationConfig:
     group_headway_secs: float | None = None
     pattern_ids: str | Sequence[str] | None = None
     service_date: str | None = None
+    # Use the caller's local calendar date, captured once for the entire feed.
+    generation_date: str = field(default_factory=lambda: date.today().strftime("%Y%m%d"))  # noqa: DTZ011
 
 
 _MODES = {

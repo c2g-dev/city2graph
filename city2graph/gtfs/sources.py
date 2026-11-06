@@ -1,4 +1,4 @@
-"""Interpret OSM and Overture input through explicit retrieval operations."""
+"""Interpret OSM input through explicit retrieval operations."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
-from ast import literal_eval
 from dataclasses import dataclass
 from datetime import UTC
 from datetime import datetime
@@ -20,17 +19,20 @@ from typing import cast
 
 import geopandas as gpd
 import pandas as pd
-from overturemaps.core import ALL_RELEASES
+from pyproj import Geod
 from shapely.geometry import LineString
 from shapely.geometry import MultiPolygon
 from shapely.geometry import Point
 from shapely.geometry import Polygon
+from shapely.ops import nearest_points
+from shapely.ops import polygonize
+from shapely.ops import unary_union
 
-from .feed import _input_provenance
 from .generation import create_gtfs
+from .metadata import _input_metadata
 from .schema import _INPUT_KEYS
+from .schema import _METADATA_COLUMNS
 from .schema import _MODES
-from .schema import _PROVENANCE_COLUMNS
 from .schema import GenerationOptions
 from .schema import TransportData
 from .schema import _clock
@@ -51,6 +53,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     import duckdb
+
 
 _DAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
 
@@ -145,7 +148,7 @@ def _opening_hours(value: str) -> list[list[tuple[str, str]]]:
     assigned: set[int] = set()
     for clause in value.split(";"):
         match = re.fullmatch(
-            r"(?:(?P<days>[A-Za-z,\-]+)\s+)?(?P<hours>off|closed|\d{2}:\d{2}-\d{2}:\d{2}(?:,\s*\d{2}:\d{2}-\d{2}:\d{2})*)",
+            r"(?:(?P<days>[A-Za-z,\-]+)\s+)?(?P<hours>off|closed|\d{1,2}:\d{2}-\d{1,2}:\d{2}(?:,\s*\d{1,2}:\d{2}-\d{1,2}:\d{2})*)",
             clause.strip(),
         )
         if match is None:
@@ -167,14 +170,18 @@ def _opening_hours(value: str) -> list[list[tuple[str, str]]]:
                 if (
                     start[0] >= 24
                     or start[1] >= 60
-                    or end[0] > 24
+                    or end[0] > 48
                     or end[1] >= 60
-                    or (end[0] == 24 and end[1] != 0)
+                    or (end[0] == 48 and end[1] != 0)
                 ):
                     msg = "Invalid opening_hours clock value"
                     raise ValueError(msg)
                 lower, upper = start[0] * 3600 + start[1] * 60, end[0] * 3600 + end[1] * 60
-                periods.append((lower, upper if upper > lower else upper + 86400))
+                upper = upper if upper > lower else upper + 86400
+                if upper - lower > 86400:
+                    msg = "An opening_hours period cannot exceed 24 hours"
+                    raise ValueError(msg)
+                periods.append((lower, upper))
             periods.sort()
             if any(left[1] > right[0] for left, right in pairwise(periods)):
                 msg = "Overlapping opening_hours intervals are unsupported"
@@ -225,15 +232,21 @@ def _conditional_intervals(value: str) -> list[list[dict[str, object]]]:
         Seven lists of periods with a positive headway.
     """
     week: list[list[dict[str, object]]] = [[] for _ in range(7)]
+    baselines: dict[int, int] = {}
     for clause in value.split(";"):
-        match = re.fullmatch(r"\s*([^@;]+?)\s*@\s*\(([^()]+)\)\s*", clause)
+        match = re.fullmatch(r"\s*([^@;]+?)\s*@\s*(?:\(([^()]+)\)|([^()]+))\s*", clause)
         if match is None:
             msg = "Unsupported interval:conditional; expected interval @ (weekdays and fixed times)"
             raise ValueError(msg)
         headway = _interval(match[1].strip())
-        condition = match[2].strip()
+        condition = (match[2] or match[3]).strip()
         if re.fullmatch(r"[A-Za-z,\-]+", condition):
-            condition += " 00:00-24:00"
+            for day in _weekdays(condition):
+                if day in baselines:
+                    msg = "Overlapping weekday-only conditional intervals"
+                    raise ValueError(msg)
+                baselines[day] = headway
+            continue
         for day, periods in enumerate(_opening_hours(condition)):
             if not periods and condition.endswith(("off", "closed")):
                 msg = "Conditional intervals must specify positive headways and operating times"
@@ -253,7 +266,47 @@ def _conditional_intervals(value: str) -> list[list[dict[str, object]]]:
     _check_weekly_overlap(
         [[(str(row["start_time"]), str(row["end_time"])) for row in periods] for periods in week]
     )
+    _fill_conditional_baselines(week, baselines)
     return week
+
+
+def _fill_conditional_baselines(
+    week: list[list[dict[str, object]]], baselines: dict[int, int]
+) -> None:
+    """Fill weekday-only conditional rates around more specific clock periods.
+
+    Clock periods take precedence over a weekday baseline, including overnight spans.
+
+    Parameters
+    ----------
+    week : list
+        Validated clock-specific periods, extended in place.
+    baselines : dict
+        Weekday rates to use outside the clock-specific periods.
+    """
+    spans = [
+        (
+            day * 86400 + _seconds(str(row["start_time"])),
+            day * 86400 + _seconds(str(row["end_time"])),
+        )
+        for day, rows in enumerate(week)
+        for row in rows
+    ]
+    spans += [(start - 604800, end - 604800) for start, end in list(spans) if end > 604800]
+    for day, headway in baselines.items():
+        origin = day * 86400
+        covered = [
+            (max(start - origin, 0), min(end - origin, 86400))
+            for start, end in spans
+            if start < origin + 86400 and end > origin
+        ]
+        boundaries = sorted({0, 86400, *(point for span in covered for point in span)})
+        for start, end in pairwise(boundaries):
+            if not any(lower <= start < upper for lower, upper in covered):
+                week[day].append(
+                    {"start_time": _clock(start), "end_time": _clock(end), "headway_secs": headway}
+                )
+        week[day].sort(key=lambda row: str(row["start_time"]))
 
 
 def _osm_parents(
@@ -438,7 +491,7 @@ def _add_osm_operating(
     Parameters
     ----------
     data : TransportData
-        Prepared input whose provenance is extended.
+        Prepared input whose metadata is extended.
     relations : list of dict
         Selected OSM route relations.
     enabled : bool
@@ -486,8 +539,8 @@ def _add_osm_operating(
                     "details": json.dumps({"raw": tags[tag], "reason": reason}),
                 }
             )
-    data["provenance"] = pd.concat(
-        [data["provenance"], pd.DataFrame(records, columns=_PROVENANCE_COLUMNS)], ignore_index=True
+    data["metadata"] = pd.concat(
+        [data["metadata"], pd.DataFrame(records, columns=_METADATA_COLUMNS)], ignore_index=True
     )
 
 
@@ -515,7 +568,7 @@ def _osm_failures(issues: dict[str, str], usable: list[str], on_invalid: str) ->
     usable : list of str
         Remaining usable pattern IDs.
     on_invalid : str
-        Raise by default, or explicitly skip invalid source patterns.
+        Policy for invalid source patterns: "skip" (public default) or "raise".
     """
     if issues and (on_invalid == "raise" or not usable):
         msg = "Invalid OSM relations:\n" + "\n".join(
@@ -621,7 +674,6 @@ class _SourceIO:
 
     prepare_area: Callable[..., tuple[str, Polygon | MultiPolygon | None]]
     boundaries: Callable[[str], gpd.GeoDataFrame]
-    overture: Callable[..., dict[str, gpd.GeoDataFrame]]
 
 
 def _area(
@@ -687,7 +739,7 @@ def _source_record(source: str, details: dict[str, object]) -> dict[str, object]
     Returns
     -------
     dict[str, object]
-        One source provenance record.
+        One source metadata record.
     """
     return {
         "table_name": "source",
@@ -711,7 +763,7 @@ def _complete_input(
     """
     Fill missing source fields, requiring an explicit switch for replacement.
 
-    Keep original values in provenance when an explicit override replaces them.
+    Keep original values in metadata when an explicit override replaces them.
 
     Parameters
     ----------
@@ -731,10 +783,10 @@ def _complete_input(
     TransportData
         Common generator input with supplementation history.
     """
-    provenance = _input_provenance(base)
-    for record in provenance:
+    records = _input_metadata(base)
+    for record in records:
         record.update(kind="source", source=source)
-    provenance.append(_source_record(source, metadata))
+    records.append(_source_record(source, metadata))
     for name, supplied_frame in (supplied or {}).items():
         incoming = _without_stop_wkb(supplied_frame) if name == "stops" else supplied_frame
         if isinstance(incoming, gpd.GeoDataFrame):
@@ -772,7 +824,7 @@ def _complete_input(
                     msg = f"{name} {identity}, {field}: source conflict; use overwrite_source=True to replace explicitly"
                     raise ValueError(msg)
                 target[field] = value
-                provenance.append(
+                records.append(
                     {
                         "table_name": name,
                         "record_id": "|".join(identity),
@@ -787,7 +839,7 @@ def _complete_input(
         if "geometry" in frame:
             frame = gpd.GeoDataFrame(frame, geometry="geometry", crs=4326)
         base[name] = frame
-    base["provenance"] = pd.DataFrame(provenance, columns=_PROVENANCE_COLUMNS)
+    base["metadata"] = pd.DataFrame(records, columns=_METADATA_COLUMNS)
     return cast("TransportData", base)
 
 
@@ -868,10 +920,150 @@ def _chain_lines(lines: list[LineString]) -> LineString | None:
     return None
 
 
+def _boarding_geometry(
+    element: dict[str, Any], elements: dict[tuple[str, int], dict[str, Any]]
+) -> Point | LineString | Polygon | MultiPolygon | None:
+    """Resolve a point, way or multipolygon boarding element.
+
+    Missing or incomplete multipolygons remain unresolved.
+
+    Parameters
+    ----------
+    element : dict
+        Boarding member with point coordinates or way geometry.
+    elements : dict
+        Retrieved elements, including multipolygon member ways.
+
+    Returns
+    -------
+    shapely geometry or None
+        Source geometry, or None when incomplete or invalid.
+    """
+    if "lon" in element and "lat" in element:
+        return Point(element["lon"], element["lat"])
+    coords = element.get("geometry", [])
+    if len(coords) >= 2 and all("lon" in row and "lat" in row for row in coords):
+        line = LineString([(row["lon"], row["lat"]) for row in coords])
+        return Polygon(line) if line.is_ring else line
+    if element.get("tags", {}).get("type") != "multipolygon":
+        return None
+    rings: dict[str, list[LineString]] = {"outer": [], "inner": []}
+    for member in element.get("members", []):
+        role = member.get("role", "outer") or "outer"
+        if member["type"] != "way" or role not in rings:
+            continue
+        way = elements.get(("way", member["ref"]), member)
+        coords = way.get("geometry", [])
+        if len(coords) < 2:
+            return None
+        rings[role].append(LineString([(row["lon"], row["lat"]) for row in coords]))
+    outer = unary_union(list(polygonize(rings["outer"])))
+    inner = unary_union(list(polygonize(rings["inner"])))
+    target = outer.difference(inner)
+    return (
+        target
+        if isinstance(target, (Polygon, MultiPolygon)) and not target.is_empty and target.is_valid
+        else None
+    )
+
+
+def _boarding_pair(
+    stop: dict[str, Any], platform: dict[str, Any], elements: dict[tuple[str, int], dict[str, Any]]
+) -> bool:
+    """Match an adjacent PTv2 stop/platform pair by reference or proximity.
+
+    Railway station references and platform numbers have different scopes.
+    Explicitly tagged platforms can match a tagged stop position using its local
+    platform reference or geometry within 50 metres. Platform names often
+    describe tracks rather than repeating the station name.
+
+    Parameters
+    ----------
+    stop : dict
+        Immediately preceding stop-position element.
+    platform : dict
+        Platform element following that stop in the ordered relation.
+    elements : dict
+        Retrieved elements for resolving platform multipolygons.
+
+    Returns
+    -------
+    bool
+        Whether the pair identifies one boarding occurrence.
+    """
+    left, right = stop.get("tags", {}), platform.get("tags", {})
+    if any(left.get(key) and left[key] == right.get(key) for key in ("ref", "name")):
+        return True
+    if "lon" not in stop or "lat" not in stop:
+        return False
+    if left.get("local_ref") and set(left["local_ref"].split(";")) & set(
+        right.get("ref", "").split(";")
+    ):
+        return True
+    point = Point(stop["lon"], stop["lat"])
+    target = _boarding_geometry(platform, elements)
+    if target is None:
+        return False
+    nearest = nearest_points(point, target)[1]
+    _, _, distance = Geod(ellps="WGS84").inv(point.x, point.y, nearest.x, nearest.y)
+    return bool(distance <= 50)
+
+
+def _stop_area_lookup(
+    elements: dict[tuple[str, int], dict[str, Any]],
+) -> dict[tuple[str, int], dict[str, Any]]:
+    """Resolve unambiguous OSM stop-area membership to a station location.
+
+    Source membership defines grouping without a name or proximity clustering heuristic.
+
+    Parameters
+    ----------
+    elements : dict
+        Retrieved routes, boarding elements and their parent stop areas.
+
+    Returns
+    -------
+    dict
+        Boarding element keys mapped to named station IDs and representative points.
+        Elements belonging to multiple stop areas retain their individual identities.
+    """
+    lookup: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    for area in elements.values():
+        if area.get("tags", {}).get("public_transport") != "stop_area":
+            continue
+        name = area.get("tags", {}).get("name")
+        if not name:
+            continue
+        members = [
+            member
+            for member in area.get("members", [])
+            if member.get("role", "").startswith(("stop", "platform"))
+        ]
+        points = []
+        for member in members:
+            element = elements.get((member["type"], member["ref"]), member)
+            geometry = _boarding_geometry(element, elements)
+            if geometry is not None:
+                points.append(geometry.representative_point())
+        if not points:
+            continue
+        station = {
+            "stop_id": f"osm:stop_area:{area['id']}",
+            "stop_name": name,
+            "geometry": Point(
+                sum(p.x for p in points) / len(points), sum(p.y for p in points) / len(points)
+            ),
+        }
+        for member in members:
+            lookup.setdefault((member["type"], member["ref"]), []).append(station)
+    return {key: values[0] for key, values in lookup.items() if len(values) == 1}
+
+
 def _osm_pattern(
     relation: dict[str, Any],
     elements: dict[tuple[str, int], dict[str, Any]],
     *,
+    station_lookup: dict[tuple[str, int], dict[str, Any]],
     sequence_override: bool,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], LineString | None]:
     """
@@ -885,6 +1077,8 @@ def _osm_pattern(
         OSM route relation with ordered members.
     elements : dict[tuple[str, int], dict[str, Any]]
         Retrieved OSM elements indexed by type and identifier.
+    station_lookup : dict
+        Unambiguous stop-area identities for station-level generation.
     sequence_override : bool
         Allow unresolved source stops when a replacement sequence is supplied.
 
@@ -910,34 +1104,32 @@ def _osm_pattern(
         if role.startswith(("stop", "platform")):
             tags = element.get("tags", {})
             if role.startswith("platform") and previous_stop is not None:
-                previous_tags = previous_stop.get("tags", {})
-                same = any(
-                    tags.get(key) and tags.get(key) == previous_tags.get(key)
-                    for key in ("ref", "name")
-                )
-                if not same and not sequence_override:
-                    msg = f"{pattern_id}: ambiguous stop/platform pair; supply stop_sequences and overwrite_source=True"
-                    raise ValueError(msg)
+                same = _boarding_pair(previous_stop, element, elements)
                 if same:
                     previous_stop = None
                     continue
             previous_stop = element if role.startswith("stop") else None
-            if "lat" not in element or "lon" not in element:
+            station = station_lookup.get((member["type"], member["ref"]))
+            location = _boarding_geometry(element, elements)
+            if location is None and station:
+                location = station["geometry"]
+            if location is None:
                 if sequence_override:
                     continue
-                msg = (
-                    f"{pattern_id}: boarding location for {member['type']} {member['ref']} is not a point; "
-                    "supply stops and stop_sequences"
-                )
+                msg = f"{pattern_id}: boarding location for {member['type']} {member['ref']} has no usable geometry"
                 raise ValueError(msg)
+            point = location if isinstance(location, Point) else location.representative_point()
             stop_id = f"osm:{member['type']}:{member['ref']}"
-            stops.append(
-                {
-                    "stop_id": stop_id,
-                    "stop_name": tags.get("name"),
-                    "geometry": Point(element["lon"], element["lat"]),
-                }
-            )
+            station = station_lookup.get((member["type"], member["ref"]))
+            location_row = station or {
+                "stop_id": stop_id,
+                "stop_name": tags.get("name"),
+                "geometry": point,
+            }
+            stop_id = str(location_row["stop_id"])
+            if sequence and sequence[-1]["stop_id"] == stop_id:
+                continue
+            stops.append(dict(location_row))
             sequence.append(
                 {
                     "pattern_id": pattern_id,
@@ -1046,7 +1238,7 @@ def _finish_osm_selection(
     tuple
         Valid input, selected services and usable pattern IDs.
     """
-    history = prepared["provenance"]
+    history = prepared["metadata"]
     source_patterns = set(
         history.loc[
             history["table_name"].eq("patterns")
@@ -1107,8 +1299,8 @@ def _finish_osm_selection(
         prepared, services = _select_patterns(
             cast("Mapping[str, pd.DataFrame]", prepared), services, usable, extra, explicit=False
         )
-        prepared["provenance"] = pd.concat(
-            [prepared["provenance"], pd.DataFrame(extra)], ignore_index=True
+        prepared["metadata"] = pd.concat(
+            [prepared["metadata"], pd.DataFrame(extra)], ignore_index=True
         )
     return prepared, services, usable
 
@@ -1155,8 +1347,8 @@ def _select_completed_osm(
         selection_records,
         explicit=requested is not None,
     )
-    prepared["provenance"] = pd.concat(
-        [prepared["provenance"], pd.DataFrame(selection_records)], ignore_index=True
+    prepared["metadata"] = pd.concat(
+        [prepared["metadata"], pd.DataFrame(selection_records)], ignore_index=True
     )
     return prepared, services, chosen
 
@@ -1216,6 +1408,41 @@ def _osm_query(
     )
 
 
+def _station_area_query(relations: list[dict[str, Any]], timeout: float) -> str:
+    """Request parent station areas only for the selected boarding members.
+
+    This bounds the parent lookup independently of the potentially large track geometry.
+
+    Parameters
+    ----------
+    relations : list of dict
+        Selected OSM routes with ordered stop and platform roles.
+    timeout : float
+        Overpass processing timeout in seconds.
+
+    Returns
+    -------
+    str
+        A parent-relation query, or an empty string when there are no boarding members.
+    """
+    members: dict[str, set[int]] = {kind: set() for kind in ("node", "way", "relation")}
+    for relation in relations:
+        for member in relation.get("members", []):
+            if member.get("role", "").startswith(("stop", "platform")):
+                members[member["type"]].add(member["ref"])
+    selectors = "".join(
+        f"{kind}(id:{','.join(map(str, sorted(ids)))});" for kind, ids in members.items() if ids
+    )
+    if not selectors:
+        return ""
+    return (
+        f"[out:json][timeout:{int(timeout)}];({selectors})->.boarding;"
+        '(rel(bn.boarding)["public_transport"="stop_area"];'
+        'rel(bw.boarding)["public_transport"="stop_area"];'
+        'rel(br.boarding)["public_transport"="stop_area"];);out body center;'
+    )
+
+
 def _osm_input(
     relations: list[dict[str, Any]],
     elements: dict[tuple[str, int], dict[str, Any]],
@@ -1225,6 +1452,7 @@ def _osm_input(
     polygon: Polygon | MultiPolygon | None,
     relation_ids: list[int] | None,
     on_invalid: str,
+    stop_level: str,
 ) -> tuple[dict[str, pd.DataFrame], dict[str, str]]:
     """
     Interpret selected relations before applying supplementation.
@@ -1247,12 +1475,15 @@ def _osm_input(
         Explicit OSM relation IDs, bypassing polygon intersection filtering.
     on_invalid : str
         Raise for invalid source relations or explicitly skip them.
+    stop_level : str
+        Use mapped station areas or retain individual boarding elements.
 
     Returns
     -------
     tuple
         Source transport tables and relation-specific structural failures.
     """
+    station_lookup = _stop_area_lookup(elements) if stop_level == "station" else {}
     routes, stops, patterns, sequences = [], [], [], []
     issues: dict[str, str] = {}
     overridden = (
@@ -1265,7 +1496,9 @@ def _osm_input(
         tags = relation.get("tags", {})
         override = pattern_id in overridden
         try:
-            locations, ordered, shape = _osm_pattern(relation, elements, sequence_override=override)
+            locations, ordered, shape = _osm_pattern(
+                relation, elements, sequence_override=override, station_lookup=station_lookup
+            )
         except ValueError as exc:
             if override:
                 raise
@@ -1322,7 +1555,8 @@ def _load_osm_transport(  # noqa: PLR0913, PLR0915 - source selection and shared
     relation_ids: list[int] | None = None,
     modes: str | Sequence[str] | None = None,
     pattern_ids: str | Sequence[str] | None = None,
-    on_invalid: Literal["raise", "skip"] = "raise",
+    stop_level: Literal["station", "platform"] = "station",
+    on_invalid: Literal["raise", "skip"] = "skip",
     data: TransportData | Mapping[str, pd.DataFrame] | None = None,
     overwrite_source: bool = _OVERWRITE_SOURCE,
     endpoint: str = _OSM_ENDPOINT,
@@ -1357,6 +1591,8 @@ def _load_osm_transport(  # noqa: PLR0913, PLR0915 - source selection and shared
         Requested transport mode groups, or all supported modes.
     pattern_ids : str | Sequence[str] | None
         Explicit pattern selection applied before generation.
+    stop_level : {"station", "platform"}, default "station"
+        Consolidate boarding elements using unambiguous mapped stop areas.
     on_invalid : Literal['raise', 'skip']
         Raise for invalid source relations or explicitly skip them.
     data : TransportData | Mapping[str, pd.DataFrame] | None
@@ -1382,6 +1618,9 @@ def _load_osm_transport(  # noqa: PLR0913, PLR0915 - source selection and shared
     )
     selected_modes = _transport_modes(modes)
     data = _osm_supplement(cast("Mapping[str, pd.DataFrame] | None", data), set(), set())
+    if stop_level not in {"station", "platform"}:
+        msg = "stop_level must be station or platform"
+        raise ValueError(msg)
     if on_invalid not in {"raise", "skip"}:
         msg = "on_invalid must be 'raise' or 'skip'"
         raise ValueError(msg)
@@ -1463,6 +1702,19 @@ def _load_osm_transport(  # noqa: PLR0913, PLR0915 - source selection and shared
     if route_name and relation_ids is None and len(candidates) > 1:
         msg = f"Ambiguous route_name; candidate relation_ids: {[item['id'] for item in relations]}"
         raise ValueError(msg)
+    area_query = ""
+    area_payload: dict[str, Any] = {}
+    if stop_level == "station":
+        area_query = _station_area_query(relations, timeout)
+        if area_query:
+            area_payload = _request_osm(area_query, endpoint, timeout)
+            elements.update(
+                {
+                    (item["type"], item["id"]): item
+                    for item in area_payload["elements"]
+                    if item.get("tags", {}).get("public_transport") == "stop_area"
+                }
+            )
     base, issues = _osm_input(
         relations,
         elements,
@@ -1471,6 +1723,7 @@ def _load_osm_transport(  # noqa: PLR0913, PLR0915 - source selection and shared
         polygon=polygon,
         relation_ids=relation_ids,
         on_invalid=on_invalid,
+        stop_level=stop_level,
     )
     prepared = _complete_input(
         base,
@@ -1491,12 +1744,28 @@ def _load_osm_transport(  # noqa: PLR0913, PLR0915 - source selection and shared
                 source_ids - {f"osm:relation:{item['id']}" for item in relations}
             ),
             "on_invalid": on_invalid,
+            "stop_level": stop_level,
+            "stop_area_query": area_query,
+            "stop_area_osm3s": area_payload.get("osm3s"),
+            "stop_areas": [
+                item
+                for item in elements.values()
+                if item.get("tags", {}).get("public_transport") == "stop_area"
+            ],
+            "stop_resolution": (
+                "Unambiguous named stop_area members share a station ID and mean boarding coordinate; "
+                "consecutive duplicates collapsed"
+            ),
             "overwrite_source": overwrite_source,
             "query": query,
             "osm3s": payload.get("osm3s"),
             "relations": relations,
             "route_masters": masters,
             "direction_id": "0 labels each independently selected relation; no opposite service inferred",
+            "boarding_pair_policy": (
+                "Ordered PTv2 stop/platform: shared name/ref, local platform reference, or geometry within 50 m; "
+                "unmatched platforms remain separate boarding occurrences"
+            ),
         },
     )
     prepared, services, chosen = _select_completed_osm(
@@ -1506,7 +1775,7 @@ def _load_osm_transport(  # noqa: PLR0913, PLR0915 - source selection and shared
     prepared, services, usable = _finish_osm_selection(
         prepared, services, cast("Mapping[str, pd.DataFrame] | None", data), issues, on_invalid
     )
-    records = prepared["provenance"]
+    records = prepared["metadata"]
     labels = (
         records["table_name"].eq("patterns")
         & records["field"].eq("direction_id")
@@ -1521,243 +1790,3 @@ def _load_osm_transport(  # noqa: PLR0913, PLR0915 - source selection and shared
         masters=masters,
     )
     return create_gtfs(prepared, services, agency=agency, **gtfs_options)
-
-
-def _overture_selection(
-    data: Mapping[str, pd.DataFrame],
-    services: pd.DataFrame | None,
-    modes: str | Sequence[str] | None,
-    pattern_ids: str | Sequence[str] | None,
-) -> tuple[Mapping[str, pd.DataFrame], pd.DataFrame | None, list[dict[str, object]]]:
-    """Select explicitly supplied Overture route patterns before downloading.
-
-    Mode identity comes from route_type rather than inferred infrastructure use.
-
-    Parameters
-    ----------
-    data : mapping
-        Caller-supplied transport tables.
-    services : pandas.DataFrame or None
-        Service overrides.
-    modes : str, sequence of str or None
-        Requested mode groups.
-    pattern_ids : str, sequence of str or None
-        Additional pattern selection.
-
-    Returns
-    -------
-    tuple
-        Selected tables, services and selection provenance.
-    """
-    selected_modes = _transport_modes(modes)
-    selection_records: list[dict[str, object]] = []
-    if modes is not None or pattern_ids is not None:
-        required = {
-            "routes": {"route_id", "route_type"},
-            "patterns": {"pattern_id", "route_id"},
-            "stop_sequences": {"pattern_id", "stop_id"},
-        }
-        for name, columns in required.items():
-            if name not in data or not columns.issubset(data[name]):
-                msg = f"{name}: mode/pattern selection requires columns {sorted(columns)}"
-                raise ValueError(msg)
-        requested = _selection(pattern_ids, "pattern_ids")
-        if requested is not None and (
-            unknown := set(requested) - set(data["patterns"]["pattern_id"].astype(str))
-        ):
-            msg = f"pattern_ids: unknown IDs {sorted(unknown)}"
-            raise ValueError(msg)
-        chosen = _matching_patterns(data, selected_modes if modes is not None else None, requested)
-        if not chosen:
-            msg = f"No matching Overture route patterns for modes {selected_modes}"
-            raise ValueError(msg)
-        selected, services = _select_patterns(
-            data, services, chosen, selection_records, explicit=pattern_ids is not None
-        )
-        data = cast("Mapping[str, pd.DataFrame]", selected)
-    return data, services, selection_records
-
-
-def _load_overture_transport(
-    io: _SourceIO,
-    services: pd.DataFrame | None = None,
-    *,
-    agency: pd.DataFrame | None = None,
-    data: TransportData | Mapping[str, pd.DataFrame],
-    area: list[float] | Polygon | MultiPolygon | gpd.GeoSeries | gpd.GeoDataFrame | None = None,
-    place_name: str | None = None,
-    release: str | None = None,
-    route_name: str | None = None,
-    modes: str | Sequence[str] | None = None,
-    pattern_ids: str | Sequence[str] | None = None,
-    overwrite_source: bool = _OVERWRITE_SOURCE,
-    **gtfs_options: Unpack[GenerationOptions],
-) -> duckdb.DuckDBPyConnection:
-    """
-    Retrieve Overture infrastructure for explicit transport input.
-
-    Routes and stop order remain caller-supplied while selected infrastructure supplies geometry.
-
-    Parameters
-    ----------
-    io : _SourceIO
-        Geographical lookup and download operations supplied by the data facade.
-    services : pd.DataFrame | None
-        Partial service overrides for the selected patterns.
-    agency : pd.DataFrame | None
-        Explicit agency metadata passed to generation.
-    data : TransportData | Mapping[str, pd.DataFrame]
-        Explicit transport tables or supplemental input.
-    area : list[float] | Polygon | MultiPolygon | gpd.GeoSeries | gpd.GeoDataFrame | None
-        Bounding box or geometry defining the retrieval area.
-    place_name : str | None
-        Place name to resolve instead of an explicit area.
-    release : str | None
-        Overture release identifier, or the latest available release.
-    route_name : str | None
-        Optional route or infrastructure name filter.
-    modes : str | Sequence[str] | None
-        Requested transport mode groups, or all supported modes.
-    pattern_ids : str | Sequence[str] | None
-        Explicit pattern selection applied before generation.
-    overwrite_source : bool
-        Whether explicit supplemental values may replace source values.
-    **gtfs_options : Unpack[GenerationOptions]
-        Calendar and timing options forwarded to GTFS generation.
-
-    Returns
-    -------
-    duckdb.DuckDBPyConnection
-        Generated feed with source, selection and assumption history.
-    """
-    _validate_generation_options(
-        services, {**gtfs_options, "agency": agency, "data": data, "pattern_ids": pattern_ids}
-    )
-    selected_modes = _transport_modes(modes)
-    data, services, selection_records = _overture_selection(
-        cast("Mapping[str, pd.DataFrame]", data), services, modes, pattern_ids
-    )
-    bbox, polygon = _area(io, area, place_name)
-    resolved_release = release if release is not None else max(ALL_RELEASES)
-    requested_stops = set(data.get("stop_sequences", pd.DataFrame()).get("stop_id", []))
-    supplied_stops = set(data.get("stops", pd.DataFrame()).get("stop_id", []))
-    needs_candidates = any(
-        str(value).startswith("overture:") for value in requested_stops - supplied_stops
-    )
-    raw = io.overture(
-        area=polygon if polygon is not None else [float(value) for value in bbox.split(",")],
-        types=["segment", "connector", "place"] if needs_candidates else ["segment", "connector"],
-        release=resolved_release,
-        save_to_file=False,
-        keep_outer_neighbors=True,
-    )
-    segments = raw.get("segment", gpd.GeoDataFrame())
-    if route_name is not None:
-        if "names" not in segments:
-            msg = f"No named Overture infrastructure matching {route_name!r}"
-            raise ValueError(msg)
-        segments = segments[
-            segments["names"].map(lambda names: _nested(names).get("primary") == route_name)
-        ]
-    if segments.empty:
-        msg = "No matching Overture transport infrastructure"
-        raise ValueError(msg)
-    supplied = dict(data)
-    patterns = supplied.get("patterns")
-    if patterns is not None and "segment_ids" in patterns:
-        patterns = patterns.copy()
-        lookup = segments.set_index("id").geometry
-        geometries = []
-        for row in patterns.to_dict("records"):
-            ids = row["segment_ids"]
-            if not isinstance(ids, list) or not ids or set(ids) - set(lookup.index):
-                msg = f"pattern {row['pattern_id']}: segment_ids must identify an ordered list of retrieved segments"
-                raise ValueError(msg)
-            shape = _chain_lines([lookup.loc[key] for key in ids])
-            if shape is None:
-                msg = (
-                    f"pattern {row['pattern_id']}: supplied segments do not form a continuous path"
-                )
-                raise ValueError(msg)
-            if row.get("reverse_shape", False):
-                shape = LineString(list(shape.coords)[::-1])
-            geometries.append(shape)
-        supplied["patterns"] = gpd.GeoDataFrame(patterns, geometry=geometries, crs=segments.crs)
-    stops = []
-    for row in raw.get("place", pd.DataFrame()).to_dict("records"):
-        if f"overture:{row['id']}" not in requested_stops:
-            continue
-        category = str(_nested(row.get("categories")).get("primary", ""))
-        if any(
-            word in category
-            for word in (
-                "railway_station",
-                "train_station",
-                "subway_station",
-                "bus_stop",
-                "bus_station",
-                "ferry_terminal",
-                "tram_stop",
-            )
-        ) and isinstance(row.get("geometry"), Point):
-            stops.append(
-                {
-                    "stop_id": f"overture:{row['id']}",
-                    "stop_name": _nested(row.get("names")).get("primary"),
-                    "geometry": row["geometry"],
-                }
-            )
-    base = {
-        "stops": gpd.GeoDataFrame(
-            stops, columns=["stop_id", "stop_name", "geometry"], geometry="geometry", crs=4326
-        )
-    }
-    prepared = _complete_input(
-        base,
-        supplied,
-        overwrite_source=overwrite_source,
-        source="Overture Maps",
-        metadata={
-            "release": resolved_release,
-            "bbox": bbox,
-            "route_name": route_name,
-            "modes": selected_modes if modes is not None else None,
-            "segments": segments.drop(columns="geometry").to_dict("records"),
-            "connectors": raw.get("connector", pd.DataFrame())
-            .drop(columns="geometry", errors="ignore")
-            .to_dict("records"),
-        },
-    )
-    if selection_records:
-        prepared["provenance"] = pd.concat(
-            [prepared["provenance"], pd.DataFrame(selection_records)], ignore_index=True
-        )
-    return create_gtfs(prepared, services, agency=agency, **gtfs_options)
-
-
-def _nested(value: object) -> dict[str, Any]:
-    """
-    Read Overture nested properties supplied as dictionaries or JSON strings.
-
-    GeoJSON properties may arrive as mappings, JSON or serialised Python literals.
-
-    Parameters
-    ----------
-    value : object
-        Input scalar or nested property to interpret.
-
-    Returns
-    -------
-    dict[str, Any]
-        Parsed property mapping, or an empty mapping for absent properties.
-    """
-    if isinstance(value, str):
-        encoded = value
-        try:
-            value = json.loads(encoded)
-        except json.JSONDecodeError:
-            try:
-                value = literal_eval(encoded)
-            except (ValueError, SyntaxError):
-                return {}
-    return value if isinstance(value, dict) else {}

@@ -12,11 +12,9 @@ archives and local
 derives stop-to-stop origin–destination records and aggregates GTFS schedules
 into transportation network graphs.
 
-For generation, supply only the operating conditions you want to control.
-Missing values use interpretable source data, then documented assumptions.
-See the [input decision flow](../examples/creating_gtfs.md#2-decide-what-to-enter-and-what-to-leave-automatic)
-for field-by-field choices, including fixed departures and the distinction
-between per-pattern and shared-group intervals.
+See the [generation tutorial](../examples/creating_gtfs.md) for a first feed and
+the [generation reference](gtfs_generation.md) for field precedence, source-tag
+interpretation, partial service tables and default values.
 
 ::: city2graph.transportation
     options:
@@ -24,9 +22,10 @@ between per-pattern and shared-group intervals.
       members:
         - TransportData
         - create_gtfs
-        - gtfs_generation_report
+        - get_gtfs_summary
         - save_gtfs
         - load_gtfs
+        - load_osm_transport
         - load_gbfs
         - get_od_pairs
         - travel_summary_graph

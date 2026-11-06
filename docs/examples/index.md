@@ -12,7 +12,7 @@ The tutorials include Jupyter notebooks built from open data and focused guides 
 | Goal | Data | What you will build | Tutorial |
 | --- | --- | --- | --- |
 | Model urban form | Overture Maps or OpenStreetMap buildings and streets | Heterogeneous building, tessellation, and street graph | [Morphological graphs](morphological_graph_from_overturemaps.ipynb) |
-| Create public transport feeds | Custom inputs, OSM or Overture | Synthetic GTFS and travel summaries | [Creating GTFS](creating_gtfs.md) |
+| Create public transport feeds | Custom inputs or OSM | Synthetic GTFS and travel summaries | [Creating GTFS](creating_gtfs.md) |
 | Analyse public transport | London GTFS feed | Stop-to-stop travel-time graph and multimodal isochrones | [GTFS transit graphs](gtfs.ipynb) |
 | Fill isochrone holes | Synthetic road network | Buffer footprints with optional hole filling and clipping | [Buffer isochrone holes](isochrone_holes.md) |
 | Model migration or commuting | OD edge list or adjacency matrix | Weighted mobility graph | [OD matrices](generating_graphs_from_od_matrix.ipynb) |
@@ -23,6 +23,14 @@ The tutorials include Jupyter notebooks built from open data and focused guides 
 ## Tutorials
 
 <div class="grid cards examples-gallery" markdown>
+
+- ![Public transport networks and blue street-based isochrones across eight cities](../assets/examples/synthetic_gtfs_world_isochrones_thumbnail.png){ .card-img }
+
+    **[How to approximate GTFS from OpenStreetMap with City2Graph](creating_gtfs.md)**
+
+    ---
+
+    Create a feed from OSM, inspect the operating values used, and save a transit graph. Includes links to the eight-city data and reproduction scripts.
 
 - ![Metapath edges (cyan) linking amenities across the dual street graph of Soho, London](../assets/examples/metapaths.jpg){ .card-img }
 

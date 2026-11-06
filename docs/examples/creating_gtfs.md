@@ -1,559 +1,504 @@
 ---
-description: Generate GTFS using available transport information, inspect assumptions and customise a reproducible synthetic service.
+seo_title: "How to approximate GTFS from OpenStreetMap with City2Graph"
+description: "Generate synthetic GTFS feeds from OpenStreetMap in Python, build public transport graphs, and calculate multi-modal accessibility as isochrones with City2Graph and OSMnx."
+social_image: assets/examples/synthetic_gtfs_world_isochrones_thumbnail.png
+social_image_alt: "Public transport networks and street-based isochrones in Tokyo, London, Paris, New York, Melbourne, Berlin, Seoul and Amsterdam"
+social_image_width: 1600
+social_image_height: 900
 ---
 
-# Creating and saving public transport feeds
+# How to approximate GTFS from OpenStreetMap with City2Graph
 
-City2Graph uses supplied stopping patterns and interpretable source information
-before filling gaps with a reproducible synthetic service. Missing operating
-conditions do not require manual configuration. A generated feed is a modelling
-scenario, **not an observed timetable**. The provisional default speeds have not
-been calibrated or validated globally.
+City2Graph generates synthetic GTFS feeds from OpenStreetMap (OSM) public
+transport routes and converts them into public transport graphs in Python.
+This example models subway, train and light-rail services in Tokyo's 23 wards,
+then combines the rail graph with an OSMnx walking network to calculate
+multi-modal accessibility as 10-, 20- and 30-minute isochrones. Start from a place
+name, inspect the generated service assumptions, and customise operating
+conditions for your accessibility analysis.
 
-## 1. Create, inspect and save a small feed
+[![Public transport networks and street-based isochrones in Tokyo, London, Paris, New York, Melbourne, Berlin, Seoul and Amsterdam](../assets/examples/synthetic_gtfs_world_isochrones.png)](../assets/examples/synthetic_gtfs_world_isochrones.png)
 
-This example needs no network access. Two patterns share a route, direction and
-three stops. The returned DuckDB connection also works with the existing
-transportation analysis functions.
+<small> © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) · ODbL 1.0. Water context: [OpenFreeMap](https://openfreemap.org/) / [OpenMapTiles](https://openmaptiles.org/).</small>
 
-<!-- gtfs-example:offline -->
+## 1. Generate a rail graph { #start-with-a-place }
+
+Load the mapped rail services to generate a feed:
+
+<!-- gtfs-quick:osm -->
 ```python
-from pathlib import Path
-
-import geopandas as gpd
-import pandas as pd
-from shapely.geometry import LineString, Point
-
 import city2graph as c2g
 
-alignment = LineString([(-2.99, 53.40), (-2.98, 53.40), (-2.97, 53.40)])
-data: c2g.TransportData = {
-    "routes": pd.DataFrame([{"route_id": "R1", "route_short_name": "R1", "route_type": 3}]),
-    "stops": gpd.GeoDataFrame(
-        {"stop_id": ["A", "B", "C"], "stop_name": ["West", "Central", "East"]},
-        geometry=[Point(-2.99, 53.40), Point(-2.98, 53.40), Point(-2.97, 53.40)],
-        crs=4326,
-    ),
-    "patterns": gpd.GeoDataFrame(
-        {"pattern_id": ["local", "variant"], "route_id": ["R1", "R1"],
-         "direction_id": [0, 0]},
-        geometry=[alignment, alignment], crs=4326,
-    ),
-    "stop_sequences": pd.DataFrame({
-        "pattern_id": ["local"] * 3 + ["variant"] * 3,
-        "stop_sequence": [0, 1, 2, 0, 1, 2],
-        "stop_id": ["A", "B", "C", "A", "B", "C"],
-    }),
-}
-con = c2g.create_gtfs(data)
-report = c2g.gtfs_generation_report(con)
-print(report["services"][["date", "pattern_id", "headway_secs", "departures"]])
-print(report["edges"][["travel_time_sec", "frequency"]])
-output = c2g.save_gtfs(con, Path("minimal.zip"))
+con = c2g.load_osm_transport(
+    place_name="Tokyo 23 wards, Japan",
+    modes=["subway", "train", "light_rail"],
+)
 ```
 
-All input frames remain unchanged. Geometry needs a declared CRS; the generator
-reprojects it to WGS84 where needed. `stop_sequence` orders occurrences, allowing
-repeated visits to the same stop. Each direction and pattern is explicit.
-`save_gtfs` also writes `minimal.zip.provenance.json`. Existing outputs are
-protected; use `overwrite=True` when intentionally replacing a previous run.
+Convert the feed into station nodes and connections between consecutive stops.
 
-## 2. Decide what to enter and what to leave automatic
+<!-- gtfs-quick:osm-graph -->
+```python
+nodes, edges = c2g.travel_summary_graph(con)
+```
 
-**Enter only the conditions you want to control. Leave the rest omitted.**
-City2Graph resolves each missing condition separately: it uses interpretable
-source information first, then a documented assumption. A feed can therefore
-combine your operating hours, a source interval and an assumed speed.
+![Tokyo rail graph from the minimal OpenStreetMap call](../assets/examples/synthetic_gtfs_osm_quickstart.png)
 
-First provide the **route, stops and stopping order**, or obtain them with a
-loader. These are required structure: City2Graph does not invent missing routes
-or stopping orders. `create_gtfs(data)` uses your tables; `load_osm_transport`
-extracts them from selected relations; `load_overture_transport` still requires
-you to supply routes, patterns and stop sequences.
+??? example "Plot this map"
 
-### A. Decide which values you want to control
+    <!-- gtfs-quick:osm-plot -->
+    ```python
+    import contextily as ctx
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    from matplotlib.colors import LinearSegmentedColormap
+    from matplotlib.lines import Line2D
 
-Use the following flow **once for each condition**, such as the departure
-interval, operating window or travel time. Supplying one condition does not
-require you to supply the others.
+    area = c2g.get_boundaries("Tokyo 23 wards, Japan")
+    nodes, edges = c2g.clip_graph((nodes, edges), area)
+    days = c2g.get_gtfs_summary(con)["summary"].iloc[0]["service_days"]
+    edges = edges.assign(frequency=edges["frequency"] / days)
+    nodes, edges = nodes.to_crs(3857), edges.to_crs(3857)
+    fig, ax = plt.subplots(figsize=(11, 11), facecolor="white")
+    xmin, ymin, xmax, ymax = area.to_crs(3857).total_bounds
+    half_width = max(xmax - xmin, ymax - ymin) * 0.52
+    mid_x, mid_y = (xmin + xmax) / 2, (ymin + ymax) / 2
+    ax.set_xlim(mid_x - half_width, mid_x + half_width)
+    ax.set_ylim(mid_y - half_width, mid_y + half_width)
+    ax.set_aspect("equal")
+    ctx.add_basemap(
+        ax, source=ctx.providers.Esri.WorldGrayCanvas,
+        zoom=12, alpha=0.6, zorder=2,
+        attribution="Basemap: Esri, HERE, Garmin, OSM contributors, GIS user community · Network: © OSM contributors", attribution_size=7,
+    )
+    frequency = edges["frequency"]
+    breaks = [0, 250, 500, 1000, 2000, 4000]
+    while frequency.max() >= breaks[-1]:
+        breaks.append(breaks[-1] * 2)
+    cmap = LinearSegmentedColormap.from_list("rail_blue", ["#abd5ed", "#559fc9", "#266a9b"])
+    classes = pd.cut(frequency, breaks, right=False, labels=False)
+    weights = classes / (len(breaks) - 2)
+    widths = 0.65 + 1.35 * weights
+    edges.plot(ax=ax, color=cmap(weights), linewidth=widths.to_numpy(), alpha=0.9, zorder=3)
+    neighbours = {stop: set() for stop in nodes.index}
+    for start, end in edges.index:
+        neighbours[start].add(end)
+        neighbours[end].add(start)
+    sizes = [15.98 + 8 * min(max(len(neighbours[stop]) - 2, 0), 3) for stop in nodes.index]
+    nodes.plot(ax=ax, color="#ef695e", markersize=sizes, edgecolor="none", linewidth=0, zorder=4)
+
+    handles = []
+    for index, (lower, upper) in enumerate(zip(breaks[:-1], breaks[1:], strict=True)):
+        weight = index / (len(breaks) - 2)
+        handles.append(Line2D([], [], color=cmap(weight), linewidth=0.65 + 1.35 * weight,
+                              alpha=0.9, label=f"[{lower:,}, {upper:,})"))
+    handles.append(Line2D([], [], linestyle="none", label="Connected stations"))
+    for index, label in enumerate(["1–2", "3", "4", "5 or more"]):
+        handles.append(Line2D([], [], linestyle="none", marker="o", color="#ef695e",
+                              markeredgecolor="none", markersize=(15.98 + 8 * index) ** 0.5,
+                              label=label))
+    legend = ax.legend(
+        handles=handles, title="Modelled traversals/day", loc="lower right",
+        bbox_to_anchor=(0.98, 0.04), fontsize=8, title_fontsize=9,
+        framealpha=0.96, facecolor="white", edgecolor="none",
+        borderpad=1.1, labelspacing=0.7, handlelength=2.5,
+    )
+    legend.get_texts()[len(breaks) - 1].set_fontweight("bold")
+    legend.set_zorder(6)
+    ax.set_axis_off()
+    plt.show()
+    ```
+
+### Calculate multi-modal accessibility as isochrones { #walk-and-rail-isochrones-from-tokyo-station }
+
+Combine the generated rail service with walking streets to calculate 10-, 20-
+and 30-minute reach from Tokyo Station.
+
+<span id="download-the-walking-network"></span>
+
+Geocode Tokyo's 23 wards with `get_boundaries`, then pass that boundary to
+[OSMnx](https://osmnx.readthedocs.io/en/stable/user-reference.html#osmnx.graph.graph_from_polygon)
+to download the walking streets.
+Project both networks to Tokyo's local metric CRS so distances are in metres.
+Walking speed is 4.5 km/h.
+
+<!-- gtfs-iso:streets -->
+```python
+import geopandas as gpd
+import osmnx as ox
+from shapely.geometry import Point
+
+place = "Tokyo 23 wards, Japan"
+crs = 6677
+walking_speed = 4.5 / 3.6  # metres per second
+
+area = c2g.get_boundaries(place)
+street_graph = ox.graph_from_polygon(
+    area.geometry.union_all(), network_type="walk", retain_all=True,
+)
+street_graph = ox.project_graph(street_graph, to_crs=crs)
+walk_nodes, walk_edges = c2g.nx_to_gdf(street_graph)
+walk_edges["travel_time_sec"] = walk_edges["length"] / walking_speed
+del street_graph
+area = area.to_crs(crs)
+
+latitude, longitude = ox.geocode("Tokyo Station, Japan")
+origin = gpd.GeoSeries([Point(longitude, latitude)], crs=4326).to_crs(crs)
+```
+
+<span id="connect-streets-and-stations"></span>
+
+Keep the complete directed rail graph, including routes continuing outside the
+wards. `bridge_nodes` connects stations and street nodes within 250 m in both
+directions.
+
+<!-- gtfs-iso:connect -->
+```python
+rail_nodes, rail_edges = c2g.travel_summary_graph(con, directed=True)
+rail_nodes = rail_nodes.to_crs(crs)
+rail_edges = rail_edges.to_crs(crs)
+node_layers = {
+    "street": walk_nodes[["geometry"]],
+    "station": rail_nodes[["geometry"]],
+}
+_, access_edges = c2g.bridge_nodes(
+    node_layers,
+    proximity_method="fixed_radius",
+    radius=250,
+)
+```
+
+Convert the bridge distances to walking time and add three minutes for entry
+and waiting when boarding. Access links are used only for routing, so their
+geometries can be omitted from the combined graph.
+
+<!-- gtfs-iso:network -->
+```python
+rail_type = ("station", "ride", "station")
+edge_layers = {
+    ("street", "walk", "street"): walk_edges[["geometry", "travel_time_sec"]],
+    rail_type: rail_edges[["geometry", "travel_time_sec"]],
+}
+for edge_type, connections in access_edges.items():
+    boarding_time = 180 if edge_type[2] == "station" else 0
+    edge_layers[edge_type] = connections.assign(
+        geometry=None,
+        travel_time_sec=connections["weight"] / walking_speed + boarding_time,
+    )
+
+multimodal = c2g.gdf_to_nx(
+    nodes=node_layers,
+    edges=edge_layers,
+    directed=True,
+    multigraph=True,
+)
+```
+
+<span id="calculate-and-plot-the-reachable-streets"></span>
+
+Start at the street node nearest Tokyo Station. `cut_edge_types` removes rail
+and access links after calculating reachability, so the polygons follow reachable
+streets. The 20 m buffer controls their display width.
+
+<!-- gtfs-iso:calculate -->
+```python
+origin_node = walk_nodes.distance(origin.iloc[0]).idxmin()
+center = walk_nodes.geometry.loc[origin_node]
+isochrones = c2g.create_isochrone(
+    graph=multimodal,
+    center_point=center,
+    threshold=[600, 1200, 1800],
+    edge_attr="travel_time_sec",
+    cut_edge_types=[rail_type, *access_edges],
+    method="buffer",
+    buffer_distance=20,
+    resolution=4,
+)
+isochrones = gpd.clip(isochrones, area).sort_values("threshold")
+```
+
+This scenario uses average rail travel times and straight station-access links.
+Transfers between rail services have no additional penalty. Walking is restricted
+to the geocoded wards; rail journeys retain their full stopping sequences. The
+polygons include street segments with both endpoints reached.
+
+![Ten-, twenty- and thirty-minute walk and rail isochrones from Tokyo Station](../assets/examples/synthetic_gtfs_tokyo_isochrones.png)
+
+??? example "Plot the isochrones"
+
+    <!-- gtfs-iso:plot -->
+    ```python
+    import contextily as ctx
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    colours = {600: "#215e91", 1200: "#599fca", 1800: "#b7d9ec"}
+    view = isochrones.to_crs(3857)
+    origin_map = origin.to_crs(3857).iloc[0]
+    fig, ax = plt.subplots(figsize=(11, 11), facecolor="white")
+
+    for seconds in reversed(colours):
+        view.loc[view["threshold"] == seconds].plot(
+            ax=ax, color=colours[seconds], linewidth=0, zorder=3,
+        )
+    xmin, ymin, xmax, ymax = area.to_crs(3857).total_bounds
+    half_width = max(xmax - xmin, ymax - ymin) * 0.52
+    mid_x, mid_y = (xmin + xmax) / 2, (ymin + ymax) / 2
+    ax.set_xlim(mid_x - half_width, mid_x + half_width)
+    ax.set_ylim(mid_y - half_width, mid_y + half_width)
+    ax.set_aspect("equal")
+    ctx.add_basemap(
+        ax,
+        source=ctx.providers.Esri.WorldGrayCanvas,
+        zoom=12,
+        alpha=0.55,
+        attribution="Basemap: Esri and contributors · Network: © OpenStreetMap contributors",
+        attribution_size=7,
+    )
+    ax.scatter(origin_map.x, origin_map.y, s=70, marker="D", color="#ef695e", zorder=5)
+    handles = [
+        Patch(facecolor=colour, label=f"Within {seconds // 60} minutes")
+        for seconds, colour in colours.items()
+    ]
+    handles.append(Line2D(
+        [], [], marker="D", linestyle="none", color="#ef695e",
+        markersize=6, label="Tokyo Station",
+    ))
+    ax.legend(handles=handles, title="Walk + rail", loc="lower right", framealpha=0.95)
+    ax.set_axis_off()
+    plt.show()
+    ```
+
+### Inspect the generated feed { #inspect-the-generated-feed }
+
+```python
+report = c2g.get_gtfs_summary(con)
+fields = ["pattern_count", "stop_count", "service_days", "mean_daily_departures"]
+print(report["summary"][fields].T.to_string(header=False))
+```
+
+```text
+pattern_count            310.000000
+stop_count              1765.000000
+service_days               7.000000
+mean_daily_departures  32124.427494
+```
+
+The loader uses mapped station groups and reads operating intervals, including
+weekday and peak-hour conditions. In this recorded run it generated 310
+patterns; the ward view contains 662 nodes and 744 connections. Unusable
+relations are reported and skipped by default (23 in this snapshot).
+Inspect the adopted values and exclusions with `c2g.get_gtfs_summary(con)`.
+Use `stop_level="platform"` to retain individual boarding IDs, or
+`on_invalid="raise"` to require every selected relation to be usable.
+
+The edge legend uses intervals `[lower, upper)`: the lower bound is included
+and the upper bound is excluded. Node sizes count distinct neighbours,
+with the largest size grouping five or more connections.
+
+The loader fills missing operating conditions and records the values it uses.
+The automatic reference week starts on the generation date in the local system
+timezone. This map describes modelled
+services rather than observed train frequency or crowding. OSM uses named,
+unambiguous `stop_area` membership to group boarding locations. The graph
+includes no transfer-time or platform-accessibility model.
+
+Overture Maps is currently unsupported for GTFS generation. Its
+[transportation data](https://docs.overturemaps.org/guides/transportation/)
+describe physical infrastructure, but do not provide complete public transport
+routes with the ordered station calls and operating patterns required by this
+workflow. Inferring service from track connectivity or station proximity can introduce
+incorrect station connections and arbitrary service counts. Use OSM's mapped
+transport relations or supply explicit transport tables with `create_gtfs`.
+
+The next section changes the operating conditions while keeping the same mapped
+network. The [generation reference](../api/gtfs_generation.md#generation-flow)
+explains how user settings, OSM tags and defaults produce each value.
+
+## 2. Set the operating conditions { #generate-a-feed }
+
+<span id="2-decide-what-to-enter-and-what-to-leave-automatic"></span>
+
+Once the routes, stops and stopping order are known, specify only the operating
+conditions you want to control. Apply this flow separately to each condition.
+In this example the source is OSM. With custom input tables, source records
+are optional; absent source values lead to defaults.
 
 <div class="gtfs-flowchart" markdown="1">
 
 ```mermaid
+%%{init: {"flowchart": {"padding": 8, "rankSpacing": 24, "nodeSpacing": 24}}}%%
 flowchart TD
-    A{"Do you want to set this condition?"}
-    A -->|Yes| B["Enter it in the parameter or table below"]
-    B --> C["Use your value"]
-    A -->|No: leave it omitted| D{"Does the data provide a usable value?"}
-    D -->|Yes| E["Use the data value"]
-    D -->|No| F["Use the documented default assumption"]
+    U{"User value specified?"}
+    U -->|Yes| V["Use user value"]
+    U -->|No| S{"Usable source value?"}
+    S -->|Yes| W["Use source value"]
+    S -->|No / no source records| D["Use default"]
+    V --> R["Inspect the adopted value and its origin"]
+    W --> R
+    D --> R
 ```
 
 </div>
 
-An invalid value that **you supply** raises an error; it never silently becomes a
-default. An unsupported **source expression** is recorded with its rejection
-reason, then treated as unavailable. Assumed or estimated values appear in the
-report and a summary warning.
+The defaults are modelling assumptions. Check the adopted values before using
+travel times or service counts in an analysis.
 
-| Condition | To set it yourself | When omitted, use data if available | If the data cannot supply it |
-|---|---|---|---|
-| **Departure interval** | `services.headway_secs` for particular patterns; otherwise `headway_secs` for every pattern **or** `group_headway_secs` for a shared group rate. See B below. | OSM `interval` and supported `interval:conditional`, per pattern. | A shared group interval of **900 s**, multiplied by the number of selected patterns to obtain each pattern's interval. |
-| **Operating window** | `services.start_time` / `end_time` for particular patterns; otherwise `start_time` / `end_time` for all patterns. | Supported OSM `opening_hours`. | **06:00–22:00**. The end is exclusive for departures. |
-| **Travel time** | Exact offsets or `stop_sequences.travel_time_secs`; for untimed legs, per-leg `speed_kph` or global `speed_kph`. See C below. | Usable OSM whole-route `duration`, allocated to untimed legs by distance. | Distance divided by the provisional mode speed, e.g. **20 km/h for a bus**. |
-| **Dwell at a stop** | `stop_sequences.dwell_time_secs`, otherwise global `dwell_time_secs`. | Complete supplied offsets already include dwell. OSM duration does not provide individual stop dwell. | **0 s** additional dwell. |
-| **Service dates** | `service_date="20261103"` for one day, or `calendar` / `calendar_dates` for a schedule. | Source weekday restrictions apply within the selected dates; they do not determine the study dates. | The fixed reference week **2026-01-03–2026-01-09**, not the current week. |
-| **Agency** | `agency` with the operator name, URL and timezone. | Available source metadata; otherwise an unambiguous geographical timezone estimate. | Synthetic name, project URL and, if timezone inference fails, **UTC**. |
+The quick start uses source operating tags, station groups and estimated travel
+times. Add only the conditions you want to change. For example,
+model departures between 07:00 and 09:00 at ten-minute intervals:
 
-For row-specific conditions, use `services` and `stop_sequences`. A row-specific
-value takes priority over a global keyword for the same condition. **A partial
-`services` table changes conditions, not the generation target:** unlisted
-patterns remain. Select the target separately with `pattern_ids`; loaders also
-accept `modes`.
+<span id="5-override-only-the-necessary-fields"></span>
 
-### B. Choose fixed departures or a departure interval
-
-**If you know the departure times**, put each departure in a separate
-`services.departure_time` row. That pattern gets those departures and no added
-frequency service. Do not mix `departure_time` with `start_time`, `end_time` or
-`headway_secs` in the same row. Global frequency settings can still apply to
-other patterns. To generate only the patterns in your timetable, also pass
-`pattern_ids=services["pattern_id"].unique().tolist()`.
-
-**Otherwise, choose how to determine the interval.** For each pattern, the first
-available item in this list wins:
-
-1. Its **`services.headway_secs`** value.
-2. Global **`headway_secs`**, used unchanged for each pattern.
-3. Global **`group_headway_secs` × number of selected patterns in its group**.
-4. The pattern's **source interval**, used unchanged.
-5. The assumed **900 s × number of selected patterns in its group**.
-
-Supply at most one of the two global interval parameters. A group is defined by
-route and direction, or by `patterns.service_group_id`. All selected patterns
-count towards the group size, including patterns with their own interval, fixed
-departures or closures; unused shares are not redistributed.
-
-For **two patterns in one group**, both operating 06:00–22:00 on one day, with
-no source intervals, closures or individual overrides:
-
-| What you pass | Interval used by each pattern | Total expected departures per day |
-|---|---:|---:|
-| Neither interval parameter | 1,800 s | 64 |
-| `group_headway_secs=900` | 1,800 s | 64 |
-| `headway_secs=900` | 900 s | 128 |
-
-### C. Supply travel times only where you know them
-
-For each leg, complete arrival/departure offsets or an explicit
-`travel_time_secs` take priority. Remaining legs use an individual speed if
-provided, then the global `speed_kph`. If neither speed is supplied, a usable OSM
-route duration can fill untimed legs; otherwise the provisional mode speed is
-used. Specifying a speed does not overwrite an explicit travel time.
-
-Distance comes from an explicit `distance_m`, a cumulative-distance difference,
-a usable directed route shape, or finally geodesic distance. These distance and
-speed calculations are estimates. See [Defaults, reasons and limits](#3-defaults-reasons-and-limits)
-for the full distance policy and mode speeds.
-
-### D. Check which values were actually used
-
-For example, suppose one OSM bus pattern has `interval=10` but no usable duration.
-The following choices produce a mixture of origins:
-
-| Your input | Adopted interval | Adopted window | Travel-time basis |
-|---|---|---|---|
-| Omit all operating parameters | **Data:** 600 s | **Assumption:** 06:00–22:00, if no opening hours | **Assumption:** distance at 20 km/h |
-| Set `start_time="07:00:00"`, `end_time="09:00:00"`, `speed_kph=30` | **Data:** 600 s | **Your input:** 07:00–09:00 | **Your input:** distance at 30 km/h |
-| Also set `headway_secs=900` | **Your input:** 900 s | **Your input:** 07:00–09:00 | **Your input:** distance at 30 km/h |
-
-An explicit complete window overrides source opening hours. With only one
-window boundary supplied, source periods supply the other boundary and retain
-their weekday restrictions and closures. A fixed `departure_time` also overrides
-source opening hours; your calendar still determines its operating dates. To disregard OSM operating tags altogether,
-set `use_source_tags=False`.
-
-After generation, `gtfs_generation_report(con)["assumptions"]` identifies **your
-input** (`user` or `override`), **data** (`source`), **assumptions** (`default`) and
-**estimates** (`estimated`). `report["services"]` shows the adopted daily windows,
-intervals and departure counts. Inspect both before saving; the generator does
-not establish whether a source value or an assumption is realistic for your study.
-
-### Select source data and transport modes
-
-Both loaders accept `modes="bus"` or a sequence such as `modes=["bus", "train"]`.
-Omitting `modes` retains all supported OSM modes or all supplied Overture routes.
-Empty selections and unknown mode names raise errors before any download.
-
-| Mode | GTFS route_type | Extended route types | OSM route tags |
-|---|---:|---|---|
-| `tram` (alias `light_rail`) | 0 | 900–906 | `tram`, `light_rail` |
-| `subway` | 1 | 400–404 | `subway` |
-| `train` | 2 | 100–117 | `train` |
-| `bus` | 3 | 200–209, 700–716 | `bus` |
-| `ferry` | 4 | 1000, 1200 | `ferry` |
-| `funicular` | 7 | 1400 | `funicular` |
-| `trolleybus` | 11 | 800 | `trolleybus` |
-| `monorail` | 12 | 405 | `monorail` |
-
-The loaders also recognise these
-[extended GTFS route types](https://developers.google.com/transit/gtfs/reference/extended-route-types)
-in supplied routes. For example, `modes="bus"` includes regional buses (`701`)
-and coaches (`200`); `modes="train"` includes suburban rail (`109`). The original
-`routes.route_type` is retained in the generated feed and report. The same groups
-determine provisional default speeds for untimed legs. Codes absent from both
-this table and the speed table below use the `other` speed and are included when
-`modes` is omitted.
-
-<!-- gtfs-example:network -->
+<!-- gtfs-example:settings -->
 ```python
-# Live requests depend on the source's availability and data quality.
-osm = c2g.load_osm_transport(place_name="Liverpool, UK", modes="bus")
-osm.close()
-overture = c2g.load_overture_transport(
-    data=data, area=[-3.00, 53.39, -2.96, 53.41], modes=["bus", "train"],
+settings = {
+    "start_time": "07:00:00",  # First departures
+    "end_time": "09:00:00",    # Departure window ends (exclusive)
+    "headway_secs": 600,       # Ten minutes per pattern
+}
+```
+
+These are the only custom operating values in this example. Speed, dwell,
+distance estimation and the reference week keep their automatic values.
+The explicit interval replaces the source's base and time-of-day intervals.
+Remove a key to return that condition to source-first completion. A pattern is
+one stopping sequence in one direction; `group_headway_secs` can instead share
+a departure rate across a group.
+
+After running the quick start, rerun its loader with `**settings`:
+
+<!-- gtfs-example:osm -->
+```python
+configured_con = c2g.load_osm_transport(
+    place_name="Tokyo 23 wards, Japan",
+    modes=["subway", "train", "light_rail"],
+    **settings,
 )
-overture.close()
+configured_nodes, configured_edges = c2g.travel_summary_graph(configured_con)
 ```
 
-OSM downloads member geometry only for the selected modes. It also requests
-candidate relation IDs and tags so it can distinguish a mode-excluded ID from an
-unknown ID. Selection by `relation_ids`, `pattern_ids` and `modes` uses their
-intersection. `modes` and `pattern_ids` also apply after supplemental `data` is
-merged, so additional patterns cannot bypass the selection. Overture
-selects **supplied routes by `route_type`** and retains their stopping patterns;
-it does not discover routes or infer stopping order. Its infrastructure download
-remains area-based, so mode selection does not guarantee less network traffic.
 
-The OSM loader reports invalid relations together, including IDs, reasons,
-repair instructions and usable relation IDs. A missing route name can be filled
-through `data["routes"]`; missing stop information can be supplied through
-`data["stops"]` and `data["stop_sequences"]`. Set `overwrite_source=True` only when
-replacing an existing source value. Supplementation is considered before deciding
-whether a relation is invalid. Correct the reported problems, select the usable
-IDs, or explicitly opt into
-excluding invalid source relations:
+For a map of this scenario, use `configured_nodes` and `configured_edges` in the
+quick-start plotting block. The original `con` remains available for the
+accessibility example in section 1.
 
-<!-- gtfs-example:network -->
+The settings dictionary controls the whole generated service. Use the first
+detail below for more operating settings, the second to change the downloaded
+network, and the third for conditions that vary by pattern or stop.
+
+<span id="parameters-you-can-set"></span>
+
+??? reference "Set operating conditions for the whole feed"
+
+    <span id="operating-conditions"></span>
+
+    These arguments work with `create_gtfs` and `load_osm_transport`. Put the conditions you want to change in
+    `settings` in the configured examples above.
+
+    <!-- gtfs-defaults:controls -->
+
+??? reference "Select routes, modes and boarding locations"
+
+    <span id="source-and-selection"></span>
+
+    Pass these directly to the appropriate loader.
+
+    | Parameter | What it selects or controls | If omitted |
+    |---|---|---|
+    | `area` / `place_name` | Download boundary, or a place to geocode | Supply an area/place, or OSM `relation_ids` |
+    | `relation_ids` (OSM) | Specific route relations | Find routes in the selected area |
+    | `route_name` | OSM route-name filter | No name filter |
+    | `route_ref` (OSM) | Route reference, such as a line code | No reference filter |
+    | `modes` | Transport modes, e.g. `"subway"` or `["subway", "train"]` | All supported or supplied modes |
+    | `pattern_ids` | Patterns to generate; also accepted by `create_gtfs` | All selected patterns |
+    | `data` | Explicit transport tables for `create_gtfs`; supplemental tables for OSM | Required for `create_gtfs`; OSM derives its input from relations |
+    | `use_source_tags` (OSM) | Whether to use supported operating tags | `True` |
+    | `overwrite_source` | Whether supplements may replace source values | `False` |
+    | `stop_level` (OSM) | Group mapped station areas, or retain individual boarding IDs | `"station"` |
+    | `on_invalid` (OSM) | Skip unusable relations with recorded reasons, or require all with `"raise"` | `"skip"` |
+    | `endpoint` / `timeout` (OSM) | Overpass server and request timeout | Configured [server and timeout](../api/gtfs_generation.md#osm-retrieval) |
+
+??? reference "Set conditions for individual patterns and stops"
+
+    <span id="per-pattern-and-per-stop-values"></span>
+
+    These are table columns, not global keyword arguments. A row-specific
+    operating value takes priority over the corresponding global setting.
+
+    | Table | Fields you can set | Purpose |
+    |---|---|---|
+    | `services` | `pattern_id`, `headway_secs`, `start_time`, `end_time` | Conditions for named patterns; unlisted patterns remain |
+    | `services` | `departure_time` | One fixed departure per row |
+    | `services` | `exact_times` | `0` for expected frequency counts; `1` for departures at exact intervals |
+    | `services` | `trip_id`, `service_id` | Named trips and their calendars |
+    | `stop_sequences` | `travel_time_secs`, `speed_kph`, `distance_m` | Incoming leg time, speed or distance |
+    | `stop_sequences` | `dwell_time_secs`, `arrival_offset_secs`, `departure_offset_secs` | Dwell or complete timing offsets |
+    | `stop_sequences` | `shape_dist_traveled`, `pickup_type`, `drop_off_type`, `stop_headsign`, `timepoint` | Cumulative distance and stop-level GTFS attributes |
+    | `patterns` | `direction_id`, `service_group_id` | Direction and interval-allocation group |
+
+    Dates and IDs connect these rows to the input tables. See the
+    [table example and constraints](../api/gtfs_generation.md#from-your-own-tables).
+
+
+### Check the values used { #4-inspect-values-warnings-and-counts }
+
+<!-- gtfs-example:inspect -->
 ```python
-osm = c2g.load_osm_transport(
-    place_name="Liverpool, UK", modes=["bus", "train"], on_invalid="skip",
-)
-excluded = c2g.gtfs_generation_report(osm)["assumptions"].query(
-    "field == 'relation' and kind == 'ignored'"
-)
-print(excluded[["record_id", "reason"]])
-osm.close()
+report = c2g.get_gtfs_summary(configured_con)
+print(report["services"][[
+    "pattern_id", "date", "start_time", "end_time", "headway_secs", "departures",
+]])
+print(report["assumptions"][["record_id", "field", "value", "kind", "reason"]])
 ```
 
-The default is `on_invalid="raise"`. Skipped relations produce a summary warning;
-their IDs and reasons survive save/load. An empty result, malformed explicit
-input or network failure still raises an error.
+`services` shows the adopted intervals and windows for each modelled day.
+In `assumptions`, `kind` records where each value came from:
 
-### What the OSM loader can interpret
-
-- `interval`: positive integer minutes, `HH:MM` or `HH:MM:SS`.
-- `opening_hours`: `24/7`, weekday lists or ranges with fixed time intervals,
-  multiple disjoint intervals, and `off`/`closed`. Overnight intervals use GTFS
-  hours above 24 and belong to their starting service day.
-- `interval:conditional`: disjoint `interval @ (weekdays and fixed time ranges)`
-  clauses, or a weekday selector alone. The base interval applies outside the
-  conditional periods. Without a base interval, the default applies there.
-  Unsupported or overlapping conditions reject the **whole interval family**,
-  including a base `interval`; the loader does not flatten it into a constant.
-- `duration`: positive `H:MM` or `H:MM:SS` from the first departure to the last
-  arrival. An integer without units is ambiguous and rejected. After reserving
-  explicit leg times, leg speeds and intermediate dwell, the positive remainder
-  is distributed in proportion to the distances of the untimed legs. A single
-  remaining leg can receive the remainder directly. This is an **estimate**,
-  not source-observed segment timing. Unusable distances or incompatible totals
-  cause the duration to be rejected, retaining the reason.
-- An unambiguous immediate `route_master` can supply common interval, opening
-  hours, operator, website and timezone information. Child interval tags replace
-  the parent's interval family. Parent duration is not distributed among different
-  variants. Multiple candidate parents are not resolved automatically.
-
-Holiday, seasonal and solar-time rules and overlapping weekly rules are outside
-the supported grammar. `use_source_tags=False` disables operating-tag adoption;
-explicit conditions and model defaults remain available. Structural parent
-membership and agency metadata are still retained.
-
-These are bounded interpretations of the [OSM interval](https://wiki.openstreetmap.org/wiki/Key:interval),
-[conditional interval](https://wiki.openstreetmap.org/wiki/Key:interval:conditional),
-[duration](https://wiki.openstreetmap.org/wiki/Key:duration) and
-[opening hours](https://wiki.openstreetmap.org/wiki/Key:opening_hours) tags.
-Their definitions do not validate City2Graph's fallback values.
-
-## 3. Defaults, reasons and limits
-
-The tables below are generated from the same packaged configuration registry as
-the implementation. The model version is **`simple-v1`**. It uses constant speeds
-and headways within resolved periods, with no random variation, fitted peak
-adjustment, reference-feed calibration or blanket speed correction.
-
-### Provisional average speeds
-
-<!-- gtfs-defaults:speeds -->
-
-All speeds are in **km/h**, used on each untimed incoming leg. These are retained
-compatibility baselines, **unverified modelling assumptions** rather than measured
-or globally representative values. Stopping effects are included by assumption,
-so there is no additional default dwell. Choose study-specific values or supply
-leg times where travel-time validity matters. No transport standard is cited as
-recommending these speeds.
-
-### Operating, metadata and technical defaults
-
-<!-- gtfs-defaults:settings -->
-
-**Dates.** With neither dates nor a calendar, the seven days from **2026-01-03
-(Saturday) through 2026-01-09 (Friday)** represent each weekday once. They are
-fixed weekday coordinates, independent of execution time, and do not reconstruct
-historical service or holiday calendars. An explicit `service_date` produces
-one day. Without weekday information, all weekdays have the same assumed service.
-A service ID is inferred from an explicit calendar only if exactly one candidate
-exists. `service_date` cannot be combined with `calendar` or `calendar_dates`.
-
-**Frequency allocation.** `group_headway_secs` is a shared reference interval for
-each route-direction group. When neither explicit nor source intervals are
-available, its baseline is 900 seconds: four expected departures per hour across
-the group. Two patterns each receive a 1,800-second interval, giving 32 expected
-departures per pattern per reference day and 64 on their shared sections. Across
-seven days, each common section has 448 expected traversals.
-
-`group_headway_secs=900` preserves that baseline. In contrast,
-`headway_secs=900` applies to **each pattern**, giving 128 expected daily traversals
-for two patterns sharing a section. Both global keywords cannot be supplied
-together. Individual `services.headway_secs` takes precedence over either global
-choice. Source intervals remain per pattern when no explicit interval applies.
-An explicit group interval also overrides source conditional intervals.
-
-Group membership comes from route and direction, or `patterns.service_group_id`.
-The denominator includes all selected patterns. Explicit pattern overrides and
-closed days do not redistribute unused shares, so a group interval is not a hard
-cap on the combined service. An unresolved OSM parent shares one budget across
-its children and warns; `direction_id=0` remains a placeholder, not an inferred
-outbound direction. Fixed departures never acquire a frequency.
-
-**Distance.** An untimed leg uses `distance_m`, then the difference in cumulative
-`shape_dist_traveled`, then usable directed shape distance, then geodesic distance.
-`auto` records the actual basis. `distance_method="shape"` strictly requires usable
-directed geometry when geometry is needed; `"geodesic"` skips shape projection.
-Zero-distance or otherwise unresolvable legs require positive distances or times.
-Straight-line distance can underestimate a route, especially across barriers.
-
-**Metadata.** Explicit `agency` takes precedence over source operator, website and
-timezone fields. Offline geographical timezone lookup is attempted only when
-needed; every stop must yield the same unique land timezone. The lookup library
-and boundary-dataset versions are recorded. This estimate does not establish the
-operator's official timezone. Ambiguous, offshore or multi-zone inputs fall back
-to UTC with a warning. Synthetic operator names and the project URL are also
-warned placeholders. A feed uses one agency timezone; conflicting source zones
-are recorded and require inspection.
-
-The Overture release defaults to the newest release known to the installed
-Overture client, rather than a live search for the newest global release. Supply
-`release` for a repeatable request; the actual release and source retrieval context
-are recorded. Source selection (`place_name`, relation IDs or `area`) and required
-stopping patterns have no invented defaults. `optional_tables=None` adds no extra
-GTFS tables. These choices affect input selection and output structure, not the
-synthetic operating model.
-
-## 4. Inspect values, warnings and counts
-
-<!-- gtfs-example:offline -->
-```python
-report = c2g.gtfs_generation_report(con)
-print(report["assumptions"][["record_id", "field", "value", "kind", "reason", "evidence"]])
-print(report["services"][["date", "weekday", "pattern_id", "headway_secs", "departures"]])
-print(report["edges"][["travel_time_sec", "frequency"]])
-```
-
-`assumptions` distinguishes explicit `user` values, interpreted `source` values,
-`default` assumptions, deterministic `generated` IDs, `estimated` quantities and
-`ignored` information. It includes effective values, units and readable reasons;
-`table_name="assumptions"` marks effective choices; `operation_source` rows retain
-parsed source fields and raw tags in `details`. Retrieval context is also retained.
-Generated values are never
-labelled as user input.
-
-`services` has a stable column order for fixed, frequency-based and mixed services.
-Frequency columns are present but missing for fixed departures. `headway_secs`,
-`group_headway_secs`, `exact_times`, route/direction codes and pattern counts use
-nullable integer types; `departures` is numeric. IDs, clocks and dates are strings.
-
-`services` shows each period, pattern and date, with closed days retained as zero
-expected departures. Counts for `exact_times=0` can be fractional: eligible
-seconds divided by headway. They are not a list of guaranteed departures.
-`exact_times=1` and fixed departures use discrete counts.
-`edges` aggregates directed adjacent-stop sections over **all active dates**, adding
-patterns that traverse the same section. To inspect one day, use
-`travel_summary_graph(con, calendar_start="20260105", calendar_end="20260105",
-directed=True)`. Express patterns that skip a stop form a different adjacent-stop
-section; the report does not split that section at skipped stops.
-
-Warnings summarise completion and discarded source fields; the report contains
-the individual details. A research pipeline can require explicit resolution:
-
-<!-- gtfs-example:offline -->
-```python
-import warnings
-
-with warnings.catch_warnings():
-    warnings.simplefilter("error", c2g.GTFSGenerationWarning)
-    # Generation raises if a warned fallback or source rejection is needed.
-    # con = c2g.create_gtfs(data, ...)
-```
-
-### Worked source cases
-
-These examples describe the tags on a selected OSM route; the API fetches the
-actual relation rather than fabricating source tags.
-
-| Input information | Adopted conditions and interpretation |
+| `kind` | Meaning |
 |---|---|
-| `interval=10` only | Source headway 600 s per pattern; default 06:00–22:00 and provisional speed. The frequency is source information; the other values remain assumptions. |
-| `duration=00:12`; untimed legs of 1 km and 2 km | Estimated incoming times 240 s and 480 s, with zero additional dwell. Explicit times of 120 s on the first leg would leave 600 s for the second. |
-| `opening_hours=Mo-Fr 07:00-09:00; Sa-Su off` | Five days × two hours = ten operating hours in the representative week. Weekend rows remain at zero departures. At the base interval this gives 40 departures in the week. |
-| `opening_hours=Mo 22:00-02:00` | Monday's GTFS service window is 22:00–26:00; 16 expected departures at a 900 s headway. Other service days are closed. |
-| `interval=15`; `interval:conditional=10 @ (Mo-Fr 07:00-09:00)` | A 600 s headway in the stated weekday period, with 900 s elsewhere inside the adopted operating window. |
-| Two patterns, no interval information | Each receives half the default route-direction departure rate. Both sharing a section produce 64 expected traversals per day, rather than doubling that total merely because there are two patterns. |
+| `user` / `override` | Explicit input |
+| `source` | Interpreted source data |
+| `default` | A fallback assumption |
+| `estimated` | A calculation, such as distance divided by speed |
+| `generated` | A generated identifier |
+| `ignored` | Rejected information, with a reason |
 
-## 5. Override only the necessary fields
+Mapped local, express and through-service patterns can overlap. Check their
+service scopes before interpreting summed edge counts as operating capacity.
+These are modelled services, without validation against operator timetables or
+passenger counts.
 
-<!-- gtfs-example:offline -->
+The OSM loader records exclusions under its default `on_invalid="skip"` policy:
+
 ```python
-con.close()
-con = c2g.create_gtfs(
-    data,
-    headway_secs=600,            # Per pattern when explicitly supplied
-    start_time="07:00:00",
-    end_time="19:00:00",
-    speed_kph=25,
-    service_date="20261102",    # One actual study day
-)
+excluded = report["assumptions"].query("field == 'relation' and kind == 'ignored'")
+print(excluded[["record_id", "reason"]])
 ```
 
-A partial service table overrides its named patterns and fills their missing
-fields. **Unlisted patterns remain** and use global, source or default conditions.
-Use `pattern_ids` to restrict generation. Empty tables, empty selections, unknown
-IDs and misspelled service columns are errors; `headway_sec` is not silently
-substituted with a default. Known service rows outside the selection are excluded.
-Rows without `pattern_id` broadcast to all patterns (an explicit `trip_id`
-requires a pattern). Use separate rows for arbitrary fixed departures:
+### Save the feed { #6-save-restore-and-describe-research-use }
 
-<!-- gtfs-example:offline -->
+Save the generated feed as a GTFS ZIP with one call:
+
+<!-- gtfs-example:save -->
 ```python
-services = pd.DataFrame([
-    {"pattern_id": "local", "departure_time": "08:05:00"},
-    {"pattern_id": "variant", "start_time": "08:00:00", "end_time": "10:00:00",
-     "headway_secs": 1200, "exact_times": 0},
-])
-agency = pd.DataFrame([{
-    "agency_name": "Study operator", "agency_url": "https://example.org",
-    "agency_timezone": "Europe/London",
-}])
-con.close()
-con = c2g.create_gtfs(data, services, agency=agency, service_date="20261102")
+c2g.save_gtfs(configured_con, "synthetic.zip")
 ```
 
-Override one pattern while retaining the other, or explicitly select just one:
+## 3. Across eight cities { #across-eight-cities }
 
-<!-- gtfs-example:offline -->
-```python
-with c2g.create_gtfs(
-    data, pd.DataFrame([{"pattern_id": "local", "headway_secs": 600}]),
-    group_headway_secs=900, service_date="20261102",
-) as adjusted:
-    print(c2g.gtfs_generation_report(adjusted)["services"][[
-        "pattern_id", "group_headway_secs", "headway_secs", "frequency_scope", "departures",
-    ]])
+The Tokyo accessibility panel uses the same recorded feed, origin, projected
+coordinate system and ward boundary as the worked example, with thresholds
+extended to one-minute intervals.
+The other cities use their selected synthetic feeds and local walking networks.
 
-with c2g.create_gtfs(
-    data, services, pattern_ids="local", service_date="20261102",
-) as selected:
-    fixed = c2g.gtfs_generation_report(selected)["services"]
-    # Frequency columns exist and are missing for a fixed departure.
-    print(fixed[["departure_time", "headway_secs", "departures"]])
-```
+[![Public transport networks and street-based isochrones in Tokyo, London, Paris, New York, Melbourne, Berlin, Seoul and Amsterdam](../assets/examples/synthetic_gtfs_world_isochrones.png)](../assets/examples/synthetic_gtfs_world_isochrones.png)
 
-Several disjoint frequency periods may share `trip_id` when the pattern and
-service calendar agree. Generated trip IDs avoid all explicitly supplied IDs,
-including IDs on rows processed later. Weekly source conditions can derive
-date-specific service and trip IDs, whose origins are retained. Disjoint periods
-of the same named trip share its derived daily ID. Existing `calendar`,
-`calendar_dates` and `optional_tables` remain supported.
+© OpenStreetMap contributors.
 
-For leg-level control, supply `stop_sequences.travel_time_secs`, `speed_kph`,
-`distance_m` or `dwell_time_secs`. Times are seconds; distances are metres.
-Incoming travel time runs from the previous departure to the current arrival;
-the first row's incoming time is unused. Dwell runs from arrival to departure.
-A fixed first-stop departure anchors that departure, so its arrival can be earlier
-by its dwell time. Complete `arrival_offset_secs` and `departure_offset_secs`
-include dwell already and must be supplied together on each occurrence using them.
-OSM source fields are protected during supplementation unless
-`overwrite_source=True` is supplied. Keep this explicit when replacing source order.
-
-## 6. Save, restore and describe research use
-
-<!-- gtfs-example:offline -->
-```python
-from pathlib import Path
-
-before = c2g.gtfs_generation_report(con)
-output = c2g.save_gtfs(con, Path("synthetic.zip"))
-restored = c2g.load_gtfs(output)  # Restores synthetic.zip.provenance.json by default
-try:
-    after = c2g.gtfs_generation_report(restored)
-    from pandas.testing import assert_frame_equal
-    for name in before:
-        assert_frame_equal(before[name], after[name])
-finally:
-    restored.close()
-    con.close()
-```
-
-You can reuse `loaded.table("stops").df()` directly as `data["stops"]` when
-building another feed or supplementing either loader. For a pandas table with
-`stop_lat` and `stop_lon`, the redundant binary `geometry` returned by DuckDB is
-ignored. A GeoDataFrame instead uses its point geometry and must declare a CRS.
-Numeric `direction_id` values `0.0` and `1.0` are accepted and written as GTFS
-codes `0` and `1`; fractional values and other codes are rejected.
-Empty and whitespace-only cells are treated as missing. For example, a blank
-`parent_station` indicates no parent; a blank required `stop_name` still needs
-correction. Non-blank identifiers retain their spelling and leading zeroes.
-
-`include_provenance=False` omits the sidecar; `load_gtfs(..., provenance_path=None)`
-disables its restoration. An explicit sidecar path is also supported. Without
-history, `gtfs_generation_report` reports that effective assumptions are unavailable.
-The standard GTFS tables remain usable. Loading a saved feed preserves its
-recorded model and adopted values. Missing report fields remain null, including
-dates when the history contains only aggregate counts.
-
-For a paper, record the model version, input selection and retrieval version/date,
-actual adopted speeds and periods, grouping policy, distance and duration
-estimates, calendar, timezone, rejected source fields and all overrides. Preserve
-the sidecar with the analysis inputs. State which values describe the target
-routes and which are unverified reference assumptions. GTFS
-[frequency semantics](https://gtfs.org/documentation/schedule/reference/#frequenciestxt)
-explain the output representation, not the realism of the default service.
-
-Check against available comparison data without fitting the defaults to those
-feeds. Assess sensitivity to speed factors **0.75, 1 and 1.25** and headways
-**10, 15 and 30 minutes**, reporting changes in travel times, section counts and
-the study's outcome. These scenarios are **not confidence intervals**. Their
-purpose is to expose dependence on assumptions. Passing structural checks and
-reproducing a feed do not establish empirical travel-time validity.
-
-## Selecting patterns and reading reports
-
-Use `pattern_ids=services["pattern_id"].unique().tolist()` to generate only the
-patterns named in a service table. Omit `pattern_ids` to retain other patterns
-with completed operating conditions. A service table supplies partial overrides;
-pattern selection defines the generation target.
-
-Use `group_headway_secs` for a shared group interval and `headway_secs` for each
-pattern's interval. Report fields use numeric types: for example,
-`report["services"]["headway_secs"].eq(900)` selects a 900-second interval.
-Use `.isna()` for non-applicable fields. Saved feeds retain their recorded model
-and adopted values; loading a feed does not regenerate service.
+The figures are static illustrations based on source data retrieved in November
+2026. Running the examples retrieves current OSM data, so network coverage and
+results can change. Raw downloads, generated GTFS archives and intermediate
+graphs are kept outside Git. The code in this tutorial is the maintained workflow;
+the repository retains the published PNGs and small synthetic test inputs.

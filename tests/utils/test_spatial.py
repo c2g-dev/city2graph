@@ -1761,6 +1761,51 @@ class TestGraphAnalysis(BaseGraphTest):
         assert len(result) == 3
         assert mock_compute.call_count == 1
 
+    @pytest.mark.parametrize("graph_class", [nx.Graph, nx.MultiDiGraph])
+    @pytest.mark.parametrize("threshold", [10, [5, 10]])
+    def test_isochrone_cuts_remove_isolated_stations_and_preserve_walks(
+        self, graph_class: type[nx.Graph], threshold: int | list[int], sample_crs: str
+    ) -> None:
+        """Transport may enable walking reach without leaving station-only circles."""
+        graph = graph_class(crs=sample_crs)
+        positions = {0: (0, 0), 1: (100, 0), 2: (1000, 0), 3: (1100, 0), 4: (1200, 0), 5: (2000, 0)}
+        for node, position in positions.items():
+            graph.add_node(node, pos=position)
+        rail = ("station", "ride", "station")
+        walk = ("street", "walk", "street")
+        if graph.is_multigraph():
+            graph.add_edge(
+                0, 1, cost=1, edge_type=rail, geometry=LineString([(0, 0), (0, 500), (100, 0)])
+            )
+        for u, v, edge_type in [
+            (0, 1, walk),
+            (1, 2, rail),
+            (2, 3, rail),
+            (3, 4, walk),
+            (2, 5, rail),
+        ]:
+            graph.add_edge(
+                u, v, cost=1, edge_type=edge_type, geometry=LineString([positions[u], positions[v]])
+            )
+        original_edges = graph.number_of_edges()
+        result = utils.create_isochrone(
+            graph,
+            center_point=Point(0, 0),
+            threshold=threshold,
+            edge_attr="cost",
+            cut_edge_types=[rail],
+            method="buffer",
+            buffer_distance=10,
+        )
+        for polygon in result.geometry:
+            assert polygon.covers(Point(50, 0))
+            assert polygon.covers(Point(1150, 0))
+            assert not polygon.covers(Point(1000, 0))
+            assert not polygon.covers(Point(2000, 0))
+            assert not polygon.covers(Point(0, 250))
+        assert graph.number_of_edges() == original_edges
+        assert len(graph) == len(positions)
+
     def test_isochrone_with_cut_edge_types(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
@@ -1791,20 +1836,6 @@ class TestGraphAnalysis(BaseGraphTest):
             buffer_distance=1.0,
             cut_edge_types=[cut_type],
         )
-
-        # The cut isochrone should be smaller or empty if all edges are cut
-        # In the sample, we only have one edge type. If we cut it, we have no edges.
-        # But nodes are still there?
-        # create_isochrone with method="buffer" uses edges.
-        # If all edges are removed, it returns empty or just nodes?
-        # _extract_isochrone_geometries adds nodes AND edges for buffer?
-        # Let's check _extract_isochrone_geometries implementation.
-        # It adds node positions first, THEN edges if method="buffer".
-        # So if edges are removed, it will buffer the nodes.
-
-        # Full isochrone: nodes + edges buffered.
-        # Cut isochrone: nodes buffered (edges removed).
-        # So area should be smaller.
 
         assert not iso_full.empty
         assert not iso_cut.empty
@@ -2375,8 +2406,8 @@ class TestGraphAnalysis(BaseGraphTest):
         assert iso.empty
         assert "geometry" in iso.columns
 
-    def test_filter_edges_by_type_coverage(self, sample_crs: str) -> None:
-        """Test _filter_edges_by_type with actual removal."""
+    def test_isochrone_all_edges_cut(self, sample_crs: str) -> None:
+        """Removing every edge leaves no reachable street geometry to draw."""
         G = nx.Graph()
         G.graph["crs"] = sample_crs
         G.add_edge(1, 2, full_edge_type=("a", "b", "c"), length=1)
@@ -2390,10 +2421,9 @@ class TestGraphAnalysis(BaseGraphTest):
             cut_edge_types=[("a", "b", "c")],
             method="convex_hull",
         )
-        # Edge removed, nodes remain.
-        # Output is always Polygon or MultiPolygon (buffered from remaining geometries)
-        assert not iso.empty
-        assert iso.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
+        assert iso.empty
+        assert len(G) == 2
+        assert G.number_of_edges() == 1
 
     def test_prepare_isochrone_graph_errors(self) -> None:
         """Isochrones require a graph or both node and edge layers."""

@@ -166,7 +166,7 @@ def _validate_metadata(tables: dict[str, pd.DataFrame], issues: list[str]) -> No
         if not any(_present(row.get(key)) for key in ("route_short_name", "route_long_name")):
             issues.append(f"routes {row['route_id']}: supply route_short_name or route_long_name")
         mode = pd.to_numeric(row["route_type"], errors="coerce")
-        if pd.isna(mode) or mode < 0 or int(mode) != mode:
+        if pd.isna(mode) or not math.isfinite(mode) or mode < 0 or int(mode) != mode:
             issues.append(f"routes {row['route_id']}: invalid route_type")
     _validate_stops(tables["stops"], issues)
     _validate_calendars(tables, issues)
@@ -823,6 +823,27 @@ def _validate_timing_options(data: Mapping[str, pd.DataFrame] | None, issues: li
     """
     if data is None or "stop_sequences" not in data:
         return
+    _unknown_fields(
+        set(data["stop_sequences"].columns),
+        {
+            "pattern_id",
+            "stop_id",
+            "stop_sequence",
+            "speed_kph",
+            "distance_m",
+            "travel_time_secs",
+            "dwell_time_secs",
+            "arrival_offset_secs",
+            "departure_offset_secs",
+            "shape_dist_traveled",
+            "pickup_type",
+            "drop_off_type",
+            "stop_headsign",
+            "timepoint",
+        },
+        "stop_sequences",
+        issues,
+    )
     for index, row in zip(
         data["stop_sequences"].index, _records(data["stop_sequences"]), strict=True
     ):
@@ -934,7 +955,7 @@ def _select_patterns(
     selected : list of str or None
         Pattern IDs, or all available patterns.
     records : list of dict
-        Provenance records to extend with deliberate exclusions.
+        Metadata records to extend with deliberate exclusions.
     explicit : bool, default True
         Whether pattern IDs were supplied directly rather than derived by a loader.
 
@@ -1064,7 +1085,7 @@ def _matching_patterns(
         )
         routes = routes.loc[route_types.isin({_MODES[mode] for mode in modes})]
     allowed = set(routes["route_id"].astype(str))
-    chosen = (
+    chosen: list[str] = (
         data["patterns"]
         .loc[data["patterns"]["route_id"].astype(str).isin(allowed), "pattern_id"]
         .astype(str)

@@ -7,11 +7,10 @@ import io
 import json
 import urllib.error
 import urllib.parse
+from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
-from typing import cast
 
 import geopandas as gpd
 import pandas as pd
@@ -22,46 +21,7 @@ from shapely.geometry import Point
 
 import city2graph as c2g
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping
-
-
 pytestmark = pytest.mark.filterwarnings("ignore::city2graph.GTFSGenerationWarning")
-
-
-@pytest.fixture(autouse=True)
-def fixed_overture_release(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("city2graph._gtfs.sources.ALL_RELEASES", ["2026-10-21.0"])
-
-
-@pytest.fixture
-def osm_response() -> dict[str, Any]:
-    return {
-        "osm3s": {"timestamp_osm_base": "2026-11-02T12:00:00Z"},
-        "elements": [
-            {
-                "type": "relation",
-                "id": 42,
-                "tags": {
-                    "type": "route",
-                    "route": "bus",
-                    "ref": "R",
-                    "name": "Test route",
-                    "public_transport:version": "2",
-                },
-                "members": [
-                    {"type": "node", "ref": 1, "role": "stop"},
-                    {"type": "node", "ref": 11, "role": "platform"},
-                    {"type": "node", "ref": 2, "role": "stop_exit_only"},
-                    {"type": "way", "ref": 3, "role": ""},
-                ],
-            },
-            {"type": "node", "id": 1, "lat": 51, "lon": 0, "tags": {"name": "A"}},
-            {"type": "node", "id": 11, "lat": 51.0001, "lon": 0, "tags": {"name": "A"}},
-            {"type": "node", "id": 2, "lat": 51, "lon": 0.01, "tags": {"name": "B"}},
-            {"type": "way", "id": 3, "geometry": [{"lat": 51, "lon": 0}, {"lat": 51, "lon": 0.01}]},
-        ],
-    }
 
 
 @pytest.fixture
@@ -72,6 +32,190 @@ def osm_services() -> pd.DataFrame:
 
 
 class TestLoadOsmTransport:
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "local_ref",
+            "platform_name",
+            "near_way",
+            "inside_polygon",
+            "near_point",
+            "far",
+            "conflict",
+            "untagged",
+            "missing_geometry",
+        ],
+    )
+    def test_tagged_stop_platform_pairing(
+        self, monkeypatch: pytest.MonkeyPatch, osm_response: dict[str, Any], case: str
+    ) -> None:
+        """Resolve adjacent tagged platforms without conflating station and track refs."""
+        stop = osm_response["elements"][1]
+        platform = osm_response["elements"][2]
+        stop["tags"].update(public_transport="stop_position", ref="G01")
+        platform["tags"] = {"public_transport": "platform", "ref": "2"}
+        if case in {"local_ref", "platform_name"}:
+            stop["tags"]["local_ref"] = "2"
+            platform["tags"]["ref"] = "1;2"
+            if case == "platform_name":
+                platform["tags"]["name"] = "Station A platforms 1 and 2"
+        elif case in {"near_way", "inside_polygon", "missing_geometry"}:
+            platform.update(type="way")
+            platform.pop("lat")
+            platform.pop("lon")
+            osm_response["elements"][0]["members"][1]["type"] = "way"
+            if case == "near_way":
+                platform["geometry"] = [
+                    {"lon": -0.001, "lat": 51.0001},
+                    {"lon": 0.001, "lat": 51.0001},
+                ]
+            elif case == "inside_polygon":
+                platform["geometry"] = [
+                    {"lon": x, "lat": y}
+                    for x, y in [
+                        (-0.001, 50.999),
+                        (0.001, 50.999),
+                        (0.001, 51.001),
+                        (-0.001, 51.001),
+                        (-0.001, 50.999),
+                    ]
+                ]
+        elif case == "far":
+            platform["lat"] = 51.01
+        elif case == "conflict":
+            platform["tags"]["name"] = "Another station"
+        elif case == "untagged":
+            platform["tags"].pop("public_transport")
+        monkeypatch.setattr(
+            "urllib.request.urlopen",
+            lambda *_args, **_kwargs: io.BytesIO(json.dumps(osm_response).encode()),
+        )
+        if case in {"far", "missing_geometry"}:
+            with pytest.raises(ValueError, match=r"missing stop_name|no usable geometry"):
+                c2g.load_osm_transport(relation_ids=[42], service_date="20260105")
+        else:
+            with c2g.load_osm_transport(relation_ids=[42], service_date="20260105") as con:
+                assert len(con.table("stops").df()) == 2
+                assert con.table("stop_times").df().stop_id.tolist() == ["osm:node:1", "osm:node:2"]
+
+    @pytest.mark.parametrize("level", ["station", "platform"])
+    @pytest.mark.parametrize("ambiguous", [False, True])
+    def test_stop_area_grouping_and_platform_only_stops(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        osm_response: dict[str, Any],
+        level: Literal["station", "platform"],
+        ambiguous: bool,
+    ) -> None:
+        """Keep a platform-only next station and consolidate only unique memberships."""
+        relation = osm_response["elements"][0]
+        # Station B is represented only by its area platform in this pattern.
+        relation["members"] = [
+            relation["members"][0],
+            {"type": "way", "ref": 20, "role": "platform"},
+        ]
+        osm_response["elements"].extend(
+            [
+                {
+                    "type": "way",
+                    "id": 20,
+                    "tags": {"name": "B", "public_transport": "platform"},
+                    "geometry": [{"lon": 0.01, "lat": 51}, {"lon": 0.0101, "lat": 51}],
+                },
+                {
+                    "type": "relation",
+                    "id": 101,
+                    "tags": {"name": "Station A", "public_transport": "stop_area"},
+                    "members": [
+                        {"type": "node", "ref": 1, "role": "stop"},
+                        {"type": "node", "ref": 11, "role": "platform"},
+                    ],
+                },
+                {
+                    "type": "relation",
+                    "id": 102,
+                    "tags": {"name": "Station B", "public_transport": "stop_area"},
+                    "members": [{"type": "way", "ref": 20, "role": "platform"}],
+                },
+            ]
+        )
+        if ambiguous:
+            duplicate = copy.deepcopy(osm_response["elements"][-1])
+            duplicate["id"] = 103
+            osm_response["elements"].append(duplicate)
+        queries = []
+
+        def fetch(request: urllib.request.Request, **_kwargs: object) -> io.BytesIO:
+            assert isinstance(request.data, bytes)
+            query = urllib.parse.parse_qs(request.data.decode())["data"][0]
+            queries.append(query)
+            station_request = "->.boarding;" in query
+            elements = [
+                row
+                for row in osm_response["elements"]
+                if (row.get("tags", {}).get("public_transport") == "stop_area") == station_request
+            ]
+            return io.BytesIO(json.dumps({"elements": elements}).encode())
+
+        monkeypatch.setattr("urllib.request.urlopen", fetch)
+        with c2g.load_osm_transport(relation_ids=[42], stop_level=level, on_invalid="raise") as con:
+            ids = con.table("stop_times").df().stop_id.tolist()
+            assert ids == (
+                ["osm:stop_area:101", "osm:way:20" if ambiguous else "osm:stop_area:102"]
+                if level == "station"
+                else ["osm:node:1", "osm:way:20"]
+            )
+            nodes, edges = c2g.travel_summary_graph(con)
+            assert len(nodes) == 2
+            assert len(edges) == 1
+            assert len(queries) == (2 if level == "station" else 1)
+
+    def test_platform_multipolygon_and_default_exclusions(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        osm_response: dict[str, Any],
+    ) -> None:
+        """Read platform multipolygons and keep usable routes under default policy."""
+        relation = osm_response["elements"][0]
+        relation["members"][1] = {"type": "relation", "ref": 200, "role": "platform"}
+        osm_response["elements"].extend(
+            [
+                {
+                    "type": "relation",
+                    "id": 200,
+                    "tags": {"type": "multipolygon", "public_transport": "platform"},
+                    "members": [{"type": "way", "ref": 201, "role": "outer"}],
+                },
+                {
+                    "type": "way",
+                    "id": 201,
+                    "geometry": [
+                        {"lon": x, "lat": y}
+                        for x, y in [
+                            (-0.001, 50.999),
+                            (0.001, 50.999),
+                            (0.001, 51.001),
+                            (-0.001, 51.001),
+                            (-0.001, 50.999),
+                        ]
+                    ],
+                },
+            ]
+        )
+        invalid = copy.deepcopy(relation)
+        invalid["id"] = 43
+        invalid["tags"].pop("public_transport:version")
+        osm_response["elements"].append(invalid)
+        monkeypatch.setattr(
+            "urllib.request.urlopen",
+            lambda *_a, **_k: io.BytesIO(json.dumps(osm_response).encode()),
+        )
+        with pytest.warns(c2g.GTFSGenerationWarning, match="excluded 1 OSM relation"):
+            con = c2g.load_osm_transport(relation_ids=[42, 43])
+        with con:
+            assert con.table("stop_times").df().stop_id.tolist() == ["osm:node:1", "osm:node:2"]
+            assert c2g.get_gtfs_summary(con)["summary"].iloc[0]["excluded_relation_count"] == 1
+
     def test_reuse_loaded_stops_as_supplement(
         self, monkeypatch: pytest.MonkeyPatch, osm_response: dict[str, Any], tmp_path: Path
     ) -> None:
@@ -123,11 +267,11 @@ class TestLoadOsmTransport:
             assert len(frequencies) == 2
             assert frequencies["trip_id"].eq(frequencies["trip_id"].iloc[0]).all()
             assert frequencies["trip_id"].iloc[0] != "named:c2g:20261103"
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"]["departures"].sum() == 29
             archive = c2g.save_gtfs(con, tmp_path / "daily.zip")
         with c2g.load_gtfs(archive) as restored:
-            restored_report = c2g.gtfs_generation_report(restored)
+            restored_report = c2g.get_gtfs_summary(restored)
             assert restored_report.keys() == report.keys()
             for name, frame in report.items():
                 assert_frame_equal(frame, restored_report[name])
@@ -140,6 +284,7 @@ class TestLoadOsmTransport:
             {"pattern_ids": []},
             {"on_invalid": "ignore"},
             {"headway_sec": 600},
+            {"data": {"stop_sequences": pd.DataFrame([{"travel_time_sec": 600}])}},
             {"services": pd.DataFrame([{"headway_sec": 600}])},
         ],
     )
@@ -151,7 +296,9 @@ class TestLoadOsmTransport:
 
         monkeypatch.setattr("city2graph.data.get_boundaries", unexpected)
         monkeypatch.setattr("urllib.request.urlopen", unexpected)
-        with pytest.raises(ValueError, match=r"modes|pattern_ids|on_invalid|headway|services"):
+        with pytest.raises(
+            ValueError, match=r"modes|pattern_ids|on_invalid|headway|services|travel_time_sec"
+        ):
             c2g.load_osm_transport(place_name="Liverpool, UK", **options)
 
     @pytest.mark.parametrize(("modes", "count"), [("bus", 1), (["bus", "train"], 2), (None, 2)])
@@ -180,7 +327,7 @@ class TestLoadOsmTransport:
         ) as con:
             assert len(con.table("routes").df()) == count
             assert len(con.table("stops").df()) == 2
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert len(report["services"]) == count
             assert "modes" in set(report["assumptions"]["field"])
         if modes == "bus":
@@ -246,7 +393,7 @@ class TestLoadOsmTransport:
                 {"type": "node", "ref": 2, "role": "stop"},
             ]
         else:
-            invalid["members"][1]["ref"] = 2
+            invalid["members"][1]["ref"] = 9999
         second = copy.deepcopy(invalid)
         second["id"] = 44
         osm_response["elements"].extend([invalid, second])
@@ -257,18 +404,19 @@ class TestLoadOsmTransport:
         with pytest.raises(
             ValueError, match=r"(?s)osm:relation:43.*osm:relation:44.*Usable relation_ids: \[42\]"
         ):
-            c2g.load_osm_transport(relation_ids=[42, 43, 44])
+            c2g.load_osm_transport(relation_ids=[42, 43, 44], on_invalid="raise")
         with pytest.warns(c2g.GTFSGenerationWarning, match="excluded 2 OSM relations"):
             con = c2g.load_osm_transport(relation_ids=[42, 43, 44], on_invalid="skip")
         with con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             rejected = report["assumptions"].query("field == 'relation' and kind == 'ignored'")
             assert set(rejected["record_id"]) == {"osm:relation:43", "osm:relation:44"}
+            assert report["summary"].loc[0, "excluded_relation_count"] == 2
             assert rejected["reason"].str.contains("Excluded by").all()
             assert con.table("routes").df()["route_id"].tolist() == ["osm:relation:42"]
             path = c2g.save_gtfs(con, tmp_path / "selected.zip")
         with c2g.load_gtfs(path) as restored:
-            restored_report = c2g.gtfs_generation_report(restored)
+            restored_report = c2g.get_gtfs_summary(restored)
             assert restored_report.keys() == report.keys()
             for key, frame in report.items():
                 assert_frame_equal(frame, restored_report[key])
@@ -376,7 +524,7 @@ class TestLoadOsmTransport:
             service_date="20261103",
             **options,
         ) as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert set(report["services"]["pattern_id"]) == expected
             assert set(con.table("stops").df()["stop_id"]) == {
                 "osm:node:1",
@@ -393,7 +541,7 @@ class TestLoadOsmTransport:
                 )
             output = c2g.save_gtfs(con, tmp_path / "selection.zip")
         with c2g.load_gtfs(output) as restored:
-            restored_report = c2g.gtfs_generation_report(restored)
+            restored_report = c2g.get_gtfs_summary(restored)
             assert restored_report.keys() == report.keys()
             for key, frame in report.items():
                 assert_frame_equal(frame, restored_report[key])
@@ -486,7 +634,7 @@ class TestLoadOsmTransport:
             service_date="20261103",
         ) as con:
             assert con.table("routes").df()["route_id"].tolist() == ["osm:relation:42"]
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"]["headway_secs"].tolist() == [900]
             assert (
                 report["assumptions"]
@@ -583,7 +731,7 @@ class TestLoadOsmTransport:
         with c2g.load_osm_transport(
             relation_ids=[42], group_headway_secs=1200, service_date="20261103"
         ) as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"]["headway_secs"].tolist() == [1200]
             assert report["services"]["group_headway_secs"].tolist() == [1200]
             assert (
@@ -598,7 +746,7 @@ class TestLoadOsmTransport:
             group_headway_secs=1200,
             service_date="20261103",
         ) as con:
-            assert c2g.gtfs_generation_report(con)["services"]["headway_secs"].tolist() == [300]
+            assert c2g.get_gtfs_summary(con)["services"]["headway_secs"].tolist() == [300]
 
     @pytest.mark.parametrize(
         ("tags", "periods", "headway", "active", "ignored"),
@@ -672,7 +820,7 @@ class TestLoadOsmTransport:
             lambda *_args, **_kwargs: io.BytesIO(json.dumps(osm_response).encode()),
         )
         with c2g.load_osm_transport(relation_ids=[42], service_date="20260105") as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             services = report["services"]
             assert list(zip(services["start_time"], services["end_time"], strict=True)) == periods
             assert set(services["headway_secs"]) == {headway}
@@ -702,6 +850,25 @@ class TestLoadOsmTransport:
                 68,
             ),
             ("10 @ (Mo)", [("06:00:00", "22:00:00")], [600], 96),
+            ("10 @ Mo", [("06:00:00", "22:00:00")], [600], 96),
+            (
+                "10 @ Mo 7:00-09:00",
+                [("06:00:00", "07:00:00"), ("07:00:00", "09:00:00"), ("09:00:00", "22:00:00")],
+                [900, 600, 900],
+                68,
+            ),
+            (
+                "10 @ Mo; 5 @ (Mo 07:00-09:00)",
+                [("06:00:00", "07:00:00"), ("07:00:00", "09:00:00"), ("09:00:00", "22:00:00")],
+                [600, 300, 600],
+                108,
+            ),
+            (
+                "10 @ (Su 23:00-32:00)",
+                [("06:00:00", "08:00:00"), ("08:00:00", "22:00:00")],
+                [600, 900],
+                68,
+            ),
             ("10 @ (Mo 07:00-09:00); 20 @ (Mo 08:00-10:00)", [("06:00:00", "22:00:00")], [900], 64),
             ("10 @ (Su 22:00-02:00); 20 @ (Mo 01:00-03:00)", [("06:00:00", "22:00:00")], [900], 64),
         ],
@@ -723,7 +890,7 @@ class TestLoadOsmTransport:
             lambda *_a, **_k: io.BytesIO(json.dumps(osm_response).encode()),
         )
         with c2g.load_osm_transport(relation_ids=[42], service_date="20260105") as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             daily = report["services"]
             assert list(zip(daily["start_time"], daily["end_time"], strict=True)) == periods
             assert daily["headway_secs"].astype(int).tolist() == headways
@@ -771,12 +938,12 @@ class TestLoadOsmTransport:
                 ("00:02:00", "00:02:30") if explicit else ("00:03:50", "00:04:20"),
                 ("00:12:00", "00:12:00"),
             ]
-            assumptions = c2g.gtfs_generation_report(con)["assumptions"]
+            assumptions = c2g.get_gtfs_summary(con)["assumptions"]
             timed = assumptions.query("table_name == 'assumptions' and field == 'travel_time_secs'")
             assert "estimated" in set(timed["kind"])
             assert set(timed.query("kind == 'user'")["value"].astype(float)) <= {120}
         with c2g.load_osm_transport(relation_ids=[42], speed_kph=36) as con:
-            ignored = c2g.gtfs_generation_report(con)["assumptions"].query("kind == 'ignored'")
+            ignored = c2g.get_gtfs_summary(con)["assumptions"].query("kind == 'ignored'")
             assert ignored["details"].str.contains("speed", case=False).any()
 
     def test_route_master_inheritance_and_shared_budget(
@@ -810,7 +977,7 @@ class TestLoadOsmTransport:
             lambda *_a, **_k: io.BytesIO(json.dumps(osm_response).encode()),
         )
         with c2g.load_osm_transport(relation_ids=[42, 43]) as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"]["departures"].sum() == 8
             assert report["edges"]["frequency"].eq(8).all()
             assert set(report["services"]["headway_secs"]) == {1800}
@@ -829,10 +996,10 @@ class TestLoadOsmTransport:
             )
         osm_response["elements"][-1]["tags"]["interval"] = "10"
         with c2g.load_osm_transport(relation_ids=[42, 43]) as con:
-            assert c2g.gtfs_generation_report(con)["services"]["departures"].sum() == 24
+            assert c2g.get_gtfs_summary(con)["services"]["departures"].sum() == 24
         osm_response["elements"][0]["tags"]["interval"] = "20"
         with c2g.load_osm_transport(relation_ids=[42, 43], service_date="20260105") as con:
-            assert sorted(c2g.gtfs_generation_report(con)["services"]["departures"]) == [6, 12]
+            assert sorted(c2g.get_gtfs_summary(con)["services"]["departures"]) == [6, 12]
 
     @pytest.mark.parametrize(
         ("tags", "reason"),
@@ -862,7 +1029,7 @@ class TestLoadOsmTransport:
             lambda *_a, **_k: io.BytesIO(json.dumps(osm_response).encode()),
         )
         with c2g.load_osm_transport(relation_ids=[42]) as con:
-            assumptions = c2g.gtfs_generation_report(con)["assumptions"]
+            assumptions = c2g.get_gtfs_summary(con)["assumptions"]
             if reason:
                 assert assumptions.query("kind == 'ignored'")["details"].str.contains(reason).all()
                 assert con.sql("SELECT agency_timezone FROM agency").fetchall() == [
@@ -904,7 +1071,7 @@ class TestLoadOsmTransport:
             lambda *_a, **_k: io.BytesIO(json.dumps(osm_response).encode()),
         )
         with c2g.load_osm_transport(relation_ids=[42]) as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             ignored = report["assumptions"].query("kind == 'ignored'")
             assert set(ignored["field"]) == {"route_master", "duration"}
             assert "12" in set(ignored["value"])
@@ -923,16 +1090,18 @@ class TestLoadOsmTransport:
             "urllib.request.urlopen",
             lambda *_a, **_k: io.BytesIO(json.dumps(osm_response).encode()),
         )
+        today = date.today()  # noqa: DTZ011 - generation uses the local calendar date
         with c2g.load_osm_transport(relation_ids=[42]) as con:
-            report = c2g.gtfs_generation_report(con)
-            assert report["services"]["date"].tolist() == [
-                f"202601{day:02d}" for day in range(3, 10)
+            report = c2g.get_gtfs_summary(con)
+            days = pd.date_range(today, periods=7)
+            assert report["services"]["date"].tolist() == days.strftime("%Y%m%d").tolist()
+            assert report["services"]["departures"].tolist() == [
+                24 if day.weekday() == 0 else 0 for day in days
             ]
-            assert report["services"]["departures"].tolist() == [0, 0, 24, 0, 0, 0, 0]
-            assert report["services"]["weekday"].iloc[0] == "Saturday"
+            assert report["services"]["weekday"].iloc[0] == today.strftime("%A")
             path = c2g.save_gtfs(con, tmp_path / "source.zip")
             with c2g.load_gtfs(path) as restored:
-                restored_report = c2g.gtfs_generation_report(restored)
+                restored_report = c2g.get_gtfs_summary(restored)
                 assert restored_report.keys() == report.keys()
                 for key, frame in report.items():
                     assert_frame_equal(frame, restored_report[key])
@@ -948,7 +1117,7 @@ class TestLoadOsmTransport:
         with c2g.load_osm_transport(
             relation_ids=[42], start_time="08:00:00", headway_secs=300, service_date="20260105"
         ) as con:
-            services = c2g.gtfs_generation_report(con)["services"]
+            services = c2g.get_gtfs_summary(con)["services"]
             assert services[["start_time", "end_time", "headway_secs"]].to_numpy().tolist() == [
                 ["08:00:00", "10:00:00", 300]
             ]
@@ -956,11 +1125,11 @@ class TestLoadOsmTransport:
         with c2g.load_osm_transport(
             services, relation_ids=[42], headway_secs=300, service_date="20260105"
         ) as con:
-            assert c2g.gtfs_generation_report(con)["services"]["departures"].tolist() == [3]
+            assert c2g.get_gtfs_summary(con)["services"]["departures"].tolist() == [3]
         with c2g.load_osm_transport(
             relation_ids=[42], use_source_tags=False, service_date="20260105"
         ) as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"]["departures"].tolist() == [64]
             assert (
                 report["assumptions"]
@@ -981,9 +1150,9 @@ class TestLoadOsmTransport:
             lambda *_args, **_kwargs: io.BytesIO(json.dumps(osm_response).encode()),
         )
         with c2g.load_osm_transport(relation_ids=[42], service_date="20000108") as con:
-            assert c2g.gtfs_generation_report(con)["services"]["departures"].tolist() == [12]
+            assert c2g.get_gtfs_summary(con)["services"]["departures"].tolist() == [12]
         with c2g.load_osm_transport(relation_ids=[42], calendar_dates=service_dates) as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"]["departures"].tolist() == [0]
             assert report["edges"].empty
 
@@ -1027,14 +1196,14 @@ class TestLoadOsmTransport:
         )
         shared = pd.DataFrame([{"service_id": "shared"}])
         with c2g.load_osm_transport(shared, relation_ids=[42, 43]) as con:
-            daily = c2g.gtfs_generation_report(con)["services"]
+            daily = c2g.get_gtfs_summary(con)["services"]
             assert daily["departures"].sum() == 4
             assert daily.loc[daily["pattern_id"].eq("osm:relation:42"), "departures"].eq(0).all()
             assert set(shared["service_id"]) == {"shared"}
         with c2g.load_osm_transport(
             relation_ids=[42], start_time="08:00:00", end_time="09:00:00"
         ) as con:
-            report = c2g.gtfs_generation_report(con)
+            report = c2g.get_gtfs_summary(con)
             assert report["services"]["departures"].tolist() == [4] * 7
             assert (
                 report["assumptions"]
@@ -1141,11 +1310,11 @@ class TestLoadOsmTransport:
                     assert_frame_equal(con.table(table).df(), direct.table(table).df())
                 assert (
                     con.sql(
-                        "SELECT count(*) FROM _city2graph_provenance WHERE kind='source'"
+                        "SELECT count(*) FROM _city2graph_metadata WHERE kind='source'"
                     ).fetchall()[0][0]
                     > 0
                 )
-                assert len(requests) == 1
+                assert len(requests) == 2
 
     @pytest.mark.parametrize(
         "problem",
@@ -1174,7 +1343,8 @@ class TestLoadOsmTransport:
             other["tags"]["ref"] = "Another route"
             osm_response["elements"].append(other)
         elif problem == "platform":
-            osm_response["elements"][2]["tags"]["name"] = "Unrelated"
+            osm_response["elements"][2]["tags"].pop("name")
+            osm_response["elements"][2]["lat"] = 51.01
         elif problem == "missing_point":
             del osm_response["elements"][1]["lat"]
 
@@ -1235,290 +1405,5 @@ class TestLoadOsmTransport:
                 ("Custom A",)
             ]
             assert con.sql(
-                "SELECT count(*) FROM _city2graph_provenance WHERE kind='override'"
+                "SELECT count(*) FROM _city2graph_metadata WHERE kind='override'"
             ).fetchall() == [(1,)]
-
-
-class TestLoadOvertureTransport:
-    def test_reuse_loaded_stops_and_numeric_directions(
-        self, monkeypatch: pytest.MonkeyPatch, transport_input: c2g.TransportData, tmp_path: Path
-    ) -> None:
-        monkeypatch.setattr(
-            "city2graph.data.load_overture_data",
-            lambda **_kwargs: {
-                "segment": gpd.GeoDataFrame(
-                    {"id": ["s"]},
-                    geometry=[LineString([(0, 51), (0.02, 51)])],
-                    crs=4326,
-                )
-            },
-        )
-        with c2g.create_gtfs(transport_input, service_date="20261103") as original:
-            expected = original.table("stop_times").df()
-            archive = c2g.save_gtfs(original, tmp_path / "source.zip")
-        with c2g.load_gtfs(archive) as loaded:
-            transport_input["stops"] = loaded.table("stops").df()
-        transport_input["patterns"]["direction_id"] = transport_input["patterns"][
-            "direction_id"
-        ].astype(float)
-        with c2g.load_overture_transport(
-            data=transport_input,
-            area=[-0.01, 50.9, 0.03, 51.1],
-            modes="bus",
-            service_date="20261103",
-        ) as con:
-            assert_frame_equal(expected, con.table("stop_times").df())
-            assert con.table("trips").df()["direction_id"].eq("0").all()
-
-    @pytest.mark.parametrize("value", [float("inf"), float("-inf")])
-    def test_nonfinite_route_type_precedes_network_access(
-        self, monkeypatch: pytest.MonkeyPatch, transport_input: c2g.TransportData, value: float
-    ) -> None:
-        def unexpected(*_args: object, **_kwargs: object) -> None:
-            pytest.fail("Invalid route_type must fail before any network access")
-
-        monkeypatch.setattr("city2graph.data.get_boundaries", unexpected)
-        monkeypatch.setattr("city2graph.data.load_overture_data", unexpected)
-        transport_input["routes"]["route_type"] = value
-        with pytest.raises(ValueError, match=r"routes row 0.*001.*route_type"):
-            c2g.load_overture_transport(
-                data=transport_input, place_name="Liverpool, UK", modes="bus"
-            )
-
-    @pytest.mark.parametrize(("modes", "count"), [("bus", 1), (["bus", "train"], 2), (None, 2)])
-    def test_mode_selection_and_shared_stops(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        transport_input: c2g.TransportData,
-        modes: str | list[str] | None,
-        count: int,
-    ) -> None:
-        transport_input["routes"] = pd.concat(
-            [
-                transport_input["routes"],
-                transport_input["routes"].assign(route_id="rail", route_type=2),
-            ],
-            ignore_index=True,
-        )
-        transport_input["patterns"].loc[1, "route_id"] = "rail"
-        before = {
-            name: frame.copy(deep=True)
-            for name, frame in cast("Mapping[str, pd.DataFrame]", transport_input).items()
-        }
-        calls = []
-
-        def fetch(**kwargs: object) -> dict[str, gpd.GeoDataFrame]:
-            calls.append(kwargs)
-            return {
-                "segment": gpd.GeoDataFrame(
-                    {"id": ["s"]}, geometry=[LineString([(0, 51), (0.02, 51)])], crs=4326
-                )
-            }
-
-        monkeypatch.setattr("city2graph.data.load_overture_data", fetch)
-        services = pd.DataFrame([{"pattern_id": "express", "headway_secs": 600}])
-        with c2g.load_overture_transport(
-            services,
-            data=transport_input,
-            area=[-0.01, 50.9, 0.03, 51.1],
-            modes=modes,
-            service_date="20261103",
-        ) as con:
-            assert len(con.table("routes").df()) == count
-            assert len(c2g.gtfs_generation_report(con)["services"]) == count
-            assert con.table("stops").df()["stop_id"].is_unique
-        assert len(calls) == 1
-        with c2g.load_overture_transport(
-            data=transport_input,
-            area=[-0.01, 50.9, 0.03, 51.1],
-            modes=["bus", "train"],
-            pattern_ids="express",
-        ) as con:
-            assert con.table("routes").df()["route_type"].tolist() == ["2"]
-        for name, frame in before.items():
-            assert_frame_equal(frame, cast("Mapping[str, pd.DataFrame]", transport_input)[name])
-
-    @pytest.mark.parametrize(
-        "options",
-        [
-            {"modes": []},
-            {"modes": "plane"},
-            {"modes": "ferry"},
-            {"pattern_ids": "missing"},
-            {"headway_sec": 600},
-            {"services": pd.DataFrame([{"headway_sec": 600}])},
-        ],
-    )
-    def test_mode_preflight_before_download(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        transport_input: c2g.TransportData,
-        options: dict[str, Any],
-    ) -> None:
-        def unexpected(**_kwargs: object) -> None:
-            pytest.fail("Invalid input must be rejected before downloading")
-
-        monkeypatch.setattr("city2graph.data.load_overture_data", unexpected)
-        with pytest.raises(ValueError, match=r"modes|pattern_ids|on_invalid|headway|services"):
-            c2g.load_overture_transport(
-                data=transport_input, area=[-0.01, 50.9, 0.03, 51.1], **options
-            )
-
-    def test_without_operating_parameters(
-        self, monkeypatch: pytest.MonkeyPatch, transport_input: c2g.TransportData
-    ) -> None:
-        monkeypatch.setattr(
-            "city2graph.data.load_overture_data",
-            lambda **_kwargs: {
-                "segment": gpd.GeoDataFrame(
-                    {"id": ["s"]}, geometry=[LineString([(0, 51), (0.02, 51)])], crs=4326
-                )
-            },
-        )
-        transport_input["stop_sequences"] = transport_input["stop_sequences"].drop(
-            columns="travel_time_secs"
-        )
-        with c2g.load_overture_transport(
-            data=transport_input, area=[-0.01, 50.9, 0.03, 51.1]
-        ) as con:
-            report = c2g.gtfs_generation_report(con)
-            assert report["services"].groupby("pattern_id")["departures"].sum().to_dict() == {
-                "express": 224,
-                "local": 224,
-            }
-            assert set(report["assumptions"].query("field == 'speed_kph'")["kind"]) == {"default"}
-
-    def test_loader_matches_direct_generator(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        transport_input: c2g.TransportData,
-        agency: pd.DataFrame,
-        service_dates: pd.DataFrame,
-        departures: pd.DataFrame,
-    ) -> None:
-        calls = []
-        raw = {
-            "segment": gpd.GeoDataFrame(
-                {"id": ["segment-1"], "names": [{"primary": "Road"}]},
-                geometry=[LineString([(0, 51), (0.01, 51), (0.02, 51)])],
-                crs=4326,
-            )
-        }
-
-        def load(**kwargs: object) -> dict[str, gpd.GeoDataFrame]:
-            calls.append(kwargs)
-            return raw
-
-        monkeypatch.setattr("city2graph.data.load_overture_data", load)
-        data = dict(cast("dict[str, pd.DataFrame]", transport_input))
-        data["patterns"] = pd.DataFrame(data["patterns"].drop(columns="geometry"))
-        data["patterns"]["segment_ids"] = [["segment-1"], ["segment-1"]]
-        with (
-            c2g.load_overture_transport(
-                departures,
-                agency=agency,
-                data=data,
-                area=[-0.01, 50.9, 0.03, 51.1],
-                release="2026-10-21.0",
-                route_name="Road",
-                calendar_dates=service_dates,
-                dwell_time_secs=0,
-            ) as con,
-            c2g.create_gtfs(
-                transport_input,
-                departures,
-                agency=agency,
-                calendar_dates=service_dates,
-                dwell_time_secs=0,
-            ) as direct,
-        ):
-            for table in ("trips", "stop_times", "shapes"):
-                assert_frame_equal(con.table(table).df(), direct.table(table).df())
-            assert calls[0]["save_to_file"] is False
-            assert calls[0]["release"] == "2026-10-21.0"
-
-    def test_missing_operating_inputs(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        agency: pd.DataFrame,
-        service_dates: pd.DataFrame,
-        departures: pd.DataFrame,
-    ) -> None:
-        monkeypatch.setattr(
-            "city2graph.data.load_overture_data",
-            lambda **_kwargs: {
-                "segment": gpd.GeoDataFrame(
-                    {"id": ["s"]}, geometry=[LineString([(0, 0), (1, 1)])], crs=4326
-                )
-            },
-        )
-        with pytest.raises(ValueError, match="missing input table"):
-            c2g.load_overture_transport(
-                departures,
-                agency=agency,
-                data={},
-                area=[0, 0, 1, 1],
-                calendar_dates=service_dates,
-                dwell_time_secs=0,
-            )
-
-    def test_empty_result(
-        self, monkeypatch: pytest.MonkeyPatch, agency: pd.DataFrame, departures: pd.DataFrame
-    ) -> None:
-        monkeypatch.setattr("city2graph.data.load_overture_data", lambda **_kwargs: {})
-        with pytest.raises(ValueError, match="No matching"):
-            c2g.load_overture_transport(departures, agency=agency, data={}, area=[0, 0, 1, 1])
-
-    @pytest.mark.parametrize("encoding", ["mapping", "json", "literal"])
-    def test_selected_station_candidates(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        transport_input: c2g.TransportData,
-        agency: pd.DataFrame,
-        service_dates: pd.DataFrame,
-        departures: pd.DataFrame,
-        encoding: str,
-    ) -> None:
-        source = gpd.GeoDataFrame(
-            {
-                "id": ["a", "b"],
-                "names": [{"primary": "A"}, {"primary": "B"}],
-                "categories": [{"primary": "train_station"}] * 2,
-            },
-            geometry=[Point(0, 51), Point(0.01, 51)],
-            crs=4326,
-        )
-        if encoding != "mapping":
-            for field in ("names", "categories"):
-                source[field] = source[field].map(json.dumps if encoding == "json" else str)
-        calls = []
-
-        def load(**kwargs: object) -> dict[str, gpd.GeoDataFrame]:
-            calls.append(kwargs)
-            return {
-                "place": source,
-                "segment": gpd.GeoDataFrame(
-                    {"id": ["s"]}, geometry=[LineString([(0, 51), (0.01, 51)])], crs=4326
-                ),
-            }
-
-        monkeypatch.setattr("city2graph.data.load_overture_data", load)
-        data = {
-            "routes": transport_input["routes"],
-            "patterns": transport_input["patterns"].iloc[:1],
-            "stop_sequences": transport_input["stop_sequences"].iloc[:2].copy(),
-        }
-        data["stop_sequences"]["stop_id"] = ["overture:a", "overture:b"]
-        with c2g.load_overture_transport(
-            departures.iloc[:1],
-            agency=agency,
-            data=data,
-            area=[-0.01, 50.9, 0.03, 51.1],
-            calendar_dates=service_dates,
-            dwell_time_secs=0,
-        ) as con:
-            assert con.sql("SELECT stop_id FROM stops ORDER BY stop_id").fetchall() == [
-                ("overture:a",),
-                ("overture:b",),
-            ]
-            assert calls[0]["types"] == ["segment", "connector", "place"]

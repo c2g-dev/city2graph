@@ -14,13 +14,7 @@ import shutil
 import subprocess
 import tempfile
 import warnings
-from collections.abc import Mapping
-from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
-from typing import Unpack
-
-import duckdb
 
 # Third-party imports
 import geopandas as gpd
@@ -42,23 +36,12 @@ from shapely.geometry import MultiPolygon
 from shapely.geometry import Polygon
 from shapely.ops import substring
 
-from ._gtfs.schema import GenerationOptions
-from ._gtfs.schema import TransportData
-from ._gtfs.sources import _OSM_ENDPOINT
-from ._gtfs.sources import _OSM_TIMEOUT
-from ._gtfs.sources import _OVERWRITE_SOURCE
-from ._gtfs.sources import _USE_SOURCE_TAGS
-from ._gtfs.sources import _load_osm_transport
-from ._gtfs.sources import _load_overture_transport
-from ._gtfs.sources import _SourceIO
 from .utils import clip_graph
 
 # Public API definition
 __all__ = [
     "get_boundaries",
-    "load_osm_transport",
     "load_overture_data",
-    "load_overture_transport",
     "process_overture_segments",
 ]
 
@@ -1104,204 +1087,3 @@ def _calculate_passable_intervals(
         passable_intervals.append((current, 1.0))
 
     return passable_intervals
-
-
-def load_osm_transport(  # noqa: PLR0913 - source selection and shared generation options
-    services: pd.DataFrame | None = None,
-    *,
-    agency: pd.DataFrame | None = None,
-    area: list[float] | Polygon | MultiPolygon | gpd.GeoSeries | gpd.GeoDataFrame | None = None,
-    place_name: str | None = None,
-    route_name: str | None = None,
-    route_ref: str | None = None,
-    relation_ids: list[int] | None = None,
-    modes: str | Sequence[str] | None = None,
-    pattern_ids: str | Sequence[str] | None = None,
-    on_invalid: Literal["raise", "skip"] = "raise",
-    data: TransportData | Mapping[str, pd.DataFrame] | None = None,
-    overwrite_source: bool = _OVERWRITE_SOURCE,
-    endpoint: str = _OSM_ENDPOINT,
-    timeout: float = _OSM_TIMEOUT,
-    use_source_tags: bool = _USE_SOURCE_TAGS,
-    **gtfs_options: Unpack[GenerationOptions],
-) -> duckdb.DuckDBPyConnection:
-    """
-    Retrieve OSM public transport relations and create a GTFS feed.
-
-    Relation IDs identify patterns as ``osm:relation:<id>``. Ordered PTv2 stop
-    members are retained, including stops outside the selection boundary.
-    Operating conditions are passed to the shared create_gtfs implementation.
-
-    Parameters
-    ----------
-    services : pandas.DataFrame, optional
-        Optional operating conditions referring to the OSM pattern identifiers.
-        Omit the table for all patterns with source-first completion; omit
-        pattern_id to apply supplied periods to every selected pattern.
-    agency : pandas.DataFrame, optional
-        Explicit agency metadata. Missing metadata uses available source fields,
-        unique geographical timezone inference and warned placeholders.
-    area : list, Polygon, MultiPolygon, GeoSeries or GeoDataFrame, optional
-        WGS84 bounding box or polygon selection. Exclusive with place_name.
-        May be omitted when relation_ids is supplied.
-    place_name : str, optional
-        Place boundary to resolve with get_boundaries.
-    route_name : str, optional
-        Exact route-name filter. Ambiguous matches require relation_ids.
-    route_ref : str, optional
-        Exact route reference filter within the selected area.
-    relation_ids : list of int, optional
-        Explicit route relation IDs. These select complete relations.
-    modes : str or sequence of str, optional
-        Select tram (including light_rail), subway, train, bus, trolleybus,
-        ferry, monorail or funicular. Defaults to all supported modes.
-        Combined with relation_ids and pattern_ids by intersection.
-        Also filters supplemental routes by their effective route_type.
-        Documented extended GTFS types use the corresponding mode group;
-        original route_type values are preserved.
-    pattern_ids : str or sequence of str, optional
-        Additional explicit pattern selection. Intersects modes and relation_ids.
-        Unlisted service patterns otherwise remain in the generated feed.
-        Applies to supplemental patterns too. Mode-excluded source IDs are known
-        from candidate tags, without downloading their member geometry.
-    on_invalid : {"raise", "skip"}, default "raise"
-        Report all invalid source relations together, or explicitly exclude them
-        with a warning and persisted reasons. Network and explicit-input errors
-        are never skipped; an empty result always raises an error.
-    data : mapping of str to pandas.DataFrame, optional
-        Supplemental routes, stops, patterns or stop_sequences using common IDs.
-        Supplied values are validated before retrieval, including excluded rows.
-        Missing source route names and stop information may be completed here.
-    overwrite_source : bool, default False
-        Allow explicit replacement of source fields and stopping sequences.
-    endpoint : str, default "https://overpass-api.de/api/interpreter"
-        Configurable Overpass endpoint.
-    timeout : float, default 180
-        HTTP and Overpass timeout in seconds.
-    use_source_tags : bool, default True
-        Adopt supported interval, opening_hours, duration and interval:conditional
-        tags below explicit overrides. Unambiguous parent metadata can be inherited.
-        Unsupported tags and rejection reasons remain in the generation report.
-    **gtfs_options
-        Calendar, timing, headway, representative-date and optional-table
-        overrides forwarded to create_gtfs, including group_headway_secs and
-        pattern selection. Missing values use simple-v1. Unlisted service patterns remain.
-
-    Returns
-    -------
-    duckdb.DuckDBPyConnection
-        Generated feed ready for analysis and save_gtfs.
-
-    Raises
-    ------
-    ValueError
-        If selection is empty, ambiguous or cannot supply the required inputs.
-    RuntimeError
-        If Overpass fails or returns an incomplete response.
-    """
-    return _load_osm_transport(
-        _SourceIO(_prepare_area_and_bbox, get_boundaries, load_overture_data),
-        services=services,
-        agency=agency,
-        area=area,
-        place_name=place_name,
-        route_name=route_name,
-        route_ref=route_ref,
-        relation_ids=relation_ids,
-        modes=modes,
-        pattern_ids=pattern_ids,
-        on_invalid=on_invalid,
-        data=data,
-        overwrite_source=overwrite_source,
-        endpoint=endpoint,
-        timeout=timeout,
-        use_source_tags=use_source_tags,
-        **gtfs_options,
-    )
-
-
-def load_overture_transport(
-    services: pd.DataFrame | None = None,
-    *,
-    agency: pd.DataFrame | None = None,
-    data: TransportData | Mapping[str, pd.DataFrame],
-    area: list[float] | Polygon | MultiPolygon | gpd.GeoSeries | gpd.GeoDataFrame | None = None,
-    place_name: str | None = None,
-    release: str | None = None,
-    route_name: str | None = None,
-    modes: str | Sequence[str] | None = None,
-    pattern_ids: str | Sequence[str] | None = None,
-    overwrite_source: bool = _OVERWRITE_SOURCE,
-    **gtfs_options: Unpack[GenerationOptions],
-) -> duckdb.DuckDBPyConnection:
-    """
-    Retrieve Overture infrastructure and create explicitly defined GTFS service.
-
-    Overture supplies physical infrastructure, not ordered public transport
-    services. Supply routes, patterns and stop_sequences in data. Patterns may
-    include an explicitly ordered segment_ids list to construct their shape;
-    reverse_shape=True explicitly reverses that alignment.
-
-    Parameters
-    ----------
-    services : pandas.DataFrame, optional
-        Optional operating conditions for supplied pattern identifiers. Omit the
-        table for all patterns with simple-v1 completion; omit pattern_id to apply
-        supplied periods to every selected pattern.
-    agency : pandas.DataFrame, optional
-        Explicit agency metadata. Missing metadata uses available source fields,
-        unique geographical timezone inference and warned placeholders.
-    data : mapping of str to pandas.DataFrame
-        Common generator inputs supplementing retrieved stop candidates.
-        Candidate stop IDs are ``overture:<id>``. Stops can also be supplied
-        entirely by the caller. No stopping order or route is inferred.
-    area : list, Polygon, MultiPolygon, GeoSeries or GeoDataFrame, optional
-        Geographical extent, exclusive with place_name.
-    place_name : str, optional
-        Place boundary resolved with get_boundaries.
-    release : str, optional
-        Overture release passed to load_overture_data. Defaults to the newest
-        release known to the installed client; the actual release is recorded.
-    route_name : str, optional
-        Exact primary-name filter for infrastructure candidates within the area,
-        not a public transport service-name search.
-    modes : str or sequence of str, optional
-        Select supplied routes by GTFS route_type: tram (including light_rail),
-        subway, train, bus, trolleybus, ferry, monorail or funicular.
-        Documented extended GTFS types use the corresponding mode group,
-        including 701 for bus and 109 for train; original codes are preserved.
-        Defaults to all supplied routes. Infrastructure is still downloaded by
-        area; this filter does not promise a reduction in network traffic.
-    pattern_ids : str or sequence of str, optional
-        Select supplied patterns in addition to modes. Unlisted service patterns
-        otherwise remain and receive completed operating conditions.
-    overwrite_source : bool, default False
-        Allow explicit replacement of retrieved stop attributes.
-    **gtfs_options
-        Calendar, timing, group_headway_secs and pattern_ids forwarded to
-        create_gtfs. Unlisted service patterns remain and use simple-v1 completion.
-
-    Returns
-    -------
-    duckdb.DuckDBPyConnection
-        Generated feed ready for analysis and save_gtfs.
-
-    Raises
-    ------
-    ValueError
-        If candidate selection is empty or required route/order inputs are incomplete.
-    """
-    return _load_overture_transport(
-        _SourceIO(_prepare_area_and_bbox, get_boundaries, load_overture_data),
-        services=services,
-        agency=agency,
-        data=data,
-        area=area,
-        place_name=place_name,
-        release=release,
-        route_name=route_name,
-        modes=modes,
-        pattern_ids=pattern_ids,
-        overwrite_source=overwrite_source,
-        **gtfs_options,
-    )

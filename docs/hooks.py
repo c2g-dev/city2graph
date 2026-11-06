@@ -7,39 +7,41 @@ import hashlib
 import io
 import json
 import re
+import shutil
+import subprocess
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from bs4 import BeautifulSoup
-from git import Repo
 from mkdocs.config.defaults import MkDocsConfig
 from mkdocs.plugins import event_priority
-from mkdocs.structure.files import Files
 from mkdocs.structure.pages import Page
+from mkdocs.structure.files import Files
 from PIL import Image, UnidentifiedImageError
 
 
 @event_priority(100)  # type: ignore[untyped-decorator]
 def on_files(files: Files, config: MkDocsConfig) -> Files:
-    """Avoid inventing Git revision dates for pages not yet committed."""
+    """Show Git revision dates only for pages present in the current commit.
+
+    New local pages have no revision date. Excluding them also prevents the
+    date plugin from computing inconsistent first/last build-time fallbacks.
+    """
     plugin = config.plugins.get("git-revision-date-localized")
-    if plugin is None:
+    git = shutil.which("git")
+    if plugin is None or git is None:
         return files
-    root = Path(__file__).parents[1]
-    repo = Repo(root)
-    committed = {item.path for item in repo.head.commit.tree.traverse() if item.type == "blob"}
-    excluded = plugin.config["exclude"]
-    for file in files.documentation_pages():
-        if file.abs_src_path is None:
-            continue
-        source = Path(file.abs_src_path)
-        if (
-            source.is_relative_to(root)
-            and str(source.relative_to(root)) not in committed
-            and file.src_uri not in excluded
-        ):
-            excluded.append(file.src_uri)
+    result = subprocess.run(
+        [git, "-C", config.docs_dir, "ls-tree", "-r", "--name-only", "HEAD"],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode:
+        return files
+    committed = set(result.stdout.splitlines())
+    excluded = set(plugin.config["exclude"])
+    excluded.update(file.src_uri for file in files if file.is_documentation_page() and file.src_uri not in committed)
+    plugin.config["exclude"] = sorted(excluded)
     return files
 
 
@@ -48,8 +50,51 @@ def on_page_markdown(markdown: str, **_kwargs: object) -> str:
     if "<!-- gtfs-defaults:" not in markdown:
         return markdown
     registry = json.loads(
-        (Path(__file__).parents[1] / "city2graph/_gtfs/defaults.json").read_text(encoding="utf-8")
+        (Path(__file__).parents[1] / "city2graph/gtfs/defaults.json").read_text(encoding="utf-8")
     )
+    values = {field: entry["value"] for field, entry in registry["settings"].items()}
+    resolution = [
+        "| Condition | Your input | Source value, if available | Default |",
+        "|---|---|---|---|",
+        "| Interval | `services.headway_secs`, then `headway_secs` or `group_headway_secs` | "
+        "Interpreted base and conditional intervals | "
+        f"{values['group_headway_secs']} s shared across a route-direction group |",
+        "| Departure window | Service-row boundary, then `start_time` / `end_time` | "
+        f"Interpreted departure periods | {values['start_time']}–{values['end_time']} |",
+        "| Leg time | Complete offsets or leg time, then per-leg or global speed | "
+        "Interpreted route duration | Distance / [mode speed](#default-mode-speeds) |",
+        "| Additional dwell | Included in complete offsets; otherwise per-stop or global dwell | "
+        f"No source field used | {values['dwell_time_secs']} s |",
+        "| Active dates | `service_date`, or `calendar` / `calendar_dates` | "
+        "Source weekday restrictions apply within these dates | "
+        f"{values['service_days']} reference days from the {values['service_date']} |",
+        "| Agency metadata | `agency` table | Interpreted operator, URL and timezone | "
+        "Geographical timezone inference; placeholders for unresolved fields |",
+    ]
+    controls = [
+        "| Parameter | What it sets | If omitted |",
+        "|---|---|---|",
+        "| `headway_secs` (s) | Interval for each pattern | Source interval, then group allocation |",
+        "| `group_headway_secs` (s) | Shared interval for a route-direction group | "
+        f"Source intervals, otherwise a shared {values['group_headway_secs']} s interval |",
+        "| `start_time` / `end_time` | First-stop departure window | Source hours, otherwise "
+        f"{values['start_time']}–{values['end_time']} |",
+        "| `speed_kph` (km/h) | Speed for untimed legs | Usable source duration, otherwise "
+        f"mode speed, e.g. {registry['speeds_kph']['1']} km/h for subway |",
+        "| `dwell_time_secs` (s) | Additional dwell at each stop | "
+        f"{values['dwell_time_secs']} s |",
+        "| `distance_method` | `auto`, `shape` or `geodesic` distance estimation | "
+        f"`{values['distance_method']}` |",
+        "| `service_date` | Single-day synthetic timetable (`YYYYMMDD`); determines the weekday | Supplied calendar, otherwise "
+        f"{values['service_days']} reference days from the {values['service_date']} |",
+        "| `calendar` / `calendar_dates` | Weekdays, date ranges and exceptions | "
+        "A calendar for the selected date or reference week |",
+        "| `services` | Per-pattern intervals, windows or fixed departures | "
+        "Complete all selected patterns from source/default values |",
+        "| `agency` | Operator name, URL and timezone | Source metadata, then geographical "
+        "timezone inference and placeholder metadata |",
+        "| `optional_tables` | Additional GTFS tables | None added |",
+    ]
     speeds = [
         "| Mode (`route_type`) | Average speed (km/h) | Extended route types |",
         "|---|---:|---|",
@@ -60,19 +105,39 @@ def on_page_markdown(markdown: str, **_kwargs: object) -> str:
         + " |"
         for mode, speed in registry["speeds_kph"].items()
     )
-    settings = [
-        "| Setting | Default and unit | Applies to | Reason and evidence status | Override |",
-        "|---|---|---|---|---|",
-    ]
-    for field, entry in registry["settings"].items():
-        value = json.dumps(entry["value"]) if isinstance(entry["value"], bool) else str(entry["value"])
-        settings.append(
-            f"| `{field}` | `{value}` ({entry['unit']}) | {entry['scope']} | "
-            f"{entry['reason']} **{entry['evidence']}.** | `{entry['override']}` |"
+    setting_groups = {
+        "Operating assumptions": (
+            "group_headway_secs", "start_time", "end_time", "dwell_time_secs",
+            "exact_times", "distance_method",
+        ),
+        "Reference dates": ("service_date", "service_days", "weekday_policy"),
+        "Agency metadata": ("agency_name", "agency_url", "agency_timezone"),
+        "OSM retrieval": ("use_source_tags", "endpoint", "timeout", "overwrite_source"),
+        "Saving and loading": ("include_metadata", "overwrite"),
+    }
+    for title, fields in setting_groups.items():
+        settings = [
+            "| Setting | Default and unit | Scope and override |",
+            "|---|---|---|",
+        ]
+        for field in fields:
+            entry = registry["settings"][field]
+            value = json.dumps(entry["value"]) if isinstance(entry["value"], bool) else str(entry["value"])
+            settings.append(
+                f"| `{field}` | `{value}` ({entry['unit']}) | {entry['scope']}. "
+                f"Override: {entry['override']}. |"
+            )
+        slug = title.lower().replace(" ", "-")
+        markdown = markdown.replace(f"<!-- gtfs-defaults:{slug} -->", "\n".join(settings))
+    return (
+        markdown.replace(
+            "    <!-- gtfs-defaults:controls -->",
+            "\n".join(f"    {line}" for line in controls),
         )
-    return markdown.replace(
-        "<!-- gtfs-defaults:speeds -->", "\n".join(speeds)
-    ).replace("<!-- gtfs-defaults:settings -->", "\n".join(settings))
+        .replace("<!-- gtfs-defaults:controls -->", "\n".join(controls))
+        .replace("<!-- gtfs-defaults:resolution -->", "\n".join(resolution))
+        .replace("<!-- gtfs-defaults:speeds -->", "\n".join(speeds))
+    )
 
 
 def _asset(data: bytes, suffix: str, config: MkDocsConfig) -> str:

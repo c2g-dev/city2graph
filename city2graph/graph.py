@@ -154,7 +154,8 @@ def _get_last_occurrence_indexer(
         Integer positions of ``ids`` in ``index``, with ``-1`` for misses.
     """
     if index.is_unique:
-        return index.get_indexer(ids)
+        positions: np.ndarray[tuple[int, ...], np.dtype[np.int64]] = index.get_indexer(ids)
+        return positions
 
     keep_mask = ~index.duplicated(keep="last")
     kept_positions = np.flatnonzero(keep_mask)

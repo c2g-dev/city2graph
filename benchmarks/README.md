@@ -1,135 +1,185 @@
-# Scalability refactoring
+# Benchmarks
 
-These measurements support [#266](https://github.com/c2g-dev/city2graph/issues/266).
-Correctness tests remain under `tests/`; benchmarks have no timing assertions and
-are not part of pytest.
+These commands measure public APIs and evaluate synthetic GTFS against supplied
+reference data. Run them from the repository root after
+`uv sync --extra cpu --group dev`. Results are JSONL on stdout; diagnostic messages
+use stderr. Store measurements under the ignored `benchmarks/results/` directory.
+Correctness tests live under `tests/` and have no timing thresholds.
 
-## Reproduce the measurements
-
-Run from a development environment with the CPU extra installed:
+## Performance measurements
 
 ```bash
-uv run python benchmarks/scalability.py > current.jsonl
-uv run python benchmarks/scalability.py --package-root /path/to/baseline-checkout > baseline.jsonl
+mkdir -p benchmarks/results
+uv run python -m benchmarks.scalability > benchmarks/results/spatial.jsonl
+uv run python -m benchmarks.gtfs_performance > benchmarks/results/gtfs.jsonl
 ```
 
-Use the same environment and the baseline checkout at `8cffe2d`. Each case and
-input size runs in a fresh process. Run the two commands sequentially on an idle
-machine. A single case can be selected with `--case weighted --size 4000`.
+Both commands accept `--case`, `--size`, `--seed` (default 42), `--repeat`
+(default 3), `--warmup` (default 1) and `--package-root`. An explicit size applies
+to every selected case. Select a small case while developing a workload:
 
-The JSON lines include:
+```bash
+uv run python -m benchmarks.scalability --case weighted --size 100
+uv run python -m benchmarks.gtfs_performance --case generate-fixed --size 10
+```
 
-- Median elapsed time of three runs without instrumentation.
-- Peak Python allocations from a separate `tracemalloc` run. This is not RSS and
-  excludes some allocations made by native libraries.
-- Process peak RSS, including imported libraries, inputs and outputs. On macOS
-  the native RSS value is bytes; on Linux the script converts KiB to bytes.
-- Maximum returned distance-array size, maximum intermediate join row count,
-  network traversal count, complete-path node references and enriched edge count.
-- Python, operating system and dependency versions, plus the imported package path.
+Each case, size and measurement phase uses a fresh process with a fixed Python
+hash seed. Input preparation and output cleanup are outside the timed operation.
+Outputs stay alive until the timer or memory reading has completed.
 
-Point samples use NumPy generator seed 42 and the unit square, with EPSG:3857.
-Weighted metapaths use a unit-cost chain with every node as an endpoint and a
-threshold of 1. Ordinary metapaths use layers of sizes `1, n, 1, n, 1` and complete
-connections between adjacent layers. Network k-nearest neighbours use a road
-chain and 20 points at its first 20 nodes, with `k=1`. Waxman uses `beta=0.00001`,
-`r0=1` and seed 42. MST uses Manhattan distance. Gabriel and relative neighbourhood
-measurements use the same seeded point samples.
+| Metric | Definition |
+| --- | --- |
+| `samples_seconds`, `median_seconds` | Uninstrumented wall-clock samples after warm-up. |
+| `traced_peak_bytes` | A separate, single operation measured with `tracemalloc`; includes Python allocations but excludes some native allocations. |
+| `process_peak_rss_bytes` | A separate, uninstrumented process high-water mark, including imports and prepared inputs. This is total process memory, not incremental operation memory. |
+| `output` | Workload-specific row, edge or archive-byte counts, checked across repetitions and phases. |
 
-## Compatibility and remaining costs
+Run comparisons sequentially on an otherwise idle machine. OS caches, native
+allocators, library versions and CPU state can affect measurements. The memory
+phases do not include warm-up; the time phase reports warm operation performance.
 
-Public signatures, defaults and materialised return formats are unchanged. The
-refactoring preserves node/edge identity and ordering, CRS, geometry orientation,
-metadata, seeded selection and the original exact distance-boundary predicates.
-Record batching retains pandas' nullable scalar conversions; feature tensors
-continue to own their storage.
+## Workloads
 
-- Weighted shortest paths use source batches of at most 256 rows and approximately
-  8 MiB per float64 distance array. At least one full distance row is necessary;
-  the caller consuming a generator can briefly retain the preceding batch.
-- Waxman consumes every original random draw in row order, including discarded
-  diagonal and lower-triangle draws. Temporary matrices are bounded, but time is
-  still quadratic and dense outputs still require quadratic storage.
-- Directed metapath counts and provably exactly representable integer-valued sum/mean
-  attributes can be aggregated after each hop. Numeric strings follow the same
-  conversion as the original reducers. Floating-point cancellation, missing-value
-  means, arbitrary reducers and undirected path-signature deduplication retain
-  the existing enumerating implementation. Their path-count-dependent cost remains.
-- Network neighbour selection retains one predecessor tree at a time and builds
-  only selected geometries. Target layers share each source-layer traversal.
-  Network MST selects scalar candidates before reconstructing tree geometry; some
-  source traversals are repeated for selected tree edges to avoid retaining all
-  predecessor trees.
-- MST still retains quadratic scalar candidates for non-Euclidean metrics.
-  Legacy candidate-set order is necessary to preserve equal-weight edge selection
-  and output order. It no longer constructs a complete attributed NetworkX graph
-  or a geometry for every candidate on finite inputs with unique node IDs.
-  Duplicate IDs and non-finite inputs retain the legacy NetworkX path, including
-  its validation behaviour. String-ID tie order remains dependent on
-  Python's hash seed, as in the baseline.
-- Morphology shares the nearest-node buffer graph and its distance field across
-  requested distances. The separate edge-snapped field and existing shared base
-  tessellation retain their original semantics. Building prefiltering and local
-  enclosure retries are deliberately unchanged: reducing their context has not
-  been shown to preserve boundary geometry.
-- Concave-hull intersection arrays are batched. Its neighbour cache has an 8 MiB
-  retention budget; query sizes survive eviction so ties are reproduced when an
-  array is recomputed. These changes do not make every hull walk linear.
-- Overture stdout is spooled to temporary files; GDAL receives a path rather than
-  a complete Python GeoJSON string. Temporary files are removed even on failure.
-  Saved filenames and formats remain unchanged.
-- GTFS timestamp conversion works on unique time/date pairs and maps results back
-  in original row order. OD cleaning and masks use row batches. Both APIs still
-  return complete tables, whose storage remains proportional to output size.
+Spatial point inputs use seeded NumPy samples in a unit square with EPSG:3857.
 
-Correctness changes, including PyG type selection in #253, are outside this
-diff; fixes already merged into main are retained.
+| Case | Input and operation | Default sizes |
+| --- | --- | --- |
+| `weighted` | Unit-cost chain; weighted metapaths with threshold 1 and all nodes as endpoints. | 1,000 / 2,000 / 4,000 nodes |
+| `paths` | Layers `1, n, 1, n, 1`, fully connected between neighbours; directed metapath aggregation. | 100 / 200 / 400 branches |
+| `network` | Road chain and 20 points on its first nodes; network kNN with `k=1`. | 500 / 1,000 / 2,000 road nodes |
+| `waxman` | Seeded points; `beta=0.00001`, `r0=1`, seeded edge selection. | 1,000 / 2,000 / 4,000 points |
+| `mst` | Seeded points; Manhattan minimum spanning tree. | 100 / 200 / 400 points |
+| `gabriel` | Seeded points; Gabriel graph. | 1,000 / 2,000 / 4,000 points |
+| `rng` | Seeded points; relative neighbourhood graph. | 1,000 / 2,000 / 4,000 points |
 
-## Local results (2 November 2026)
+GTFS cases combine `generate`, `save`, `load` or `summary` with `fixed` or
+`frequency`, for example `load-frequency`. Sizes are 10, 100 and 1,000 patterns,
+each with its own route and the same 20 ordered stops. Seeded leg durations are
+40–80 seconds, with zero dwell and an explicit UTC agency. The fixed service
+date is 2000-01-03. Fixed trips leave at 08:00; frequency services run 06:00–22:00
+with a 600-second headway. Saved feeds include metadata.
 
-Baseline `8cffe2d` and the refactoring used the same environment: Python 3.13.5,
-NumPy 2.5.4, pandas 3.1.0 and GeoPandas 1.2.0 on macOS 26.1 arm64.
-The final refactoring is based on main at `924f85b`. Weighted-metapath runs
-receive a fresh edge dictionary each time, preserving the API's existing input
-mutation without allowing one measurement to affect the next. The table shows
-audit baseline → refactored values; MB is decimal.
+Generated input hashes cover the GTFS tables and conditions. Spatial hashes
+identify the versioned input recipe, size and seed. Geometry and timetable
+correctness are covered by the public API tests; output counts are a lightweight
+check that measurements performed the same amount of work.
 
-| Workload | Median time (s) | Peak traced allocations (MB) | Process peak RSS (MB) |
-| --- | ---: | ---: | ---: |
-| Weighted metapaths, 4,000 nodes | 0.0813 → 0.0847 | 131.17 → 18.99 | 679.6 → 567.8 |
-| Metapaths, 400 branches | 0.0070 → 0.0072 | 25.85 → 0.14 | 562.5 → 544.6 |
-| Network kNN, 2,000 road nodes / 20 points | 0.2699 → 0.0541 | 34.97 → 2.67 | 586.7 → 550.8 |
-| Waxman, 4,000 points | 0.2107 → 0.1803 | 449.94 → 34.72 | 1062.6 → 583.2 |
-| Manhattan MST, 400 points | 0.6365 → 0.0774 | 55.99 → 21.08 | 688.5 → 582.7 |
-| Gabriel, 4,000 points | 0.7276 → 0.2509 | 10.26 → 10.27 | 568.8 → 571.7 |
-| Relative neighbourhood, 4,000 points | 1.4380 → 0.2953 | 8.43 → 8.43 | 560.8 → 563.6 |
+## Compare results
 
-The weighted distance array decreased from 128 MB to 8.192 MB. The largest
-ordinary-metapath join decreased from 160,000 rows to 400. Network kNN used
-20 traversals instead of 40, without complete path lists to all reachable nodes.
-MST enriched 399 edges instead of 79,800. All 21 workload/size combinations
-returned the same output edge counts.
+Use the same harness and dependency environment for both checkouts:
 
-Small ordinary-metapath inputs pay additional aggregation overhead: at 100
-branches the median increased from 0.0040 to 0.0074 seconds, while traced peak
-allocations fell from 1.67 MB to 0.09 MB. These measurements establish memory
-and scaling improvements, not a guarantee that every call is faster.
+```bash
+uv run python -m benchmarks.scalability --package-root /path/to/checkout > benchmarks/results/baseline.jsonl
+uv run python -m benchmarks.scalability > benchmarks/results/current.jsonl
+uv run python -m benchmarks.compare benchmarks/results/baseline.jsonl benchmarks/results/current.jsonl
+```
 
-Full results at all input sizes are in
-[`results/scalability-2026-11-02.json`](results/scalability-2026-11-02.json).
-Supplementary comparison against main at `924f85b` with `PYTHONHASHSEED=0`
-matched all 378 cases, including exact geometry WKB comparisons. Exported
-signatures were unchanged for all 47 public functions. The regression suite
-also covers batch boundaries, seeded edge selection, tied MST edges, repeated
-IDs, internal-looking attribute names, nullable attributes, input ownership,
-cache eviction and shared-search validation of empty or invalid layers.
+Records contain a schema version, suite, case, parameters, input hashes,
+environment, source commit, dirty flag, source/harness hashes, metrics and checks.
+The package root is verified in each worker. Source hashes include uncommitted
+Python and registry changes; a commit alone cannot identify a dirty checkout.
 
-Validation of the final source state:
+The comparison matches suite, case, complete parameters and input hashes.
+Unmatched cases are reported as missing. Matched scalar metrics have absolute
+differences and current/baseline ratios; a zero baseline has a null ratio.
+Environment differences are reported alongside the comparison. No performance
+thresholds or universal accuracy criteria are imposed. Retain both original
+files for samples and non-scalar results.
 
-- `uv run pytest -q`: 1,079 passed, 11 skipped; 98% reported coverage.
-- `uv run pre-commit run --all-files`: passed, including type and docstring checks.
+## GTFS reference evaluation
 
-The audit baseline was 963 passed, 11 skipped and 99% reported coverage.
-The retained dense-matrix compatibility helpers are no longer reached by the
-public proximity workloads, contributing to the lower coverage percentage;
-tests do not call private helpers solely to raise coverage.
+Use the reference evaluation below for exact reconstruction, approximation and
+sensitivity analysis. Raw inputs belong in the ignored `benchmarks/data/`
+directory or outside this checkout. Evaluation results use the same record
+envelope, with quality metrics instead of performance timings.
+
+## Add or change a workload
+
+Add a case to the appropriate case registry and provide a `Workload` containing
+prepared inputs, the public API operation, an output description and cleanup.
+Register long-lived resources with the preparation `ExitStack`; release returned
+connections after measurement. Inputs must be reproducible and independent of
+previous invocations. Update the input recipe and workload version when its
+meaning changes, and document the size unit and fixed conditions here.
+
+Add small correctness and CLI tests under `tests/`. Test result structure,
+selection, cleanup and comparable conditions without asserting elapsed time or
+memory thresholds. Keep raw feeds and generated measurement files out of Git.
+
+## Reference evaluation
+
+### Run an evaluation
+
+```bash
+uv run python -m benchmarks.gtfs_generation \
+  --feed /path/to/reference.zip --date 20251119 --routes GS \
+  --speed-kph 25 --dwell-secs 0 \
+  --window 07:00:00 10:00:00 > benchmarks/results/reference.jsonl
+```
+
+Create the results directory first. The whole service day is always evaluated;
+repeat `--window START END` to add time windows. Times after midnight use extended
+hours, for example `--window 23:00:00 26:00:00`.
+
+The reference selection supports `calendar.txt`, `calendar_dates.txt`, or both.
+Date exceptions override the weekly calendar. All active trips on the selected
+routes are retained with their complete stop sequences. Large stop-time tables
+are filtered in chunks. Identifiers retain their original string values.
+
+Exact reconstruction requires scheduled trips and complete arrival/departure
+values. Selected frequency-based trips, missing stop times and empty selections
+raise explanatory errors. Frequency-based synthetic generation is measured
+separately by the performance suite.
+
+### Comparisons and checks
+
+Exact reconstruction retains stop occurrences, relative arrival/departure offsets
+and first departure times. Before reporting success, the command checks all
+selected stop IDs, sequences and arrival/departure times, graph edge coverage,
+travel times and service counts, then checks saved/reloaded stop-time equality.
+Time strings are normalised to extended `HH:MM:SS` notation for comparison.
+
+Approximation retains the reference stopping patterns and departures while using
+the requested speed and dwell assumptions to estimate journey times. Its topology
+and whole-day counts are controlled inputs. The evaluation measures timing
+sensitivity within those conditions; it does not establish independent network
+recovery or timetable accuracy from OSM.
+
+Reported metrics include edge precision/recall, matched-edge travel-time and
+frequency errors, weakly connected components and shortest-path errors over
+matched reachable pairs. Paths use vehicle-service edges without walking or
+transfers. Empty windows report zero counts and null undefined metrics. Relative
+errors use only matched edges with positive reference travel time; the result
+records included and excluded edge counts. Absolute errors include zero-duration
+edges. Unmatched edges are reflected in coverage metrics, not assigned invented
+travel times.
+
+### Optional alignments
+
+Supply `--alignments /path/to/alignments.geojson` to use explicit route shapes.
+The file needs a CRS and one geometry per `route_id` / `direction_id` combination
+used by the selected patterns. The result hashes both the feed and alignment
+file and records the distance method. Check source dates and suitability for
+your study independently.
+
+### Sensitivity analysis
+
+Add `--sensitivity` to deduplicate reference trips by route, direction and ordered
+stops, then vary speed and route-direction headway. Defaults are speed factors
+`0.75 1 1.25`, headways `600 900 1800` seconds and service hours `06:00:00` to
+`22:00:00`. Set these explicitly when comparisons require different conditions:
+
+```bash
+uv run python -m benchmarks.gtfs_generation \
+  --feed /path/to/reference.zip --date 20251119 --routes GS \
+  --speed-kph 25 --dwell-secs 0 --sensitivity \
+  --speed-factors 0.8 1 1.2 --headways 300 600 \
+  --service-start 05:00:00 --service-end 25:00:00
+```
+
+Patterns share each route-direction frequency equally. Sensitivity uses the
+chosen dwell value and distance method and compares against whole-day reference
+service. Results record every condition, mean leg time, section traversals and
+comparison metrics. These are scenarios rather than calibrated estimates or
+confidence intervals. Generalising to a city or mode requires suitable reference
+coverage and independently justified operating assumptions.

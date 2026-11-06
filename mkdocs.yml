@@ -20,6 +20,11 @@ exclude_docs: |
   examples/city2graph_overture.ipynb
   examples/cache/
   examples/data/
+  **/*.json.gz
+  **/*.geojson*
+  **/*.osm.pbf
+  **/*.graphml
+  **/*.parquet
   examples/generate_thumbnail.py
   examples/thumbnail.png
   assets/data/
@@ -219,7 +224,7 @@ nav:
       - Metapath Construction for Heterogeneous GNNs: examples/add_metapaths.ipynb
       - Morphological Graphs from Overture Maps & OpenStreetMap: examples/morphological_graph_from_overturemaps.ipynb  # yamllint disable-line rule:line-length
       - GTFS to Public Transit Graphs: examples/gtfs.ipynb
-      - Creating and Saving GTFS: examples/creating_gtfs.md
+      - Approximating GTFS from OpenStreetMap: examples/creating_gtfs.md
       - Filling Holes in Buffer Isochrones: examples/isochrone_holes.md
       - OD Matrices to Mobility Graphs: examples/generating_graphs_from_od_matrix.ipynb
       - Spatial Proximity Graphs: examples/generating_graphs_by_proximity.ipynb
@@ -229,6 +234,7 @@ nav:
       - Metapath: api/metapath.md
       - Morphology: api/morphology.md
       - Transportation: api/transportation.md
+      - GTFS Generation: api/gtfs_generation.md
       - Mobility: api/mobility.md
       - Proximity: api/proximity.md
       - Data: api/data.md

@@ -266,6 +266,41 @@ class TestLoadGbfs:
 
 
 class TestGetOdPairs:
+    @pytest.mark.parametrize(
+        ("start", "end", "expected"),
+        [
+            (None, None, {"2024-01-01", "2024-01-03"}),
+            ("20240102", None, {"2024-01-03"}),
+            (None, "20240102", {"2024-01-01"}),
+            ("20230101", "20250101", {"2024-01-01", "2024-01-03"}),
+        ],
+    )
+    @pytest.mark.parametrize("with_calendar", [False, True])
+    def test_inferred_date_bounds_and_exceptions(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        start: str | None,
+        end: str | None,
+        expected: set[str],
+        with_calendar: bool,
+    ) -> None:
+        gtfs = sample_gtfs_dict.copy()
+        if with_calendar:
+            gtfs["calendar"] = gtfs["calendar"].assign(start_date="20240101", end_date="20240102")
+        else:
+            gtfs.pop("calendar")
+        gtfs["calendar_dates"] = pd.DataFrame(
+            {
+                "service_id": ["service1"] * 3,
+                "date": ["20240101", "20240102", "20240103"],
+                "exception_type": [1, 2, 1],
+            }
+        )
+        with gtfs_connection(gtfs) as con:
+            result = get_od_pairs(con, start_date=start, end_date=end, include_geometry=False)
+            assert set(result["date"]) == expected
+
     def test_get_od_pairs_basic(
         self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
     ) -> None:

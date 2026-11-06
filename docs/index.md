@@ -206,6 +206,14 @@ supported Python and CUDA versions, and conda-forge instructions.
 
 <div class="grid cards examples-gallery" markdown>
 
+- ![Public transport networks and blue street-based isochrones across eight cities](assets/examples/synthetic_gtfs_world_isochrones_thumbnail.png){ .card-img }
+
+    **[How to approximate GTFS from OpenStreetMap with City2Graph](examples/creating_gtfs.md)**
+
+    ---
+
+    Generate synthetic GTFS feeds from OpenStreetMap, build public transport graphs, and map accessibility along walking streets.
+
 - ![Walkable street networks of eight city centres extracted from Overture Maps](assets/examples/overture_osmnx.jpg){ .card-img }
 
     **[How to Use Overture Maps Like OSMnx](https://medium.com/@yuta.sato.now/how-to-use-overture-maps-like-osmnx-by-city2graph-7e01d38f9f61)**

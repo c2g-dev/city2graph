@@ -16,6 +16,7 @@ from the top-level package, so the examples use `import city2graph as c2g`.
 | Convert GeoDataFrames, NetworkX, or PyTorch Geometric graphs | `gdf_to_pyg`, `pyg_to_gdf`, `pyg_to_nx`, `nx_to_pyg` | [Graph](graph.md) |
 | Load Overture Maps data or place boundaries | `load_overture_data`, `get_boundaries` | [Data](data.md) |
 | Build a building–street morphology graph | `morphological_graph` | [Morphology](morphology.md) |
+| Generate and inspect public transport service | `create_gtfs`, `load_osm_transport`, `get_gtfs_summary`, `save_gtfs` | [Transportation](transportation.md) |
 | Load GTFS or GBFS data into DuckDB | `load_gtfs`, `load_gbfs` | [Transportation](transportation.md) |
 | Convert GTFS into a public transport graph | `get_od_pairs`, `travel_summary_graph` | [Transportation](transportation.md) |
 | Convert an OD matrix into a weighted spatial graph | `od_matrix_to_graph` | [Mobility](mobility.md) |

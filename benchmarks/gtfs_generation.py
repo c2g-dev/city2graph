@@ -8,12 +8,10 @@ direction_id columns. Raw reference feeds are not copied into the repository.
 from __future__ import annotations
 
 # The command reports benchmark results on stdout.
-# ruff: noqa: T201
 import argparse
-import hashlib
-import json
 import tempfile
 import zipfile
+from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -26,6 +24,10 @@ import numpy as np
 import pandas as pd
 
 import city2graph as c2g
+from benchmarks.common import emit
+from benchmarks.common import file_digest
+from benchmarks.common import positive_int
+from benchmarks.common import record
 
 if TYPE_CHECKING:
     import duckdb
@@ -40,16 +42,23 @@ def read_table(archive: zipfile.ZipFile, name: str) -> pd.DataFrame:
 def reference_tables(path: Path, date: str, routes: list[str]) -> dict[str, pd.DataFrame]:
     """Select complete active trips and their stops for the chosen routes."""
     with zipfile.ZipFile(path) as archive:
-        calendar = read_table(archive, "calendar")
-        weekday = datetime.strptime(date, "%Y%m%d").strftime("%A").lower()
-        active = set(
-            calendar.loc[
-                (calendar.start_date <= date)
-                & (calendar.end_date >= date)
-                & calendar[weekday].eq("1"),
-                "service_id",
-            ]
-        )
+        weekday = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")[
+            datetime.strptime(date, "%Y%m%d").weekday()
+        ]
+        active: set[str] = set()
+        if "calendar.txt" in archive.namelist():
+            calendar = read_table(archive, "calendar")
+            active = set(
+                calendar.loc[
+                    (calendar.start_date <= date)
+                    & (calendar.end_date >= date)
+                    & calendar[weekday].eq("1"),
+                    "service_id",
+                ]
+            )
+        elif "calendar_dates.txt" not in archive.namelist():
+            msg = "Reference feed needs calendar.txt or calendar_dates.txt"
+            raise ValueError(msg)
         if "calendar_dates.txt" in archive.namelist():
             exceptions = read_table(archive, "calendar_dates")
             selected = exceptions[exceptions.date.eq(date)]
@@ -61,6 +70,11 @@ def reference_tables(path: Path, date: str, routes: list[str]) -> dict[str, pd.D
             msg = "No active reference trips for the selected routes/date"
             raise ValueError(msg)
         identifiers = set(trips.trip_id)
+        if "frequencies.txt" in archive.namelist():
+            frequencies = read_table(archive, "frequencies")
+            if frequencies.trip_id.isin(identifiers).any():
+                msg = "Exact reconstruction requires scheduled trips; selected trips use frequencies.txt"
+                raise ValueError(msg)
         chunks: list[pd.DataFrame] = []
         with archive.open("stop_times.txt") as stream:
             chunks.extend(
@@ -70,6 +84,14 @@ def reference_tables(path: Path, date: str, routes: list[str]) -> dict[str, pd.D
                 )
             )
         times = pd.concat(chunks, ignore_index=True)
+        if times.empty or set(times.trip_id) != identifiers:
+            msg = "Every selected trip must have stop_times"
+            raise ValueError(msg)
+        for field in ("arrival_time", "departure_time"):
+            if field not in times or times[field].str.strip().eq("").any():
+                msg = f"Exact reconstruction requires complete {field} values"
+                raise ValueError(msg)
+            times[field] = times[field].map(lambda value: format_time(elapsed(value)))
         times["stop_sequence"] = pd.to_numeric(times.stop_sequence)
         times = times.sort_values(["trip_id", "stop_sequence"])
         stops = read_table(archive, "stops")
@@ -92,8 +114,22 @@ def reference_tables(path: Path, date: str, routes: list[str]) -> dict[str, pd.D
 
 def elapsed(value: str) -> int:
     """Convert extended-hour reference times into elapsed seconds."""
-    hours, minutes, seconds = map(int, value.split(":"))
+    try:
+        hours, minutes, seconds = map(int, value.split(":"))
+    except ValueError as exc:
+        msg = f"Invalid GTFS time: {value!r}"
+        raise ValueError(msg) from exc
+    if hours < 0 or not 0 <= minutes < 60 or not 0 <= seconds < 60:
+        msg = f"Invalid GTFS time: {value!r}"
+        raise ValueError(msg)
     return hours * 3600 + minutes * 60 + seconds
+
+
+def format_time(seconds: int) -> str:
+    """Normalise extended-hour times for exact stop-time comparisons."""
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
 def generator_input(tables: dict[str, pd.DataFrame]) -> tuple[c2g.TransportData, pd.DataFrame]:
@@ -152,6 +188,7 @@ def graph_metrics(reference: gpd.GeoDataFrame, candidate: gpd.GeoDataFrame) -> d
     frequency_errors = (
         candidate.loc[common, "frequency"] - reference.loc[common, "frequency"]
     ).abs()
+    positive = reference.loc[common, "travel_time_sec"] > 0
     path_errors: list[float] = []
     for origin in sorted(set(reference_graph) & set(candidate_graph)):
         before = nx.single_source_dijkstra_path_length(reference_graph, origin)
@@ -169,10 +206,12 @@ def graph_metrics(reference: gpd.GeoDataFrame, candidate: gpd.GeoDataFrame) -> d
         "edge_recall": len(common) / len(reference) if len(reference) else None,
         "travel_time_mae_sec": float(errors.mean()) if len(common) else None,
         "travel_time_mean_relative_error": float(
-            (errors / reference.loc[common, "travel_time_sec"]).mean()
+            (errors[positive] / reference.loc[common, "travel_time_sec"][positive]).mean()
         )
-        if len(common)
+        if positive.any()
         else None,
+        "relative_error_edges": int(positive.sum()),
+        "relative_error_excluded_edges": int((~positive).sum()),
         "frequency_mae": float(frequency_errors.mean()) if len(common) else None,
         "reference_components": nx.number_weakly_connected_components(reference_graph),
         "candidate_components": nx.number_weakly_connected_components(candidate_graph),
@@ -216,8 +255,8 @@ def sensitivity_cases(
         directed=True,
     )[1]
     results = []
-    for factor in (0.75, 1.0, 1.25):
-        for headway in (600, 900, 1800):
+    for factor in args.speed_factors:
+        for headway in args.headways:
             services = conditions[["pattern_id"]].copy()
             services["headway_secs"] = headway * conditions.pattern_count
             with c2g.create_gtfs(
@@ -226,7 +265,9 @@ def sensitivity_cases(
                 agency=tables["agency"],
                 service_date=args.date,
                 speed_kph=args.speed_kph * factor,
-                dwell_time_secs=0,
+                dwell_time_secs=args.dwell_secs,
+                start_time=args.service_start,
+                end_time=args.service_end,
                 distance_method="shape" if args.alignments else "geodesic",
             ) as candidate:
                 edges = c2g.travel_summary_graph(
@@ -241,7 +282,9 @@ def sensitivity_cases(
                         "speed_kph": args.speed_kph * factor,
                         "route_direction_headway_secs": headway,
                         "unique_patterns": len(patterns),
-                        "mean_leg_time_sec": float(edges.travel_time_sec.mean()),
+                        "mean_leg_time_sec": float(edges.travel_time_sec.mean())
+                        if len(edges)
+                        else None,
                         "total_section_traversals": float(edges.frequency.sum()),
                         "comparison": graph_metrics(reference_edges, edges),
                     }
@@ -249,7 +292,7 @@ def sensitivity_cases(
     return results
 
 
-def compare(args: argparse.Namespace) -> dict[str, object]:
+def compare(args: argparse.Namespace) -> dict[str, Any]:
     """Evaluate exact reconstruction and a documented speed approximation."""
     tables = reference_tables(args.feed, args.date, args.routes)
     data, services = generator_input(tables)
@@ -268,100 +311,107 @@ def compare(args: argparse.Namespace) -> dict[str, object]:
             validate="many_to_one",
         )
         approximated["patterns"] = gpd.GeoDataFrame(patterns, geometry="geometry", crs=4326)
-    with tempfile.TemporaryDirectory() as directory:
+    with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
         path = Path(directory) / "reference.zip"
         with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for name, frame in tables.items():
                 archive.writestr(name + ".txt", frame.to_csv(index=False))
-        reference = c2g.load_gtfs(path)
-        exact = c2g.create_gtfs(
-            data, services, agency=tables["agency"], calendar_dates=tables["calendar_dates"]
-        )
-        approximation = c2g.create_gtfs(
-            approximated,
-            services,
-            agency=tables["agency"],
-            calendar_dates=tables["calendar_dates"],
-            speed_kph=args.speed_kph,
-            dwell_time_secs=args.dwell_secs,
-            distance_method="shape" if args.alignments else "geodesic",
-        )
-        try:
-            results: dict[str, Any] = {}
-            for label, bounds in (
-                ("whole_service_day", (None, None)),
-                ("morning", ("07:00:00", "10:00:00")),
-            ):
-                graphs = [
-                    c2g.travel_summary_graph(
-                        con,
-                        calendar_start=args.date,
-                        calendar_end=args.date,
-                        start_time=bounds[0],
-                        end_time=bounds[1],
-                        directed=True,
-                    )[1]
-                    for con in (reference, exact, approximation)
-                ]
-                results[label] = {
-                    "exact": graph_metrics(graphs[0], graphs[1]),
-                    "approximation": graph_metrics(graphs[0], graphs[2]),
-                }
-            sensitivity = (
-                sensitivity_cases(reference, approximated, tables, args) if args.sensitivity else []
+        reference = stack.enter_context(c2g.load_gtfs(path))
+        exact = stack.enter_context(
+            c2g.create_gtfs(
+                data, services, agency=tables["agency"], calendar_dates=tables["calendar_dates"]
             )
-            before = reference.sql(
-                "SELECT trip_id, stop_id, stop_sequence FROM stop_times ORDER BY trip_id, CAST(stop_sequence AS INTEGER)"
-            ).df()
-            after = exact.sql(
-                "SELECT trip_id, stop_id, stop_sequence FROM stop_times ORDER BY trip_id, CAST(stop_sequence AS INTEGER)"
-            ).df()
-            pd.testing.assert_frame_equal(before, after)
-            for window in results.values():
-                assert window["exact"]["edge_precision"] == 1
-                assert window["exact"]["edge_recall"] == 1
-                assert window["exact"]["travel_time_mae_sec"] == 0
-                assert window["exact"]["frequency_mae"] == 0
-            saved = c2g.save_gtfs(exact, Path(directory) / "generated.zip")
-            reloaded = c2g.load_gtfs(saved)
-            try:
-                pd.testing.assert_frame_equal(
-                    exact.table("stop_times").df(), reloaded.table("stop_times").df()
-                )
-            finally:
-                reloaded.close()
+        )
+        approximation = stack.enter_context(
+            c2g.create_gtfs(
+                approximated,
+                services,
+                agency=tables["agency"],
+                calendar_dates=tables["calendar_dates"],
+                speed_kph=args.speed_kph,
+                dwell_time_secs=args.dwell_secs,
+                distance_method="shape" if args.alignments else "geodesic",
+            )
+        )
+        results: dict[str, Any] = {}
+        for label, bounds in [
+            ("whole_service_day", (None, None)),
+            *[(f"{start}-{end}", (start, end)) for start, end in args.window],
+        ]:
+            graphs = [
+                c2g.travel_summary_graph(
+                    con,
+                    calendar_start=args.date,
+                    calendar_end=args.date,
+                    start_time=bounds[0],
+                    end_time=bounds[1],
+                    directed=True,
+                )[1]
+                for con in (reference, exact, approximation)
+            ]
+            results[label] = {
+                "exact": graph_metrics(graphs[0], graphs[1]),
+                "approximation": graph_metrics(graphs[0], graphs[2]),
+            }
+        sensitivity = (
+            sensitivity_cases(reference, approximated, tables, args) if args.sensitivity else []
+        )
+        before = reference.sql(
+            "SELECT trip_id, stop_id, stop_sequence, arrival_time, departure_time "
+            "FROM stop_times ORDER BY trip_id, CAST(stop_sequence AS INTEGER)"
+        ).df()
+        after = exact.sql(
+            "SELECT trip_id, stop_id, stop_sequence, arrival_time, departure_time "
+            "FROM stop_times ORDER BY trip_id, CAST(stop_sequence AS INTEGER)"
+        ).df()
+        pd.testing.assert_frame_equal(before, after)
+        for window in results.values():
+            exact_metrics = window["exact"]
+            if exact_metrics["reference_edges"] == 0:
+                assert exact_metrics["candidate_edges"] == 0
+            else:
+                assert exact_metrics["edge_precision"] == 1
+                assert exact_metrics["edge_recall"] == 1
+                assert exact_metrics["travel_time_mae_sec"] == 0
+                assert exact_metrics["frequency_mae"] == 0
+        saved = c2g.save_gtfs(exact, Path(directory) / "generated.zip")
+        reloaded = c2g.load_gtfs(saved)
+        try:
+            pd.testing.assert_frame_equal(
+                exact.table("stop_times").df(), reloaded.table("stop_times").df()
+            )
         finally:
-            for con in (reference, exact, approximation):
-                con.close()
-    with args.feed.open("rb") as stream:
-        digest = hashlib.file_digest(stream, "sha256").hexdigest()
-    return {
-        "feed": args.feed.name,
-        "sha256": digest,
+            reloaded.close()
+    parameters = {
         "service_date": args.date,
-        "routes": args.routes,
-        "trips": len(tables["trips"]),
-        "stop_occurrences": len(before),
-        "stopping_pattern_match": 1.0,
-        "assumptions": {
-            "speed_kph": args.speed_kph,
-            "dwell_secs": args.dwell_secs,
-            "distance_basis": str(args.alignments)
-            if args.alignments
-            else "geodesic between reference GTFS stops",
-            "stops_patterns_departures": "reference GTFS; topology and whole-day counts are controlled, not independently recovered",
-            "source_date_mismatch": "external alignments may postdate the reference feed"
-            if args.alignments
-            else "not applicable",
-        },
-        "results": results,
-        "sensitivity": sensitivity,
-        "sensitivity_scope": (
-            "Controlled reference stopping patterns; 06:00-22:00, zero dwell, "
-            "equal shares of each route-direction frequency. "
-            "Scenario factors are not confidence intervals or calibration."
-        ),
+        "routes": sorted(args.routes),
+        "speed_kph": args.speed_kph,
+        "dwell_secs": args.dwell_secs,
+        "distance_method": "shape" if args.alignments else "geodesic",
+        "windows": args.window,
+        "sensitivity": args.sensitivity,
+        "speed_factors": args.speed_factors,
+        "headways": args.headways,
+        "service_start": args.service_start,
+        "service_end": args.service_end,
+        "workload_version": 1,
     }
+    inputs = {"feed": file_digest(args.feed)}
+    if args.alignments:
+        inputs["alignments"] = file_digest(args.alignments)
+    return record(
+        "gtfs_generation",
+        "reference",
+        parameters,
+        inputs,
+        {
+            "trips": len(tables["trips"]),
+            "stop_occurrences": len(before),
+            "windows": results,
+            "sensitivity": sensitivity,
+        },
+        {"exact_stop_times": True, "exact_graphs": True, "roundtrip": True},
+    )
 
 
 def main() -> None:
@@ -374,8 +424,33 @@ def main() -> None:
     parser.add_argument("--dwell-secs", type=float, required=True)
     parser.add_argument("--alignments", type=Path)
     parser.add_argument("--sensitivity", action="store_true")
+    parser.add_argument(
+        "--window",
+        nargs=2,
+        action="append",
+        metavar=("START", "END"),
+        help="Additional comparison window; repeat to compare multiple windows",
+    )
+    parser.add_argument("--speed-factors", nargs="+", type=float, default=[0.75, 1.0, 1.25])
+    parser.add_argument("--headways", nargs="+", type=positive_int, default=[600, 900, 1800])
+    parser.add_argument("--service-start", default="06:00:00")
+    parser.add_argument("--service-end", default="22:00:00")
     args = parser.parse_args()
-    print(json.dumps(compare(args), indent=2, allow_nan=False))
+    args.window = args.window or []
+    if not np.isfinite(args.speed_kph) or args.speed_kph <= 0:
+        parser.error("--speed-kph must be finite and positive")
+    if not np.isfinite(args.dwell_secs) or args.dwell_secs < 0:
+        parser.error("--dwell-secs must be finite and non-negative")
+    if any(not np.isfinite(factor) or factor <= 0 for factor in args.speed_factors):
+        parser.error("--speed-factors must be finite and positive")
+    try:
+        for start, end in [*args.window, (args.service_start, args.service_end)]:
+            if elapsed(start) >= elapsed(end):
+                msg = "Window start must precede end; use extended hours after midnight"
+                parser.error(msg)
+        emit(compare(args))
+    except ValueError as exc:
+        parser.error(str(exc))
 
 
 if __name__ == "__main__":

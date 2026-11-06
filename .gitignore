@@ -24,7 +24,7 @@ docs/build/
 *.zip
 *.tar.gz
 *.csv
-# Ignore GeoJSONs generally, but allow in tests/data (preserving existing rule)
+# Keep only small, intentional test fixtures.
 *.geojson
 !tests/data/*.geojson
 
@@ -51,3 +51,17 @@ city2graph_overture.ipynb
 AGENTS.md
 CLAUDE.md
 .claude/*
+
+# Local benchmark measurements
+benchmarks/results/
+
+# Downloaded transport inputs and generated research outputs
+benchmarks/data/
+docs/assets/examples/rail-atlas/
+docs/assets/examples/tokyo-gtfs/
+*.osm.pbf
+*.osm.xml
+*.geojson.gz
+*.json.gz
+*.graphml
+*.parquet

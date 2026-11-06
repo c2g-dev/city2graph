@@ -12,7 +12,7 @@ Main modules include:
 - graph : Converting between GeoDataFrames and PyTorch Geometric objects
 - morphology : Creating morphological graphs from urban data
 - proximity : Generating proximity-based graph networks
-- transportation : Loading GTFS/GBFS data and creating transportation networks
+- transportation : Generating, loading, inspecting and saving public transport feeds
 - utils : Core utilities for graph conversion and validation
 
 Author: Yuta Sato

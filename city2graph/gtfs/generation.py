@@ -15,17 +15,16 @@ from pyproj import Geod
 from shapely.geometry import LineString
 from shapely.ops import substring
 
-from .feed import _assumption
 from .feed import _connection
-from .feed import _input_provenance
-from .feed import _retrieval_assumptions
-from .feed import _source_conditions
-from .feed import _warn_generation
+from .metadata import _assumption
+from .metadata import _input_metadata
+from .metadata import _retrieval_assumptions
+from .metadata import _source_conditions
+from .metadata import _warn_generation
+from .schema import _METADATA_COLUMNS
 from .schema import _MODEL
-from .schema import _PROVENANCE_COLUMNS
 from .schema import _REGISTRY
 from .schema import _ROUTE_TYPE_GROUPS
-from .schema import _SERVICE_DATE
 from .schema import TransportData
 from .schema import _clock
 from .schema import _default
@@ -88,7 +87,7 @@ class _TimingInput:
 
 @dataclass
 class _ResolvedGeneration:
-    """Effective input and its provenance, ready for GTFS materialisation.
+    """Effective input and its metadata, ready for GTFS materialisation.
 
     Resolved services share the prepared timing input through final assembly.
     """
@@ -97,7 +96,7 @@ class _ResolvedGeneration:
     services: pd.DataFrame
     agency: pd.DataFrame
     calendar_dates: pd.DataFrame | None
-    provenance: list[dict[str, object]]
+    metadata: list[dict[str, object]]
     shapes: list[dict[str, object]]
     timing: _TimingInput
 
@@ -212,10 +211,8 @@ def _pattern_times(
     sequence: list[dict[str, Any]],
     line: LineString | None,
     timing: _TimingInput,
-    speed_kph: float | None,
-    dwell_time_secs: float | None,
     distance_method: str,
-    provenance: list[dict[str, object]],
+    metadata: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """
     Compute one pattern's relative schedule and record estimated values.
@@ -230,13 +227,9 @@ def _pattern_times(
         Directed WGS84 route alignment, when available.
     timing : _TimingInput
         Shared stop geometry and numeric occurrence order.
-    speed_kph : float | None
-        Fallback running speed, explicitly supplied in kilometres per hour.
-    dwell_time_secs : float | None
-        Fallback stopping duration in seconds, without an implicit default.
     distance_method : str
         Distance policy used when no leg distance is supplied.
-    provenance : list[dict[str, object]]
+    metadata : list[dict[str, object]]
         Source and assumption records; estimation records are appended during generation.
 
     Returns
@@ -265,17 +258,12 @@ def _pattern_times(
                     if _present(row.get("travel_time_secs")):
                         travel = _number(row["travel_time_secs"], "travel_time_secs", positive=True)
                     else:
-                        speed_value = row.get("speed_kph")
-                        speed = _number(
-                            speed_value if _present(speed_value) else speed_kph,
-                            "speed_kph",
-                            positive=True,
-                        )
+                        speed = _number(row["speed_kph"], "speed_kph", positive=True)
                         distance, basis = _leg_distance(
                             row, previous, line, timing.locations, distance_method
                         )
                         travel = distance / (speed / 3.6)
-                        provenance.append(
+                        metadata.append(
                             {
                                 "table_name": "stop_sequences",
                                 "record_id": f"{row['pattern_id']}|{row['stop_sequence']}",
@@ -293,10 +281,7 @@ def _pattern_times(
                                 ),
                             }
                         )
-                dwell_value = row.get("dwell_time_secs")
-                dwell = _number(
-                    dwell_value if _present(dwell_value) else dwell_time_secs, "dwell_time_secs"
-                )
+                dwell = _number(row["dwell_time_secs"], "dwell_time_secs")
                 arrival = departure + travel
                 next_departure = arrival + dwell
             if arrival < departure or next_departure < arrival:
@@ -371,7 +356,7 @@ def create_gtfs(  # noqa: PLR0913 - shared generation API with optional override
         GTFS agency metadata. Source fields precede synthetic placeholders.
         A unique geographical timezone is estimated before a warned UTC fallback.
     calendar : pandas.DataFrame, optional
-        GTFS weekly service calendar. Without dates, use a fixed representative week.
+        GTFS weekly service calendar. Without dates, use seven days starting on the generation date.
     calendar_dates : pandas.DataFrame, optional
         GTFS date-specific service additions and removals.
     speed_kph : float, optional
@@ -403,7 +388,8 @@ def create_gtfs(  # noqa: PLR0913 - shared generation API with optional override
         excluded; unknown IDs and empty selections raise an error.
     service_date : str, optional
         Explicit YYYYMMDD service date for one day. If all date inputs are omitted,
-        use seven days from 20260103 (Saturday). Cannot be combined with
+        use seven days starting on the generation date in the local system timezone.
+        Cannot be combined with
         calendar or calendar_dates.
     optional_tables : mapping of str to pandas.DataFrame, optional
         Additional transfers, pathways, levels, feed_info or attributions tables.
@@ -433,7 +419,7 @@ def create_gtfs(  # noqa: PLR0913 - shared generation API with optional override
     )
     resolved = _resolve_generation(data, services, agency, config)
     data, services, agency = resolved.data, resolved.services, resolved.agency
-    calendar_dates, provenance = resolved.calendar_dates, resolved.provenance
+    calendar_dates, metadata = resolved.calendar_dates, resolved.metadata
     patterns, stops = data["patterns"], data["stops"]
     timing, shapes = resolved.timing, resolved.shapes
     schedules = {
@@ -441,10 +427,8 @@ def create_gtfs(  # noqa: PLR0913 - shared generation API with optional override
             timing.sequences[str(identifier)],
             timing.lines.get(str(identifier)),
             timing,
-            speed_kph,
-            dwell_time_secs,
             distance_method or str(_default("distance_method")),
-            provenance,
+            metadata,
         )
         for identifier in patterns["pattern_id"]
     }
@@ -470,8 +454,8 @@ def create_gtfs(  # noqa: PLR0913 - shared generation API with optional override
         tables[name] = frame
     tables = {name: _text_frame(frame) for name, frame in tables.items()}
     _validate_tables(tables)
-    _warn_generation(provenance)
-    return _connection(tables, pd.DataFrame(provenance, columns=_PROVENANCE_COLUMNS))
+    _warn_generation(metadata)
+    return _connection(tables, pd.DataFrame(metadata, columns=_METADATA_COLUMNS))
 
 
 def _build_trips(
@@ -626,7 +610,7 @@ def _resolve_generation(
             if frame is not None
         },
     }
-    records = _input_provenance(raw)
+    records = _input_metadata(raw)
     data, services = _select_patterns(
         cast("Mapping[str, pd.DataFrame]", data),
         services,
@@ -635,6 +619,19 @@ def _resolve_generation(
     )
     _retrieval_assumptions(records)
     _assumption(records, "generation", "model", _MODEL)
+    _assumption(
+        records,
+        "generation",
+        "excluded_relation_count",
+        len(
+            {
+                row["record_id"]
+                for row in records
+                if row["field"] == "relation" and row["kind"] == "ignored"
+            }
+        ),
+        "generated",
+    )
     _assumption(
         records,
         "generation",
@@ -673,10 +670,12 @@ def _resolve_generation(
             records,
             "generation",
             "service_date",
-            config.service_date or _SERVICE_DATE,
+            config.service_date or config.generation_date,
             "default" if config.service_date is None else "user",
             _MODEL if config.service_date is None else "input",
-            "Fixed reference-week coordinate, not a historical reconstruction",
+            "Generation date in the local system timezone"
+            if config.service_date is None
+            else "Explicit service date",
         )
         _assumption(
             records,
@@ -907,7 +906,7 @@ def _timing_defaults(
     Returns
     -------
     None
-        Updates the generation-local occurrence rows and provenance in place.
+        Updates the generation-local occurrence rows and metadata in place.
     """
     modes = {}
     for route in _records(data["routes"]):
