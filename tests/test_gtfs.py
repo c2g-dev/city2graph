@@ -287,7 +287,7 @@ class TestCreateGtfs:
             report = c2g.get_gtfs_summary(con)
             rows = report["services"].set_index("pattern_id")
             assert rows["departures"].to_dict() == {"local": 1, "express": 32}
-            assert pd.isna(rows.loc["local", "headway_secs"])
+            assert rows["headway_secs"].isna().loc["local"]
             assert rows.loc["express", "headway_secs"] == 1800
             assert con.sql(
                 "SELECT trip_headsign FROM trips WHERE trip_headsign IS NOT NULL"
