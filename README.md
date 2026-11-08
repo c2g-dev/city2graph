@@ -21,8 +21,9 @@ and the Python API reference.
 [![City2Graph workflow from geospatial data to graph analysis](https://city2graph.net/latest/assets/figures/scope.png)](https://city2graph.net/latest/)
 
 - **Morphology:** Graphs of buildings, streets, and tessellated urban fabric from OpenStreetMap and Overture Maps.
-- **Transportation:** GTFS public transport and GBFS shared-mobility feeds loaded
-  into DuckDB, with GTFS aggregated into stop-to-stop transit graphs.
+- **Transportation:** Generate synthetic GTFS feeds from tables or OSM public
+  transport relations, inspect their assumptions, and save or load feeds in
+  DuckDB. Aggregate GTFS into stop-to-stop graphs and load GBFS shared-mobility feeds.
 - **Mobility:** Origin–destination matrices and flow data — migration, bike-sharing, pedestrian counts — as weighted spatial graphs.
 - **Proximity and Contiguity:** KNN, Delaunay, Gilbert, and Waxman graphs plus queen/rook contiguity, under Euclidean, Manhattan, or network distances.
 - **Heterogeneous Graphs and Metapaths:** Multiple node and edge types in one graph, with metapath-derived edges composing relations across them.
@@ -47,7 +48,7 @@ This installs the core functionality without PyTorch and PyTorch Geometric.
 If you need the Graph Neural Networks functionality, install with the `cpu` option:
 
 ```bash
-pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
+pip install torch==2.15.0 torchvision==0.29.2 --index-url https://download.pytorch.org/whl/cpu
 pip install "city2graph[cpu]"
 ```
 
@@ -59,18 +60,19 @@ Install PyTorch and torchvision from the matching official wheel index before
 installing the City2Graph extra. For example, for CUDA 13.2 on Linux or Windows:
 
 ```bash
-pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cu132
+pip install torch==2.15.0 torchvision==0.29.2 --index-url https://download.pytorch.org/whl/cu132
 pip install "city2graph[cu132]"
 ```
 
 Supported CUDA extras are `cu126`, `cu128`, `cu130`, and `cu132`. The current
-lockfile uses PyTorch 2.14.1, torchvision 0.29.1, and PyG 2.8.1 for CPU and all
-CUDA variants except `cu128`, which uses PyTorch 2.11.0 and torchvision 0.26.0.
-For CUDA 12.8, install those older versions from the `cu128` index first.
+lockfile uses PyTorch 2.15.0 and torchvision 0.29.2 for CPU and CUDA 13.2,
+2.14.1 and 0.29.1 for CUDA 12.6 and 13.0, and 2.11.0 and 0.26.0 for CUDA 12.8.
+PyG resolves to 2.8.1 for every extra. Install each CUDA pair from its matching
+index first; the [installation guide](docs/installation.md) lists the commands.
 An extra name alone does not select a CPU or CUDA wheel index in pip.
 
 PyG's published 2.8 support matrix lists PyTorch through 2.12. City2Graph tests
-its graph conversions with PyTorch 2.14.1; this does not establish compatibility
+its graph conversions on CPU with PyTorch 2.15.0; this does not establish compatibility
 for optional PyG binary extensions. See the [installation guide](docs/installation.md)
 for the full commands and compatibility notes.
 

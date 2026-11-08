@@ -41,7 +41,7 @@ This keeps the installation smaller by excluding PyTorch and PyTorch Geometric.
 For PyTorch Geometric conversion and GNN development without a GPU, use:
 
 ```bash
-pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
+pip install torch==2.15.0 torchvision==0.29.2 --index-url https://download.pytorch.org/whl/cpu
 pip install "city2graph[cpu]"
 ```
 
@@ -54,24 +54,33 @@ for the required CUDA variant, then install the matching City2Graph extra.
 For CUDA 13.2:
 
 ```bash
-pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cu132
+pip install torch==2.15.0 torchvision==0.29.2 --index-url https://download.pytorch.org/whl/cu132
 pip install "city2graph[cu132]"
 ```
 
-For CUDA 12.6 or 13.0, replace `cu132` in both commands with `cu126` or
-`cu130`. CUDA 12.8 wheels are available only through PyTorch 2.11, so use:
+CUDA 12.6 and 13.0 retain PyTorch 2.14.1 and torchvision 0.29.1. For CUDA 12.6,
+use the following commands; replace `cu126` with `cu130` for CUDA 13.0:
+
+```bash
+pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cu126
+pip install "city2graph[cu126]"
+```
+
+CUDA 12.8 wheels are available only through PyTorch 2.11, so use:
 
 ```bash
 pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
 pip install "city2graph[cu128]"
 ```
 
-The lockfile resolves the following stable versions. These are the tested
-versions, rather than new minimum requirements for every dependency:
+The lockfile resolves the following stable versions. CPU graph conversions
+are tested with PyTorch 2.15.0; CUDA execution requires separate verification
+on compatible hardware. These versions do not change the declared minimum requirements:
 
 | Extra | PyTorch | torchvision | PyG |
 | --- | --- | --- | --- |
-| `cpu`, `cu126`, `cu130`, `cu132` | 2.14.1 | 0.29.1 | 2.8.1 |
+| `cpu`, `cu132` | 2.15.0 | 0.29.2 | 2.8.1 |
+| `cu126`, `cu130` | 2.14.1 | 0.29.1 | 2.8.1 |
 | `cu128` | 2.11.0 | 0.26.0 | 2.8.1 |
 
 pip does not read this repository's `tool.uv.sources` settings, and an extra
@@ -87,8 +96,8 @@ uv sync --extra cu132 --group dev
 ```
 
 [PyG 2.8's published support matrix](https://github.com/pyg-team/pytorch_geometric/releases/tag/2.8.0)
-lists PyTorch 2.9–2.12. City2Graph verifies its graph conversions with PyTorch
-2.14.1, but optional PyG binary extensions require their own compatible wheels.
+lists PyTorch 2.9–2.12. City2Graph verifies its graph conversions on CPU with
+PyTorch 2.15.0, but optional PyG binary extensions require their own compatible wheels.
 They are not needed for City2Graph's conversions and are not installed by these
 extras. See the [PyG installation guide](https://pytorch-geometric.readthedocs.io/en/stable/install/installation.html)
 before adding them.

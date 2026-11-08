@@ -46,7 +46,7 @@ Please include the following information in your report:
 | [CVE-2025-3730](https://nvd.nist.gov/vuln/detail/CVE-2025-3730) | PyTorch | Critical | v0.2.4 | Minimum `torch>=2.8.0` enforced across all install variants |
 | [CVE-2025-2953](https://nvd.nist.gov/vuln/detail/CVE-2025-2953) | PyTorch | Critical | v0.2.4 | Minimum `torch>=2.8.0` enforced; deprecated CUDA variants (`cu118`, `cu124`) removed |
 
-As part of the fix, the following CUDA install extras were removed: `cu118`, `cu124`. The currently supported extras are: `cpu`, `cu126`, `cu128`, `cu130`.
+As part of the fix, the following CUDA install extras were removed: `cu118`, `cu124`. The currently supported extras are: `cpu`, `cu126`, `cu128`, `cu130`, `cu132`.
 
 ## Security Best Practices
 
@@ -62,7 +62,7 @@ When using city2graph, we recommend following these security best practices:
 
 - **Keep Dependencies Updated:** Regularly update city2graph and its dependencies to get the latest security patches
 - **Use Virtual Environments:** Isolate city2graph installations using virtual environments (venv, conda, etc.)
-- **Pin Secure PyTorch Versions:** city2graph requires `torch>=2.13.0` for CPU, CUDA 12.6, and CUDA 13.0, or `torch>=2.11.0` for CUDA 12.8
+- **Pin Secure PyTorch Versions:** city2graph requires `torch>=2.13.0` for CPU, CUDA 12.6, CUDA 13.0, and CUDA 13.2, or `torch>=2.11.0` for CUDA 12.8
 - **Review Dependencies:** Be aware of the security status of core dependencies:
   - PyTorch (≥ 2.11.0) and PyTorch Geometric (≥ 2.8.0)
   - GeoPandas and its dependencies (GDAL, GEOS, etc.)
