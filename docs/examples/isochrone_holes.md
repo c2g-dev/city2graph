@@ -1,6 +1,13 @@
 ---
-description: Fill interior holes in buffer isochrones without changing the buffer distance or connecting separate polygon parts.
+seo_title: "Fill Holes in Buffer Isochrones in Python - City2Graph"
+description: "Fill interior holes in buffer isochrones with create_isochrone(fill_holes=True) without changing the buffer distance or joining separate polygon parts."
 keywords: isochrone, buffer, fill_holes, accessibility, clipping, polygons
+date_published: "2026-11-03"
+date_modified: "2026-11-03"
+about:
+  - "Isochrones"
+  - "Accessibility analysis"
+  - "Buffer analysis"
 ---
 
 # Filling holes in buffer isochrones

@@ -1,15 +1,32 @@
 ---
-seo_title: "City2Graph: Geospatial Graphs for Network Analysis and GNNs"
+seo_title: "City2Graph: Geospatial Graphs for Network Analysis and GeoAI"
 description: "Build spatial and heterogeneous graphs from buildings, streets, GTFS feeds, OD matrices, and POIs for NetworkX analysis and PyTorch Geometric GNNs."
 hide:
   - navigation
   - toc
+faq:
+  - question: "What data can City2Graph convert into graphs?"
+    answer: "City2Graph supports buildings, street segments, tessellations, Overture Maps features, GTFS and GBFS feeds, origin-destination matrices, points of interest, polygonal zones, and existing GeoDataFrame or NetworkX graphs. Each input has a builder function and a tutorial."
+  - question: "What can I use City2Graph for?"
+    answer: "City2Graph graphs support spatial network analysis such as centrality, shortest paths and accessibility isochrones; urban morphology, walkability and public transport research; mobility flow analysis; spatial statistics with proximity and contiguity graphs; and Graph Neural Network workflows including GeoAI. The same graph converts between GeoDataFrames, NetworkX, rustworkx and PyTorch Geometric."
+  - question: "Is PyTorch required?"
+    answer: "No. The core installation builds and analyses geospatial graphs with GeoPandas, NetworkX, and rustworkx without installing PyTorch. PyTorch and PyTorch Geometric are optional dependencies for GNN-ready Data and HeteroData tensors."
+  - question: "Can graphs be converted between GeoPandas, NetworkX, and PyTorch Geometric?"
+    answer: "Yes. City2Graph supports round-trip conversion between GeoDataFrames, NetworkX, and PyTorch Geometric, including heterogeneous graphs."
+  - question: "How do I analyse a city network with NetworkX?"
+    answer: "Build a graph, for example a morphological or transit graph, then convert it with gdf_to_nx to a NetworkX graph. Run centrality, shortest-path or connectivity analysis there, and return the results to GeoDataFrames with nx_to_gdf for mapping."
+  - question: "How do I build a graph for a GNN from Overture Maps or OpenStreetMap data?"
+    answer: "Load buildings and street segments, for example with load_overture_data for Overture Maps, build a heterogeneous morphological graph with morphological_graph, then convert it with gdf_to_pyg to a PyTorch Geometric HeteroData object."
+  - question: "Can I analyse public transport without a GTFS feed?"
+    answer: "Yes. load_osm_transport reads public transport route relations from OpenStreetMap and generates a synthetic GTFS feed in DuckDB. The same feed supports transit graphs, accessibility isochrones, and export as a GTFS ZIP."
+  - question: "How does City2Graph relate to OSMnx?"
+    answer: "OSMnx is a focused toolkit for downloading and analysing OpenStreetMap street networks. City2Graph can use street data from OSMnx and combines it with buildings, Overture Maps, transit, mobility, proximity, and heterogeneous graph workflows. The two libraries are complementary."
 ---
 
-# City2Graph: Geospatial Graphs for Network Analysis and GNNs
+# City2Graph: Geospatial Graphs for Network Analysis and GeoAI
 
-**City2Graph** is a Python library that turns geospatial data into analysis-ready
-graphs. Build networks from buildings, streets, public transport feeds,
+**City2Graph** is a Python library that turns geospatial data into
+analysis-ready graphs for spatial network analysis, urban analytics, and GeoAI. Build networks from buildings, streets, public transport feeds,
 origin–destination matrices, zones, and points of interest; analyse them with
 [NetworkX](https://networkx.org/) or convert them to
 [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/) for
@@ -38,35 +55,38 @@ can support mapping, spatial network analysis, and machine-learning workflows.
   <img src="assets/figures/scope.png" alt="City2Graph workflow from geospatial data to NetworkX and PyTorch Geometric graphs" class="desktop-limit-width">
 </p>
 
-**Any use of City2Graph in research must cite the paper below**, published in
-*Computers, Environment and Urban Systems*. For details, read the
-[paper landing page](paper.md) or
-[open the open-access Version of Record PDF directly](assets/papers/sato2026city2graph.pdf).
+## Paper and citation
 
-<p align="center">
-  <a href="paper.html">
-    <img src="assets/figures/CEUS_thumbnail.jpg" alt="City2Graph paper in Computers, Environment and Urban Systems" class="desktop-limit-width">
-  </a>
-</p>
+Any use of City2Graph in research must cite the paper below:
 
-Sato, Y., Pietrostefani, E., Mahabir, R., & Arribas-Bel, D. (2026). City2Graph:
-A Python library for Heterogeneous Graph Neural Networks and spatial analysis in
-urban systems. *Computers, Environment and Urban Systems*, 130, 102492.
-[https://doi.org/10.1016/j.compenvurbsys.2026.102492](https://doi.org/10.1016/j.compenvurbsys.2026.102492)
+=== "Paper"
 
-```bibtex
-@article{sato2026city2graph,
-  title = {City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial analysis in urban systems},
-  author = {Sato, Yuta and Pietrostefani, Elisabetta and Mahabir, Ron and Arribas-Bel, Daniel},
-  journal = {Computers, Environment and Urban Systems},
-  volume = {130},
-  pages = {102492},
-  year = {2026},
-  issn = {0198-9715},
-  doi = {10.1016/j.compenvurbsys.2026.102492},
-  url = {https://www.sciencedirect.com/science/article/pii/S0198971526000943},
-}
-```
+    <p align="center">
+      <a href="paper.html">
+        <img src="assets/figures/CEUS_thumbnail.jpg" alt="City2Graph paper in Computers, Environment and Urban Systems" class="desktop-limit-width">
+      </a>
+    </p>
+
+    Sato, Y., Pietrostefani, E., Mahabir, R., & Arribas-Bel, D. (2026). City2Graph:
+    A Python library for Heterogeneous Graph Neural Networks and spatial analysis in
+    urban systems. *Computers, Environment and Urban Systems*, 130, 102492.
+    [https://doi.org/10.1016/j.compenvurbsys.2026.102492](https://doi.org/10.1016/j.compenvurbsys.2026.102492)
+
+=== "BibTeX"
+
+    ```bibtex
+    @article{sato2026city2graph,
+      title = {City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial analysis in urban systems},
+      author = {Sato, Yuta and Pietrostefani, Elisabetta and Mahabir, Ron and Arribas-Bel, Daniel},
+      journal = {Computers, Environment and Urban Systems},
+      volume = {130},
+      pages = {102492},
+      year = {2026},
+      issn = {0198-9715},
+      doi = {10.1016/j.compenvurbsys.2026.102492},
+      url = {https://www.sciencedirect.com/science/article/pii/S0198971526000943},
+    }
+    ```
 
 ## Quickstart
 
@@ -289,35 +309,28 @@ GNN. City2Graph removes that step.
   and ordinary GIS layers are read directly, so a working graph is a few lines
   away rather than a preprocessing project.
 
+## What you can do with the graphs
+
+A graph built with City2Graph is an ordinary GeoDataFrame, NetworkX, rustworkx,
+or PyTorch Geometric object, so one dataset supports several kinds of work.
+
+- **Spatial network analysis:** centrality, shortest paths, and accessibility
+  isochrones on street and public transport networks.
+- **Urban and transport research:** urban morphology, walkability, multimodal
+  accessibility, and origin–destination mobility flows.
+- **Spatial statistics and mapping:** proximity and contiguity graphs over
+  points of interest and zones, returned to GeoDataFrames for plotting.
+- **Graph Neural Networks and GeoAI:** `Data` and `HeteroData` for PyTorch
+  Geometric. The [Liverpool case study](https://github.com/c2g-dev/city2graph-case-study)
+  clusters urban functions with graph autoencoders, and the
+  [FOSS4G workshop](https://github.com/c2g-dev/city2graph-workshop) walks
+  through the pipeline.
+
+The [paper](paper.md) describes the design.
+
 ## FAQ
 
-### What data can City2Graph convert into graphs?
-
-City2Graph supports buildings, street segments, tessellations, Overture Maps
-features, GTFS and GBFS feeds, origin–destination matrices, points of interest,
-polygonal zones, and existing GeoDataFrame or NetworkX graphs. The
-[workflow table](#sample-workflow) links each input to its
-builder and tutorial.
-
-### Is PyTorch required?
-
-No. The core installation builds and analyses geospatial graphs with
-GeoPandas, NetworkX, and rustworkx without installing PyTorch. PyTorch and
-PyTorch Geometric are optional dependencies for GNN-ready `Data` and
-`HeteroData` tensors.
-
-### Can graphs be converted between GeoPandas, NetworkX, and PyTorch Geometric?
-
-Yes. City2Graph supports round-trip conversion between GeoDataFrames, NetworkX,
-and PyTorch Geometric, including heterogeneous graphs. See the
-[graph conversion API](api/graph.md) for the supported functions.
-
-### How does City2Graph relate to OSMnx?
-
-OSMnx is a focused toolkit for downloading and analysing OpenStreetMap street
-networks. City2Graph can use street data from OSMnx and combines it with
-buildings, Overture Maps, transit, mobility, proximity, and heterogeneous graph
-workflows. The two libraries are complementary.
+<!-- faq -->
 
 ## Sample workflow
 

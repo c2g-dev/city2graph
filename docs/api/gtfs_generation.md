@@ -1,4 +1,5 @@
 ---
+seo_title: "How City2Graph Generates GTFS: Settings, OSM Tags and Defaults"
 description: Guide to generating synthetic GTFS from OpenStreetMap or your own tables, showing how user settings, source tags and defaults produce each value.
 ---
 

@@ -1,9 +1,9 @@
-# City2Graph: Geospatial Graphs for Network Analysis and GNNs
+# City2Graph: Geospatial Graphs for Network Analysis and GeoAI
 
 [![City2Graph](https://city2graph.net/latest/assets/logos/social_preview_city2graph.png)](https://city2graph.net/latest/)
 
-**City2Graph** is a Python library that turns buildings, streets, public
-transport feeds, origin–destination matrices, zones, and points of interest
+**City2Graph** is a Python library for spatial network analysis, urban
+analytics, and GeoAI that turns buildings, streets, public transport feeds, origin–destination matrices, zones, and points of interest
 into spatial and heterogeneous graphs. It bridges
 [GeoPandas](https://geopandas.org/), [NetworkX](https://networkx.org/), and
 [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/) so the

@@ -113,6 +113,25 @@
       "runtimePlatform": "Python 3.12–3.14",
       "isAccessibleForFree": true,
       "image": {{ social_image | tojson }},
+      "keywords": ["Spatial Network Analysis", "Urban Analytics", "Graph Neural Networks", "GeoAI", "PyTorch Geometric", "Heterogeneous Graphs", "GTFS", "Overture Maps", "OpenStreetMap", "Urban Morphology", "Accessibility"],
+      "featureList": [
+        "Heterogeneous morphological graphs from buildings, streets, and tessellations",
+        "Public transport graphs from GTFS feeds and synthetic GTFS from OpenStreetMap",
+        "Weighted mobility graphs from origin-destination matrices",
+        "Proximity and contiguity graphs over points and zones",
+        "Metapath-derived edges for heterogeneous graph neural networks",
+        "Conversion between GeoPandas, NetworkX, rustworkx, and PyTorch Geometric"
+      ],
+      "author": {
+        "@type": "Person",
+        "name": "Yuta Sato",
+        "sameAs": "https://orcid.org/0009-0004-7052-7163"
+      },
+      "sameAs": [
+        "https://github.com/c2g-dev/city2graph",
+        "https://pypi.org/project/city2graph/",
+        "https://anaconda.org/conda-forge/city2graph"
+      ],
       "citation": {
         "@type": "ScholarlyArticle",
         "name": "City2Graph: A Python library for Heterogeneous Graph Neural Networks and spatial analysis in urban systems",
@@ -320,7 +339,8 @@
 }
 </script>
 {% endif %}
-{% if page.meta.faq %}
+{% endif %}
+{% if page and page.meta.faq %}
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -336,6 +356,5 @@
   ]
 }
 </script>
-{% endif %}
 {% endif %}
 {% endblock %}

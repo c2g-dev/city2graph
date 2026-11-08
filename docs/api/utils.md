@@ -1,11 +1,14 @@
 ---
-description: API reference for the Utils module. Utility functions for graph conversion between GeoDataFrame, NetworkX and rustworkx, validation, tessellation, isochrone creation, and plotting.
+seo_title: "Utils API: Isochrones, Tessellation, rustworkx - City2Graph"
+description: "Utility functions for GeoDataFrame, NetworkX and rustworkx conversion, graph validation, tessellation, isochrone creation and plotting in City2Graph."
 keywords: gdf_to_nx, nx_to_gdf, rustworkx, tessellation, isochrone, dual_graph, plot_graph, graph validation, spatial utilities, canonicalize_edges, symmetrize_edges
 ---
 
 # Utils Module
 
 The utils module provides core utility functions for graph conversion, validation, and visualization.
+
+It converts between GeoDataFrames, NetworkX, and rustworkx, validates graph inputs, creates tessellations, and computes isochrones for accessibility analysis.
 
 For buffer isochrones, see [Filling holes in buffer isochrones](../examples/isochrone_holes.md)
 for the optional `fill_holes` setting, a before-and-after figure, and clipping guidance.
