@@ -21,15 +21,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 
-## 1.1.0 (2026-11-03)
+## 1.1.0 (2026-11-08)
 
 ### Added
+- Added `TransportData` and `create_gtfs()` for generating synthetic GTFS feeds from route, stop, pattern, and stop-sequence tables, with shared `simple-v1` operating rules and configurable service conditions.
+- Added `load_osm_transport()` for retrieving OSM public transport relations and generating feeds with explicit overrides, supplemental data, and recorded source conditions. `GTFSGenerationWarning` identifies estimates, assumptions, and placeholders; generated service should be interpreted with these conditions.
+- Added `get_gtfs_summary()` to inspect feed contents and generation conditions, and `save_gtfs()` to validate and export feeds as ZIP archives. Generation metadata can be embedded in the archive and is restored by `load_gtfs()` by default; `include_metadata=False` loads only GTFS tables.
 - Added optional `fill_holes=True` to `create_isochrone(method="buffer")`. It removes interior rings after combining all buffered components, without bridging gaps between separate polygon parts. The default is `False`, so existing calls retain their geometry. `buffer_distance=100`, the default hull method, CRS handling, and independent threshold layers are unchanged.
 
 ### Changed
 - Reduced temporary allocations with shared row batching across graph conversion, weighted metapaths, OD matrices, and proximity graphs. Network proximity queries reuse traversals across destinations, morphology reuses its buffer reachability calculation, and concave-hull neighbour caches are bounded.
 - Streamed Overture CLI output through temporary files instead of retaining the complete GeoJSON text in memory, and reused repeated GTFS timestamp conversions.
 - Updated package and citation metadata for `v1.1.0` and added the 1.1.x series to the security support table.
+- Refreshed runtime, development, and documentation dependencies, including Overture Maps 2.1.0, pandas 3.1.1, pytest 9.2.0, MkDocs Material 9.8.1, and PyMdown Extensions 13.0. Retained the pinned timezone boundary dataset for reproducible GTFS agency timezone inference.
+- Updated CPU and CUDA 13.2 dependencies to PyTorch 2.15.0 and torchvision 0.29.2. CUDA 12.6 and 13.0 retain PyTorch 2.14.1 and torchvision 0.29.1; CUDA 12.8 retains PyTorch 2.11.0 and torchvision 0.26.0. PyG remains at 2.8.1 across extras.
+- Updated the Ruff and mypy pre-commit hooks to 0.17.4 and 2.4.1, respectively.
 
 ### Fixed
 - Fixed PyG feature metadata alignment when requested columns are missing or non-numeric, validated CRS consistency before conversion, and applied heterogeneous node and edge type selections during reconstruction.
@@ -42,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - Added a runnable buffer isochrone guide with a before-and-after hole-filling figure, the distinction from `allow_holes`, and an example of clipping after filling to retain excluded areas.
 - Added scalability benchmarks and recorded results for the shared processing changes.
+- Added a synthetic GTFS API guide, an OSM-to-GTFS tutorial, and reusable GTFS generation and performance benchmarks.
+- Grouped GTFS guidance under Transportation, improved page titles, descriptions, and structured data, and reduced documentation CI setup time.
+- Updated installation commands and compatibility tables for the refreshed CPU and CUDA dependencies, with separate guidance for optional PyG binary extensions.
 
 
 ## 1.0.1 (2026-10-22)
