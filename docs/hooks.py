@@ -58,8 +58,23 @@ def _render_faq(markdown: str, page: Page | None) -> str:
     return markdown.replace("<!-- faq -->", "\n\n".join(entries))
 
 
+def _apply_notebook_meta(page: Page | None) -> None:
+    """Expose notebook ``metadata.mkdocs`` entries as page metadata.
+
+    mkdocs-jupyter reads only the entries it understands (such as ``hide``),
+    so titles, descriptions and dates stored there never reach the templates.
+    """
+    file = getattr(page, "file", None)
+    if page is None or file is None or not file.src_uri.endswith(".ipynb"):
+        return
+    notebook = json.loads(Path(file.abs_src_path).read_text(encoding="utf-8"))
+    for key, value in notebook.get("metadata", {}).get("mkdocs", {}).items():
+        page.meta.setdefault(key, value)
+
+
 def on_page_markdown(markdown: str, *, page: Page | None = None, **_kwargs: object) -> str:
     """Render page FAQs and the GTFS default tables from their registered sources."""
+    _apply_notebook_meta(page)
     markdown = _render_faq(markdown, page)
     if "<!-- gtfs-defaults:" not in markdown:
         return markdown

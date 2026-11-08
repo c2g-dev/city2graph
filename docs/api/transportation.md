@@ -1,5 +1,6 @@
 ---
-description: API reference for loading GTFS public transport and GBFS shared-mobility feeds, deriving OD pairs, and creating travel-summary graphs.
+seo_title: "GTFS and GBFS API: Transit Graphs, Synthetic GTFS - City2Graph"
+description: "Load GTFS and GBFS feeds into DuckDB, generate synthetic GTFS from OpenStreetMap, derive OD pairs and build travel-summary graphs with City2Graph."
 ---
 
 # Transportation Module

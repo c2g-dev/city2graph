@@ -1,5 +1,5 @@
 ---
-description: Guidelines for developing, testing, documenting, and contributing to City2Graph.
+description: Set up the City2Graph development environment, run tests and pre-commit checks, follow the code style, and submit a pull request.
 keywords: contributing, pull request, development environment, pre-commit, pytest, coverage, code style, ruff, mypy, numpydoc, documentation
 hide:
   - navigation

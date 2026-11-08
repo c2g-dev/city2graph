@@ -6,7 +6,7 @@ social_image_alt: "Public transport networks and street-based isochrones in Toky
 social_image_width: 1600
 social_image_height: 900
 date_published: "2026-11-06"
-date_modified: "2026-11-06"
+date_modified: "2026-11-08"
 about:
   - "GTFS"
   - "OpenStreetMap"
@@ -16,27 +16,28 @@ faq:
   - question: "Can I analyse public transport without a GTFS feed?"
     answer: "Yes. load_osm_transport reads public transport route relations from OpenStreetMap for a place name or boundary and generates a synthetic GTFS feed in a DuckDB connection. The same connection builds travel-summary graphs and origin-destination tables, supports isochrone workflows, and can be saved as a GTFS ZIP."
   - question: "Does it work for cities outside Europe and North America?"
-    answer: "The workflow depends on how completely OpenStreetMap maps the public transport routes and their ordered stops. It has no regional restriction. The eight-city figure includes Tokyo, Seoul and Melbourne. Run get_gtfs_summary on the result to see how many patterns were generated and which relations were skipped."
+    answer: "The workflow depends on how completely OpenStreetMap maps the public transport routes and their ordered stops. It has no regional restriction. The eight-city figure includes Tokyo, Seoul and Melbourne. get_gtfs_summary reports how many patterns were generated and which relations were skipped."
   - question: "How accurate are the synthetic schedules?"
-    answer: "Stop order and station locations come from OpenStreetMap. Each operating condition takes your setting first, then a supported OpenStreetMap tag, then a documented default. The result is a modelled service. It has not been validated against operator timetables or passenger counts, so use it for network structure, relative service levels and accessibility, and inspect the adopted values before drawing conclusions."
+    answer: "Stop order and station locations come from OpenStreetMap. Each operating condition takes your setting first, then a supported OpenStreetMap tag, then a documented default. The result is a modelled service for analysing network structure, relative service levels and accessibility. Its interpretation depends on the adopted values; it has not been validated against operator timetables or passenger counts."
   - question: "Which transport modes can City2Graph generate?"
-    answer: "Tram, subway, train, bus, trolleybus, ferry, light rail, monorail and funicular routes. Pass one or more of them to the modes argument."
+    answer: "Tram, subway, train, bus, trolleybus, ferry, light rail, monorail and funicular routes. The modes argument accepts one or more of these modes."
   - question: "Can I use my own routes instead of OpenStreetMap?"
     answer: "Yes. create_gtfs accepts explicit routes, stops, patterns and stop sequences as tables, and operating conditions you do not specify are completed from defaults."
   - question: "Can I save the generated feed as a GTFS file?"
     answer: "Yes. save_gtfs writes the feed as a GTFS ZIP, and the connection can be reloaded later. The generator writes a subset of the GTFS Schedule files, described in the generation reference."
   - question: "Is Overture Maps supported for GTFS generation?"
-    answer: "Not currently. Overture Maps transportation data describes physical infrastructure and does not provide complete public transport routes with ordered station calls and operating patterns. Use OpenStreetMap route relations or supply your own tables."
+    answer: "Not currently. Overture Maps transportation data describes physical infrastructure and does not provide complete public transport routes with ordered station calls and operating patterns. Generation uses OpenStreetMap route relations or your own tables."
 ---
 
 # No GTFS? Create It from OpenStreetMap by City2Graph
 
-City2Graph creates GTFS from OpenStreetMap (OSM) in Python. Pass a place name to
-`load_osm_transport` and it reads the mapped public transport routes and stops,
+City2Graph creates GTFS from OpenStreetMap (OSM) in Python. Given a place name,
+`load_osm_transport` reads the mapped public transport routes and stops,
 generates a synthetic GTFS feed, and returns it as a DuckDB connection. From
 there you can build a transit graph, calculate multi-modal accessibility
 isochrones, or save a GTFS ZIP. No operator feed is required, so the same
-workflow serves any transit system that OSM maps, in any city worldwide.
+workflow serves any transit system that OSM maps, in any city worldwide. For
+details, see the [GTFS generation guide](../api/gtfs_generation.md#generation-flow).
 
 [![Public transport networks and street-based isochrones in eight cities: Tokyo, London, Paris, New York, Melbourne, Berlin, Seoul and Amsterdam, each generated from OpenStreetMap without an operator GTFS feed](../assets/examples/synthetic_gtfs_world_isochrones.png)](../assets/examples/synthetic_gtfs_world_isochrones.png)
 
@@ -48,7 +49,7 @@ workflow serves any transit system that OSM maps, in any city worldwide.
 format for public transport schedules, but analysis that needs it stalls where
 no operator publishes an open feed. OSM maps transit routes and ordered stops in
 a consistent, openly licensed structure
-([public transport tagging](https://wiki.openstreetmap.org/wiki/Public_transport)),
+([OSM public transport documentation](https://wiki.openstreetmap.org/wiki/Public_transport)),
 so one method can cover cities that have no feed and cities that do.
 
 | | Operator GTFS feed | Synthetic GTFS from OSM |
@@ -59,13 +60,30 @@ so one method can cover cities that have no feed and cities that do.
 | Suited to | Analysis that needs the published timetable | Network structure, service levels and accessibility, compared across cities with one method |
 | Output | The feed as published | DuckDB feed, GTFS ZIP and transit graph |
 
-Use an official feed with [`load_gtfs`](gtfs.ipynb) when you have one and need
-its timetable. Generate a feed from OSM when you have none, or when you want the
-same assumptions in every city you compare.
+An official feed loaded with [`load_gtfs`](gtfs.ipynb) provides the operator
+timetable. Generation from OSM supports analysis where no feed is available or
+where a comparison needs the same assumptions across cities.
 
 ## 1. How to create GTFS from OpenStreetMap { #start-with-a-place }
 
-One call loads the mapped rail services and generates a feed:
+City2Graph reads OSM routes and ordered stops into a synthetic GTFS feed held
+in DuckDB. The feed supports transit graphs and accessibility analysis, and
+can be exported as a GTFS ZIP.
+
+<div class="gtfs-flowchart" markdown="1">
+
+```mermaid
+%%{init: {"flowchart": {"padding": 8, "rankSpacing": 24, "nodeSpacing": 24}}}%%
+flowchart LR
+    O["OpenStreetMap"] -->|load_osm_transport| F["Synthetic GTFS<br/>DuckDB connection"]
+    F -->|travel_summary_graph| G["Transit graph"]
+    G -->|create_isochrone| I["Accessibility<br/>isochrones"]
+    F -->|save_gtfs| Z["GTFS ZIP"]
+```
+
+</div>
+
+In Tokyo's 23 wards, one call loads the mapped rail services and generates a feed:
 
 <!-- gtfs-quick:osm -->
 ```python
@@ -77,7 +95,8 @@ con = c2g.load_osm_transport(
 )
 ```
 
-Convert the feed into station nodes and connections between consecutive stops.
+`travel_summary_graph` converts the feed into station nodes and connections
+between consecutive stops.
 
 <!-- gtfs-quick:osm-graph -->
 ```python
@@ -158,23 +177,22 @@ The loader queries OSM through Overpass for
 in the selected place or boundary and keeps their ordered stop members, following
 [Public Transport Version 2](https://wiki.openstreetmap.org/wiki/Public_transport)
 (PTv2) tagging. It supports these `modes`: `tram`, `subway`, `train`, `bus`,
-`trolleybus`, `ferry`, `light_rail`, `monorail` and `funicular`. Omit `modes` to
-load every supported mode. Replace `place_name` with `area` to supply your own
-boundary, or use `relation_ids` to select specific routes. To analyse another
-city, change `place_name` and the projected CRS in the isochrone example below.
+`trolleybus`, `ferry`, `light_rail`, `monorail` and `funicular`. Without `modes`,
+it loads every supported mode. The `area` argument accepts a boundary in place
+of `place_name`, while `relation_ids` selects specific routes. Other cities
+require their own `place_name` and projected CRS in the isochrone example below.
 
 ### Calculate transit accessibility isochrones from the generated feed { #walk-and-rail-isochrones-from-tokyo-station }
 
-Combine the generated rail service with walking streets to calculate 10-, 20-
-and 30-minute reach from Tokyo Station.
+The generated rail service and walking streets together give 10-, 20- and
+30-minute reach from Tokyo Station.
 
 <span id="download-the-walking-network"></span>
 
-Geocode Tokyo's 23 wards with `get_boundaries`, then pass that boundary to
+`get_boundaries` geocodes Tokyo's 23 wards, and
 [OSMnx](https://osmnx.readthedocs.io/en/stable/user-reference.html#osmnx.graph.graph_from_polygon)
-to download the walking streets.
-Project both networks to Tokyo's local metric CRS so distances are in metres.
-Walking speed is 4.5 km/h.
+downloads the walking streets within that boundary. Both networks use Tokyo's
+local metric CRS for distances in metres. Walking speed is 4.5 km/h.
 
 <!-- gtfs-iso:streets -->
 ```python
@@ -202,9 +220,8 @@ origin = gpd.GeoSeries([Point(longitude, latitude)], crs=4326).to_crs(crs)
 
 <span id="connect-streets-and-stations"></span>
 
-Keep the complete directed rail graph, including routes continuing outside the
-wards. `bridge_nodes` connects stations and street nodes within 250 m in both
-directions.
+The complete directed rail graph includes routes continuing outside the wards.
+`bridge_nodes` connects stations and street nodes within 250 m in both directions.
 
 <!-- gtfs-iso:connect -->
 ```python
@@ -222,9 +239,9 @@ _, access_edges = c2g.bridge_nodes(
 )
 ```
 
-Convert the bridge distances to walking time and add three minutes for entry
-and waiting when boarding. Access links are used only for routing, so their
-geometries can be omitted from the combined graph.
+Bridge distances determine walking time, with three minutes added for entry
+and waiting when boarding. Access links serve only routing, so their geometries
+can be omitted from the combined graph.
 
 <!-- gtfs-iso:network -->
 ```python
@@ -250,9 +267,9 @@ multimodal = c2g.gdf_to_nx(
 
 <span id="calculate-and-plot-the-reachable-streets"></span>
 
-Start at the street node nearest Tokyo Station. `cut_edge_types` removes rail
-and access links after calculating reachability, so the polygons follow reachable
-streets. The 20 m buffer controls their display width.
+Routing starts at the street node nearest Tokyo Station. `cut_edge_types` removes
+rail and access links after calculating reachability, so the polygons follow
+reachable streets. The 20 m buffer controls their display width.
 
 <!-- gtfs-iso:calculate -->
 ```python
@@ -343,9 +360,9 @@ The loader uses mapped station groups and reads operating intervals, including
 weekday and peak-hour conditions. In this recorded run it generated 310
 patterns; the ward view contains 662 nodes and 744 connections. Unusable
 relations are reported and skipped by default (23 in this snapshot).
-Inspect the adopted values and exclusions with `c2g.get_gtfs_summary(con)`.
-Use `stop_level="platform"` to retain individual boarding IDs, or
-`on_invalid="raise"` to require every selected relation to be usable.
+`c2g.get_gtfs_summary(con)` reports the adopted values and exclusions.
+The option `stop_level="platform"` retains individual boarding IDs, while
+`on_invalid="raise"` requires every selected relation to be usable.
 
 The edge legend uses intervals `[lower, upper)`: the lower bound is included
 and the upper bound is excluded. Node sizes count distinct neighbours,
@@ -363,13 +380,12 @@ Overture Maps is currently unsupported for GTFS generation. Its
 describe physical infrastructure, but do not provide complete public transport
 routes with the ordered station calls and operating patterns required by this
 workflow. Inferring service from track connectivity or station proximity can introduce
-incorrect station connections and arbitrary service counts. Use OSM's mapped
-transport relations or supply explicit transport tables with `create_gtfs`.
+incorrect station connections and arbitrary service counts. GTFS generation
+therefore relies on OSM's mapped transport relations or explicit transport
+tables supplied to `create_gtfs`.
 
 The same steps apply to other cities, shown next. The section after that changes
-the operating conditions while keeping the same mapped network. The
-[generation reference](../api/gtfs_generation.md#generation-flow) explains how
-user settings, OSM tags and defaults produce each value.
+the operating conditions while keeping the same mapped network.
 
 ## 2. The same workflow in eight cities { #across-eight-cities }
 
@@ -390,9 +406,9 @@ The other cities use their selected synthetic feeds and local walking networks.
 | Oceania | Melbourne |
 
 These cities are examples. The method needs OSM route relations with ordered
-stops, so results depend on how completely local transit is mapped. Check
-`c2g.get_gtfs_summary(con)` for the generated pattern count and the relations
-that were skipped before comparing cities.
+stops, so results depend on how completely local transit is mapped.
+`c2g.get_gtfs_summary(con)` provides the generated pattern count and skipped
+relations needed to assess coverage before comparing cities.
 
 The figures are static illustrations based on source data retrieved in November
 2026. Running the examples retrieves current OSM data, so network coverage and
@@ -404,8 +420,9 @@ the repository retains the published PNGs and small synthetic test inputs.
 
 <span id="2-decide-what-to-enter-and-what-to-leave-automatic"></span>
 
-Once the routes, stops and stopping order are known, specify only the operating
-conditions you want to control. Apply this flow separately to each condition.
+Once the routes, stops and stopping order are known, each operating condition
+follows the flow below. Explicit settings take priority over source values and
+defaults.
 In this example the source is OSM. With custom input tables, source records
 are optional; absent source values lead to defaults.
 
@@ -426,12 +443,12 @@ flowchart TD
 
 </div>
 
-The defaults are modelling assumptions. Check the adopted values before using
-travel times or service counts in an analysis.
+The defaults are modelling assumptions. The adopted values determine how travel
+times and service counts can be interpreted in an analysis.
 
 The quick start uses source operating tags, station groups and estimated travel
-times. Add only the conditions you want to change. For example,
-model departures between 07:00 and 09:00 at ten-minute intervals:
+times. A settings dictionary overrides individual conditions. This example
+models departures between 07:00 and 09:00 at ten-minute intervals:
 
 <span id="5-override-only-the-necessary-fields"></span>
 
@@ -447,11 +464,11 @@ settings = {
 These are the only custom operating values in this example. Speed, dwell,
 distance estimation and the reference week keep their automatic values.
 The explicit interval replaces the source's base and time-of-day intervals.
-Remove a key to return that condition to source-first completion. A pattern is
+Omitting a key restores source-first completion for that condition. A pattern is
 one stopping sequence in one direction; `group_headway_secs` can instead share
 a departure rate across a group.
 
-After running the quick start, rerun its loader with `**settings`:
+The same loader accepts these overrides through `**settings`:
 
 <!-- gtfs-example:osm -->
 ```python
@@ -464,13 +481,13 @@ configured_nodes, configured_edges = c2g.travel_summary_graph(configured_con)
 ```
 
 
-For a map of this scenario, use `configured_nodes` and `configured_edges` in the
-quick-start plotting block. The original `con` remains available for the
+The quick-start plotting block also works with `configured_nodes` and
+`configured_edges`. The original `con` remains available for the
 accessibility example in section 1.
 
-The settings dictionary controls the whole generated service. Use the first
-detail below for more operating settings, the second to change the downloaded
-network, and the third for conditions that vary by pattern or stop.
+The settings dictionary controls the whole generated service. The details below
+cover feed-wide operating settings, network selection, and conditions that vary
+by pattern or stop.
 
 <span id="parameters-you-can-set"></span>
 
@@ -478,8 +495,8 @@ network, and the third for conditions that vary by pattern or stop.
 
     <span id="operating-conditions"></span>
 
-    These arguments work with `create_gtfs` and `load_osm_transport`. Put the conditions you want to change in
-    `settings` in the configured examples above.
+    These arguments work with `create_gtfs` and `load_osm_transport` through
+    the `settings` dictionary shown above.
 
     <!-- gtfs-defaults:controls -->
 
@@ -487,7 +504,7 @@ network, and the third for conditions that vary by pattern or stop.
 
     <span id="source-and-selection"></span>
 
-    Pass these directly to the appropriate loader.
+    The loaders accept these selection arguments directly.
 
     | Parameter | What it selects or controls | If omitted |
     |---|---|---|
@@ -522,7 +539,7 @@ network, and the third for conditions that vary by pattern or stop.
     | `stop_sequences` | `shape_dist_traveled`, `pickup_type`, `drop_off_type`, `stop_headsign`, `timepoint` | Cumulative distance and stop-level GTFS attributes |
     | `patterns` | `direction_id`, `service_group_id` | Direction and interval-allocation group |
 
-    Dates and IDs connect these rows to the input tables. See the
+    Dates and IDs connect these rows to the input tables, as shown in the
     [table example and constraints](../api/gtfs_generation.md#from-your-own-tables).
 
 
@@ -549,8 +566,9 @@ In `assumptions`, `kind` records where each value came from:
 | `generated` | A generated identifier |
 | `ignored` | Rejected information, with a reason |
 
-Mapped local, express and through-service patterns can overlap. Check their
-service scopes before interpreting summed edge counts as operating capacity.
+Mapped local, express and through-service patterns can overlap, so summed edge
+counts require a review of the service scopes before interpretation as operating
+capacity.
 These are modelled services, without validation against operator timetables or
 passenger counts.
 
@@ -563,14 +581,14 @@ print(excluded[["record_id", "reason"]])
 
 ### Save the feed { #6-save-restore-and-describe-research-use }
 
-Save the generated feed as a GTFS ZIP with one call:
+`save_gtfs` writes the generated feed as a GTFS ZIP:
 
 <!-- gtfs-example:save -->
 ```python
 c2g.save_gtfs(configured_con, "synthetic.zip")
 ```
 
-## Frequently asked questions { #faq }
+## Q&A { #faq }
 
 <!-- faq -->
 
@@ -580,4 +598,4 @@ c2g.save_gtfs(configured_con, "synthetic.zip")
 - [Transportation API](../api/transportation.md): `load_osm_transport`, `create_gtfs`, `save_gtfs`, `get_gtfs_summary` and `travel_summary_graph`.
 - [GTFS to public transit graphs](gtfs.ipynb): the same graph and isochrone workflow from an official London feed.
 - [Filling holes in buffer isochrones](isochrone_holes.md): the buffer method used above.
-- [Public transport tagging in OpenStreetMap](https://wiki.openstreetmap.org/wiki/Public_transport) and the [GTFS Schedule reference](https://gtfs.org/documentation/schedule/reference/).
+- [OpenStreetMap public transport documentation](https://wiki.openstreetmap.org/wiki/Public_transport) and the [GTFS Schedule reference](https://gtfs.org/documentation/schedule/reference/).
