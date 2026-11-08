@@ -323,13 +323,15 @@ def test_gtfs_flowchart_themes_mobile_and_navigation(
     )
     assert page.locator("body").get_attribute("data-md-color-scheme") == f"city2graph-{scheme}"
     diagrams = page.locator(".mermaid svg")
-    diagram = diagrams.first
+    # The page has an overview flowchart first and the decision flow second.
+    decision_flow = page.locator(".gtfs-flowchart").nth(1)
+    diagram = decision_flow.locator(".mermaid svg")
     diagram.wait_for()
     assert "User value specified?" in (diagram.text_content() or "")
     assert "Use source value" in (diagram.text_content() or "")
     assert "Use default" in (diagram.text_content() or "")
     assert page.get_by_text("These are the only custom operating values", exact=False).is_visible()
-    assert diagrams.count() == 1
+    assert diagrams.count() == 2
     assert page.locator("article img").count() == 4
     for atlas in page.locator('article img[src$="synthetic_gtfs_world_isochrones.png"]').all():
         atlas.scroll_into_view_if_needed()
@@ -347,7 +349,7 @@ def test_gtfs_flowchart_themes_mobile_and_navigation(
         box = diagram.bounding_box()
         assert box
         assert min(box["width"], box["height"]) > 100
-        wrapper = page.locator(".gtfs-flowchart").bounding_box()
+        wrapper = decision_flow.bounding_box()
         assert wrapper
         assert wrapper["width"] <= width
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
@@ -421,7 +423,7 @@ def test_gtfs_introductory_maps_precede_configuration(
     assert atlases.first.evaluate(
         "image => Boolean(image.compareDocumentPosition(document.querySelector('#start-with-a-place')) & Node.DOCUMENT_POSITION_FOLLOWING)"
     )
-    assert page.locator(".gtfs-flowchart").evaluate(
+    assert page.locator(".gtfs-flowchart").last.evaluate(
         "chart => Boolean(chart.compareDocumentPosition("
         "document.getElementById('5-override-only-the-necessary-fields')) & Node.DOCUMENT_POSITION_FOLLOWING)"
     )
