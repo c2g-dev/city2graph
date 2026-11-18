@@ -1345,6 +1345,26 @@ class TestSaveGtfs:
         ):
             c2g.get_gtfs_summary(restored)
 
+    def test_save_cannot_replace_a_file_created_during_export(
+        self,
+        transport_input: TransportData,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        path = tmp_path / "feed.zip"
+        writestr = ZipFile.writestr
+
+        def write_with_competitor(archive: ZipFile, name: str, data: str) -> None:
+            if not path.exists():
+                path.write_bytes(b"concurrent output")
+            writestr(archive, name, data)
+
+        with c2g.create_gtfs(transport_input) as con, monkeypatch.context() as patch:
+            patch.setattr(ZipFile, "writestr", write_with_competitor)
+            with pytest.raises(FileExistsError):
+                c2g.save_gtfs(con, path)
+        assert path.read_bytes() == b"concurrent output"
+
     def test_overwrite_and_exclusions(
         self,
         transport_input: TransportData,

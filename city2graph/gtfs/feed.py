@@ -130,7 +130,11 @@ def save_gtfs(
                 )
             if metadata is not None:
                 archive.writestr(_METADATA_FILENAME, metadata)
-        temporary.replace(path)
+        if overwrite:
+            temporary.replace(path)
+        else:
+            # Publish the completed archive without replacing a concurrent writer.
+            path.hardlink_to(temporary)
     return path
 
 
