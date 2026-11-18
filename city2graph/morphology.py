@@ -1344,18 +1344,21 @@ def _place_to_movement_edges(
         msg = f"Expected ID column '{movement_id_col}' not found in movement_gdf."
         raise ValueError(msg)
 
-    # Ensure CRS consistency between place and movement GeoDataFrames
+    # GeoDataFrame reprojection transforms only its active geometry.
+    movement_crs = movement_gdf.crs
     movement_gdf = GeoDataProcessor.harmonize_crs(movement_gdf, place_gdf.crs, stacklevel=3)
     GeoDataProcessor.warn_crs_issues(
         place_gdf, geographic_message=_GEOGRAPHIC_CRS_MSG, stacklevel=3
     )
 
-    # Determine which geometry to use for the query
-    query_geometry = (
-        movement_gdf[primary_barrier_col]
-        if primary_barrier_col and primary_barrier_col in movement_gdf.columns
-        else movement_gdf.geometry
-    )
+    query_geometry = movement_gdf.geometry
+    if primary_barrier_col and primary_barrier_col in movement_gdf.columns:
+        query_geometry = gpd.GeoSeries(movement_gdf[primary_barrier_col])
+        barrier_crs = query_geometry.crs or movement_crs
+        if barrier_crs is not None and place_gdf.crs is not None and barrier_crs != place_gdf.crs:
+            if query_geometry.crs is None:
+                query_geometry = query_geometry.set_crs(barrier_crs)
+            query_geometry = query_geometry.to_crs(place_gdf.crs)
 
     # Use spatial index query with 'dwithin' predicate for efficient proximity search
     # This avoids creating expensive buffer geometries

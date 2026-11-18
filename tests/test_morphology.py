@@ -2538,3 +2538,32 @@ class TestPublicInputImmutability(TestMorphologyBase):
         segments_to_graph(sample_segments_gdf)
 
         assert_geodataframe_equal(sample_segments_gdf, segments_before)
+
+
+@pytest.mark.parametrize("typed_barrier", [False, True])
+def test_place_movement_reprojects_secondary_barrier_geometry(typed_barrier: bool) -> None:
+    """The spatial join uses the place CRS for the selected barrier column."""
+    place = gpd.GeoDataFrame(
+        {"place_id": ["east"]},
+        geometry=[
+            Polygon([(111300, -10), (111340, -10), (111340, 10), (111300, 10)]),
+        ],
+        crs=3857,
+    )
+    degree_line = LineString([(1.0, -0.001), (1.0, 0.001)])
+    movement = gpd.GeoDataFrame(
+        {"movement_id": ["street"], "barrier": [degree_line]},
+        geometry=[degree_line],
+        crs=4326,
+    )
+    if typed_barrier:
+        movement["barrier"] = gpd.GeoSeries([degree_line], crs=4326)
+
+    with pytest.warns(RuntimeWarning, match="CRS"):
+        _, edges = place_to_movement_graph(
+            place, movement, primary_barrier_col="barrier", max_connection_distance=0
+        )
+
+    assert list(zip(edges["place_id"], edges["movement_id"], strict=True)) == [("east", "street")]
+    assert movement.crs.to_epsg() == 4326
+    assert movement.loc[0, "barrier"].equals_exact(degree_line, 0)
