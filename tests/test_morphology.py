@@ -2538,3 +2538,28 @@ class TestPublicInputImmutability(TestMorphologyBase):
         segments_to_graph(sample_segments_gdf)
 
         assert_geodataframe_equal(sample_segments_gdf, segments_before)
+
+
+@pytest.mark.parametrize("as_nx", [False, True])
+def test_place_adjacency_deduplicates_joined_places_without_edges(as_nx: bool) -> None:
+    """A join cannot reintroduce duplicate node IDs in an empty topology."""
+    places = gpd.GeoDataFrame(
+        {"place_id": ["west", "west", "east"]},
+        geometry=[
+            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+            Polygon([(3, 0), (4, 0), (4, 1), (3, 1)]),
+        ],
+        crs=3857,
+    )
+    if as_nx:
+        with pytest.warns(DeprecationWarning, match="as_nx"):
+            graph = place_to_place_graph(places, as_nx=True)
+        assert isinstance(graph, nx.Graph)
+        assert len(graph) == 2
+        assert graph.number_of_edges() == 0
+        assert {data["place_id"] for _, data in graph.nodes(data=True)} == {"west", "east"}
+    else:
+        nodes, edges = place_to_place_graph(places)
+        assert list(nodes["place_id"]) == ["west", "east"]
+        assert edges.empty
