@@ -141,6 +141,32 @@ class TestGraphStructures(BaseGraphTest):
         assert nodes.crs == dual_edges.crs == sample_nodes_gdf.crs
         pd.testing.assert_frame_equal(edges, original)
 
+    def test_dual_graph_uses_the_active_geometry_column(
+        self, sample_nodes_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """Centroids replace the active geometry even when its name is not geometry."""
+        edges = gpd.GeoDataFrame(
+            {
+                "u": [1, 2],
+                "v": [2, 3],
+                "geometry": ["road A", "road B"],
+                "shape": [LineString([(0, 0), (2, 0)]), LineString([(2, 0), (4, 0)])],
+            },
+            geometry="shape",
+            crs=sample_nodes_gdf.crs,
+        )
+
+        dual_nodes, dual_edges = utils.dual_graph(
+            (sample_nodes_gdf, edges), keep_original_geom=True
+        )
+
+        assert dual_nodes.geometry.name == "shape"
+        assert list(dual_nodes.geometry) == [Point(1, 0), Point(3, 0)]
+        assert list(dual_nodes["geometry"]) == ["road A", "road B"]
+        assert list(dual_nodes["original_geometry"]) == list(edges.geometry)
+        assert list(dual_edges.geometry) == [LineString([(1, 0), (3, 0)])]
+        assert list(edges.geometry.geom_type) == ["LineString", "LineString"]
+
     @pytest.mark.parametrize(
         ("source", "target"),
         [

@@ -266,7 +266,7 @@ def dual_graph(
             UserWarning,
             stacklevel=2,
         )
-    dual_nodes["geometry"] = dual_nodes.geometry.centroid
+    dual_nodes.set_geometry(dual_nodes.geometry.centroid, inplace=True)
 
     if keep_original_geom:
         dual_nodes["original_geometry"] = edges_clean.geometry
