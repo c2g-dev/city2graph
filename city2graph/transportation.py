@@ -708,8 +708,9 @@ def get_od_pairs(
         for each OD pair.
     directed : bool, default=False
         If ``True``, preserve the original trip direction for each OD pair.
-        If ``False`` (default), canonicalize each pair so that
-        ``orig_stop_id < dest_stop_id`` and aggregate both directions together.
+        If ``False`` (default), use the same ordered stop pair for both
+        directions and orient any line geometry to that pair. Departure and
+        arrival timestamps still follow each trip's original direction.
 
     Returns
     -------
@@ -781,7 +782,12 @@ def get_od_pairs(
 
     if include_geometry and "stops" in tables:
         query += """,
-            ST_AsText(ST_MakeLine(s1.geometry, s2.geometry)) as geometry_wkt
+            ST_AsText(
+                CASE WHEN NOT ? AND v.orig_stop_id > v.dest_stop_id
+                     THEN ST_MakeLine(s2.geometry, s1.geometry)
+                     ELSE ST_MakeLine(s1.geometry, s2.geometry)
+                END
+            ) as geometry_wkt
         """
     else:
         include_geometry = False
@@ -797,7 +803,7 @@ def get_od_pairs(
         LEFT JOIN stops s2 ON v.dest_stop_id = s2.stop_id
         """
 
-    od_pairs_df = con.execute(query).df()
+    od_pairs_df = con.execute(query, [directed] if include_geometry else []).df()
 
     if od_pairs_df.empty:
         return pd.DataFrame()
@@ -820,9 +826,6 @@ def get_od_pairs(
         swap = od_pairs_df["orig_stop_id"] > od_pairs_df["dest_stop_id"]
         od_pairs_df.loc[swap, ["orig_stop_id", "dest_stop_id"]] = od_pairs_df.loc[
             swap, ["dest_stop_id", "orig_stop_id"]
-        ].to_numpy()
-        od_pairs_df.loc[swap, ["departure_ts", "arrival_ts"]] = od_pairs_df.loc[
-            swap, ["arrival_ts", "departure_ts"]
         ].to_numpy()
 
     od_pairs_df = od_pairs_df.sort_values(["trip_id", "date"]).reset_index(drop=True)

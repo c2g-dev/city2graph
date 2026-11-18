@@ -470,6 +470,31 @@ class TestGetOdPairs:
         # Undirected should have orig_stop_id <= dest_stop_id for all rows
         assert (result_undirected["orig_stop_id"] <= result_undirected["dest_stop_id"]).all()
 
+    def test_undirected_od_pair_keeps_trip_times_and_orients_geometry(
+        self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
+    ) -> None:
+        sample_gtfs_dict["stop_times"] = pd.DataFrame(
+            {
+                "trip_id": ["trip1", "trip1"],
+                "stop_id": ["stop2", "stop1"],
+                "stop_sequence": [1, 2],
+                "departure_time": ["08:00:00", "08:10:00"],
+                "arrival_time": ["08:00:00", "08:10:00"],
+            }
+        )
+        with gtfs_connection(sample_gtfs_dict) as con:
+            actual = get_od_pairs(con, "20240101", "20240101")
+            directed = get_od_pairs(con, "20240101", "20240101", directed=True)
+
+        assert isinstance(actual, gpd.GeoDataFrame)
+        assert isinstance(directed, gpd.GeoDataFrame)
+        row = actual.iloc[0]
+        assert (row["orig_stop_id"], row["dest_stop_id"]) == ("stop1", "stop2")
+        assert row["departure_ts"] == pd.Timestamp("2024-01-01 08:00")
+        assert row["arrival_ts"] == pd.Timestamp("2024-01-01 08:10")
+        assert row["travel_time_sec"] == 600.0
+        assert list(row.geometry.coords) == list(directed.iloc[0].geometry.coords)[::-1]
+
     def test_get_od_pairs_calendar_dates_only_with_explicit_window(
         self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
     ) -> None:
