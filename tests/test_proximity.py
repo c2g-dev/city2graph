@@ -1068,6 +1068,24 @@ def test_generators_insufficient_points_early_exit(
         assert_valid_proximity_result(nodes, edges, 2)
 
 
+@pytest.mark.parametrize("cost", [-1.0, float("nan"), float("inf")])
+def test_network_proximity_rejects_invalid_shortest_path_costs(cost: float) -> None:
+    """An invalid user-supplied weight cannot silently remove connectivity."""
+    points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], crs=3857)
+    network = gpd.GeoDataFrame(
+        {"travel_cost": [cost]}, geometry=[LineString([(0, 0), (1, 0)])], crs=3857
+    )
+
+    with pytest.raises(ValueError, match=r"travel_cost.*finite and non-negative"):
+        knn_graph(
+            points,
+            k=1,
+            distance_metric="network",
+            network_gdf=network,
+            network_weight="travel_cost",
+        )
+
+
 def test_bridge_nodes_errors_and_nx() -> None:
     """Cover bridge_nodes error branches and as_nx=True path."""
     p1 = make_single_point()
