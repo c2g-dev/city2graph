@@ -877,9 +877,29 @@ def remove_isolated_components(
     if edges.empty:
         return _return_graph_output(nodes, edges, input_type, as_nx)
 
+    # Frame labels are not guaranteed unique, so carry source row positions
+    # through conversion. Leave a caller's identically named column untouched.
+    position_column = "_city2graph_edge_position"
+    while position_column in edges.columns:
+        position_column += "_"
+    positions = pd.RangeIndex(len(edges))
+    indexed_edges = edges.copy(deep=False)
+    indexed_edges[position_column] = positions
+    if (
+        isinstance(edges.index, pd.MultiIndex)
+        and edges.index.nlevels == 3
+        and not edges.index.is_unique
+    ):
+        # The third level is the NetworkX edge key. Different rows must keep
+        # distinct keys even if the frame repeats all three index levels.
+        indexed_edges.index = pd.MultiIndex.from_arrays(
+            [edges.index.get_level_values(0), edges.index.get_level_values(1), positions],
+            names=edges.index.names,
+        )
+
     # Build graph for component analysis
     try:
-        nx_graph = gdf_to_nx(edges=edges, multigraph=True)
+        nx_graph = gdf_to_nx(edges=indexed_edges, multigraph=True)
     except (ValueError, TypeError, KeyError):
         return _return_graph_output(nodes, edges, input_type, as_nx)
 
@@ -891,13 +911,11 @@ def remove_isolated_components(
     largest_cc = max(cc_func(nx_graph), key=len)
     subgraph = nx_graph.subgraph(largest_cc)
 
-    # Get original edge indices
-    edge_indices = [
-        d["_original_edge_index"]
-        for _, _, d in subgraph.edges(data=True)
-        if "_original_edge_index" in d
-    ]
-    filtered_edges = edges.loc[edge_indices] if edge_indices else edges.iloc[0:0]
+    retained_rows = np.zeros(len(edges), dtype=bool)
+    for _, _, attrs in subgraph.edges(data=True):
+        if position_column in attrs:
+            retained_rows[int(attrs[position_column])] = True
+    filtered_edges = edges.iloc[retained_rows]
 
     return _return_graph_output(
         _filter_nodes_by_edges(nodes, filtered_edges), filtered_edges, input_type, as_nx
