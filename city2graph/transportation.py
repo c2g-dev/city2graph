@@ -306,6 +306,50 @@ def _ensure_stops_geometry(con: duckdb.DuckDBPyConnection) -> None:
     )
 
 
+def _materialize_loaded_stop_geometry(con: duckdb.DuckDBPyConnection) -> None:
+    """
+    Materialize nullable WGS84 geometry in an imported stops table.
+
+    Validate coordinate columns for location types that require them and
+    leave locations with unusable coordinates without a point.
+
+    Parameters
+    ----------
+    con : duckdb.DuckDBPyConnection
+        Feed connection containing the imported stops table.
+
+    Returns
+    -------
+    None
+        The function adds the geometry column to stops.
+
+    Raises
+    ------
+    ValueError
+        If locations require coordinates and a coordinate column is absent.
+    """
+    stop_columns = _table_columns(con, "stops")
+    has_coordinates = {"stop_lon", "stop_lat"}.issubset(stop_columns)
+    if not has_coordinates and (
+        "location_type" not in stop_columns
+        or con.execute("""
+            SELECT count(*) FROM stops
+            WHERE coalesce(try_cast(location_type AS INTEGER), 0) NOT IN (3, 4)
+        """).fetchone()
+        != (0,)
+    ):
+        msg = "GTFS stops requiring coordinates must have stop_lon and stop_lat columns."
+        raise ValueError(msg)
+    con.execute("ALTER TABLE stops ADD COLUMN geometry GEOMETRY")
+    if has_coordinates:
+        con.execute("""
+            UPDATE stops
+            SET geometry = ST_Point(CAST(stop_lon AS DOUBLE), CAST(stop_lat AS DOUBLE))
+            WHERE try_cast(stop_lon AS DOUBLE) BETWEEN -180 AND 180
+              AND try_cast(stop_lat AS DOUBLE) BETWEEN -90 AND 90
+        """)
+
+
 def _feed_date_bounds(
     con: duckdb.DuckDBPyConnection, tables: set[str]
 ) -> tuple[datetime | None, datetime | None]:
@@ -480,7 +524,9 @@ def load_gtfs(
     The function reads ``*.txt`` GTFS files as tables, registers a time parsing
     UDF, and materializes ``stops.geometry`` as points from
     ``stop_lon``/``stop_lat`` when valid WGS84 stop coordinates are available.
-    Stops with missing or invalid coordinates are kept with null geometry.
+    Stops with missing or invalid coordinate values are kept with null geometry.
+    A table may omit coordinate columns when it contains only GTFS location
+    types whose coordinates are optional.
 
     Parameters
     ----------
@@ -527,14 +573,7 @@ def load_gtfs(
         tables = sorted(_list_tables(con))
 
         if "stops" in tables:
-            con.execute("ALTER TABLE stops ADD COLUMN geometry GEOMETRY")
-            if {"stop_lon", "stop_lat"}.issubset(_table_columns(con, "stops")):
-                con.execute("""
-                    UPDATE stops
-                    SET geometry = ST_Point(CAST(stop_lon AS DOUBLE), CAST(stop_lat AS DOUBLE))
-                    WHERE try_cast(stop_lon AS DOUBLE) BETWEEN -180 AND 180
-                      AND try_cast(stop_lat AS DOUBLE) BETWEEN -90 AND 90
-                """)
+            _materialize_loaded_stop_geometry(con)
 
         if embedded_metadata is not None:
             _restore_metadata(con, embedded_metadata)
