@@ -36,6 +36,22 @@ def od_zones_gdf() -> gpd.GeoDataFrame:
 class TestODMatrixToGraph:
     """Tests for od_matrix_to_graph function."""
 
+    def test_geometry_creation_drops_edges_with_empty_centroids(self) -> None:
+        """Keep unaffected flows when one valid zone ID has no spatial footprint."""
+        zones = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0), Point()], crs="EPSG:3857")
+        flows = pd.DataFrame({"source": [0, 0], "target": [1, 2], "flow": [3, 4]})
+        with pytest.warns(UserWarning, match=r"Dropping 1 edges.*missing centroid"):
+            nodes, edges = od_matrix_to_graph(flows, zones, weight_cols=["flow"])
+        assert list(nodes.index) == [0, 1, 2]
+        assert list(edges.index) == [(0, 1)]
+        assert edges["weight"].tolist() == [3]
+
+        _, nonspatial_edges = od_matrix_to_graph(
+            flows, zones, weight_cols=["flow"], compute_edge_geometry=False
+        )
+        assert list(nonspatial_edges.index) == [(0, 1), (0, 2)]
+        assert nonspatial_edges.geometry.isna().all()
+
     def test_adjacency_batch_boundary_and_input_ownership(self) -> None:
         """Diagonal removal and NaN handling are global across row batches."""
         n = 270

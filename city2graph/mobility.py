@@ -31,6 +31,7 @@ from typing import cast
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from shapely import is_empty
 from shapely.geometry import LineString
 
 from city2graph._processing import row_batches
@@ -1317,7 +1318,7 @@ def _create_edge_geometries(
     src_pts = e[source_col].map(lookup)
     tgt_pts = e[target_col].map(lookup)
 
-    missing_any = src_pts.isna() | tgt_pts.isna()
+    missing_any = src_pts.isna() | tgt_pts.isna() | is_empty(src_pts) | is_empty(tgt_pts)
     n_missing = int(missing_any.sum())
     if n_missing:
         warnings.warn(
