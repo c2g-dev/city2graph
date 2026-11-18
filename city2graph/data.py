@@ -28,6 +28,7 @@ from shapely import get_point
 from shapely import get_type_id
 from shapely import get_x
 from shapely import get_y
+from shapely import has_z
 from shapely import is_empty
 from shapely import set_coordinates
 from shapely.geometry import LineString
@@ -312,7 +313,8 @@ def process_overture_segments(
 
     This function processes road segments by splitting them at connector points and
     optionally generates barrier geometries based on level rules. It also performs
-    endpoint clustering to snap nearby endpoints together.
+    endpoint clustering to snap nearby endpoints in the horizontal plane while
+    retaining existing elevations.
 
     Parameters
     ----------
@@ -860,7 +862,9 @@ def _cluster_segment_endpoints(
         .reshape(-1, 2, 2)
     )
 
-    coordinates, geometry_indexes = get_coordinates(line_geometries, return_index=True)
+    coordinates, geometry_indexes = get_coordinates(
+        line_geometries, include_z=bool(has_z(line_geometries).any()), return_index=True
+    )
     first_coordinate = np.flatnonzero(np.r_[True, geometry_indexes[1:] != geometry_indexes[:-1]])
     last_coordinate = np.r_[first_coordinate[1:] - 1, len(coordinates) - 1]
     coordinates[first_coordinate, :2] = centroid_coordinates[:, 0, :]

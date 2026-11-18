@@ -1286,6 +1286,23 @@ class TestProcessOvertureSegments:
         assert list(result.geometry.iloc[0].coords) == [(0, 0), (0.5, 2), (1.1, 0)]
         assert list(result.geometry.iloc[1].coords) == [(1.1, 0), (1.5, 2), (2, 0)]
 
+    def test_endpoint_clustering_retains_elevation(self) -> None:
+        """Snap horizontal positions while keeping each line's dimensions and elevations."""
+        segments = make_segments_gdf(
+            ids=["elevated", "flat"],
+            geoms_or_coords=[
+                LineString([(0, 0, 10), (0.5, 2, 11), (1, 0, 12)]),
+                LineString([(1.2, 0), (1.5, 2), (2, 0)]),
+            ],
+            crs="EPSG:3857",
+        )
+        connectors = make_connectors_gdf(ids=["unused"], coords=[(0, 0)], crs="EPSG:3857")
+        result = process_overture_segments(
+            segments, connectors_gdf=connectors, get_barriers=False, threshold=1.0
+        )
+        assert list(result.geometry.iloc[0].coords) == [(0, 0, 10), (0.5, 2, 11), (1.1, 0, 12)]
+        assert list(result.geometry.iloc[1].coords) == [(1.1, 0), (1.5, 2), (2, 0)]
+
     def test_vectorized_barriers_preserve_indexes_and_null_geometries(self) -> None:
         """Barrier generation aligns custom indexes and retains null/empty values."""
         segments_gdf = gpd.GeoDataFrame(
