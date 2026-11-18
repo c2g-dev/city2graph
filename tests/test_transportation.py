@@ -219,6 +219,17 @@ class TestLoadGtfs:
 
 
 class TestLoadGbfs:
+    def test_bad_json_does_not_hide_valid_station_geometries(self, tmp_path: Path) -> None:
+        (tmp_path / "bad.json").write_text("{invalid", encoding="utf-8")
+        (tmp_path / "station_information.json").write_text(
+            '{"data":{"stations":[{"station_id":"a","lat":40,"lon":-74}]}}',
+            encoding="utf-8",
+        )
+        with load_gbfs(tmp_path) as con:
+            assert con.execute(
+                "SELECT station_id, ST_AsText(geometry) FROM station_information"
+            ).fetchall() == [("a", "POINT (-74 40)")]
+
     def test_load_gbfs_is_public_top_level_api(self) -> None:
         assert c2g.load_gbfs is load_gbfs
 

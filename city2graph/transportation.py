@@ -549,7 +549,8 @@ def load_gbfs(path: str | Path) -> duckdb.DuckDBPyConnection:
 
     The function reads GBFS JSON files from a local directory, flattens common
     feed structures into DuckDB tables, and materializes geometry columns from
-    ``lon``/``lat`` fields when available.
+    ``lon``/``lat`` fields when available. Unreadable files are logged and
+    skipped so other feeds in the directory remain usable.
 
     Parameters
     ----------
@@ -565,38 +566,42 @@ def load_gbfs(path: str | Path) -> duckdb.DuckDBPyConnection:
     con.execute("INSTALL spatial; LOAD spatial;")
     path = Path(path)
     has_files = False
-    try:
-        for file_path in path.rglob("*.json"):
-            with file_path.open(encoding="utf-8") as f:
-                raw = json.load(f)
-            data = raw.get("data", {})
-            if "stations" in data:
-                rows = data["stations"]
-            elif "bikes" in data:
-                rows = data["bikes"]
-            elif "vehicles" in data:
-                rows = data["vehicles"]
-            elif "vehicle_types" in data:
-                rows = data["vehicle_types"]
-            elif "feeds" in data:
-                rows = data["feeds"]
-            else:
-                rows = [data]
-            if not rows:
-                continue
-            has_files = True
-            table_name = file_path.stem.replace("-", "_").lower()
-            frame = pd.DataFrame(rows)
-            con.register("_gbfs_tmp", frame)
-            con.execute(f"""
-                CREATE OR REPLACE TABLE {table_name} AS
-                SELECT *
-                FROM _gbfs_tmp
-            """)  # noqa: S608
-            con.unregister("_gbfs_tmp")
-    except (OSError, json.JSONDecodeError, duckdb.Error):
-        logger.exception("Failed to read GBFS data at %s", path)
-        return con
+    for file_path in path.rglob("*.json"):
+        try:
+            with file_path.open(encoding="utf-8") as file:
+                raw = json.load(file)
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            logger.exception("Failed to read GBFS file at %s", file_path)
+            continue
+        data = raw.get("data") if isinstance(raw, dict) else None
+        if not isinstance(data, dict):
+            logger.warning("GBFS file has no data object: %s", file_path)
+            continue
+        rows = next(
+            (
+                data[key]
+                for key in ("stations", "bikes", "vehicles", "vehicle_types", "feeds")
+                if key in data
+            ),
+            [data],
+        )
+        if not rows:
+            continue
+        table_name = file_path.stem.replace("-", "_").lower()
+        try:
+            con.register("_gbfs_tmp", pd.DataFrame(rows))
+            try:
+                con.execute(f"""
+                    CREATE OR REPLACE TABLE {table_name} AS
+                    SELECT *
+                    FROM _gbfs_tmp
+                """)  # noqa: S608
+            finally:
+                con.unregister("_gbfs_tmp")
+        except (ValueError, duckdb.Error):
+            logger.exception("Failed to load GBFS table from %s", file_path)
+            continue
+        has_files = True
     if not has_files:
         logger.warning("No GBFS JSON files found in %s", path)
         return con
