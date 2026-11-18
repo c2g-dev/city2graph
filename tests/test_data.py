@@ -1203,6 +1203,24 @@ class TestProcessOvertureSegments:
 
         assert len(result) >= 1
 
+    def test_split_barriers_keep_their_position_on_the_original_road(self) -> None:
+        """A rule's source fractions must be translated to each child segment."""
+        segments = make_segments_gdf(
+            ids=["road"],
+            geoms_or_coords=[[(0, 0), (10, 0)]],
+            connectors='[{"connector_id": "middle", "at": 0.5}]',
+            level_rules='[{"value": 1, "between": [0.3, 0.7]}]',
+            crs="EPSG:3857",
+        )
+        connectors = make_connectors_gdf(ids=["middle"], coords=[(5, 0)], crs="EPSG:3857")
+        result = process_overture_segments(segments, connectors_gdf=connectors, threshold=0.01)
+
+        assert result["id"].tolist() == ["road_1", "road_2"]
+        assert result["barrier_geometry"].tolist() == [
+            LineString([(0, 0), (3, 0)]),
+            LineString([(7, 0), (10, 0)]),
+        ]
+
     def test_vectorized_splitting_preserves_order_attributes_and_geometry(self) -> None:
         """Batch splitting preserves exact row semantics and source attributes."""
         segments_gdf = gpd.GeoDataFrame(
