@@ -17,7 +17,6 @@ import logging
 import warnings
 from dataclasses import dataclass
 from itertools import combinations
-from math import isfinite
 from numbers import Real
 from typing import TYPE_CHECKING
 from typing import Any
@@ -1545,6 +1544,9 @@ def _validate_radius(radius: float) -> None:
     """
     Check that a fixed-radius cutoff is finite and non-negative.
 
+    A zero cutoff is valid and can select distinct nodes with coincident
+    coordinates. Reject invalid values before querying the neighbor index.
+
     Parameters
     ----------
     radius : float
@@ -1555,7 +1557,7 @@ def _validate_radius(radius: float) -> None:
     ValueError
         If the radius is negative or not finite.
     """
-    if not isfinite(radius) or radius < 0:
+    if not np.isfinite(radius) or radius < 0:
         msg = "radius must be finite and non-negative"
         raise ValueError(msg)
 
