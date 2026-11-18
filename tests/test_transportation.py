@@ -1,6 +1,7 @@
 """Tests for the transportation module."""
 
 import typing
+import zipfile
 
 # ruff: noqa: D101, D102, S608, PT011
 from datetime import datetime
@@ -40,6 +41,11 @@ def gtfs_zip_invalid_coords() -> typing.Generator[str, None, None]:
                 "stop1,Stop 1,40.7128,-74.0060\n"
                 "stop2,Stop 2,invalid,invalid\n"
                 "stop3,Stop 3,,\n"
+                "stop4,Stop 4,0,NaN\n"
+                "stop5,Stop 5,Infinity,0\n"
+                "stop6,Stop 6,91,0\n"
+                "stop7,Stop 7,0,-181\n"
+                "stop8,Stop 8,0,0\n"
             ),
             "agency.txt": (
                 "agency_id,agency_name,agency_url,agency_timezone\n"
@@ -211,6 +217,21 @@ class TestLoadGtfs:
                 ("stop1", False),
                 ("stop2", True),
                 ("stop3", True),
+                ("stop4", True),
+                ("stop5", True),
+                ("stop6", True),
+                ("stop7", True),
+                ("stop8", False),
+            ]
+
+    def test_load_gtfs_retains_locations_without_coordinate_columns(self, tmp_path: Path) -> None:
+        path = tmp_path / "coordinates-optional.zip"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("stops.txt", "stop_id,location_type\ngeneric-node,3\n")
+
+        with load_gtfs(path) as con:
+            assert con.execute("SELECT stop_id, geometry FROM stops").fetchall() == [
+                ("generic-node", None)
             ]
 
     def test_load_gtfs_nonexistent_file(self) -> None:

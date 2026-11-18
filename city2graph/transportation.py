@@ -293,8 +293,8 @@ def _ensure_stops_geometry(con: duckdb.DuckDBPyConnection) -> None:
         SELECT
             *,
             CASE
-                WHEN try_cast(NULLIF(stop_lon, '') AS DOUBLE) IS NOT NULL
-                 AND try_cast(NULLIF(stop_lat, '') AS DOUBLE) IS NOT NULL
+                WHEN try_cast(NULLIF(stop_lon, '') AS DOUBLE) BETWEEN -180 AND 180
+                 AND try_cast(NULLIF(stop_lat, '') AS DOUBLE) BETWEEN -90 AND 90
                 THEN ST_Point(
                     CAST(NULLIF(stop_lon, '') AS DOUBLE),
                     CAST(NULLIF(stop_lat, '') AS DOUBLE)
@@ -479,7 +479,8 @@ def load_gtfs(
 
     The function reads ``*.txt`` GTFS files as tables, registers a time parsing
     UDF, and materializes ``stops.geometry`` as points from
-    ``stop_lon``/``stop_lat`` when stop coordinates are available.
+    ``stop_lon``/``stop_lat`` when valid WGS84 stop coordinates are available.
+    Stops with missing or invalid coordinates are kept with null geometry.
 
     Parameters
     ----------
@@ -526,12 +527,14 @@ def load_gtfs(
         tables = sorted(_list_tables(con))
 
         if "stops" in tables:
-            # Build point geometries while guarding against empty coordinate strings.
-            con.execute("""
-                ALTER TABLE stops ADD COLUMN geometry GEOMETRY;
-                UPDATE stops SET geometry = ST_Point(CAST(NULLIF(stop_lon, '') AS DOUBLE), CAST(NULLIF(stop_lat, '') AS DOUBLE))
-                WHERE try_cast(NULLIF(stop_lon, '') as DOUBLE) IS NOT NULL AND try_cast(NULLIF(stop_lat, '') as DOUBLE) IS NOT NULL;
-            """)
+            con.execute("ALTER TABLE stops ADD COLUMN geometry GEOMETRY")
+            if {"stop_lon", "stop_lat"}.issubset(_table_columns(con, "stops")):
+                con.execute("""
+                    UPDATE stops
+                    SET geometry = ST_Point(CAST(stop_lon AS DOUBLE), CAST(stop_lat AS DOUBLE))
+                    WHERE try_cast(stop_lon AS DOUBLE) BETWEEN -180 AND 180
+                      AND try_cast(stop_lat AS DOUBLE) BETWEEN -90 AND 90
+                """)
 
         if embedded_metadata is not None:
             _restore_metadata(con, embedded_metadata)
