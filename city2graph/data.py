@@ -101,7 +101,7 @@ def load_overture_data(
         The area of interest. Can be:
         - A bounding box as [min_lon, min_lat, max_lon, max_lat] in WGS84
         - A Shapely Polygon/MultiPolygon (assumed to be in WGS84)
-        - A GeoSeries or GeoDataFrame with CRS info (will be reprojected to WGS84 if needed)
+        - A GeoSeries or GeoDataFrame of polygons, combined and reprojected to WGS84 if needed
         Mutually exclusive with place_name.
     place_name : str, optional
         Name of a place to geocode (e.g., "Liverpool, UK"). Uses Nominatim to retrieve
@@ -437,7 +437,7 @@ def _prepare_area_and_bbox(
         The area of interest. Can be:
         - A bounding box as [min_lon, min_lat, max_lon, max_lat] in WGS84
         - A Shapely Polygon/MultiPolygon (assumed to be in WGS84)
-        - A GeoSeries or GeoDataFrame with CRS info (will be reprojected to WGS84 if needed)
+        - A GeoSeries or GeoDataFrame of polygons, combined and reprojected to WGS84 if needed
 
     Returns
     -------
@@ -460,8 +460,15 @@ def _prepare_area_and_bbox(
         wgs84_crs = CRS.from_epsg(4326)
         if area.crs is not None and CRS.from_user_input(area.crs) != wgs84_crs:
             area = area.to_crs(wgs84_crs)
-        # Extract the first geometry
-        area = area.geometry.iloc[0] if isinstance(area, gpd.GeoDataFrame) else area.iloc[0]
+        geometries = area.geometry if isinstance(area, gpd.GeoDataFrame) else area
+        if not geometries.geom_type.dropna().isin(("Polygon", "MultiPolygon")).all():
+            msg = "The area must contain polygon geometries"
+            raise ValueError(msg)
+        combined = geometries.union_all()
+        if not isinstance(combined, (Polygon, MultiPolygon)) or combined.is_empty:
+            msg = "The area must contain at least one non-empty polygon"
+            raise ValueError(msg)
+        area = combined
 
     if isinstance(area, (Polygon, MultiPolygon)):
         bbox_str = ",".join(str(round(c, 10)) for c in area.bounds)
