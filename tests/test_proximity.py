@@ -1661,3 +1661,28 @@ def test_network_bridge_nonpositive_k(k: int) -> None:
         network_gdf=network,
     )
     assert all(result.empty for result in edges.values())
+
+
+def test_network_proximity_preserves_curved_path_geometry() -> None:
+    """A selected network path follows the linework in either direction."""
+    points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(4, 0)], index=["west", "east"], crs=3857)
+    network = gpd.GeoDataFrame(
+        geometry=[
+            LineString([(0, 0), (1, 3), (2, 0)]),
+            LineString([(4, 0), (3, 2), (2, 0)]),
+        ],
+        crs=3857,
+    )
+    _, result = bridge_nodes(
+        {"start": points.iloc[:1], "end": points.iloc[1:]},
+        k=1,
+        distance_metric="network",
+        network_gdf=network,
+    )
+
+    route = LineString([(0, 0), (1, 3), (2, 0), (3, 2), (4, 0)])
+    forward = result[("start", "is_nearby", "end")]
+    reverse = result[("end", "is_nearby", "start")]
+    assert forward.geometry.iloc[0].equals_exact(route, 0)
+    assert reverse.geometry.iloc[0].equals_exact(route.reverse(), 0)
+    assert forward["weight"].iloc[0] == pytest.approx(route.length)

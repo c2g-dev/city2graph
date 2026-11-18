@@ -17,6 +17,7 @@ import logging
 import warnings
 from dataclasses import dataclass
 from itertools import combinations
+from itertools import pairwise
 from numbers import Real
 from typing import TYPE_CHECKING
 from typing import Any
@@ -396,6 +397,7 @@ class DistanceMetric:
         Reconstruct the first shortest network path.
 
         Use the first predecessor to preserve the path chosen by NetworkX strict distance improvements.
+        Retain intermediate vertices from each network edge in traversal order.
 
         Parameters
         ----------
@@ -416,8 +418,20 @@ class DistanceMetric:
         path = [target]
         while path[-1] != source:
             path.append(predecessors[path[-1]][0])
-        _graph, positions, _coords, _ids, _weight = self._get_network_support()
-        return LineString([positions[node] for node in reversed(path)])
+        graph, positions, _coords, _ids, _weight = self._get_network_support()
+        coordinates = [positions[source]]
+        for u, v in pairwise(reversed(path)):
+            geometry = graph[u][v].get("geometry")
+            start, end = positions[u], positions[v]
+            if isinstance(geometry, LineString) and not geometry.is_empty:
+                vertices = [(x, y) for x, y, *_ in geometry.coords]
+                if vertices[0] == end and vertices[-1] == start:
+                    vertices.reverse()
+                if vertices[0] == start and vertices[-1] == end:
+                    coordinates.extend(vertices[1:])
+                    continue
+            coordinates.append(end)
+        return LineString(coordinates)
 
     @staticmethod
     def _normalize_metric(metric: object) -> str:
