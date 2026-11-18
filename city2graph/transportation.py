@@ -663,7 +663,8 @@ def _build_frequency_periods(
     """)  # noqa: S608
     invalid = con.execute("""
         SELECT trip_id FROM _frequency_periods
-        WHERE headway IS NULL OR NOT isfinite(headway) OR headway <= 0
+        WHERE start_sec IS NULL OR end_sec IS NULL
+            OR headway IS NULL OR NOT isfinite(headway) OR headway <= 0
             OR headway != floor(headway) OR end_sec <= start_sec
             OR exact_times IS NULL OR exact_times NOT IN (0, 1)
         UNION ALL
