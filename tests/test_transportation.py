@@ -533,6 +533,26 @@ class TestGetOdPairs:
 
 
 class TestTravelSummaryGraph:
+    def test_undirected_summary_orients_geometry_to_its_stop_index(
+        self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
+    ) -> None:
+        sample_gtfs_dict["stop_times"] = pd.DataFrame(
+            {
+                "trip_id": ["trip1", "trip1"],
+                "stop_id": ["stop2", "stop1"],
+                "stop_sequence": [1, 2],
+                "departure_time": ["08:00:00", "08:10:00"],
+                "arrival_time": ["08:00:00", "08:10:00"],
+            }
+        )
+        with gtfs_connection(sample_gtfs_dict) as con:
+            _, actual = travel_summary_graph(con, directed=False)
+            _, directed = travel_summary_graph(con, directed=True)
+
+        assert actual.index.tolist() == [("stop1", "stop2")]
+        assert directed.index.tolist() == [("stop2", "stop1")]
+        assert list(actual.iloc[0].geometry.coords) == list(directed.iloc[0].geometry.coords)[::-1]
+
     @pytest.mark.parametrize(
         "value",
         [

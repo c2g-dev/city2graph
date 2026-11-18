@@ -24,6 +24,7 @@ from typing import Unpack
 import duckdb
 import geopandas as gpd
 import pandas as pd
+from shapely import reverse
 from shapely import wkt
 
 from . import data as _data
@@ -1118,6 +1119,8 @@ def _build_travel_summary_edges(
         edges_df.loc[swap_mask, ["from_stop_id", "to_stop_id"]] = edges_df.loc[
             swap_mask, ["to_stop_id", "from_stop_id"]
         ].to_numpy()
+        reversed_lines = reverse(edges_df.loc[swap_mask, "geometry"])
+        edges_df.loc[swap_mask, "geometry"] = reversed_lines
         edges_df["_weighted_tt"] = edges_df["travel_time_sec"] * edges_df["frequency"]
         agg = edges_df.groupby(["from_stop_id", "to_stop_id"], sort=False).agg(
             _weighted_tt=("_weighted_tt", "sum"),
