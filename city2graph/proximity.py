@@ -17,6 +17,7 @@ import logging
 import warnings
 from dataclasses import dataclass
 from itertools import combinations
+from math import isfinite
 from numbers import Real
 from typing import TYPE_CHECKING
 from typing import Any
@@ -1540,6 +1541,25 @@ def _add_minimum_spanning_edges(builder: GraphBuilder, candidates: set[EdgePair]
         builder.G[u][v]["weight"] = weight
 
 
+def _validate_radius(radius: float) -> None:
+    """
+    Check that a fixed-radius cutoff is finite and non-negative.
+
+    Parameters
+    ----------
+    radius : float
+        Maximum distance for a connection.
+
+    Raises
+    ------
+    ValueError
+        If the radius is negative or not finite.
+    """
+    if not isfinite(radius) or radius < 0:
+        msg = "radius must be finite and non-negative"
+        raise ValueError(msg)
+
+
 def fixed_radius_graph(
     gdf: gpd.GeoDataFrame,
     radius: float,
@@ -1608,7 +1628,7 @@ def fixed_radius_graph(
     ------
     ValueError
         If `distance_metric` is "network" but `network_gdf` is not provided.
-        If `radius` is not positive.
+        If `radius` is negative or not finite.
         If `duplicate_edges` is True together with `as_nx=True` or `target_gdf`.
 
     See Also
@@ -1642,6 +1662,7 @@ def fixed_radius_graph(
     as_nx = bool(as_nx)
 
     _validate_duplicate_edges(duplicate_edges, as_nx, target_gdf)
+    _validate_radius(radius)
 
     if target_gdf is not None:
         return _directed_graph(
@@ -2030,7 +2051,7 @@ def bridge_nodes(
     ValueError
         If `nodes_dict` contains fewer than two layers.
         If `proximity_method` is not "knn" or "fixed_radius".
-        If `proximity_method` is "fixed_radius" but `radius` is not provided in kwargs.
+        If `proximity_method` is "fixed_radius" but `radius` is missing, negative or not finite.
         If unknown node types are provided via ``source_node_types`` or ``target_node_types``.
 
     See Also
@@ -2076,8 +2097,14 @@ def bridge_nodes(
     net_weight_raw = kwargs.get("network_weight")
     net_weight: str | None = net_weight_raw if isinstance(net_weight_raw, str) else None
 
-    # Extract param
-    param = float(kwargs.get("k", 1)) if method == "knn" else float(kwargs["radius"])
+    if method == "knn":
+        param = float(kwargs.get("k", 1))
+    else:
+        if "radius" not in kwargs:
+            msg = "radius is required for fixed_radius"
+            raise ValueError(msg)
+        param = float(kwargs["radius"])
+        _validate_radius(param)
 
     node_order = tuple(nodes_dict.keys())
     node_set = set(node_order)
