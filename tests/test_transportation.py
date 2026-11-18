@@ -382,6 +382,27 @@ class TestGetOdPairs:
         assert isinstance(result, pd.DataFrame)
         assert "geometry" not in result.columns
 
+    @pytest.mark.parametrize("with_coordinates", [True, False])
+    def test_get_od_pairs_with_unmaterialised_stop_geometry(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        with_coordinates: bool,
+    ) -> None:
+        with gtfs_connection(sample_gtfs_dict) as con:
+            con.execute("ALTER TABLE stops DROP COLUMN geometry")
+            if not with_coordinates:
+                con.execute("ALTER TABLE stops DROP COLUMN stop_lon")
+                con.execute("ALTER TABLE stops DROP COLUMN stop_lat")
+            result = get_od_pairs(con, "20240101", "20240101")
+
+        assert not result.empty
+        if with_coordinates:
+            assert isinstance(result, gpd.GeoDataFrame)
+            assert result.geometry.notna().all()
+        else:
+            assert "geometry" not in result.columns
+
     def test_get_od_pairs_incomplete_gtfs(self, gtfs_connection: GtfsConnectionFactory) -> None:
         """A feed without trips or stop times cannot produce OD pairs."""
         con = gtfs_connection({"stops": pd.DataFrame(columns=["stop_id", "stop_lat", "stop_lon"])})

@@ -704,8 +704,8 @@ def get_od_pairs(
         Inclusive end date (``YYYYMMDD``). Defaults to the latest date in
         calendar or calendar_dates.
     include_geometry : bool, default=True
-        If ``True`` and stop geometries are available, include a line geometry
-        for each OD pair.
+        If ``True``, include a line geometry for each OD pair when stops
+        have prebuilt geometries or longitude and latitude columns.
     directed : bool, default=False
         If ``True``, preserve the original trip direction for each OD pair.
         If ``False`` (default), canonicalize each pair so that
@@ -779,12 +779,21 @@ def get_od_pairs(
             strftime(d.active_date, '%Y-%m-%d') as date
     """
 
-    if include_geometry and "stops" in tables:
+    stops_relation = "stops"
+    include_geometry = include_geometry and "stops" in tables
+    if include_geometry:
+        stop_columns = _table_columns(con, "stops")
+        if "geometry" not in stop_columns:
+            include_geometry = {"stop_lon", "stop_lat"}.issubset(stop_columns)
+            if include_geometry:
+                _ensure_graph_sql_support(con)
+                _ensure_stops_geometry(con)
+                stops_relation = "_stops_for_graph"
+
+    if include_geometry:
         query += """,
             ST_AsText(ST_MakeLine(s1.geometry, s2.geometry)) as geometry_wkt
         """
-    else:
-        include_geometry = False
 
     query += """
         FROM valid_st v
@@ -792,9 +801,9 @@ def get_od_pairs(
     """
 
     if include_geometry:
-        query += """
-        LEFT JOIN stops s1 ON v.orig_stop_id = s1.stop_id
-        LEFT JOIN stops s2 ON v.dest_stop_id = s2.stop_id
+        query += f"""
+        LEFT JOIN {stops_relation} s1 ON v.orig_stop_id = s1.stop_id
+        LEFT JOIN {stops_relation} s2 ON v.dest_stop_id = s2.stop_id
         """
 
     od_pairs_df = con.execute(query).df()
