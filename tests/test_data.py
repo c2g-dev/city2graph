@@ -294,6 +294,23 @@ class TestLoadOvertureData:
         mock_subprocess.assert_called_once()
         mock_mkdir.assert_called()
 
+    def test_empty_types_does_not_download_every_type(self, tmp_path: Path) -> None:
+        """An explicit empty selection avoids geocoding, downloads and file writes."""
+        output = tmp_path / "unused"
+        with (
+            patch("city2graph.data.get_boundaries") as geocode,
+            patch("city2graph.data.subprocess.run") as download,
+        ):
+            geocode.return_value = gpd.GeoDataFrame(
+                geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])], crs=WGS84_CRS
+            )
+            result = load_overture_data(place_name="Example", types=[], output_dir=str(output))
+
+        assert result == {}
+        geocode.assert_not_called()
+        download.assert_not_called()
+        assert not output.exists()
+
     def test_invalid_types(self, test_bbox: list[float]) -> None:
         """Test that invalid types raise ValueError."""
         invalid_types = ["building", "invalid_type", "another_invalid"]

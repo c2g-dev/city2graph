@@ -108,6 +108,7 @@ def load_overture_data(
         the boundary polygon. Mutually exclusive with area.
     types : list[str], optional
         List of Overture data types to download. If None, downloads all available types.
+        An empty list returns an empty dictionary without downloading data.
 
         Available types:
 
@@ -201,11 +202,12 @@ def load_overture_data(
         msg = "Exactly one of 'area' or 'place_name' must be provided"
         raise ValueError(msg)
 
-    if place_name is not None:
-        area = get_boundaries(place_name).geometry.iloc[0]
+    if types is None:
+        types = list(VALID_OVERTURE_TYPES)
+    elif not types:
+        return {}
 
     # Validate input parameters
-    types = types or list(VALID_OVERTURE_TYPES)
     invalid_types = [t for t in types if t not in VALID_OVERTURE_TYPES]
     if invalid_types:
         msg = f"Invalid types: {invalid_types}"
@@ -214,6 +216,9 @@ def load_overture_data(
     # Validate release parameter if provided
     if release is not None:
         _validate_overture_release(release)
+
+    if place_name is not None:
+        area = get_boundaries(place_name).geometry.iloc[0]
 
     # Prepare area and bounding box
     bbox_str, clip_geom = _prepare_area_and_bbox(area)
