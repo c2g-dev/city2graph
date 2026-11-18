@@ -762,7 +762,7 @@ def clip_graph(
     graph : GeoDataFrame, tuple, or NetworkX graph
         Input graph as edges GeoDataFrame, (nodes, edges) tuple, or NetworkX graph.
     area : Polygon, MultiPolygon, GeoDataFrame, or GeoSeries
-        The area to clip to.
+        The area to clip to. An empty GeoDataFrame or GeoSeries selects no edges.
     keep_outer_neighbors : bool, default False
         If True, keeps segments that intersect the boundary.
     as_nx : bool, default False
@@ -796,6 +796,15 @@ def clip_graph(
 
     # Align clip geometry CRS to edges CRS when area is geospatial tabular input.
     if isinstance(area, (gpd.GeoDataFrame, gpd.GeoSeries)):
+        if area.empty:
+            empty_edges = edges.iloc[:0].copy()
+            return _return_graph_output(
+                _filter_nodes_by_edges(nodes, empty_edges),
+                empty_edges,
+                input_type,
+                as_nx,
+                original_graph,
+            )
         area_aligned = GeoDataProcessor.harmonize_crs(area, edges.crs, warn=False)
         clip_geom = (
             area_aligned.geometry.union_all()

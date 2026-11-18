@@ -562,6 +562,45 @@ class TestClipGraph(BaseGraphTest):
         assert isinstance(result, gpd.GeoDataFrame)
         assert result.empty
 
+    @pytest.mark.parametrize("mask_cls", [gpd.GeoSeries, gpd.GeoDataFrame])
+    @pytest.mark.parametrize("keep_outer_neighbors", [False, True])
+    def test_clip_graph_empty_mask(
+        self,
+        mask_cls: type[gpd.GeoSeries | gpd.GeoDataFrame],
+        keep_outer_neighbors: bool,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """An empty polygon selection produces empty node and edge frames."""
+        empty_series = gpd.GeoSeries([], crs=sample_edges_gdf.crs)
+        mask = (
+            empty_series if mask_cls is gpd.GeoSeries else gpd.GeoDataFrame(geometry=empty_series)
+        )
+
+        nodes, edges = utils.clip_graph(
+            (sample_nodes_gdf, sample_edges_gdf),
+            mask,
+            keep_outer_neighbors=keep_outer_neighbors,
+        )
+
+        assert nodes is not None
+        assert nodes.equals(sample_nodes_gdf.iloc[:0])
+        assert edges.equals(sample_edges_gdf.iloc[:0])
+
+    def test_clip_graph_empty_mask_networkx(self, sample_crs: str) -> None:
+        """An empty mask keeps graph type and metadata without keeping a node or edge."""
+        graph = nx.MultiDiGraph(crs=sample_crs, name="roads")
+        graph.add_node("a", pos=(0, 0), geometry=Point(0, 0))
+        graph.add_node("b", pos=(1, 0), geometry=Point(1, 0))
+        graph.add_edge("a", "b", key="road", geometry=LineString([(0, 0), (1, 0)]))
+
+        clipped = utils.clip_graph(graph, gpd.GeoSeries([], crs=sample_crs))
+
+        assert isinstance(clipped, nx.MultiDiGraph)
+        assert clipped.graph == graph.graph
+        assert not clipped
+        assert graph.number_of_edges() == 1
+
     def test_clip_graph_area_as_gdf(self, sample_crs: str) -> None:
         """Test passing area as GeoDataFrame."""
         clip_poly = Polygon([(0, 0), (1, 0), (1, 2), (0, 2)])
