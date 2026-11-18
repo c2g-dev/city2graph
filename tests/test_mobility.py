@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Literal
 from typing import cast
 
 import geopandas as gpd
@@ -808,3 +809,47 @@ class TestODMatrixToGraph:
                 threshold_col="flow",
             )
         assert data["weight"].tolist() == [2.0]
+
+
+@pytest.mark.parametrize("matrix_type", ["edgelist", "adjacency"])
+@pytest.mark.parametrize(("threshold", "expected"), [(None, [6.0]), (8.0, [])])
+def test_undirected_od_threshold_is_applied_after_signed_reciprocal_sum(
+    od_zones_gdf: gpd.GeoDataFrame,
+    matrix_type: Literal["edgelist", "adjacency"],
+    threshold: float | None,
+    expected: list[float],
+) -> None:
+    """A correction in the reverse direction contributes before thresholding."""
+    if matrix_type == "edgelist":
+        data = pd.DataFrame({"source": ["A", "B"], "target": ["B", "A"], "flow": [10, -4]})
+    else:
+        ids = ["A", "B", "C"]
+        data = pd.DataFrame([[0, 10, 0], [-4, 0, 0], [0, 0, 0]], columns=ids, index=ids)
+
+    with pytest.warns(UserWarning, match="negative weights"):
+        _, edges = od_matrix_to_graph(
+            data,
+            od_zones_gdf,
+            zone_id_col="zone_id",
+            matrix_type=matrix_type,
+            weight_cols=["flow"] if matrix_type == "edgelist" else None,
+            threshold=threshold,
+            directed=False,
+        )
+
+    assert edges["weight"].tolist() == expected
+
+
+def test_undirected_od_preserves_explicit_zero_cutoff(od_zones_gdf: gpd.GeoDataFrame) -> None:
+    """An explicit threshold of zero retains observed zero-flow pairs."""
+    data = pd.DataFrame({"source": ["A"], "target": ["B"], "flow": [0]})
+    _, edges = od_matrix_to_graph(
+        data,
+        od_zones_gdf,
+        zone_id_col="zone_id",
+        weight_cols=["flow"],
+        threshold=0,
+        directed=False,
+    )
+    assert list(edges.index) == [("A", "B")]
+    assert edges["weight"].tolist() == [0]

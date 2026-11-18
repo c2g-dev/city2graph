@@ -109,7 +109,8 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
         ``weight``, it must be the primary column to avoid overwriting its values.
         Rename it before selecting a different primary column.
     threshold : float, optional
-        Minimum flow retained (>=) applied to ``threshold_col`` (future logic).
+        Minimum flow retained (>=) applied to ``threshold_col``. Undirected
+        graphs apply the cutoff to the sum of reciprocal flows.
     threshold_col : str, optional
         Column among ``weight_cols`` used for thresholding & canonical weight
         (required when ``len(weight_cols) > 1`` in full implementation).
@@ -174,8 +175,8 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
         source_col=source_col,
         target_col=target_col,
         weight_cols=weight_cols,
-        # For undirected mode, postpone thresholding until after symmetrization
-        threshold=threshold if directed else None,
+        threshold=threshold,
+        defer_threshold=not directed,
         threshold_col=threshold_col,
         include_self_loops=include_self_loops,
     )
@@ -309,6 +310,7 @@ def _build_canonical_edgelist(
     target_col: str,
     weight_cols: list[str] | None,
     threshold: float | None,
+    defer_threshold: bool,
     threshold_col: str | None,
     include_self_loops: bool,
 ) -> pd.DataFrame:
@@ -337,8 +339,9 @@ def _build_canonical_edgelist(
     weight_cols : list[str] | None
         Edge list weight (flow) columns to preserve.
     threshold : float | None
-        Minimum flow retained. Pass ``None`` to skip thresholding here
-        (undirected mode applies it after symmetrization instead).
+        Minimum flow retained, or the default positive-flow cutoff.
+    defer_threshold : bool
+        Preserve values needed for undirected summation before filtering.
     threshold_col : str | None
         Column among ``weight_cols`` used for thresholding.
     include_self_loops : bool
@@ -365,6 +368,7 @@ def _build_canonical_edgelist(
             target_col=target_col,
             weight_cols=weight_cols if weight_cols is not None else [],
             threshold=threshold,
+            defer_threshold=defer_threshold,
             threshold_col=threshold_col,
             include_self_loops=include_self_loops,
         )
@@ -379,6 +383,7 @@ def _build_canonical_edgelist(
             adj,
             include_self_loops=include_self_loops,
             threshold=threshold,
+            defer_threshold=defer_threshold,
         )
     elif matrix_type == "adjacency" and isinstance(od_data, np.ndarray):
         zone_ids = _align_numpy_array_zones(
@@ -391,6 +396,7 @@ def _build_canonical_edgelist(
             zone_ids,
             include_self_loops=include_self_loops,
             threshold=threshold,
+            defer_threshold=defer_threshold,
         )
 
     # Ensure canonical columns exist even if empty result
@@ -425,7 +431,7 @@ def _symmetrize_undirected_edges(
     weight_cols : list[str] | None
         Additional weight columns to sum for edgelist inputs.
     threshold : float | None
-        Minimum summed weight retained (>=). ``None`` keeps all edges.
+        Minimum summed weight retained (>=). ``None`` keeps positive totals.
 
     Returns
     -------
@@ -443,10 +449,7 @@ def _symmetrize_undirected_edges(
 
     edge_df = _symmetrize_edges(edge_df, sum_cols=sum_cols)
 
-    # Apply threshold after summation when requested
-    if threshold is not None:
-        edge_df = edge_df.loc[_apply_threshold(edge_df["weight"], threshold=threshold)]
-    return edge_df
+    return edge_df.loc[_apply_threshold(edge_df["weight"], threshold=threshold)]
 
 
 def _assemble_od_frames(
@@ -688,6 +691,7 @@ def _adjacency_to_edgelist(
     *,
     include_self_loops: bool = False,
     threshold: float | None = None,
+    defer_threshold: bool = False,
 ) -> pd.DataFrame:
     """
     Convert an adjacency matrix into a canonical edgelist DataFrame.
@@ -707,7 +711,10 @@ def _adjacency_to_edgelist(
     include_self_loops : bool
         Whether to keep diagonal elements subject to thresholding.
     threshold : float | None
-        Minimum flow to keep. None => drop zeros by default.
+        Minimum flow to keep. None keeps only positive totals.
+    defer_threshold : bool, default False
+        Keep both signs for reciprocal summation; omit implicit zeros unless
+        the eventual cutoff would include them.
 
     Returns
     -------
@@ -728,7 +735,11 @@ def _adjacency_to_edgelist(
     for batch in row_batches(len(arr), len(arr)):
         block = np.nan_to_num(arr[batch], nan=0.0) if nans else arr[batch]
         negative = negative or bool((block < 0).any())
-        mask = _build_adjacency_mask(block, include_self_loops=True, threshold=threshold)
+        if defer_threshold:
+            keep_zeros = threshold is not None and threshold <= 0
+            mask = np.ones(block.shape, dtype=bool) if keep_zeros else block != 0
+        else:
+            mask = _build_adjacency_mask(block, include_self_loops=True, threshold=threshold)
         if not include_self_loops:
             rows = np.arange(len(block))
             mask[rows, rows + batch.start] = False
@@ -870,6 +881,7 @@ def _normalize_edgelist(
     target_col: str,
     weight_cols: list[str],
     threshold: float | None,
+    defer_threshold: bool,
     threshold_col: str | None,
     include_self_loops: bool,
 ) -> pd.DataFrame:
@@ -892,7 +904,9 @@ def _normalize_edgelist(
         Names of numeric weight (flow) columns to process and preserve.
     threshold : float | None
         Inclusive threshold applied to the primary weight column; when
-        ``None``, zeros are dropped by default.
+        ``None``, only positive totals are retained.
+    defer_threshold : bool
+        Apply the cutoff later, once reciprocal flows have been summed.
     threshold_col : str | None
         Name of the primary weight column used for thresholding when multiple
         weights are provided; if a single weight column exists, this may be
@@ -919,12 +933,11 @@ def _normalize_edgelist(
     # Select primary column for thresholding and canonical weight
     primary = _resolve_primary(weight_cols, threshold_col)
 
-    # Apply threshold
-    mask = _apply_threshold(agg_df[primary], threshold=threshold)
-    filtered = agg_df.loc[mask].copy()
+    if not defer_threshold:
+        agg_df = agg_df.loc[_apply_threshold(agg_df[primary], threshold=threshold)]
 
     # Build canonical columns and rename source/target for consistency
-    out = filtered.rename(columns={source_col: "source", target_col: "target"})
+    out = agg_df.rename(columns={source_col: "source", target_col: "target"})
     out["weight"] = out[primary]  # canonical weight mirrors primary
 
     # Ensure canonical ordering: source, target, weight, then other weight columns
