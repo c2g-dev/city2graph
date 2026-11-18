@@ -2307,7 +2307,7 @@ def rx_to_nx(graph: rx.PyGraph | rx.PyDiGraph) -> nx.Graph | nx.MultiGraph:
             nx_id = rx_idx
             node_data = {"payload": payload} if payload is not None else {}
 
-        out_graph.add_node(nx_id, **node_data)
+        out_graph.add_nodes_from([(nx_id, node_data)])
         rx_to_nx_mapping[rx_idx] = nx_id
 
     # Restore edges and attributes
@@ -2323,9 +2323,8 @@ def rx_to_nx(graph: rx.PyGraph | rx.PyDiGraph) -> nx.Graph | nx.MultiGraph:
 
         if is_multigraph:
             key = edge_data.pop("__nx_edge_key__", None)
-            out_graph.add_edge(u_nx, v_nx, key, **edge_data)
-
+            out_graph.add_edges_from([(u_nx, v_nx, key, edge_data)])
         else:
-            out_graph.add_edge(u_nx, v_nx, **edge_data)
+            out_graph.add_edges_from([(u_nx, v_nx, edge_data)])
 
     return out_graph

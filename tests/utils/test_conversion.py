@@ -1272,6 +1272,25 @@ class TestRustworkxConversions:
         # Verify restored graph
         assert nx.utils.graphs_equal(G, G_restored)
 
+    @pytest.mark.parametrize("graph_cls", [nx.Graph, nx.DiGraph, nx.MultiGraph, nx.MultiDiGraph])
+    def test_roundtrip_attributes_are_not_constructor_arguments(
+        self, graph_cls: type[nx.Graph]
+    ) -> None:
+        """Restore arbitrary attribute keys separately from topology."""
+        graph = graph_cls()
+        graph.add_edge("a", "b")
+        edge_id = ("a", "b", 0) if graph.is_multigraph() else ("a", "b")
+        graph.nodes["a"]["node_for_adding"] = "node label"
+        graph.nodes["b"][42] = "integer node attribute key"
+        graph.edges[edge_id]["key"] = "serialized edge label"
+        graph.edges[edge_id]["u_of_edge"] = "source label"
+        graph.edges[edge_id][7] = "integer edge attribute key"
+
+        restored = utils.rx_to_nx(utils.nx_to_rx(graph))
+
+        assert type(restored) is graph_cls
+        assert nx.utils.graphs_equal(restored, graph)
+
     def test_rx_to_nx_raw_input(self) -> None:
         """Test converting a raw rustworkx graph (no __nx_node_id__)."""
         rx_G = rx.PyGraph(multigraph=False)
