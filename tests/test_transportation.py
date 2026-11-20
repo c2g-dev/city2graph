@@ -434,6 +434,20 @@ class TestGetOdPairs:
         result = get_od_pairs(con)
         assert isinstance(result, (pd.DataFrame, gpd.GeoDataFrame))
 
+    @pytest.mark.parametrize("column", ["departure_time", "arrival_time"])
+    def test_get_od_pairs_all_missing_times_returns_an_empty_frame(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        column: str,
+    ) -> None:
+        with gtfs_connection(sample_gtfs_dict) as con:
+            con.execute(f"UPDATE stop_times SET {column} = NULL")
+            result = get_od_pairs(con, "20240101", "20240101", include_geometry=False)
+        assert result.empty
+        assert pd.api.types.is_datetime64_any_dtype(result["departure_ts"])
+        assert pd.api.types.is_datetime64_any_dtype(result["arrival_ts"])
+
     def test_get_od_pairs_removal_exception_integration(
         self, gtfs_connection: GtfsConnectionFactory
     ) -> None:
@@ -748,6 +762,18 @@ class TestTravelSummaryGraph:
         assert len(edges_with) > 0
         # frequency should be higher because of headway expansion
         assert (edges_with["frequency"] > 0).all()
+
+    @pytest.mark.parametrize("column", ["start_time", "end_time"])
+    def test_travel_summary_graph_rejects_missing_frequency_boundary(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict_with_frequencies: dict[str, pd.DataFrame],
+        column: str,
+    ) -> None:
+        with gtfs_connection(sample_gtfs_dict_with_frequencies) as con:
+            con.execute(f"UPDATE frequencies SET {column} = NULL")
+            with pytest.raises(ValueError, match="Invalid or overlapping frequency periods"):
+                travel_summary_graph(con, use_frequencies=True)
 
     def test_travel_summary_graph_without_frequencies(
         self,

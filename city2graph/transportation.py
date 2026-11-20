@@ -705,7 +705,8 @@ def _build_frequency_periods(
     """)  # noqa: S608
     invalid = con.execute("""
         SELECT trip_id FROM _frequency_periods
-        WHERE headway IS NULL OR NOT isfinite(headway) OR headway <= 0
+        WHERE start_sec IS NULL OR end_sec IS NULL
+            OR headway IS NULL OR NOT isfinite(headway) OR headway <= 0
             OR headway != floor(headway) OR end_sec <= start_sec
             OR exact_times IS NULL OR exact_times NOT IN (0, 1)
         UNION ALL
@@ -847,7 +848,11 @@ def get_od_pairs(
     for source, target in (("departure_time", "departure_ts"), ("arrival_time", "arrival_ts")):
         pairs = pd.MultiIndex.from_arrays([od_pairs_df[source], od_pairs_df["active_date_str"]])
         codes, unique_pairs = pd.factorize(pairs, sort=False)
-        timestamps = pd.Series([_timestamp(time, date) for time, date in unique_pairs])
+        timestamps = pd.Series(
+            [None if pd.isna(time) else _timestamp(time, date) for time, date in unique_pairs]
+        )
+        if not pd.api.types.is_datetime64_any_dtype(timestamps):
+            timestamps = timestamps.astype("datetime64[ns]")
         od_pairs_df[target] = timestamps.take(codes).set_axis(od_pairs_df.index)
 
     od_pairs_df = od_pairs_df.dropna(subset=["departure_ts", "arrival_ts"])
