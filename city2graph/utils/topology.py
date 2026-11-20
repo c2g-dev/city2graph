@@ -246,8 +246,8 @@ def dual_graph(
     # Handle empty edges case
     if edges_clean.empty:
         dual_nodes = gpd.GeoDataFrame(geometry=[], crs=crs)
-        dual_edges = gpd.GeoDataFrame(geometry=[], crs=crs)
-        return dual_nodes, dual_edges
+        dual_edges = _empty_dual_edge_gdf(crs, edge_id_col)
+        return gdf_to_nx(dual_nodes, dual_edges) if as_nx else (dual_nodes, dual_edges)
 
     # edges_clean is guaranteed to be non-None and non-empty here
     assert edges_clean is not None

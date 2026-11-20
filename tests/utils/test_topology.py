@@ -235,6 +235,17 @@ class TestGraphStructures(BaseGraphTest):
         self.assert_valid_gdf(dual_nodes)
         self.assert_valid_gdf(dual_edges)
 
+    def test_empty_primal_graph_honors_networkx_output(self, sample_crs: str) -> None:
+        """The requested output form applies even when there are no primal edges."""
+        empty = gpd.GeoDataFrame(geometry=[], crs=sample_crs)
+
+        dual = utils.dual_graph((empty, empty), as_nx=True)
+
+        assert isinstance(dual, nx.Graph)
+        assert dual.number_of_nodes() == 0
+        assert dual.number_of_edges() == 0
+        assert dual.graph["crs"] == empty.crs
+
     def test_dual_graph_empty_result_with_edge_id_col(
         self, sample_nodes_gdf: gpd.GeoDataFrame, sample_crs: str
     ) -> None:
