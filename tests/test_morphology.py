@@ -2585,7 +2585,9 @@ def test_morphology_reprojects_secondary_barriers(
     projector = Transformer.from_crs(4326, 3857, always_xy=True)
     reference = gpd.GeoDataFrame(
         segments.drop(columns="geometry"),
-        geometry=[transform(line, projector.transform, interleaved=False) for line in segments.geometry],
+        geometry=[
+            transform(line, projector.transform, interleaved=False) for line in segments.geometry
+        ],
         crs=3857,
     )
     reference["barrier"] = reference.geometry.copy()
