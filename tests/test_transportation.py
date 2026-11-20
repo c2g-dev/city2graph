@@ -742,6 +742,18 @@ class TestTravelSummaryGraph:
         # frequency should be higher because of headway expansion
         assert (edges_with["frequency"] > 0).all()
 
+    @pytest.mark.parametrize("column", ["start_time", "end_time"])
+    def test_travel_summary_graph_rejects_missing_frequency_boundary(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict_with_frequencies: dict[str, pd.DataFrame],
+        column: str,
+    ) -> None:
+        with gtfs_connection(sample_gtfs_dict_with_frequencies) as con:
+            con.execute(f"UPDATE frequencies SET {column} = NULL")
+            with pytest.raises(ValueError, match="Invalid or overlapping frequency periods"):
+                travel_summary_graph(con, use_frequencies=True)
+
     def test_travel_summary_graph_without_frequencies(
         self,
         gtfs_connection: GtfsConnectionFactory,
