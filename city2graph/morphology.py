@@ -654,6 +654,22 @@ def _prepare_morphology(  # noqa: PLR0913
             buildings_gdf = buildings_gdf.copy()
         buildings_gdf.index = buildings_gdf.index.to_flat_index()
 
+    # Capture secondary geometry before harmonizing the active segment geometry:
+    # object-dtype columns have no CRS metadata after the source frame changes CRS.
+    barrier_geometry = None
+    if (
+        primary_barrier_col
+        and primary_barrier_col in segments_gdf.columns
+        and primary_barrier_col != segments_gdf.geometry.name
+    ):
+        barrier_geometry = gpd.GeoSeries(segments_gdf[primary_barrier_col])
+        barrier_crs = barrier_geometry.crs or segments_gdf.crs
+        if barrier_crs is not None and buildings_gdf.crs is not None:
+            if barrier_geometry.crs is None:
+                barrier_geometry = barrier_geometry.set_crs(barrier_crs)
+            if barrier_geometry.crs != buildings_gdf.crs:
+                barrier_geometry = barrier_geometry.to_crs(buildings_gdf.crs)
+
     # Ensure CRS consistency between buildings and segments
     segments_gdf = GeoDataProcessor.harmonize_crs(segments_gdf, buildings_gdf.crs, stacklevel=3)
     GeoDataProcessor.warn_crs_issues(
@@ -663,6 +679,8 @@ def _prepare_morphology(  # noqa: PLR0913
     # The single public-boundary copy of the segments: everything downstream
     # works on this owned frame.
     segments_gdf = segments_gdf.copy()
+    if barrier_geometry is not None:
+        segments_gdf[primary_barrier_col] = barrier_geometry
     segments_gdf[_MOVEMENT_ID_COL] = segments_gdf.index
 
     # Split out barrier-only segments so they shape the tessellation barriers
@@ -1344,18 +1362,21 @@ def _place_to_movement_edges(
         msg = f"Expected ID column '{movement_id_col}' not found in movement_gdf."
         raise ValueError(msg)
 
-    # Ensure CRS consistency between place and movement GeoDataFrames
+    # GeoDataFrame reprojection transforms only its active geometry.
+    movement_crs = movement_gdf.crs
     movement_gdf = GeoDataProcessor.harmonize_crs(movement_gdf, place_gdf.crs, stacklevel=3)
     GeoDataProcessor.warn_crs_issues(
         place_gdf, geographic_message=_GEOGRAPHIC_CRS_MSG, stacklevel=3
     )
 
-    # Determine which geometry to use for the query
-    query_geometry = (
-        movement_gdf[primary_barrier_col]
-        if primary_barrier_col and primary_barrier_col in movement_gdf.columns
-        else movement_gdf.geometry
-    )
+    query_geometry = movement_gdf.geometry
+    if primary_barrier_col and primary_barrier_col in movement_gdf.columns:
+        query_geometry = gpd.GeoSeries(movement_gdf[primary_barrier_col])
+        barrier_crs = query_geometry.crs or movement_crs
+        if barrier_crs is not None and place_gdf.crs is not None and barrier_crs != place_gdf.crs:
+            if query_geometry.crs is None:
+                query_geometry = query_geometry.set_crs(barrier_crs)
+            query_geometry = query_geometry.to_crs(place_gdf.crs)
 
     # Use spatial index query with 'dwithin' predicate for efficient proximity search
     # This avoids creating expensive buffer geometries
