@@ -328,7 +328,8 @@ def process_overture_segments(
         Whether to generate barrier geometries from level rules.
     connectors_gdf : geopandas.GeoDataFrame, optional
         GeoDataFrame containing connector information. If provided, segments
-        will be split at connector positions.
+        will be split at connector positions within the normalized range [0, 1].
+        References without a usable position are ignored.
     threshold : float, default 1.0
         Distance threshold for endpoint clustering in the same units as the CRS.
 
@@ -720,10 +721,11 @@ def _split_segments_at_connectors(
         normalized = pd.json_normalize(connector_rows["_connector"])
         normalized["_segment_pos"] = connector_rows["_segment_pos"].to_numpy()
         if {"connector_id", "at"} <= set(normalized.columns):
+            normalized["at"] = pd.to_numeric(normalized["at"], errors="coerce")
             normalized = normalized[
-                normalized["connector_id"].isin(valid_connector_ids) & normalized["at"].notna()
+                normalized["connector_id"].isin(valid_connector_ids)
+                & normalized["at"].between(0.0, 1.0)
             ]
-            normalized["at"] = normalized["at"].map(float)
             grouped_positions = normalized.groupby("_segment_pos", sort=False)["at"].agg(
                 lambda values: sorted({0.0, *values, 1.0})
             )
