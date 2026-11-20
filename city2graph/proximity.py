@@ -80,9 +80,10 @@ def _resolve_network_weight_attribute(
 
     This helper function determines which edge attribute to use for network
     distance calculations. If a preferred attribute is specified, it validates
-    that all edges have finite, non-negative numeric values for the attribute.
-    Otherwise, it
-    computes edge lengths automatically from geometries or node positions.
+    that all edges have non-negative numeric values other than NaN. Positive
+    infinity is allowed to represent an impassable edge.
+    Otherwise, it computes edge lengths automatically from geometries or node
+    positions.
 
     Parameters
     ----------
@@ -103,7 +104,7 @@ def _resolve_network_weight_attribute(
     ------
     ValueError
         If preferred_attr is specified but some edges are missing this
-        attribute or its values are non-numeric, negative, or nonfinite.
+        attribute or its values are non-numeric, negative, or NaN.
     """
     if preferred_attr:
         missing = [
@@ -121,11 +122,11 @@ def _resolve_network_weight_attribute(
         invalid = [
             (u, v)
             for u, v, data in graph.edges(data=True)
-            if data[preferred_attr] < 0 or not np.isfinite(float(data[preferred_attr]))
+            if data[preferred_attr] < 0 or np.isnan(float(data[preferred_attr]))
         ]
         if invalid:
             sample = ", ".join(map(str, invalid[:3]))
-            msg = f"Network weights in '{preferred_attr}' must be finite and non-negative; examples: {sample}"
+            msg = f"Network weights in '{preferred_attr}' must be non-negative and not NaN; examples: {sample}"
             raise ValueError(msg)
         return preferred_attr
 

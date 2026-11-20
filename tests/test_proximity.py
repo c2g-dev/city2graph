@@ -1068,7 +1068,7 @@ def test_generators_insufficient_points_early_exit(
         assert_valid_proximity_result(nodes, edges, 2)
 
 
-@pytest.mark.parametrize("cost", [-1.0, float("nan"), float("inf")])
+@pytest.mark.parametrize("cost", [-1.0, float("nan"), float("-inf")])
 def test_network_proximity_rejects_invalid_shortest_path_costs(cost: float) -> None:
     """An invalid user-supplied weight cannot silently remove connectivity."""
     points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], crs=3857)
@@ -1076,7 +1076,7 @@ def test_network_proximity_rejects_invalid_shortest_path_costs(cost: float) -> N
         {"travel_cost": [cost]}, geometry=[LineString([(0, 0), (1, 0)])], crs=3857
     )
 
-    with pytest.raises(ValueError, match=r"travel_cost.*finite and non-negative"):
+    with pytest.raises(ValueError, match=r"travel_cost.*non-negative.*NaN"):
         knn_graph(
             points,
             k=1,
@@ -1084,6 +1084,54 @@ def test_network_proximity_rejects_invalid_shortest_path_costs(cost: float) -> N
             network_gdf=network,
             network_weight="travel_cost",
         )
+
+
+@pytest.mark.parametrize("cost", [0.0, 2.5])
+def test_network_proximity_preserves_valid_costs(cost: float) -> None:
+    """Zero and finite positive custom costs retain their supplied values."""
+    points = make_points_simple([(0, 0), (2, 0)])
+    network = gpd.GeoDataFrame(
+        {"travel_cost": [cost]}, geometry=[LineString([(0, 0), (2, 0)])], crs=points.crs
+    )
+    _, edges = knn_graph(
+        points,
+        k=1,
+        distance_metric="network",
+        network_gdf=network,
+        network_weight="travel_cost",
+    )
+    assert len(edges) == 1
+    assert edges["weight"].iloc[0] == pytest.approx(cost)
+
+
+@pytest.mark.parametrize("detour", [False, True])
+def test_network_proximity_preserves_infinite_cost_barriers(detour: bool) -> None:
+    """A blocked direct edge permits a finite detour, otherwise no connection."""
+    points = make_points_simple([(0, 0), (2, 0)])
+    geometries = [LineString([(0, 0), (2, 0)])]
+    costs = [float("inf")]
+    if detour:
+        geometries.extend([LineString([(0, 0), (1, 1)]), LineString([(1, 1), (2, 0)])])
+        costs.extend([2.0, 3.0])
+    network = gpd.GeoDataFrame({"travel_cost": costs}, geometry=geometries, crs=points.crs)
+    original = network.copy(deep=True)
+
+    nodes, edges = knn_graph(
+        points,
+        k=1,
+        distance_metric="network",
+        network_gdf=network,
+        network_weight="travel_cost",
+    )
+
+    assert len(nodes) == 2
+    pd.testing.assert_frame_equal(network, original)
+    if detour:
+        assert len(edges) == 1
+        assert edges["weight"].iloc[0] == pytest.approx(5.0)
+        assert edges.geometry.iloc[0].equals(LineString([(0, 0), (1, 1), (2, 0)]))
+    else:
+        assert edges.empty
 
 
 def test_bridge_nodes_errors_and_nx() -> None:
