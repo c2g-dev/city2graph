@@ -654,6 +654,22 @@ def _prepare_morphology(  # noqa: PLR0913
             buildings_gdf = buildings_gdf.copy()
         buildings_gdf.index = buildings_gdf.index.to_flat_index()
 
+    # Capture secondary geometry before harmonizing the active segment geometry:
+    # object-dtype columns have no CRS metadata after the source frame changes CRS.
+    barrier_geometry = None
+    if (
+        primary_barrier_col
+        and primary_barrier_col in segments_gdf.columns
+        and primary_barrier_col != segments_gdf.geometry.name
+    ):
+        barrier_geometry = gpd.GeoSeries(segments_gdf[primary_barrier_col])
+        barrier_crs = barrier_geometry.crs or segments_gdf.crs
+        if barrier_crs is not None and buildings_gdf.crs is not None:
+            if barrier_geometry.crs is None:
+                barrier_geometry = barrier_geometry.set_crs(barrier_crs)
+            if barrier_geometry.crs != buildings_gdf.crs:
+                barrier_geometry = barrier_geometry.to_crs(buildings_gdf.crs)
+
     # Ensure CRS consistency between buildings and segments
     segments_gdf = GeoDataProcessor.harmonize_crs(segments_gdf, buildings_gdf.crs, stacklevel=3)
     GeoDataProcessor.warn_crs_issues(
@@ -663,6 +679,8 @@ def _prepare_morphology(  # noqa: PLR0913
     # The single public-boundary copy of the segments: everything downstream
     # works on this owned frame.
     segments_gdf = segments_gdf.copy()
+    if barrier_geometry is not None:
+        segments_gdf[primary_barrier_col] = barrier_geometry
     segments_gdf[_MOVEMENT_ID_COL] = segments_gdf.index
 
     # Split out barrier-only segments so they shape the tessellation barriers

@@ -13,6 +13,8 @@ import networkx as nx
 import pandas as pd
 import pytest
 from geopandas.testing import assert_geodataframe_equal
+from pyproj import Transformer
+from shapely import transform
 from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
@@ -2567,3 +2569,54 @@ def test_place_movement_reprojects_secondary_barrier_geometry(typed_barrier: boo
     assert list(zip(edges["place_id"], edges["movement_id"], strict=True)) == [("east", "street")]
     assert movement.crs.to_epsg() == 4326
     assert movement.loc[0, "barrier"].equals_exact(degree_line, 0)
+
+
+@pytest.mark.parametrize("barrier_kind", ["object", "source-crs", "target-crs"])
+@pytest.mark.parametrize("multi_distance", [False, True])
+def test_morphology_reprojects_secondary_barriers(
+    small_buildings_gdf: gpd.GeoDataFrame,
+    small_segments_gdf: gpd.GeoDataFrame,
+    barrier_kind: str,
+    multi_distance: bool,
+) -> None:
+    """Mixed-CRS inputs match an explicitly projected full-pipeline reference."""
+    buildings = small_buildings_gdf.to_crs(3857)
+    segments = small_segments_gdf.to_crs(4326)
+    projector = Transformer.from_crs(4326, 3857, always_xy=True)
+    reference = gpd.GeoDataFrame(
+        segments.drop(columns="geometry"),
+        geometry=[transform(line, projector.transform, interleaved=False) for line in segments.geometry],
+        crs=3857,
+    )
+    reference["barrier"] = reference.geometry.copy()
+    barrier = segments.geometry.copy()
+    if barrier_kind == "object":
+        segments["barrier"] = list(barrier)
+    elif barrier_kind == "target-crs":
+        segments["barrier"] = reference.geometry.copy()
+    else:
+        segments["barrier"] = barrier
+    before = segments.copy(deep=True)
+    buildings_before = buildings.copy(deep=True)
+    options = {"primary_barrier_col": "barrier", "tessellation_n_jobs": 1}
+    if multi_distance:
+        center = gpd.GeoSeries([reference.geometry.iloc[0].centroid], crs=3857)
+        expected = morphological_graphs(
+            buildings, reference, [50.0, 100.0], center_point=center, **options
+        )
+        actual = morphological_graphs(
+            buildings, segments, [50.0, 100.0], center_point=center, **options
+        )
+    else:
+        expected = {None: morphological_graph(buildings, reference, **options)}
+        actual = {None: morphological_graph(buildings, segments, **options)}
+    for distance, (expected_nodes, expected_edges) in expected.items():
+        nodes, edges = actual[distance]
+        assert not expected_nodes["place"].empty
+        assert not expected_edges[("place", "faced_to", "movement")].empty
+        for key, frame in expected_nodes.items():
+            assert_geodataframe_equal(nodes[key], frame, check_less_precise=True)
+        for key, frame in expected_edges.items():
+            assert_geodataframe_equal(edges[key], frame, check_less_precise=True)
+    assert_geodataframe_equal(segments, before)
+    assert_geodataframe_equal(buildings, buildings_before)
