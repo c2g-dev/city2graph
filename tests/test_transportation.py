@@ -1,6 +1,7 @@
 """Tests for the transportation module."""
 
 import typing
+import zipfile
 
 # ruff: noqa: D101, D102, S608, PT011
 from datetime import datetime
@@ -40,6 +41,11 @@ def gtfs_zip_invalid_coords() -> typing.Generator[str, None, None]:
                 "stop1,Stop 1,40.7128,-74.0060\n"
                 "stop2,Stop 2,invalid,invalid\n"
                 "stop3,Stop 3,,\n"
+                "stop4,Stop 4,0,NaN\n"
+                "stop5,Stop 5,Infinity,0\n"
+                "stop6,Stop 6,91,0\n"
+                "stop7,Stop 7,0,-181\n"
+                "stop8,Stop 8,0,0\n"
             ),
             "agency.txt": (
                 "agency_id,agency_name,agency_url,agency_timezone\n"
@@ -211,7 +217,47 @@ class TestLoadGtfs:
                 ("stop1", False),
                 ("stop2", True),
                 ("stop3", True),
+                ("stop4", True),
+                ("stop5", True),
+                ("stop6", True),
+                ("stop7", True),
+                ("stop8", False),
             ]
+
+    def test_load_gtfs_requires_coordinate_columns_for_optional_locations(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "missing-coordinate-columns.zip"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("stops.txt", "stop_id,location_type\ngeneric-node,3\n")
+
+        with pytest.raises(ValueError, match="both stop_lon and stop_lat columns"):
+            load_gtfs(path)
+
+    def test_load_gtfs_keeps_optional_locations_with_blank_coordinates(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "blank-optional-coordinates.zip"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr(
+                "stops.txt",
+                "stop_id,stop_name,stop_lat,stop_lon,location_type,parent_station\n"
+                "station,Station,51,-1,1,\n"
+                "platform,Platform,51,-1,0,station\n"
+                "junction,Junction,,,3,station\n"
+                "boarding-area,Boarding Area,,,4,platform\n",
+            )
+
+        with load_gtfs(path) as con:
+            rows = con.execute(
+                "SELECT stop_id, geometry IS NULL FROM stops ORDER BY stop_id"
+            ).fetchall()
+        assert rows == [
+            ("boarding-area", True),
+            ("junction", True),
+            ("platform", False),
+            ("station", False),
+        ]
 
     def test_load_gtfs_nonexistent_file(self) -> None:
         with load_gtfs("nonexistent.zip") as con:
@@ -550,6 +596,38 @@ class TestTravelSummaryGraph:
         assert len(nodes_gdf) > 0
         assert isinstance(edges_gdf, gpd.GeoDataFrame)
         assert len(edges_gdf) > 0
+
+    @pytest.mark.parametrize("prebuilt_geometry", [True, False], ids=["loaded", "numeric-fallback"])
+    def test_travel_summary_graph_retains_missing_geometry_in_frames(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        prebuilt_geometry: bool,
+    ) -> None:
+        stops = sample_gtfs_dict["stops"]
+        stops.loc[stops["stop_id"] == "stop3", "stop_lat"] = 91.0
+        with gtfs_connection(sample_gtfs_dict) as con:
+            if not prebuilt_geometry:
+                con.execute("ALTER TABLE stops DROP COLUMN geometry")
+                con.execute("ALTER TABLE stops ALTER COLUMN stop_lat TYPE DOUBLE")
+                con.execute("ALTER TABLE stops ALTER COLUMN stop_lon TYPE DOUBLE")
+            nodes, edges = travel_summary_graph(
+                con, calendar_start="20240101", calendar_end="20240101"
+            )
+
+        assert nodes.geometry.isna().to_dict() == {"stop1": False, "stop2": False, "stop3": True}
+        assert edges.geometry.isna().to_dict() == {
+            ("stop1", "stop2"): False,
+            ("stop2", "stop3"): True,
+        }
+        assert edges["frequency"].to_dict() == {("stop1", "stop2"): 2, ("stop2", "stop3"): 2}
+
+        graph = c2g.gdf_to_nx(nodes=nodes, edges=edges)
+        assert {attrs["_original_index"] for _, attrs in graph.nodes(data=True)} == {
+            "stop1",
+            "stop2",
+        }
+        assert graph.number_of_edges() == 1
 
     def test_travel_summary_graph_time_filter(
         self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
