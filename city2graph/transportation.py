@@ -683,7 +683,7 @@ def get_od_pairs(
     start_date: str | None = None,
     end_date: str | None = None,
     include_geometry: bool = True,
-    directed: bool = False,
+    directed: bool = False,  # noqa: ARG001 - retained for call compatibility
 ) -> pd.DataFrame | gpd.GeoDataFrame:
     """
     Generate stop-to-stop OD pairs from GTFS trip stop sequences.
@@ -708,15 +708,17 @@ def get_od_pairs(
         If ``True`` and stop geometries are available, include a line geometry
         for each OD pair.
     directed : bool, default=False
-        If ``True``, preserve the original trip direction for each OD pair.
-        If ``False`` (default), use the same ordered stop pair for both
-        directions and orient any line geometry to that pair. Departure and
-        arrival timestamps still follow each trip's original direction.
+        Retained for call compatibility. Both values preserve the actual trip
+        origin, destination, timestamps and line direction. Historically,
+        ``False`` canonicalized the stop IDs, which could mislabel departures
+        from the opposite stop. Use :func:`travel_summary_graph` with
+        ``directed=False`` to aggregate trips into undirected edges instead.
 
     Returns
     -------
     pd.DataFrame | gpd.GeoDataFrame
-        One row per directed (or undirected) stop-to-stop leg.
+        One row per actual stop-to-stop leg. ``orig_stop_id`` identifies the
+        departure stop and ``dest_stop_id`` identifies the arrival stop.
     """
     tables = _list_tables(con)
     required = {"stop_times", "trips"}
@@ -783,12 +785,7 @@ def get_od_pairs(
 
     if include_geometry and "stops" in tables:
         query += """,
-            ST_AsText(
-                CASE WHEN NOT ? AND v.orig_stop_id > v.dest_stop_id
-                     THEN ST_MakeLine(s2.geometry, s1.geometry)
-                     ELSE ST_MakeLine(s1.geometry, s2.geometry)
-                END
-            ) as geometry_wkt
+            ST_AsText(ST_MakeLine(s1.geometry, s2.geometry)) as geometry_wkt
         """
     else:
         include_geometry = False
@@ -804,7 +801,7 @@ def get_od_pairs(
         LEFT JOIN stops s2 ON v.dest_stop_id = s2.stop_id
         """
 
-    od_pairs_df = con.execute(query, [directed] if include_geometry else []).df()
+    od_pairs_df = con.execute(query).df()
 
     if od_pairs_df.empty:
         return pd.DataFrame()
@@ -821,13 +818,6 @@ def get_od_pairs(
     ).dt.total_seconds()
 
     od_pairs_df = od_pairs_df.drop(columns=["departure_time", "arrival_time", "active_date_str"])
-
-    if not directed:
-        # Canonicalize: ensure orig_stop_id <= dest_stop_id
-        swap = od_pairs_df["orig_stop_id"] > od_pairs_df["dest_stop_id"]
-        od_pairs_df.loc[swap, ["orig_stop_id", "dest_stop_id"]] = od_pairs_df.loc[
-            swap, ["dest_stop_id", "orig_stop_id"]
-        ].to_numpy()
 
     od_pairs_df = od_pairs_df.sort_values(["trip_id", "date"]).reset_index(drop=True)
 

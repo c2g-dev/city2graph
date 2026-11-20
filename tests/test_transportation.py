@@ -467,11 +467,16 @@ class TestGetOdPairs:
 
         assert isinstance(result_directed, pd.DataFrame)
         assert isinstance(result_undirected, pd.DataFrame)
-        # Undirected should have orig_stop_id <= dest_stop_id for all rows
-        assert (result_undirected["orig_stop_id"] <= result_undirected["dest_stop_id"]).all()
+        pd.testing.assert_frame_equal(result_directed, result_undirected)
 
-    def test_undirected_od_pair_keeps_trip_times_and_orients_geometry(
-        self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
+    @pytest.mark.parametrize("include_geometry", [False, True])
+    @pytest.mark.parametrize("directed", [False, True])
+    def test_od_pair_keeps_actual_departure_stop_and_trip_times(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        include_geometry: bool,
+        directed: bool,
     ) -> None:
         sample_gtfs_dict["stop_times"] = pd.DataFrame(
             {
@@ -483,17 +488,24 @@ class TestGetOdPairs:
             }
         )
         with gtfs_connection(sample_gtfs_dict) as con:
-            actual = get_od_pairs(con, "20240101", "20240101")
-            directed = get_od_pairs(con, "20240101", "20240101", directed=True)
+            actual = get_od_pairs(
+                con, "20240101", "20240101", directed=directed, include_geometry=include_geometry
+            )
 
-        assert isinstance(actual, gpd.GeoDataFrame)
-        assert isinstance(directed, gpd.GeoDataFrame)
+        assert actual.loc[actual["orig_stop_id"] == "stop1"].empty
+        assert len(actual.loc[actual["orig_stop_id"] == "stop2"]) == 1
         row = actual.iloc[0]
-        assert (row["orig_stop_id"], row["dest_stop_id"]) == ("stop1", "stop2")
+        assert (row["orig_stop_id"], row["dest_stop_id"]) == ("stop2", "stop1")
         assert row["departure_ts"] == pd.Timestamp("2024-01-01 08:00")
         assert row["arrival_ts"] == pd.Timestamp("2024-01-01 08:10")
         assert row["travel_time_sec"] == 600.0
-        assert list(row.geometry.coords) == list(directed.iloc[0].geometry.coords)[::-1]
+        if include_geometry:
+            assert isinstance(actual, gpd.GeoDataFrame)
+            stops = sample_gtfs_dict["stops"].set_index("stop_id")
+            assert list(row.geometry.coords) == [
+                (stops.loc[stop_id, "stop_lon"], stops.loc[stop_id, "stop_lat"])
+                for stop_id in ("stop2", "stop1")
+            ]
 
     def test_get_od_pairs_calendar_dates_only_with_explicit_window(
         self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
