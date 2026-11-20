@@ -127,6 +127,36 @@ class TestLoadOvertureData:
         assert frame.geometry.iloc[0].equals(Point(1, 2))
         assert all(not path.exists() for path in paths)
 
+    @pytest.mark.parametrize("as_frame", [False, True])
+    def test_download_uses_every_feature_in_polygon_area(
+        self, as_frame: bool, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Download the union, preserving a gap between disjoint polygons."""
+        polygons = gpd.GeoSeries(
+            [
+                Polygon([(0, 0), (2, 0), (2, 2), (0, 2)]),
+                Polygon([(4, 0), (6, 0), (6, 2), (4, 2)]),
+            ],
+            crs=WGS84_CRS,
+        )
+        area = gpd.GeoDataFrame(geometry=polygons) if as_frame else polygons
+        features = gpd.GeoDataFrame(
+            {"name": ["left", "gap", "right"]},
+            geometry=[Point(1, 1), Point(3, 1), Point(5, 1)],
+            crs=WGS84_CRS,
+        )
+        calls: list[list[str]] = []
+
+        def download(cmd: list[str], **kwargs: object) -> None:
+            calls.append(cmd)
+            stream = cast("BinaryIO", kwargs["stdout"])
+            stream.write(features.to_json().encode())
+
+        monkeypatch.setattr("city2graph.data.subprocess.run", download)
+        result = load_overture_data(area, types=["place"], save_to_file=False)
+        assert "--bbox=0.0,0.0,6.0,2.0" in calls[0]
+        assert set(result["place"]["name"]) == {"left", "right"}
+
     @patch("city2graph.data.subprocess.run")
     @patch("city2graph.data.gpd.read_file")
     @patch("city2graph.data.Path.mkdir")
@@ -1202,6 +1232,24 @@ class TestProcessOvertureSegments:
         result = process_overture_segments(segments_gdf, connectors_gdf=connectors_gdf)
 
         assert len(result) >= 1
+
+    def test_split_barriers_keep_their_position_on_the_original_road(self) -> None:
+        """A rule's source fractions must be translated to each child segment."""
+        segments = make_segments_gdf(
+            ids=["road"],
+            geoms_or_coords=[[(0, 0), (10, 0)]],
+            connectors='[{"connector_id": "middle", "at": 0.5}]',
+            level_rules='[{"value": 1, "between": [0.3, 0.7]}]',
+            crs="EPSG:3857",
+        )
+        connectors = make_connectors_gdf(ids=["middle"], coords=[(5, 0)], crs="EPSG:3857")
+        result = process_overture_segments(segments, connectors_gdf=connectors, threshold=0.01)
+
+        assert result["id"].tolist() == ["road_1", "road_2"]
+        assert result["barrier_geometry"].tolist() == [
+            LineString([(0, 0), (3, 0)]),
+            LineString([(7, 0), (10, 0)]),
+        ]
 
     def test_vectorized_splitting_preserves_order_attributes_and_geometry(self) -> None:
         """Batch splitting preserves exact row semantics and source attributes."""
