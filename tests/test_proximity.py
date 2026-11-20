@@ -31,6 +31,7 @@ import pandas as pd
 import pytest
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
+from shapely import get_coordinates
 from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
@@ -1239,16 +1240,24 @@ class TestNetworkMetricPublicApis:
         assert len(edges) == 6
         assert all(len(frame) == 2 for frame in edges.values())
 
-    def test_knn_graph_uses_position_fallback_for_network_edge_lengths(
+    @pytest.mark.parametrize(
+        "geometry",
+        [
+            pytest.param(None, id="missing-linework"),
+            pytest.param(LineString([(10, 10), (10, 11)]), id="mismatched-endpoints"),
+        ],
+    )
+    def test_knn_graph_uses_position_fallback_for_unusable_linework(
         self,
         small_points: gpd.GeoDataFrame,
         monkeypatch: pytest.MonkeyPatch,
+        geometry: LineString | None,
     ) -> None:
-        """KNN should still work when network edges lack geometry but nodes have positions."""
+        """Paths fall back to node positions when edge linework cannot be used."""
         graph = nx.Graph()
         graph.add_node("a", pos=(0.0, 0.0))
         graph.add_node("b", pos=(1.0, 0.0))
-        graph.add_edge("a", "b", geometry=None)
+        graph.add_edge("a", "b", geometry=geometry)
 
         dummy_network = make_network_edges(
             src_ids=[0],
@@ -1271,6 +1280,7 @@ class TestNetworkMetricPublicApis:
         )
 
         assert_valid_proximity_result(nodes, edges, 2)
+        assert edges.geometry.iloc[0].equals(LineString([(0, 0), (1, 0)]))
 
     def test_knn_graph_surfaces_missing_network_via_public_path(
         self,
@@ -1661,3 +1671,53 @@ def test_network_bridge_nonpositive_k(k: int) -> None:
         network_gdf=network,
     )
     assert all(result.empty for result in edges.values())
+
+
+@pytest.mark.parametrize(
+    ("geometry_column", "secondary_geometry"),
+    [
+        pytest.param("geometry", False, id="default"),
+        pytest.param("shape", False, id="renamed"),
+        pytest.param("shape", True, id="secondary-geometry"),
+    ],
+)
+def test_network_proximity_preserves_curved_path_geometry(
+    monkeypatch: pytest.MonkeyPatch, geometry_column: str, secondary_geometry: bool
+) -> None:
+    """A selected network path follows the linework in either direction."""
+    points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(4, 0)], index=["west", "east"], crs=3857)
+    network = gpd.GeoDataFrame(
+        geometry=[
+            LineString([(0, 0), (1, 3), (2, 0)]),
+            LineString([(4, 0), (3, 2), (2, 0)]),
+        ],
+        crs=3857,
+    )
+    if geometry_column != "geometry":
+        network = network.rename_geometry(geometry_column)
+    if secondary_geometry:
+        network["geometry"] = [
+            LineString([(0, 0), (1, -1), (2, 0)]),
+            LineString([(4, 0), (3, -1), (2, 0)]),
+        ]
+    extract_coordinates = Mock(wraps=get_coordinates)
+    monkeypatch.setattr("city2graph.proximity.get_coordinates", extract_coordinates)
+
+    _, result = bridge_nodes(
+        {"start": points.iloc[:1], "end": points.iloc[1:]},
+        k=1,
+        distance_metric="network",
+        network_gdf=network,
+    )
+
+    route = LineString([(0, 0), (1, 3), (2, 0), (3, 2), (4, 0)])
+    forward = result[("start", "is_nearby", "end")]
+    reverse = result[("end", "is_nearby", "start")]
+    assert forward.geometry.iloc[0].equals_exact(route, 0)
+    assert reverse.geometry.iloc[0].equals_exact(route.reverse(), 0)
+    assert forward["weight"].iloc[0] == pytest.approx(route.length)
+    assert reverse["weight"].iloc[0] == pytest.approx(route.length)
+    assert extract_coordinates.call_count == len(network)
+
+    _, nearby = fixed_radius_graph(points, radius=6, distance_metric="network", network_gdf=network)
+    assert nearby.empty
