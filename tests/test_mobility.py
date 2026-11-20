@@ -34,6 +34,22 @@ def od_zones_gdf() -> gpd.GeoDataFrame:
     )
 
 
+def test_undirected_od_merges_reciprocal_mixed_type_zone_ids() -> None:
+    """Distinct IDs can have the same string representation."""
+    zones = gpd.GeoDataFrame({"zone_id": [1, "1"]}, geometry=[Point(0, 0), Point(1, 0)], crs=3857)
+    data = pd.DataFrame({"source": [1, "1"], "target": ["1", 1], "flow": [2, 3]})
+    _, edges = od_matrix_to_graph(
+        data,
+        zones,
+        zone_id_col="zone_id",
+        weight_cols=["flow"],
+        directed=False,
+    )
+
+    assert edges["weight"].tolist() == [5]
+    assert set(edges.index[0]) == {1, "1"}
+
+
 class TestODMatrixToGraph:
     """Tests for od_matrix_to_graph function."""
 

@@ -1359,7 +1359,8 @@ def _symmetrize_edges(edges: pd.DataFrame, *, sum_cols: list[str]) -> pd.DataFra
 
     For each unordered pair {u, v}, produce a single edge with ``source`` <= ``target``
     (based on string representation ordering) and sum the provided ``sum_cols`` across
-    both directions. Self-loops (u == v) are preserved and included as-is.
+    both directions. Distinct IDs with the same string use a shared encounter-order
+    tie-breaker. Self-loops (u == v) are preserved and included as-is.
 
     Parameters
     ----------
@@ -1382,6 +1383,12 @@ def _symmetrize_edges(edges: pd.DataFrame, *, sum_cols: list[str]) -> pd.DataFra
 
     # mask where source string is lexicographically <= target string
     keep = s_str <= t_str
+    same_label = s_str.eq(t_str) & edges_work["source"].ne(edges_work["target"])
+    if same_label.any():
+        source = edges_work.loc[same_label, "source"]
+        target = edges_work.loc[same_label, "target"]
+        ranks, _ = pd.factorize(pd.concat([source, target], ignore_index=True))
+        keep.loc[same_label] = ranks[: len(source)] < ranks[len(source) :]
     src_norm = edges_work["source"].where(keep, edges_work["target"])  # swap when needed
     tgt_norm = edges_work["target"].where(keep, edges_work["source"])  # swap when needed
     edges_work["_u"] = src_norm
