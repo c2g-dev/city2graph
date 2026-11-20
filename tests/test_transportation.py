@@ -413,6 +413,20 @@ class TestGetOdPairs:
         result = get_od_pairs(con)
         assert isinstance(result, (pd.DataFrame, gpd.GeoDataFrame))
 
+    @pytest.mark.parametrize("column", ["departure_time", "arrival_time"])
+    def test_get_od_pairs_all_missing_times_returns_an_empty_frame(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        column: str,
+    ) -> None:
+        with gtfs_connection(sample_gtfs_dict) as con:
+            con.execute(f"UPDATE stop_times SET {column} = NULL")
+            result = get_od_pairs(con, "20240101", "20240101", include_geometry=False)
+        assert result.empty
+        assert pd.api.types.is_datetime64_any_dtype(result["departure_ts"])
+        assert pd.api.types.is_datetime64_any_dtype(result["arrival_ts"])
+
     def test_get_od_pairs_removal_exception_integration(
         self, gtfs_connection: GtfsConnectionFactory
     ) -> None:
