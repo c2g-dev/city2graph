@@ -813,6 +813,37 @@ class TestRemoveIsolatedComponents(BaseGraphTest):
         assert isinstance(result, gpd.GeoDataFrame)
         assert len(result) == 3  # Only large component kept
 
+    @pytest.mark.parametrize("multigraph_index", [False, True])
+    def test_repeated_index_labels_do_not_reintroduce_isolated_edges(
+        self, sample_crs: str, multigraph_index: bool
+    ) -> None:
+        """The source row, rather than its possibly repeated label, is the edge identity."""
+        labels = (
+            pd.MultiIndex.from_tuples(
+                [(1, 2, "road"), (2, 3, "road"), (1, 2, "road")], names=["u", "v", "key"]
+            )
+            if multigraph_index
+            else pd.Index(["shared", "other", "shared"], name="external_id")
+        )
+        edges = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(1, 0), (2, 0)]),
+                    LineString([(10, 0), (11, 0)]),
+                ],
+                "road": ["first", "second", "isolated"],
+                "_city2graph_edge_position": ["a", "b", "c"],
+            },
+            index=labels,
+            crs=sample_crs,
+        )
+
+        result = utils.remove_isolated_components(edges)
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.equals(edges.iloc[:2])
+
     def test_remove_isolated_with_tuple_input(self, sample_crs: str) -> None:
         """Test with (nodes, edges) tuple input."""
         nodes = gpd.GeoDataFrame(
