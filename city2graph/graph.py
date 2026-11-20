@@ -561,7 +561,7 @@ class PyGConverter(BaseGraphConverter):
         *,
         directed: bool,
         same_type: bool,
-    ) -> tuple[torch.Tensor, torch.Tensor, bool]:
+    ) -> tuple[torch.Tensor, torch.Tensor, bool, gpd.GeoDataFrame]:
         """
         Build edge index and attribute tensors for one edge table.
 
@@ -589,16 +589,17 @@ class PyGConverter(BaseGraphConverter):
 
         Returns
         -------
-        tuple[torch.Tensor, torch.Tensor, bool]
-            ``(edge_index, edge_attr, was_symmetrized)``.
+        tuple[torch.Tensor, torch.Tensor, bool, geopandas.GeoDataFrame]
+            ``(edge_index, edge_attr, was_symmetrized, retained_edges)``.
         """
-        edge_pairs = self._create_edge_indices(edge_gdf, source_index, target_index)
+        edge_pairs, valid_edges = self._create_edge_indices(edge_gdf, source_index, target_index)
+        retained_edges = edge_gdf if valid_edges.all() else edge_gdf.iloc[valid_edges]
         edge_index = (
             torch.from_numpy(edge_pairs).to(device)
             if edge_pairs.size
             else torch.zeros((2, 0), dtype=torch.long, device=device)
         )
-        edge_attr = self._create_features(edge_gdf, feature_cols)
+        edge_attr = self._create_features(retained_edges, feature_cols)
 
         # Symmetrize same-type undirected edges in place
         was_symmetrized = False
@@ -606,7 +607,7 @@ class PyGConverter(BaseGraphConverter):
             edge_index, edge_attr = self._symmetrize_edges(edge_index, edge_attr, device)
             was_symmetrized = True
 
-        return edge_index, edge_attr, was_symmetrized
+        return edge_index, edge_attr, was_symmetrized, retained_edges
 
     def _convert_homogeneous(
         self,
@@ -663,7 +664,7 @@ class PyGConverter(BaseGraphConverter):
             self._validate_edge_gdf_for_pyg(edges, directed=directed_bool)
 
         if edges is not None and not edges.empty:
-            edge_index, edge_attr, _ = self._build_edge_tensors(
+            edge_index, edge_attr, _, edges = self._build_edge_tensors(
                 edges,
                 nodes.index,
                 None,
@@ -812,7 +813,7 @@ class PyGConverter(BaseGraphConverter):
         data = HeteroData()
 
         # Default empty dicts
-        edges_dict = edges or {}
+        edges_dict = edges.copy() if edges is not None else {}
 
         # Process nodes and get mappings
         node_mappings = self._process_hetero_nodes(
@@ -954,7 +955,7 @@ class PyGConverter(BaseGraphConverter):
 
                 feature_cols = edge_feature_cols.get(edge_type) if edge_feature_cols else None
                 is_same_type = src_type == dst_type
-                edge_index, edge_attr, was_symmetrized = self._build_edge_tensors(
+                edge_index, edge_attr, was_symmetrized, retained_edges = self._build_edge_tensors(
                     edge_gdf,
                     node_indices[src_type],
                     node_indices[dst_type],
@@ -963,6 +964,7 @@ class PyGConverter(BaseGraphConverter):
                     directed=is_directed_et,
                     same_type=is_same_type,
                 )
+                edges_dict[edge_type] = retained_edges
                 symmetrized_by_et[edge_type] = was_symmetrized
 
                 data[edge_type].edge_index = edge_index
@@ -1140,7 +1142,10 @@ class PyGConverter(BaseGraphConverter):
         edge_gdf: gpd.GeoDataFrame,
         source_index: pd.Index,
         target_index: pd.Index | None = None,
-    ) -> np.ndarray[tuple[int, ...], np.dtype[np.int64]]:
+    ) -> tuple[
+        np.ndarray[tuple[int, ...], np.dtype[np.int64]],
+        np.ndarray[tuple[int, ...], np.dtype[np.bool_]],
+    ]:
         """
         Create edge connectivity matrix from edge data using MultiIndex.
 
@@ -1160,8 +1165,9 @@ class PyGConverter(BaseGraphConverter):
 
         Returns
         -------
-        numpy.ndarray
-            Edge connectivity matrix of shape ``(2, num_valid_edges)``.
+        tuple[numpy.ndarray, numpy.ndarray]
+            Edge connectivity matrix of shape ``(2, num_valid_edges)`` and
+            boolean mask identifying the retained source rows.
         """
         target_index = source_index if target_index is None else target_index
 
@@ -1175,9 +1181,10 @@ class PyGConverter(BaseGraphConverter):
 
         # Keep only edges whose both endpoints resolved to known nodes
         valid_edges_mask = (from_indices >= 0) & (to_indices >= 0)
-        return np.stack(
+        edge_pairs = np.stack(
             [from_indices[valid_edges_mask], to_indices[valid_edges_mask]],
         ).astype(np.int64, copy=False)
+        return edge_pairs, valid_edges_mask
 
     def _edge_index_metadata(
         self,
@@ -2815,6 +2822,7 @@ def gdf_to_pyg(
     This function automatically detects the graph type based on input structure.
     For heterogeneous graphs, provide dictionaries mapping types to GeoDataFrames.
     Node positions are automatically extracted from geometry centroids when available.
+    Edges with an endpoint absent from its node index are omitted from the result.
     Undirected conversion accepts unique unordered edge pairs for two-level
     edge indexes. Three-level MultiGraph-style indexes deduplicate by
     ``(min(source, target), max(source, target), key)``, so parallel rows with
