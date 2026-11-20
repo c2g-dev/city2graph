@@ -2600,18 +2600,35 @@ def test_morphology_reprojects_secondary_barriers(
         segments["barrier"] = barrier
     before = segments.copy(deep=True)
     buildings_before = buildings.copy(deep=True)
-    options = {"primary_barrier_col": "barrier", "tessellation_n_jobs": 1}
     if multi_distance:
         center = gpd.GeoSeries([reference.geometry.iloc[0].centroid], crs=3857)
         expected = morphological_graphs(
-            buildings, reference, [50.0, 100.0], center_point=center, **options
+            buildings,
+            reference,
+            [50.0, 100.0],
+            center_point=center,
+            primary_barrier_col="barrier",
+            tessellation_n_jobs=1,
         )
         actual = morphological_graphs(
-            buildings, segments, [50.0, 100.0], center_point=center, **options
+            buildings,
+            segments,
+            [50.0, 100.0],
+            center_point=center,
+            primary_barrier_col="barrier",
+            tessellation_n_jobs=1,
         )
     else:
-        expected = {None: morphological_graph(buildings, reference, **options)}
-        actual = {None: morphological_graph(buildings, segments, **options)}
+        expected = {
+            0.0: morphological_graph(
+                buildings, reference, primary_barrier_col="barrier", tessellation_n_jobs=1
+            )
+        }
+        actual = {
+            0.0: morphological_graph(
+                buildings, segments, primary_barrier_col="barrier", tessellation_n_jobs=1
+            )
+        }
     for distance, (expected_nodes, expected_edges) in expected.items():
         nodes, edges = actual[distance]
         assert not expected_nodes["place"].empty
