@@ -115,6 +115,14 @@ _BASE_ACTIVE_DATES_INSERT_SQL = """
     SELECT service_id, active_date FROM base_services
 """
 
+_STOP_GEOMETRY_SQL = """
+    CASE
+        WHEN try_cast(stop_lon AS DOUBLE) BETWEEN -180 AND 180
+         AND try_cast(stop_lat AS DOUBLE) BETWEEN -90 AND 90
+        THEN ST_Point(CAST(stop_lon AS DOUBLE), CAST(stop_lat AS DOUBLE))
+    END
+"""
+
 
 def _list_tables(con: duckdb.DuckDBPyConnection) -> set[str]:
     """
@@ -256,7 +264,7 @@ def _ensure_stops_geometry(con: duckdb.DuckDBPyConnection) -> None:
     Create a temp relation named _stops_for_graph with a geometry column.
 
     If stops.geometry already exists, it is reused. Otherwise geometry is built
-    from stop_lon/stop_lat.
+    from valid WGS84 coordinates in stop_lon/stop_lat.
 
     Parameters
     ----------
@@ -287,67 +295,37 @@ def _ensure_stops_geometry(con: duckdb.DuckDBPyConnection) -> None:
         msg = "stops must contain either a geometry column or both stop_lon and stop_lat."
         raise ValueError(msg)
 
-    con.execute(  # pragma: no cover - exercised by feeds without prebuilt stop geometry
-        """
+    con.execute(
+        f"""
         CREATE TEMP TABLE _stops_for_graph AS
-        SELECT
-            *,
-            CASE
-                WHEN try_cast(NULLIF(stop_lon, '') AS DOUBLE) BETWEEN -180 AND 180
-                 AND try_cast(NULLIF(stop_lat, '') AS DOUBLE) BETWEEN -90 AND 90
-                THEN ST_Point(
-                    CAST(NULLIF(stop_lon, '') AS DOUBLE),
-                    CAST(NULLIF(stop_lat, '') AS DOUBLE)
-                )
-                ELSE NULL
-            END AS geometry
+        SELECT *, {_STOP_GEOMETRY_SQL} AS geometry
         FROM stops
-        """
+        """  # noqa: S608
     )
 
 
 def _materialize_loaded_stop_geometry(con: duckdb.DuckDBPyConnection) -> None:
     """
-    Materialize nullable WGS84 geometry in an imported stops table.
+    Add nullable WGS84 point geometry to the imported stops table.
 
-    Validate coordinate columns for location types that require them and
-    leave locations with unusable coordinates without a point.
+    Keep the original coordinate fields and leave unusable coordinates without
+    a point.
 
     Parameters
     ----------
     con : duckdb.DuckDBPyConnection
-        Feed connection containing the imported stops table.
-
-    Returns
-    -------
-    None
-        The function adds the geometry column to stops.
+        Open DuckDB connection containing the imported stops table.
 
     Raises
     ------
     ValueError
-        If locations require coordinates and a coordinate column is absent.
+        If either coordinate column is missing.
     """
-    stop_columns = _table_columns(con, "stops")
-    has_coordinates = {"stop_lon", "stop_lat"}.issubset(stop_columns)
-    if not has_coordinates and (
-        "location_type" not in stop_columns
-        or con.execute("""
-            SELECT count(*) FROM stops
-            WHERE coalesce(try_cast(location_type AS INTEGER), 0) NOT IN (3, 4)
-        """).fetchone()
-        != (0,)
-    ):
-        msg = "GTFS stops requiring coordinates must have stop_lon and stop_lat columns."
+    if not {"stop_lon", "stop_lat"}.issubset(_table_columns(con, "stops")):
+        msg = "GTFS stops must contain both stop_lon and stop_lat columns."
         raise ValueError(msg)
     con.execute("ALTER TABLE stops ADD COLUMN geometry GEOMETRY")
-    if has_coordinates:
-        con.execute("""
-            UPDATE stops
-            SET geometry = ST_Point(CAST(stop_lon AS DOUBLE), CAST(stop_lat AS DOUBLE))
-            WHERE try_cast(stop_lon AS DOUBLE) BETWEEN -180 AND 180
-              AND try_cast(stop_lat AS DOUBLE) BETWEEN -90 AND 90
-        """)
+    con.execute(f"UPDATE stops SET geometry = {_STOP_GEOMETRY_SQL}")  # noqa: S608
 
 
 def _feed_date_bounds(
@@ -525,8 +503,6 @@ def load_gtfs(
     UDF, and materializes ``stops.geometry`` as points from
     ``stop_lon``/``stop_lat`` when valid WGS84 stop coordinates are available.
     Stops with missing or invalid coordinate values are kept with null geometry.
-    A table may omit coordinate columns when it contains only GTFS location
-    types whose coordinates are optional.
 
     Parameters
     ----------
@@ -540,6 +516,11 @@ def load_gtfs(
     -------
     duckdb.DuckDBPyConnection
         In-memory DuckDB connection containing imported GTFS tables.
+
+    Raises
+    ------
+    ValueError
+        If a stops table is present without both coordinate columns.
     """
     con = duckdb.connect(":memory:")
     try:
@@ -1309,7 +1290,10 @@ def travel_summary_graph(
 
     Edge geometry
     ~~~~~~~~~~~~~
-    Edge geometry is represented as a straight stop-to-stop line.
+    Edge geometry is represented as a straight stop-to-stop line. GeoDataFrame
+    outputs retain stops with missing geometries and their incident edges,
+    whose geometries are also missing. Conversion to NetworkX omits those
+    stops and their incident edges.
 
     Parameters
     ----------
