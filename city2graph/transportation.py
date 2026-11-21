@@ -24,6 +24,7 @@ from typing import Unpack
 import duckdb
 import geopandas as gpd
 import pandas as pd
+from shapely import reverse
 from shapely import wkt
 
 from . import data as _data
@@ -259,6 +260,37 @@ def _table_columns(
     return {row[1] for row in con.execute(f"PRAGMA table_info('{table_name}')").fetchall()}
 
 
+def _drop_temp_relation(con: duckdb.DuckDBPyConnection, name: str) -> None:
+    """
+    Drop an existing temporary DuckDB view or table matching its actual catalog type.
+
+    DuckDB raises a ``CatalogException`` if ``DROP VIEW`` targets an existing
+    table (or vice versa), so this helper inspects the temporary catalog first.
+
+    Parameters
+    ----------
+    con : duckdb.DuckDBPyConnection
+        Open DuckDB connection.
+    name : str
+        Temporary view or table name to remove if present.
+
+    Returns
+    -------
+    None
+        Mutates temporary catalog entries in ``con``.
+    """
+    if con.execute(
+        "SELECT 1 FROM duckdb_views() WHERE temporary AND view_name = ? LIMIT 1",
+        [name],
+    ).fetchone():
+        con.execute(f"DROP VIEW IF EXISTS {name}")
+    if con.execute(
+        "SELECT 1 FROM duckdb_tables() WHERE temporary AND table_name = ? LIMIT 1",
+        [name],
+    ).fetchone():
+        con.execute(f"DROP TABLE IF EXISTS {name}")
+
+
 def _ensure_stops_geometry(con: duckdb.DuckDBPyConnection) -> None:
     """
     Create a temp relation named _stops_for_graph with a geometry column.
@@ -284,8 +316,7 @@ def _ensure_stops_geometry(con: duckdb.DuckDBPyConnection) -> None:
     """
     stop_columns = _table_columns(con, "stops")
 
-    con.execute("DROP VIEW IF EXISTS _stops_for_graph")
-    con.execute("DROP TABLE IF EXISTS _stops_for_graph")
+    _drop_temp_relation(con, "_stops_for_graph")
 
     if "geometry" in stop_columns:
         con.execute("CREATE TEMP VIEW _stops_for_graph AS SELECT * FROM stops")
@@ -711,7 +742,7 @@ def get_od_pairs(
     start_date: str | None = None,
     end_date: str | None = None,
     include_geometry: bool = True,
-    directed: bool = False,
+    directed: bool = False,  # noqa: ARG001 - retained for call compatibility
 ) -> pd.DataFrame | gpd.GeoDataFrame:
     """
     Generate stop-to-stop OD pairs from GTFS trip stop sequences.
@@ -733,17 +764,20 @@ def get_od_pairs(
         Inclusive end date (``YYYYMMDD``). Defaults to the latest date in
         calendar or calendar_dates.
     include_geometry : bool, default=True
-        If ``True`` and stop geometries are available, include a line geometry
-        for each OD pair.
+        If ``True``, include a line geometry for each OD pair when stops
+        have prebuilt geometries or longitude and latitude columns.
     directed : bool, default=False
-        If ``True``, preserve the original trip direction for each OD pair.
-        If ``False`` (default), canonicalize each pair so that
-        ``orig_stop_id < dest_stop_id`` and aggregate both directions together.
+        Retained for call compatibility. Both values preserve the actual trip
+        origin, destination, timestamps and line direction. Historically,
+        ``False`` canonicalized the stop IDs, which could mislabel departures
+        from the opposite stop. Use :func:`travel_summary_graph` with
+        ``directed=False`` to aggregate trips into undirected edges instead.
 
     Returns
     -------
     pd.DataFrame | gpd.GeoDataFrame
-        One row per directed (or undirected) stop-to-stop leg.
+        One row per actual stop-to-stop leg. ``orig_stop_id`` identifies the
+        departure stop and ``dest_stop_id`` identifies the arrival stop.
     """
     tables = _list_tables(con)
     required = {"stop_times", "trips"}
@@ -808,12 +842,21 @@ def get_od_pairs(
             strftime(d.active_date, '%Y-%m-%d') as date
     """
 
-    if include_geometry and "stops" in tables:
+    stops_relation = "stops"
+    include_geometry = include_geometry and "stops" in tables
+    if include_geometry:
+        stop_columns = _table_columns(con, "stops")
+        if "geometry" not in stop_columns:
+            include_geometry = {"stop_lon", "stop_lat"}.issubset(stop_columns)
+            if include_geometry:
+                _ensure_graph_sql_support(con)
+                _ensure_stops_geometry(con)
+                stops_relation = "_stops_for_graph"
+
+    if include_geometry:
         query += """,
             ST_AsText(ST_MakeLine(s1.geometry, s2.geometry)) as geometry_wkt
         """
-    else:
-        include_geometry = False
 
     query += """
         FROM valid_st v
@@ -821,9 +864,9 @@ def get_od_pairs(
     """
 
     if include_geometry:
-        query += """
-        LEFT JOIN stops s1 ON v.orig_stop_id = s1.stop_id
-        LEFT JOIN stops s2 ON v.dest_stop_id = s2.stop_id
+        query += f"""
+        LEFT JOIN {stops_relation} s1 ON v.orig_stop_id = s1.stop_id
+        LEFT JOIN {stops_relation} s2 ON v.dest_stop_id = s2.stop_id
         """
 
     od_pairs_df = con.execute(query).df()
@@ -847,16 +890,6 @@ def get_od_pairs(
     ).dt.total_seconds()
 
     od_pairs_df = od_pairs_df.drop(columns=["departure_time", "arrival_time", "active_date_str"])
-
-    if not directed:
-        # Canonicalize: ensure orig_stop_id <= dest_stop_id
-        swap = od_pairs_df["orig_stop_id"] > od_pairs_df["dest_stop_id"]
-        od_pairs_df.loc[swap, ["orig_stop_id", "dest_stop_id"]] = od_pairs_df.loc[
-            swap, ["dest_stop_id", "orig_stop_id"]
-        ].to_numpy()
-        od_pairs_df.loc[swap, ["departure_ts", "arrival_ts"]] = od_pairs_df.loc[
-            swap, ["arrival_ts", "departure_ts"]
-        ].to_numpy()
 
     od_pairs_df = od_pairs_df.sort_values(["trip_id", "date"]).reset_index(drop=True)
 
@@ -1148,6 +1181,8 @@ def _build_travel_summary_edges(
         edges_df.loc[swap_mask, ["from_stop_id", "to_stop_id"]] = edges_df.loc[
             swap_mask, ["to_stop_id", "from_stop_id"]
         ].to_numpy()
+        reversed_lines = reverse(edges_df.loc[swap_mask, "geometry"])
+        edges_df.loc[swap_mask, "geometry"] = reversed_lines
         edges_df["_weighted_tt"] = edges_df["travel_time_sec"] * edges_df["frequency"]
         agg = edges_df.groupby(["from_stop_id", "to_stop_id"], sort=False).agg(
             _weighted_tt=("_weighted_tt", "sum"),

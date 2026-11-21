@@ -15,6 +15,7 @@ Test categories:
 
 from __future__ import annotations
 
+from fractions import Fraction
 from typing import TYPE_CHECKING
 from typing import cast
 
@@ -1069,8 +1070,8 @@ def test_generators_insufficient_points_early_exit(
         assert_valid_proximity_result(nodes, edges, 2)
 
 
-@pytest.mark.parametrize("cost", [-1.0, float("nan"), float("-inf")])
-def test_network_proximity_rejects_invalid_shortest_path_costs(cost: float) -> None:
+@pytest.mark.parametrize("cost", [-1.0, float("nan"), float("-inf"), Fraction(-1, 2)])
+def test_network_proximity_rejects_invalid_shortest_path_costs(cost: float | Fraction) -> None:
     """An invalid user-supplied weight cannot silently remove connectivity."""
     points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], crs=3857)
     network = gpd.GeoDataFrame(
@@ -1087,8 +1088,46 @@ def test_network_proximity_rejects_invalid_shortest_path_costs(cost: float) -> N
         )
 
 
-@pytest.mark.parametrize("cost", [0.0, 2.5])
-def test_network_proximity_preserves_valid_costs(cost: float) -> None:
+def test_network_proximity_missing_weight_takes_precedence_and_caps_examples() -> None:
+    """Single-pass validation prioritizes missing numeric weights and caps error samples."""
+    points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(5, 0)], crs=3857)
+    geometries = [LineString([(i, 0), (i + 1, 0)]) for i in range(5)]
+
+    # Both an invalid negative cost and four non-numeric costs are present.
+    mixed_network = gpd.GeoDataFrame(
+        {"travel_cost": [-1.0, "bad", "bad", "bad", "bad"]},
+        geometry=geometries,
+        crs=3857,
+    )
+    with pytest.raises(ValueError, match="missing numeric 'travel_cost'") as exc_missing:
+        knn_graph(
+            points,
+            k=1,
+            distance_metric="network",
+            network_gdf=mixed_network,
+            network_weight="travel_cost",
+        )
+    assert exc_missing.value.args[0].count("((") == 3
+
+    # More than three negative/NaN edges still cap reported examples at three.
+    invalid_network = gpd.GeoDataFrame(
+        {"travel_cost": [-1.0, -2.0, float("nan"), -4.0, -5.0]},
+        geometry=geometries,
+        crs=3857,
+    )
+    with pytest.raises(ValueError, match=r"travel_cost.*non-negative.*NaN") as exc_invalid:
+        knn_graph(
+            points,
+            k=1,
+            distance_metric="network",
+            network_gdf=invalid_network,
+            network_weight="travel_cost",
+        )
+    assert exc_invalid.value.args[0].count("((") == 3
+
+
+@pytest.mark.parametrize("cost", [0.0, 2.5, Fraction(5, 2)])
+def test_network_proximity_preserves_valid_costs(cost: float | Fraction) -> None:
     """Zero and finite positive custom costs retain their supplied values."""
     points = make_points_simple([(0, 0), (2, 0)])
     network = gpd.GeoDataFrame(
@@ -1102,7 +1141,7 @@ def test_network_proximity_preserves_valid_costs(cost: float) -> None:
         network_weight="travel_cost",
     )
     assert len(edges) == 1
-    assert edges["weight"].iloc[0] == pytest.approx(cost)
+    assert edges["weight"].iloc[0] == pytest.approx(float(cost))
 
 
 @pytest.mark.parametrize("detour", [False, True])
@@ -1615,6 +1654,39 @@ def test_directed_nonpositive_k(k: int) -> None:
     nodes, edges = knn_graph(frame, k=k, target_gdf=frame)
     assert len(nodes) == 4
     assert edges.empty
+
+
+@pytest.mark.parametrize("radius", [-2.0, float("nan"), float("inf")])
+@pytest.mark.parametrize("mode", ["undirected", "directed", "bridge"])
+def test_fixed_radius_rejects_an_invalid_distance(radius: float, mode: str) -> None:
+    """Invalid radii are rejected before the selection strategy can create edges."""
+    points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], crs=3857)
+    if mode == "bridge":
+        with pytest.raises(ValueError, match="radius must be finite and non-negative"):
+            bridge_nodes(
+                {"source": points, "target": points},
+                proximity_method="fixed_radius",
+                radius=radius,
+            )
+    else:
+        with pytest.raises(ValueError, match="radius must be finite and non-negative"):
+            fixed_radius_graph(
+                points, radius=radius, target_gdf=points if mode == "directed" else None
+            )
+
+
+def test_bridge_nodes_fixed_radius_requires_a_radius() -> None:
+    """The missing distance raises ValueError as documented."""
+    points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], crs=3857)
+    with pytest.raises(ValueError, match="radius is required"):
+        bridge_nodes({"source": points, "target": points}, proximity_method="fixed_radius")
+
+
+def test_fixed_radius_zero_connects_coincident_but_not_distinct_points() -> None:
+    """Zero is a well-defined inclusive cutoff for distinct node IDs."""
+    points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(0, 0), Point(1, 0)], crs=3857)
+    _, edges = fixed_radius_graph(points, radius=0)
+    assert list(edges.index) == [(0, 1)]
 
 
 @pytest.mark.parametrize("metric", ["euclidean", "manhattan"])
