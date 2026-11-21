@@ -141,6 +141,32 @@ class TestGraphStructures(BaseGraphTest):
         assert nodes.crs == dual_edges.crs == sample_nodes_gdf.crs
         pd.testing.assert_frame_equal(edges, original)
 
+    def test_dual_graph_uses_the_active_geometry_column(
+        self, sample_nodes_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """Centroids replace the active geometry even when its name is not geometry."""
+        edges = gpd.GeoDataFrame(
+            {
+                "u": [1, 2],
+                "v": [2, 3],
+                "geometry": ["road A", "road B"],
+                "shape": [LineString([(0, 0), (2, 0)]), LineString([(2, 0), (4, 0)])],
+            },
+            geometry="shape",
+            crs=sample_nodes_gdf.crs,
+        )
+
+        dual_nodes, dual_edges = utils.dual_graph(
+            (sample_nodes_gdf, edges), keep_original_geom=True
+        )
+
+        assert dual_nodes.geometry.name == "shape"
+        assert list(dual_nodes.geometry) == [Point(1, 0), Point(3, 0)]
+        assert list(dual_nodes["geometry"]) == ["road A", "road B"]
+        assert list(dual_nodes["original_geometry"]) == list(edges.geometry)
+        assert list(dual_edges.geometry) == [LineString([(1, 0), (3, 0)])]
+        assert list(edges.geometry.geom_type) == ["LineString", "LineString"]
+
     @pytest.mark.parametrize(
         ("source", "target"),
         [
@@ -234,6 +260,17 @@ class TestGraphStructures(BaseGraphTest):
         dual_nodes, dual_edges = utils.dual_graph((nodes, edges), edge_id_col="edge_id")
         self.assert_valid_gdf(dual_nodes)
         self.assert_valid_gdf(dual_edges)
+
+    def test_empty_primal_graph_honors_networkx_output(self, sample_crs: str) -> None:
+        """The requested output form applies even when there are no primal edges."""
+        empty = gpd.GeoDataFrame(geometry=[], crs=sample_crs)
+
+        dual = utils.dual_graph((empty, empty), as_nx=True)
+
+        assert isinstance(dual, nx.Graph)
+        assert dual.number_of_nodes() == 0
+        assert dual.number_of_edges() == 0
+        assert dual.graph["crs"] == empty.crs
 
     def test_dual_graph_empty_result_with_edge_id_col(
         self, sample_nodes_gdf: gpd.GeoDataFrame, sample_crs: str
@@ -562,6 +599,45 @@ class TestClipGraph(BaseGraphTest):
         assert isinstance(result, gpd.GeoDataFrame)
         assert result.empty
 
+    @pytest.mark.parametrize("mask_cls", [gpd.GeoSeries, gpd.GeoDataFrame])
+    @pytest.mark.parametrize("keep_outer_neighbors", [False, True])
+    def test_clip_graph_empty_mask(
+        self,
+        mask_cls: type[gpd.GeoSeries | gpd.GeoDataFrame],
+        keep_outer_neighbors: bool,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """An empty polygon selection produces empty node and edge frames."""
+        empty_series = gpd.GeoSeries([], crs=sample_edges_gdf.crs)
+        mask = (
+            empty_series if mask_cls is gpd.GeoSeries else gpd.GeoDataFrame(geometry=empty_series)
+        )
+
+        nodes, edges = utils.clip_graph(
+            (sample_nodes_gdf, sample_edges_gdf),
+            mask,
+            keep_outer_neighbors=keep_outer_neighbors,
+        )
+
+        assert nodes is not None
+        assert nodes.equals(sample_nodes_gdf.iloc[:0])
+        assert edges.equals(sample_edges_gdf.iloc[:0])
+
+    def test_clip_graph_empty_mask_networkx(self, sample_crs: str) -> None:
+        """An empty mask keeps graph type and metadata without keeping a node or edge."""
+        graph = nx.MultiDiGraph(crs=sample_crs, name="roads")
+        graph.add_node("a", pos=(0, 0), geometry=Point(0, 0))
+        graph.add_node("b", pos=(1, 0), geometry=Point(1, 0))
+        graph.add_edge("a", "b", key="road", geometry=LineString([(0, 0), (1, 0)]))
+
+        clipped = utils.clip_graph(graph, gpd.GeoSeries([], crs=sample_crs))
+
+        assert isinstance(clipped, nx.MultiDiGraph)
+        assert clipped.graph == graph.graph
+        assert not clipped
+        assert graph.number_of_edges() == 1
+
     def test_clip_graph_area_as_gdf(self, sample_crs: str) -> None:
         """Test passing area as GeoDataFrame."""
         clip_poly = Polygon([(0, 0), (1, 0), (1, 2), (0, 2)])
@@ -801,6 +877,37 @@ class TestRemoveIsolatedComponents(BaseGraphTest):
         result = utils.remove_isolated_components(gdf)
         assert isinstance(result, gpd.GeoDataFrame)
         assert len(result) == 3  # Only large component kept
+
+    @pytest.mark.parametrize("multigraph_index", [False, True])
+    def test_repeated_index_labels_do_not_reintroduce_isolated_edges(
+        self, sample_crs: str, multigraph_index: bool
+    ) -> None:
+        """The source row, rather than its possibly repeated label, is the edge identity."""
+        labels = (
+            pd.MultiIndex.from_tuples(
+                [(1, 2, "road"), (2, 3, "road"), (1, 2, "road")], names=["u", "v", "key"]
+            )
+            if multigraph_index
+            else pd.Index(["shared", "other", "shared"], name="external_id")
+        )
+        edges = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(1, 0), (2, 0)]),
+                    LineString([(10, 0), (11, 0)]),
+                ],
+                "road": ["first", "second", "isolated"],
+                "_city2graph_edge_position": ["a", "b", "c"],
+            },
+            index=labels,
+            crs=sample_crs,
+        )
+
+        result = utils.remove_isolated_components(edges)
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert result.equals(edges.iloc[:2])
 
     def test_remove_isolated_with_tuple_input(self, sample_crs: str) -> None:
         """Test with (nodes, edges) tuple input."""
