@@ -72,6 +72,62 @@ __all__ = [
 EdgePair = tuple[Any, Any]
 
 AUTO_NETWORK_LENGTH_ATTR = "__c2g_edge_length"
+_FAST_REAL_TYPES = (float, int, np.floating, np.integer)
+_REAL_NUMBER_TYPES = (*_FAST_REAL_TYPES, Real)
+_MAX_WEIGHT_ERROR_EXAMPLES = 3
+
+
+def _validate_preferred_network_weight(graph: nx.Graph, preferred_attr: str) -> None:
+    """
+    Validate a user-supplied network edge weight attribute in a single pass.
+
+    Checks that every edge provides a real numeric value that is non-negative
+    and not NaN (positive infinity is permitted to represent impassable edges).
+    Missing or non-numeric weights take precedence over negative/NaN values,
+    matching the original two-stage error priority.
+
+    Parameters
+    ----------
+    graph : networkx.Graph
+        Network graph whose edges are validated.
+    preferred_attr : str
+        Edge attribute name to check.
+
+    Raises
+    ------
+    ValueError
+        If any edge is missing a numeric value or has a negative or NaN weight.
+    """
+    missing: list[EdgePair] = []
+    invalid: list[EdgePair] = []
+    for u, v, data in graph.edges(data=True):
+        value = data.get(preferred_attr)
+        # Both negative values and NaN fail ``>= 0`` while +inf passes.
+        if isinstance(value, _FAST_REAL_TYPES):
+            if value >= 0:
+                continue
+        elif isinstance(value, Real):
+            if float(value) >= 0:
+                continue
+        else:
+            missing.append((u, v))
+            if len(missing) == _MAX_WEIGHT_ERROR_EXAMPLES:
+                break
+            continue
+        if len(invalid) < _MAX_WEIGHT_ERROR_EXAMPLES:
+            invalid.append((u, v))
+
+    if missing:
+        sample = ", ".join(map(str, missing))
+        msg = (
+            f"Edges missing numeric '{preferred_attr}' attribute required for network weights;"
+            f" examples: {sample}"
+        )
+        raise ValueError(msg)
+    if invalid:
+        sample = ", ".join(map(str, invalid))
+        msg = f"Network weights in '{preferred_attr}' must be non-negative and not NaN; examples: {sample}"
+        raise ValueError(msg)
 
 
 def _resolve_network_weight_attribute(
@@ -114,32 +170,12 @@ def _resolve_network_weight_attribute(
         attribute or its values are non-numeric, negative, or NaN.
     """
     if preferred_attr:
-        missing = [
-            (u, v)
-            for u, v, data in graph.edges(data=True)
-            if not isinstance(data.get(preferred_attr), Real)
-        ]
-        if missing:
-            sample = ", ".join(map(str, missing[:3]))
-            msg = (
-                f"Edges missing numeric '{preferred_attr}' attribute required for network weights;"
-                f" examples: {sample}"
-            )
-            raise ValueError(msg)
-        invalid = [
-            (u, v)
-            for u, v, data in graph.edges(data=True)
-            if data[preferred_attr] < 0 or np.isnan(float(data[preferred_attr]))
-        ]
-        if invalid:
-            sample = ", ".join(map(str, invalid[:3]))
-            msg = f"Network weights in '{preferred_attr}' must be non-negative and not NaN; examples: {sample}"
-            raise ValueError(msg)
+        _validate_preferred_network_weight(graph, preferred_attr)
         return preferred_attr
 
     for u, v, data in graph.edges(data=True):
         existing = data.get(AUTO_NETWORK_LENGTH_ATTR)
-        if isinstance(existing, Real):
+        if isinstance(existing, _REAL_NUMBER_TYPES):
             continue
         geom = data.get(geometry_column)
         if geom is not None and hasattr(geom, "length"):
@@ -147,7 +183,7 @@ def _resolve_network_weight_attribute(
         elif u in pos and v in pos:
             ux, uy = pos[u]
             vx, vy = pos[v]
-            candidate = float(np.hypot(vx - ux, vy - uy))
+            candidate = math.hypot(vx - ux, vy - uy)
         else:
             candidate = 0.0
         data[AUTO_NETWORK_LENGTH_ATTR] = candidate
