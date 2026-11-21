@@ -13,6 +13,12 @@ archives and local
 derives stop-to-stop origin–destination records and aggregates GTFS schedules
 into transportation network graphs.
 
+Detailed `get_od_pairs()` rows always retain the actual departure and arrival
+stops, chronological timestamps and trip-oriented geometry. Its `directed`
+parameter remains accepted for call compatibility; `directed=False` no longer
+relabels reverse trips with a canonical stop pair. For canonical undirected
+edges that combine both trip directions, use `travel_summary_graph(directed=False)`.
+
 See the [tutorial on creating GTFS from OpenStreetMap](../examples/creating_gtfs.md) for a first feed and
 the [generation reference](gtfs_generation.md) for field precedence, source-tag
 interpretation, partial service tables and default values.
