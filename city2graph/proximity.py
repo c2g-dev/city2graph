@@ -14,6 +14,7 @@ from __future__ import annotations
 
 # Standard library imports
 import logging
+import math
 import warnings
 from dataclasses import dataclass
 from itertools import combinations
@@ -1599,7 +1600,7 @@ def _validate_radius(radius: float) -> None:
     ValueError
         If the radius is negative or not finite.
     """
-    if not np.isfinite(radius) or radius < 0:
+    if not math.isfinite(radius) or radius < 0:
         msg = "radius must be finite and non-negative"
         raise ValueError(msg)
 
@@ -1630,7 +1631,8 @@ def fixed_radius_graph(
         of this GeoDataFrame will be used as node IDs.
     radius : float
         The maximum distance for connecting nodes. Nodes within this radius will
-        have an edge between them. Must be positive.
+        have an edge between them. Must be finite and non-negative; ``0``
+        connects distinct coincident points.
     distance_metric : str, default "euclidean"
         The distance metric to use for determining connections. Options are:
         - "euclidean": Straight-line distance
