@@ -1273,23 +1273,44 @@ class TestRustworkxConversions:
         assert nx.utils.graphs_equal(G, G_restored)
 
     @pytest.mark.parametrize("graph_cls", [nx.Graph, nx.DiGraph, nx.MultiGraph, nx.MultiDiGraph])
-    def test_roundtrip_attributes_are_not_constructor_arguments(
+    def test_roundtrip_arbitrary_and_reserved_attribute_keys(
         self, graph_cls: type[nx.Graph]
     ) -> None:
-        """Restore arbitrary attribute keys separately from topology."""
+        """Restore arbitrary attribute keys, including constructor args and internal metadata keys."""
         graph = graph_cls()
-        graph.add_edge("a", "b")
-        edge_id = ("a", "b", 0) if graph.is_multigraph() else ("a", "b")
-        graph.nodes["a"]["node_for_adding"] = "node label"
-        graph.nodes["b"][42] = "integer node attribute key"
+        graph.add_edge(("a", 0), ("b", 1))
+        edge_id = (("a", 0), ("b", 1), 0) if graph.is_multigraph() else (("a", 0), ("b", 1))
+        graph.nodes[("a", 0)]["node_for_adding"] = "node label"
+        graph.nodes[("a", 0)]["__nx_node_id__"] = "user node id"
+        graph.nodes[("b", 1)][42] = "integer node attribute key"
+        graph.nodes[("b", 1)]["__nx_node_id__"] = None
         graph.edges[edge_id]["key"] = "serialized edge label"
         graph.edges[edge_id]["u_of_edge"] = "source label"
         graph.edges[edge_id][7] = "integer edge attribute key"
+        graph.edges[edge_id]["__nx_edge_key__"] = "user edge key"
 
-        restored = utils.rx_to_nx(utils.nx_to_rx(graph))
+        rx_graph = utils.nx_to_rx(graph)
+        restored = utils.rx_to_nx(rx_graph)
+        restored_again = utils.rx_to_nx(rx_graph)
 
         assert type(restored) is graph_cls
         assert nx.utils.graphs_equal(restored, graph)
+        assert nx.utils.graphs_equal(restored_again, graph)
+
+    def test_rx_to_nx_raw_multigraph_without_edge_keys(self) -> None:
+        """Raw rustworkx multigraphs without __nx_edge_key__ assign distinct keys."""
+        rx_graph = rx.PyGraph(multigraph=True)
+        i1 = rx_graph.add_node({"label": "n1"})
+        i2 = rx_graph.add_node({"label": "n2"})
+        rx_graph.add_edge(i1, i2, {"weight": 1.0})
+        rx_graph.add_edge(i1, i2, None)
+
+        nx_graph = utils.rx_to_nx(rx_graph)
+
+        assert isinstance(nx_graph, nx.MultiGraph)
+        assert nx_graph.number_of_edges() == 2
+        assert nx_graph.edges[i1, i2, 0] == {"weight": 1.0}
+        assert nx_graph.edges[i1, i2, 1] == {}
 
     def test_rx_to_nx_raw_input(self) -> None:
         """Test converting a raw rustworkx graph (no __nx_node_id__)."""

@@ -4,7 +4,9 @@
 import logging
 import typing
 from collections.abc import Iterable
+from collections.abc import Iterator
 from collections.abc import Sequence
+from enum import Enum
 from typing import Any
 from typing import Literal
 
@@ -2183,6 +2185,56 @@ def validate_nx(graph: nx.Graph | nx.MultiGraph) -> None:
     processor.validate_nx(graph)
 
 
+class _ReservedPayloadKey(Enum):
+    """
+    Sentinel keys backing up user attributes that match internal metadata keys.
+
+    These non-string enum members allow :func:`nx_to_rx` and :func:`rx_to_nx`
+    to preserve caller-supplied ``__nx_node_id__`` and ``__nx_edge_key__``
+    attributes without colliding with normal string or numeric keys.
+    """
+
+    NODE_ID = "__nx_node_id__"
+    EDGE_KEY = "__nx_edge_key__"
+
+
+def _iter_rx_nodes(
+    graph: rx.PyGraph | rx.PyDiGraph,
+    rx_to_nx_mapping: dict[int, Any],
+) -> Iterator[tuple[Any, dict[Any, Any]]]:
+    """
+    Yield restored NetworkX node entries while recording the index mapping.
+
+    Streams ``(node_id, node_data)`` pairs directly into
+    ``Graph.add_nodes_from`` without materialising an intermediate list.
+
+    Parameters
+    ----------
+    graph : rustworkx.PyGraph or rustworkx.PyDiGraph
+        Source rustworkx graph.
+    rx_to_nx_mapping : dict[int, Any]
+        Mapping populated in place from rustworkx node indices to NetworkX IDs.
+
+    Yields
+    ------
+    tuple[Any, dict[Any, Any]]
+        Pair of ``(node_id, node_attributes)`` for each rustworkx node.
+    """
+    node_id_backup = _ReservedPayloadKey.NODE_ID
+    for rx_idx in graph.node_indices():
+        payload = graph[rx_idx]
+        if isinstance(payload, dict):
+            node_data = payload.copy()
+            nx_id = node_data.pop("__nx_node_id__", rx_idx)
+            if node_id_backup in node_data:
+                node_data["__nx_node_id__"] = node_data.pop(node_id_backup)
+        else:
+            nx_id = rx_idx
+            node_data = {"payload": payload} if payload is not None else {}
+        rx_to_nx_mapping[rx_idx] = nx_id
+        yield (nx_id, node_data)
+
+
 def nx_to_rx(graph: nx.Graph | nx.MultiGraph) -> rx.PyGraph | rx.PyDiGraph:
     """
     Convert a NetworkX graph to a rustworkx graph.
@@ -2222,25 +2274,24 @@ def nx_to_rx(graph: nx.Graph | nx.MultiGraph) -> rx.PyGraph | rx.PyDiGraph:
     out_graph.attrs = graph.graph.copy()
 
     # Add nodes and attributes
+    node_id_backup = _ReservedPayloadKey.NODE_ID
+    add_node = out_graph.add_node
     node_mapping = {}
     for node, data in graph.nodes(data=True):
-        # Prepare node payload
         payload = data.copy()
-
-        # Store original NetworkX node ID for reversibility
+        if "__nx_node_id__" in payload:
+            payload[node_id_backup] = payload["__nx_node_id__"]
         payload["__nx_node_id__"] = node
-
-        # Add node to rustworkx graph
-        rx_idx = out_graph.add_node(payload)
-
-        # Map original NetworkX node ID to rustworkx node index
-        node_mapping[node] = rx_idx
+        node_mapping[node] = add_node(payload)
 
     # Add edges and attributes
     edges_to_add = []
     if is_multigraph:
+        edge_key_backup = _ReservedPayloadKey.EDGE_KEY
         for u, v, k, data in graph.edges(data=True, keys=True):
             payload = data.copy()
+            if "__nx_edge_key__" in payload:
+                payload[edge_key_backup] = payload["__nx_edge_key__"]
             payload["__nx_edge_key__"] = k
             edges_to_add.append((node_mapping[u], node_mapping[v], payload))
     else:
@@ -2257,7 +2308,8 @@ def rx_to_nx(graph: rx.PyGraph | rx.PyDiGraph) -> nx.Graph | nx.MultiGraph:
     Convert a rustworkx graph to a NetworkX graph.
 
     This function converts a rustworkx graph object into a NetworkX graph object,
-    restoring node, edge, and graph attributes.
+    restoring node, edge, and graph attributes without colliding with NetworkX
+    constructor keyword arguments or internal metadata keys.
 
     Parameters
     ----------
@@ -2281,7 +2333,7 @@ def rx_to_nx(graph: rx.PyGraph | rx.PyDiGraph) -> nx.Graph | nx.MultiGraph:
     is_directed = isinstance(graph, rx.PyDiGraph)
     is_multigraph = graph.multigraph
 
-    out_graph = (
+    out_graph: nx.Graph | nx.MultiGraph = (
         (nx.MultiDiGraph() if is_multigraph else nx.DiGraph())
         if is_directed
         else nx.MultiGraph()
@@ -2293,38 +2345,40 @@ def rx_to_nx(graph: rx.PyGraph | rx.PyDiGraph) -> nx.Graph | nx.MultiGraph:
     if isinstance(graph.attrs, dict):
         out_graph.graph.update(graph.attrs)
 
-    # Restore nodes and attributes
-    rx_to_nx_mapping = {}
-    for rx_idx in graph.node_indices():
-        payload = graph[rx_idx]
-        node_data = {}
-
-        # Attempt to retrieve original node ID and data
-        if isinstance(payload, dict):
-            node_data = payload.copy()
-            nx_id = node_data.pop("__nx_node_id__", rx_idx)
-        else:
-            nx_id = rx_idx
-            node_data = {"payload": payload} if payload is not None else {}
-
-        out_graph.add_nodes_from([(nx_id, node_data)])
-        rx_to_nx_mapping[rx_idx] = nx_id
+    # Restore nodes and attributes via a single streaming batch call
+    rx_to_nx_mapping: dict[int, Any] = {}
+    out_graph.add_nodes_from(_iter_rx_nodes(graph, rx_to_nx_mapping))
 
     # Restore edges and attributes
     # edge_index_map returns {edge_idx: (u_idx, v_idx, data)}
-    for u_rx, v_rx, data in graph.edge_index_map().values():
-        u_nx = rx_to_nx_mapping[u_rx]
-        v_nx = rx_to_nx_mapping[v_rx]
-        edge_data = (
-            data.copy()
-            if isinstance(data, dict)
-            else ({"payload": data} if data is not None else {})
+    if isinstance(out_graph, nx.MultiGraph):
+        add_edge = out_graph.add_edge
+        edges_view = out_graph.edges
+        edge_key_backup = _ReservedPayloadKey.EDGE_KEY
+        for u_rx, v_rx, data in graph.edge_index_map().values():
+            u_nx = rx_to_nx_mapping[u_rx]
+            v_nx = rx_to_nx_mapping[v_rx]
+            if isinstance(data, dict):
+                edge_data = data.copy()
+                key = edge_data.pop("__nx_edge_key__", None)
+                if edge_key_backup in edge_data:
+                    edge_data["__nx_edge_key__"] = edge_data.pop(edge_key_backup)
+            else:
+                key = None
+                edge_data = {"payload": data} if data is not None else {}
+            assigned_key = add_edge(u_nx, v_nx, key=key)
+            if edge_data:
+                edges_view[u_nx, v_nx, assigned_key].update(edge_data)
+    else:
+        out_graph.add_edges_from(
+            (
+                rx_to_nx_mapping[u_rx],
+                rx_to_nx_mapping[v_rx],
+                data.copy()
+                if isinstance(data, dict)
+                else ({"payload": data} if data is not None else {}),
+            )
+            for u_rx, v_rx, data in graph.edge_index_map().values()
         )
-
-        if is_multigraph:
-            key = edge_data.pop("__nx_edge_key__", None)
-            out_graph.add_edges_from([(u_nx, v_nx, key, edge_data)])
-        else:
-            out_graph.add_edges_from([(u_nx, v_nx, edge_data)])
 
     return out_graph
