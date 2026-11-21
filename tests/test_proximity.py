@@ -1617,6 +1617,39 @@ def test_directed_nonpositive_k(k: int) -> None:
     assert edges.empty
 
 
+@pytest.mark.parametrize("radius", [-2.0, float("nan"), float("inf")])
+@pytest.mark.parametrize("mode", ["undirected", "directed", "bridge"])
+def test_fixed_radius_rejects_an_invalid_distance(radius: float, mode: str) -> None:
+    """Invalid radii are rejected before the selection strategy can create edges."""
+    points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], crs=3857)
+    if mode == "bridge":
+        with pytest.raises(ValueError, match="radius must be finite and non-negative"):
+            bridge_nodes(
+                {"source": points, "target": points},
+                proximity_method="fixed_radius",
+                radius=radius,
+            )
+    else:
+        with pytest.raises(ValueError, match="radius must be finite and non-negative"):
+            fixed_radius_graph(
+                points, radius=radius, target_gdf=points if mode == "directed" else None
+            )
+
+
+def test_bridge_nodes_fixed_radius_requires_a_radius() -> None:
+    """The missing distance raises ValueError as documented."""
+    points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0)], crs=3857)
+    with pytest.raises(ValueError, match="radius is required"):
+        bridge_nodes({"source": points, "target": points}, proximity_method="fixed_radius")
+
+
+def test_fixed_radius_zero_connects_coincident_but_not_distinct_points() -> None:
+    """Zero is a well-defined inclusive cutoff for distinct node IDs."""
+    points = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(0, 0), Point(1, 0)], crs=3857)
+    _, edges = fixed_radius_graph(points, radius=0)
+    assert list(edges.index) == [(0, 1)]
+
+
 @pytest.mark.parametrize("metric", ["euclidean", "manhattan"])
 def test_waxman_preserves_dense_seeded_selection_across_batches(
     metric: Literal["euclidean", "manhattan"],
