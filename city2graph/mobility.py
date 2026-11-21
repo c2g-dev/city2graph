@@ -31,8 +31,10 @@ from typing import cast
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from shapely import get_coordinates
 from shapely import is_empty
-from shapely.geometry import LineString
+from shapely import is_missing
+from shapely import linestrings
 
 from city2graph._processing import row_batches
 
@@ -111,7 +113,10 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
         Rename it before selecting a different primary column.
     threshold : float, optional
         Minimum flow retained (>=) applied to ``threshold_col``. Undirected
-        graphs apply the cutoff to the sum of reciprocal flows.
+        graphs apply the cutoff to the sum of reciprocal flows. When
+        ``matrix_type='adjacency'`` and ``threshold <= 0`` (for example,
+        ``threshold=0``), zero-valued cells are also retained as edges, which
+        produces a dense graph of :math:`O(N^2)` edges for large matrices.
     threshold_col : str, optional
         Column among ``weight_cols`` used for thresholding & canonical weight
         (required when ``len(weight_cols) > 1`` in full implementation).
@@ -177,18 +182,10 @@ def od_matrix_to_graph(  # noqa: PLR0913 (public API requires many parameters)
         target_col=target_col,
         weight_cols=weight_cols,
         threshold=threshold,
-        defer_threshold=not directed,
+        directed=directed,
         threshold_col=threshold_col,
         include_self_loops=include_self_loops,
     )
-    # If undirected, symmetrize by merging reciprocal edges and summing weights
-    if not directed and not edge_df.empty:
-        edge_df = _symmetrize_undirected_edges(
-            edge_df,
-            matrix_type=matrix_type,
-            weight_cols=weight_cols,
-            threshold=threshold,
-        )
 
     # --- Spatial assembly (Task 5) -----------------------------------------
     nodes_gdf, edges_gdf = _assemble_od_frames(
@@ -311,16 +308,17 @@ def _build_canonical_edgelist(
     target_col: str,
     weight_cols: list[str] | None,
     threshold: float | None,
-    defer_threshold: bool,
+    directed: bool,
     threshold_col: str | None,
     include_self_loops: bool,
 ) -> pd.DataFrame:
     """
-    Convert validated OD data into a canonical directed edgelist.
+    Convert validated OD data into a canonical edgelist.
 
     Dispatches on ``matrix_type`` and the concrete ``od_data`` container
     (edge list, adjacency DataFrame or adjacency ndarray), aligning zone
-    labels and normalising to canonical ``source``/``target``/``weight``
+    labels, merging reciprocal flows when ``directed=False``, applying
+    thresholding, and normalising to canonical ``source``/``target``/``weight``
     columns. Guarantees the canonical columns exist even for empty results.
 
     Parameters
@@ -341,8 +339,9 @@ def _build_canonical_edgelist(
         Edge list weight (flow) columns to preserve.
     threshold : float | None
         Minimum flow retained, or the default positive-flow cutoff.
-    defer_threshold : bool
-        Preserve values needed for undirected summation before filtering.
+    directed : bool
+        Whether to keep directed edges or merge reciprocal pairs before
+        thresholding.
     threshold_col : str | None
         Column among ``weight_cols`` used for thresholding.
     include_self_loops : bool
@@ -369,7 +368,7 @@ def _build_canonical_edgelist(
             target_col=target_col,
             weight_cols=weight_cols if weight_cols is not None else [],
             threshold=threshold,
-            defer_threshold=defer_threshold,
+            directed=directed,
             threshold_col=threshold_col,
             include_self_loops=include_self_loops,
         )
@@ -384,7 +383,7 @@ def _build_canonical_edgelist(
             adj,
             include_self_loops=include_self_loops,
             threshold=threshold,
-            defer_threshold=defer_threshold,
+            directed=directed,
         )
     elif matrix_type == "adjacency" and isinstance(od_data, np.ndarray):
         zone_ids = _align_numpy_array_zones(
@@ -397,7 +396,7 @@ def _build_canonical_edgelist(
             zone_ids,
             include_self_loops=include_self_loops,
             threshold=threshold,
-            defer_threshold=defer_threshold,
+            directed=directed,
         )
 
     # Ensure canonical columns exist even if empty result
@@ -407,50 +406,6 @@ def _build_canonical_edgelist(
             extra_weights=(weight_cols or []),
         )
     return edge_df
-
-
-def _symmetrize_undirected_edges(
-    edge_df: pd.DataFrame,
-    *,
-    matrix_type: Literal["edgelist", "adjacency"],
-    weight_cols: list[str] | None,
-    threshold: float | None,
-) -> pd.DataFrame:
-    """
-    Merge reciprocal edges for undirected output and apply the threshold.
-
-    Symmetrizes a non-empty canonical edgelist by summing the weights of
-    reciprocal edges (including any additional weight columns), then applies
-    the post-summation threshold when requested.
-
-    Parameters
-    ----------
-    edge_df : pandas.DataFrame
-        Canonical directed edgelist with ``source``/``target``/``weight``.
-    matrix_type : {'edgelist', 'adjacency'}
-        Declares how the edgelist was built.
-    weight_cols : list[str] | None
-        Additional weight columns to sum for edgelist inputs.
-    threshold : float | None
-        Minimum summed weight retained (>=). ``None`` keeps positive totals.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Symmetrized (and optionally thresholded) edgelist.
-    """
-    # Sum canonical 'weight' and any provided additional weight columns
-    sum_cols = ["weight"]
-    if matrix_type == "edgelist" and weight_cols:
-        # Ensure we sum the explicitly requested weight columns as well
-        # (they are already present in edge_df)
-        for c in weight_cols:
-            if c not in sum_cols:
-                sum_cols.append(c)
-
-    edge_df = _symmetrize_edges(edge_df, sum_cols=sum_cols)
-
-    return edge_df.loc[_apply_threshold(edge_df["weight"], threshold=threshold)]
 
 
 def _assemble_od_frames(
@@ -686,19 +641,139 @@ def _empty_edgeframe(*, include_extra_weights: bool, extra_weights: list[str]) -
     return pd.DataFrame(columns=cols)
 
 
+def _canonical_zone_ranks(zone_ids: pd.Index) -> NDArray[np.intp] | None:
+    """
+    Compute canonical lexicographic string ranks for zone identifiers.
+
+    Matches the undirected endpoint ordering (string comparison with
+    encounter-order tie-breaking for distinct IDs sharing a string label).
+    Returns ``None`` when ``zone_ids`` is already in canonical order.
+
+    Parameters
+    ----------
+    zone_ids : pandas.Index
+        Unique zone identifiers.
+
+    Returns
+    -------
+    numpy.ndarray of intp or None
+        Rank array aligned with ``zone_ids``, or ``None`` if already ordered.
+    """
+    id_str = zone_ids.astype(str).to_numpy()
+    order = np.argsort(id_str, kind="stable")
+    if np.array_equal(order, np.arange(len(zone_ids))):
+        return None
+    ranks = np.empty(len(zone_ids), dtype=np.intp)
+    ranks[order] = np.arange(len(zone_ids), dtype=np.intp)
+    return ranks
+
+
+def _undirected_adjacency_to_edgelist(
+    arr: np.ndarray,
+    ids: pd.Index,
+    *,
+    nans: int,
+    include_self_loops: bool,
+    threshold: float | None,
+) -> tuple[pd.DataFrame, bool]:
+    """
+    Build an undirected edgelist directly from upper-triangle reciprocal sums.
+
+    Sums ``arr[i, j] + arr[j, i]`` (and retains ``arr[i, i]`` on the diagonal
+    when ``include_self_loops`` is enabled) in bounded row batches, applies the
+    threshold in NumPy before constructing a DataFrame, and avoids full-matrix
+    edgelist expansion and pandas groupby overhead.
+
+    Parameters
+    ----------
+    arr : numpy.ndarray
+        Square float adjacency matrix.
+    ids : pandas.Index
+        Zone identifiers aligned with matrix axes.
+    nans : int
+        Count of NaN entries detected across ``arr``.
+    include_self_loops : bool
+        Whether to evaluate diagonal entries.
+    threshold : float | None
+        Inclusive minimum summed flow retained; ``None`` keeps strictly
+        positive totals.
+
+    Returns
+    -------
+    tuple[pandas.DataFrame, bool]
+        Undirected canonical edgelist and whether any negative entry was seen.
+    """
+    n = len(arr)
+    ranks = _canonical_zone_ranks(ids)
+    negative = False
+    parts: list[pd.DataFrame] = []
+    tril_k = -1 if include_self_loops else 0
+
+    for batch in row_batches(n, n):
+        r0 = int(batch.start)
+        if not negative:
+            negative = bool((arr[batch] < 0).any())
+
+        upper = arr[batch, r0:]
+        lower_t = arr[r0:, batch].T
+        if nans:
+            upper = np.nan_to_num(upper, nan=0.0)
+            lower_t = np.nan_to_num(lower_t, nan=0.0)
+
+        combined = upper + lower_t
+        batch_rows = len(combined)
+        if include_self_loops:
+            diag = np.arange(batch_rows)
+            combined[diag, diag] = upper[diag, diag]
+
+        mask = (combined > 0) if threshold is None else (combined >= threshold)
+        mask[np.tril_indices(batch_rows, k=tril_k)] = False
+
+        i, j = np.where(mask)
+        if len(i) == 0:
+            continue
+
+        gi = i + r0
+        gj = j + r0
+        if ranks is not None:
+            swap = ranks[gi] > ranks[gj]
+            src_idx = np.where(swap, gj, gi)
+            tgt_idx = np.where(swap, gi, gj)
+        else:
+            src_idx = gi
+            tgt_idx = gj
+
+        parts.append(
+            pd.DataFrame(
+                {
+                    "source": ids.take(src_idx),
+                    "target": ids.take(tgt_idx),
+                    "weight": combined[i, j],
+                }
+            )
+        )
+
+    if not parts:
+        empty = pd.DataFrame({"source": ids[:0], "target": ids[:0], "weight": np.empty(0)})
+        return empty, negative
+    return pd.concat(parts, ignore_index=True), negative
+
+
 def _adjacency_to_edgelist(
     adjacency: pd.DataFrame | np.ndarray,
     zone_ids: pd.Index | None = None,
     *,
     include_self_loops: bool = False,
     threshold: float | None = None,
-    defer_threshold: bool = False,
+    directed: bool = True,
 ) -> pd.DataFrame:
     """
     Convert an adjacency matrix into a canonical edgelist DataFrame.
 
-    Produces a long-form table of directed edges from a square matrix by
-    applying thresholding and (optionally) dropping diagonal entries.
+    Produces a long-form table of edges from a square matrix by applying
+    thresholding and (optionally) dropping diagonal entries. When
+    ``directed=False``, sums reciprocal entries directly over the upper
+    triangle in bounded batches before applying the threshold.
 
     Parameters
     ----------
@@ -713,9 +788,8 @@ def _adjacency_to_edgelist(
         Whether to keep diagonal elements subject to thresholding.
     threshold : float | None
         Minimum flow to keep. None keeps only positive totals.
-    defer_threshold : bool, default False
-        Keep both signs for reciprocal summation; omit implicit zeros unless
-        the eventual cutoff would include them.
+    directed : bool, default True
+        Whether to preserve directed edges or sum reciprocal pairs.
 
     Returns
     -------
@@ -731,20 +805,36 @@ def _adjacency_to_edgelist(
             UserWarning,
             stacklevel=2,
         )
+
+    if not directed:
+        edgelist, negative = _undirected_adjacency_to_edgelist(
+            arr,
+            ids,
+            nans=nans,
+            include_self_loops=include_self_loops,
+            threshold=threshold,
+        )
+        if negative:
+            warnings.warn(
+                "Adjacency contains negative weights; keeping values (requirement 5.6)",
+                UserWarning,
+                stacklevel=2,
+            )
+        return edgelist
+
     negative = False
     parts = []
     for batch in row_batches(len(arr), len(arr)):
         block = np.nan_to_num(arr[batch], nan=0.0) if nans else arr[batch]
-        negative = negative or bool((block < 0).any())
-        if defer_threshold:
-            keep_zeros = threshold is not None and threshold <= 0
-            mask = np.ones(block.shape, dtype=bool) if keep_zeros else block != 0
-        else:
-            mask = _build_adjacency_mask(block, include_self_loops=True, threshold=threshold)
+        if not negative:
+            negative = bool((block < 0).any())
+        mask = _build_adjacency_mask(block, include_self_loops=True, threshold=threshold)
         if not include_self_loops:
             rows = np.arange(len(block))
             mask[rows, rows + batch.start] = False
         i, j = np.where(mask)
+        if len(i) == 0:
+            continue
         parts.append(
             pd.DataFrame(
                 {"source": ids.take(i + batch.start), "target": ids.take(j), "weight": block[i, j]}
@@ -882,15 +972,17 @@ def _normalize_edgelist(
     target_col: str,
     weight_cols: list[str],
     threshold: float | None,
-    defer_threshold: bool,
+    directed: bool,
     threshold_col: str | None,
     include_self_loops: bool,
 ) -> pd.DataFrame:
     """
     Normalize an edgelist with optional multi-attribute weights.
 
-    Coerces weights to numeric, aggregates duplicates, applies thresholding,
-    and returns canonical columns with a primary 'weight' field.
+    Coerces weights to numeric, removes self-loops when excluded, merges
+    duplicate (and, when ``directed=False``, reciprocal) pairs in a single
+    aggregation pass, applies thresholding, and returns canonical columns
+    with a primary 'weight' field.
 
     Parameters
     ----------
@@ -906,8 +998,9 @@ def _normalize_edgelist(
     threshold : float | None
         Inclusive threshold applied to the primary weight column; when
         ``None``, only positive totals are retained.
-    defer_threshold : bool
-        Apply the cutoff later, once reciprocal flows have been summed.
+    directed : bool
+        Whether to keep directed edges or merge reciprocal pairs before
+        thresholding.
     threshold_col : str | None
         Name of the primary weight column used for thresholding when multiple
         weights are provided; if a single weight column exists, this may be
@@ -921,20 +1014,32 @@ def _normalize_edgelist(
         Canonical edge list with columns ['source', 'target', 'weight', ...],
         where 'weight' mirrors the chosen primary weight column.
     """
-    # Coerce and aggregate in focused helpers
     coerced = _coerce_weight_columns(edgelist_df, weight_cols)
-    agg_df = _aggregate_edgelist(
-        coerced, source_col=source_col, target_col=target_col, weight_cols=weight_cols
-    )
 
-    # Remove self-loops unless explicitly included
+    # Remove self-loops before aggregation unless explicitly included
     if not include_self_loops:
-        agg_df = agg_df.loc[agg_df[source_col] != agg_df[target_col]]
+        coerced = coerced.loc[coerced[source_col] != coerced[target_col]]
 
     # Select primary column for thresholding and canonical weight
     primary = _resolve_primary(weight_cols, threshold_col)
 
-    if not defer_threshold:
+    # Zero-only rows cannot change sums or survive a strictly positive cutoff
+    if threshold is None or threshold > 0:
+        nonzero = (
+            coerced[primary] != 0
+            if len(weight_cols) == 1
+            else (coerced[weight_cols] != 0).any(axis=1)
+        )
+        coerced = coerced.loc[nonzero]
+
+    if coerced.empty:
+        agg_df = coerced
+    else:
+        if not directed:
+            coerced = _canonicalize_undirected_endpoints(coerced, source_col, target_col)
+        agg_df = _aggregate_edgelist(
+            coerced, source_col=source_col, target_col=target_col, weight_cols=weight_cols
+        )
         agg_df = agg_df.loc[_apply_threshold(agg_df[primary], threshold=threshold)]
 
     # Build canonical columns and rename source/target for consistency
@@ -1321,17 +1426,19 @@ def _create_edge_geometries(
         geom = gpd.GeoSeries([None] * len(e), crs=zones_gdf.crs)
         return gpd.GeoDataFrame(e, geometry=geom, crs=zones_gdf.crs)
 
-    # Centroid lookup by ID
+    # Filter out missing or empty zone centroids once per zone
     centroids = GeoDataProcessor.compute_centroids(zones_gdf)
-    if zone_id_col is not None:
-        centroids.index = pd.Index(zones_gdf[zone_id_col])
+    zone_ids = (
+        pd.Index(zones_gdf[zone_id_col]) if zone_id_col is not None else pd.Index(zones_gdf.index)
+    )
+    centroid_arr = centroids.to_numpy()
+    valid_centroids = ~is_missing(centroid_arr) & ~is_empty(centroid_arr)
+    valid_ids = zone_ids[valid_centroids]
 
-    # Map ids -> centroids via dict for clarity
-    lookup = centroids.to_dict()
-    src_pts = e[source_col].map(lookup)
-    tgt_pts = e[target_col].map(lookup)
+    src_idx = valid_ids.get_indexer(e[source_col])
+    tgt_idx = valid_ids.get_indexer(e[target_col])
 
-    missing_any = src_pts.isna() | tgt_pts.isna() | is_empty(src_pts) | is_empty(tgt_pts)
+    missing_any = (src_idx < 0) | (tgt_idx < 0)
     n_missing = int(missing_any.sum())
     if n_missing:
         warnings.warn(
@@ -1339,72 +1446,92 @@ def _create_edge_geometries(
             UserWarning,
             stacklevel=2,
         )
-        e = e.loc[~missing_any].copy()
-        src_pts = src_pts.loc[~missing_any]
-        tgt_pts = tgt_pts.loc[~missing_any]
+        keep = ~missing_any
+        e = e.loc[keep].copy()
+        src_idx = src_idx[keep]
+        tgt_idx = tgt_idx[keep]
 
     if e.empty:
         return gpd.GeoDataFrame(e, geometry=gpd.GeoSeries([], crs=zones_gdf.crs), crs=zones_gdf.crs)
 
-    lines = [
-        LineString([a, b]) for a, b in zip(src_pts.to_numpy(), tgt_pts.to_numpy(), strict=True)
-    ]
-    geom = gpd.GeoSeries(lines, crs=zones_gdf.crs)
+    valid_coords = get_coordinates(centroid_arr[valid_centroids])
+    line_coords = np.empty((len(src_idx), 2, 2), dtype=np.float64)
+    line_coords[:, 0, :] = valid_coords[src_idx]
+    line_coords[:, 1, :] = valid_coords[tgt_idx]
+    geom = gpd.GeoSeries(linestrings(line_coords), crs=zones_gdf.crs)
     return gpd.GeoDataFrame(e.reset_index(drop=True), geometry=geom, crs=zones_gdf.crs)
 
 
-def _symmetrize_edges(edges: pd.DataFrame, *, sum_cols: list[str]) -> pd.DataFrame:
+def _can_have_string_label_collision(src: pd.Series, tgt: pd.Series) -> bool:
     """
-    Merge reciprocal directed edges into undirected edges by summing weights.
+    Check whether distinct endpoint values can share the same string form.
 
-    For each unordered pair {u, v}, produce a single edge with ``source`` <= ``target``
-    (based on string representation ordering) and sum the provided ``sum_cols`` across
-    both directions. Distinct IDs with the same string use a shared encounter-order
-    tie-breaker. Self-loops (u == v) are preserved and included as-is.
+    Homogeneous numeric or explicit string dtypes have injective string
+    representations for non-null values, so mixed-type tie-breaking is not
+    needed.
+
+    Parameters
+    ----------
+    src : pandas.Series
+        Origin identifier column.
+    tgt : pandas.Series
+        Destination identifier column.
+
+    Returns
+    -------
+    bool
+        ``True`` if two unequal values may stringify identically.
+    """
+    if src.dtype != tgt.dtype:
+        return True
+    dtype = src.dtype
+    return not (
+        pd.api.types.is_integer_dtype(dtype)
+        or pd.api.types.is_float_dtype(dtype)
+        or isinstance(dtype, pd.StringDtype)
+    )
+
+
+def _canonicalize_undirected_endpoints(
+    edges: pd.DataFrame,
+    source_col: str,
+    target_col: str,
+) -> pd.DataFrame:
+    """
+    Order each row's endpoints canonically for undirected aggregation.
+
+    Orders endpoints by string representation so that reciprocal flows map to
+    the same ``(source_col, target_col)`` pair. Distinct IDs with identical
+    string representations use a shared encounter-order tie-breaker.
 
     Parameters
     ----------
     edges : pandas.DataFrame
-        Canonical directed edgelist containing 'source', 'target', and sum_cols.
-    sum_cols : list[str]
-        Columns to sum when merging reciprocal edges. Must include 'weight'.
+        Edge list containing ``source_col`` and ``target_col``.
+    source_col : str
+        Origin column name.
+    target_col : str
+        Destination column name.
 
     Returns
     -------
     pandas.DataFrame
-        Undirected edgelist with merged weights and canonical columns.
+        Shallow copy with canonically ordered ``source_col`` and ``target_col``.
     """
-    edges_work = edges.copy()
+    src = edges[source_col]
+    tgt = edges[target_col]
+    s_str = src.astype(str)
+    t_str = tgt.astype(str)
 
-    # Normalize (u, v) ordering deterministically; keep self-loops unchanged
-    # Use astype(str) to ensure consistent comparison across dtypes
-    s_str = edges_work["source"].astype(str)
-    t_str = edges_work["target"].astype(str)
-
-    # mask where source string is lexicographically <= target string
     keep = s_str <= t_str
-    same_label = s_str.eq(t_str) & edges_work["source"].ne(edges_work["target"])
-    if same_label.any():
-        source = edges_work.loc[same_label, "source"]
-        target = edges_work.loc[same_label, "target"]
-        ranks, _ = pd.factorize(pd.concat([source, target], ignore_index=True))
-        keep.loc[same_label] = ranks[: len(source)] < ranks[len(source) :]
-    src_norm = edges_work["source"].where(keep, edges_work["target"])  # swap when needed
-    tgt_norm = edges_work["target"].where(keep, edges_work["source"])  # swap when needed
-    edges_work["_u"] = src_norm
-    edges_work["_v"] = tgt_norm
+    if _can_have_string_label_collision(src, tgt):
+        same_label = s_str.eq(t_str) & src.ne(tgt)
+        if same_label.any():
+            source_dup = src.loc[same_label]
+            target_dup = tgt.loc[same_label]
+            ranks, _ = pd.factorize(pd.concat([source_dup, target_dup], ignore_index=True))
+            keep.loc[same_label] = ranks[: len(source_dup)] < ranks[len(source_dup) :]
 
-    # Group by normalized unordered pair and sum all requested columns
-    group_cols = ["_u", "_v"]
-    agg = edges_work.groupby(group_cols, as_index=False)[sum_cols].sum()
-
-    # Rename normalized cols back to canonical names
-    agg = agg.rename(columns={"_u": "source", "_v": "target"})
-
-    # Ensure column order: source, target, weight, then any others in sum_cols order
-    other_cols = [c for c in sum_cols if c != "weight"]
-    ordered_cols = ["source", "target", "weight", *other_cols]
-
-    # Preserve any remaining non-summed columns (if present) by left-joining original
-    # But to keep the function focused and deterministic, we return only canonical columns
-    return agg.loc[:, ordered_cols]
+    src_norm = src.where(keep, tgt)
+    tgt_norm = tgt.where(keep, src)
+    return edges.assign(**{source_col: src_norm, target_col: tgt_norm})

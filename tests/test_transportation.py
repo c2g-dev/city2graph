@@ -439,6 +439,55 @@ class TestGetOdPairs:
         assert isinstance(result, pd.DataFrame)
         assert "geometry" not in result.columns
 
+    @pytest.mark.parametrize("with_coordinates", [True, False])
+    def test_get_od_pairs_with_unmaterialised_stop_geometry(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        with_coordinates: bool,
+    ) -> None:
+        with gtfs_connection(sample_gtfs_dict) as con:
+            con.execute("ALTER TABLE stops DROP COLUMN geometry")
+            if not with_coordinates:
+                con.execute("ALTER TABLE stops DROP COLUMN stop_lon")
+                con.execute("ALTER TABLE stops DROP COLUMN stop_lat")
+            first = get_od_pairs(con, "20240101", "20240101")
+            second = get_od_pairs(con, "20240101", "20240101")
+
+        assert not first.empty
+        if with_coordinates:
+            assert isinstance(first, gpd.GeoDataFrame)
+            assert isinstance(second, gpd.GeoDataFrame)
+            assert first.geometry.notna().all()
+            assert second.geometry.notna().all()
+            pd.testing.assert_frame_equal(
+                first.drop(columns="geometry"), second.drop(columns="geometry")
+            )
+        else:
+            assert "geometry" not in first.columns
+            assert "geometry" not in second.columns
+
+    def test_repeated_calls_handle_temp_stops_view_and_table_transitions(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+    ) -> None:
+        """Repeated calls reuse a connection cleanly across temp view and temp table modes."""
+        with gtfs_connection(sample_gtfs_dict) as con:
+            # First creates TEMP VIEW _stops_for_graph (stops has geometry column).
+            _, edges_view = travel_summary_graph(con)
+            # Drop geometry so subsequent calls create TEMP TABLE _stops_for_graph.
+            con.execute("ALTER TABLE stops DROP COLUMN geometry")
+            _, edges_table_1 = travel_summary_graph(con)
+            _, edges_table_2 = travel_summary_graph(con)
+            od_1 = get_od_pairs(con, "20240101", "20240101")
+            od_2 = get_od_pairs(con, "20240101", "20240101")
+
+        assert len(edges_view) == len(edges_table_1) == len(edges_table_2)
+        assert isinstance(od_1, gpd.GeoDataFrame)
+        assert isinstance(od_2, gpd.GeoDataFrame)
+        assert len(od_1) == len(od_2) > 0
+
     def test_get_od_pairs_incomplete_gtfs(self, gtfs_connection: GtfsConnectionFactory) -> None:
         """A feed without trips or stop times cannot produce OD pairs."""
         con = gtfs_connection({"stops": pd.DataFrame(columns=["stop_id", "stop_lat", "stop_lon"])})
@@ -538,8 +587,45 @@ class TestGetOdPairs:
 
         assert isinstance(result_directed, pd.DataFrame)
         assert isinstance(result_undirected, pd.DataFrame)
-        # Undirected should have orig_stop_id <= dest_stop_id for all rows
-        assert (result_undirected["orig_stop_id"] <= result_undirected["dest_stop_id"]).all()
+        pd.testing.assert_frame_equal(result_directed, result_undirected)
+
+    @pytest.mark.parametrize("include_geometry", [False, True])
+    @pytest.mark.parametrize("directed", [False, True])
+    def test_od_pair_keeps_actual_departure_stop_and_trip_times(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        include_geometry: bool,
+        directed: bool,
+    ) -> None:
+        sample_gtfs_dict["stop_times"] = pd.DataFrame(
+            {
+                "trip_id": ["trip1", "trip1"],
+                "stop_id": ["stop2", "stop1"],
+                "stop_sequence": [1, 2],
+                "departure_time": ["08:00:00", "08:10:00"],
+                "arrival_time": ["08:00:00", "08:10:00"],
+            }
+        )
+        with gtfs_connection(sample_gtfs_dict) as con:
+            actual = get_od_pairs(
+                con, "20240101", "20240101", directed=directed, include_geometry=include_geometry
+            )
+
+        assert actual.loc[actual["orig_stop_id"] == "stop1"].empty
+        assert len(actual.loc[actual["orig_stop_id"] == "stop2"]) == 1
+        row = actual.iloc[0]
+        assert (row["orig_stop_id"], row["dest_stop_id"]) == ("stop2", "stop1")
+        assert row["departure_ts"] == pd.Timestamp("2024-01-01 08:00")
+        assert row["arrival_ts"] == pd.Timestamp("2024-01-01 08:10")
+        assert row["travel_time_sec"] == 600.0
+        if include_geometry:
+            assert isinstance(actual, gpd.GeoDataFrame)
+            stops = sample_gtfs_dict["stops"].set_index("stop_id")
+            assert list(row.geometry.coords) == [
+                (stops.loc[stop_id, "stop_lon"], stops.loc[stop_id, "stop_lat"])
+                for stop_id in ("stop2", "stop1")
+            ]
 
     def test_get_od_pairs_calendar_dates_only_with_explicit_window(
         self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
@@ -579,6 +665,26 @@ class TestGetOdPairs:
 
 
 class TestTravelSummaryGraph:
+    def test_undirected_summary_orients_geometry_to_its_stop_index(
+        self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
+    ) -> None:
+        sample_gtfs_dict["stop_times"] = pd.DataFrame(
+            {
+                "trip_id": ["trip1", "trip1"],
+                "stop_id": ["stop2", "stop1"],
+                "stop_sequence": [1, 2],
+                "departure_time": ["08:00:00", "08:10:00"],
+                "arrival_time": ["08:00:00", "08:10:00"],
+            }
+        )
+        with gtfs_connection(sample_gtfs_dict) as con:
+            _, actual = travel_summary_graph(con, directed=False)
+            _, directed = travel_summary_graph(con, directed=True)
+
+        assert actual.index.tolist() == [("stop1", "stop2")]
+        assert directed.index.tolist() == [("stop2", "stop1")]
+        assert list(actual.iloc[0].geometry.coords) == list(directed.iloc[0].geometry.coords)[::-1]
+
     @pytest.mark.parametrize(
         "value",
         [
