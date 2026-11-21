@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Literal
 from typing import cast
 
 import geopandas as gpd
@@ -33,8 +34,40 @@ def od_zones_gdf() -> gpd.GeoDataFrame:
     )
 
 
+def test_undirected_od_merges_reciprocal_mixed_type_zone_ids() -> None:
+    """Distinct IDs can have the same string representation."""
+    zones = gpd.GeoDataFrame({"zone_id": [1, "1"]}, geometry=[Point(0, 0), Point(1, 0)], crs=3857)
+    data = pd.DataFrame({"source": [1, "1"], "target": ["1", 1], "flow": [2, 3]})
+    _, edges = od_matrix_to_graph(
+        data,
+        zones,
+        zone_id_col="zone_id",
+        weight_cols=["flow"],
+        directed=False,
+    )
+
+    assert edges["weight"].tolist() == [5]
+    assert set(edges.index[0]) == {1, "1"}
+
+
 class TestODMatrixToGraph:
     """Tests for od_matrix_to_graph function."""
+
+    def test_geometry_creation_drops_edges_with_empty_centroids(self) -> None:
+        """Keep unaffected flows when one valid zone ID has no spatial footprint."""
+        zones = gpd.GeoDataFrame(geometry=[Point(0, 0), Point(1, 0), Point()], crs="EPSG:3857")
+        flows = pd.DataFrame({"source": [0, 0], "target": [1, 2], "flow": [3, 4]})
+        with pytest.warns(UserWarning, match=r"Dropping 1 edges.*missing centroid"):
+            nodes, edges = od_matrix_to_graph(flows, zones, weight_cols=["flow"])
+        assert list(nodes.index) == [0, 1, 2]
+        assert list(edges.index) == [(0, 1)]
+        assert edges["weight"].tolist() == [3]
+
+        _, nonspatial_edges = od_matrix_to_graph(
+            flows, zones, weight_cols=["flow"], compute_edge_geometry=False
+        )
+        assert list(nonspatial_edges.index) == [(0, 1), (0, 2)]
+        assert nonspatial_edges.geometry.isna().all()
 
     def test_adjacency_batch_boundary_and_input_ownership(self) -> None:
         """Diagonal removal and NaN handling are global across row batches."""
@@ -808,3 +841,162 @@ class TestODMatrixToGraph:
                 threshold_col="flow",
             )
         assert data["weight"].tolist() == [2.0]
+
+    def test_undirected_adjacency_unsorted_labels_nan_and_self_loops(self) -> None:
+        """Undirected adjacency handles unsorted labels, NaNs, negatives and self-loops."""
+        ids = ["C", "A", "B"]
+        zones = gpd.GeoDataFrame(
+            {"zone_id": ids},
+            geometry=[Point(0, 0), Point(1, 0), Point(2, 0)],
+            crs="EPSG:3857",
+        )
+        matrix = pd.DataFrame(
+            [
+                [2.0, 10.0, np.nan],
+                [-4.0, 0.0, 5.0],
+                [3.0, -5.0, 0.0],
+            ],
+            index=ids,
+            columns=ids,
+        )
+        original = matrix.copy()
+
+        with pytest.warns(UserWarning, match=r"1 NaN|negative weights"):
+            _, edges = od_matrix_to_graph(
+                matrix,
+                zones,
+                zone_id_col="zone_id",
+                matrix_type="adjacency",
+                directed=False,
+                include_self_loops=True,
+            )
+
+        assert edges["weight"].to_dict() == {
+            ("C", "C"): 2.0,
+            ("A", "C"): 6.0,
+            ("B", "C"): 3.0,
+        }
+        pd.testing.assert_frame_equal(matrix, original)
+
+    def test_undirected_adjacency_explicit_zero_cutoff_retains_zero_pairs(
+        self, od_zones_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """Undirected adjacency with threshold=0 keeps all non-negative unordered pairs."""
+        ids = ["A", "B", "C"]
+        matrix = pd.DataFrame([[0, 10, 0], [-4, 0, 0], [0, 0, 0]], index=ids, columns=ids)
+
+        with pytest.warns(UserWarning, match="negative weights"):
+            _, edges = od_matrix_to_graph(
+                matrix,
+                od_zones_gdf,
+                zone_id_col="zone_id",
+                matrix_type="adjacency",
+                directed=False,
+                threshold=0.0,
+            )
+
+        assert edges["weight"].to_dict() == {("A", "B"): 6.0, ("A", "C"): 0.0, ("B", "C"): 0.0}
+
+    def test_undirected_adjacency_batch_boundary_sums_reciprocals(self) -> None:
+        """Reciprocal entries across row-batch boundaries are summed before thresholding."""
+        n = 270
+        zones = gpd.GeoDataFrame(geometry=[Point(i, 0) for i in range(n)], crs="EPSG:3857")
+        matrix = np.zeros((n, n), dtype=float)
+        matrix[0, 260] = 10.0
+        matrix[260, 0] = -4.0
+        matrix[268, 269] = 2.0
+        matrix[269, 268] = -2.0
+
+        with pytest.warns(UserWarning, match="negative weights"):
+            _, edges = od_matrix_to_graph(
+                matrix,
+                zones,
+                matrix_type="adjacency",
+                directed=False,
+                compute_edge_geometry=False,
+            )
+        with pytest.warns(UserWarning, match="negative weights"):
+            _, empty_edges = od_matrix_to_graph(
+                matrix,
+                zones,
+                matrix_type="adjacency",
+                directed=False,
+                threshold=8.0,
+                compute_edge_geometry=False,
+            )
+
+        assert edges["weight"].to_dict() == {(0, 260): 6.0}
+        assert empty_edges.empty
+
+    def test_undirected_edgelist_all_zero_and_mixed_dtype_columns(self) -> None:
+        """Zero-only edgelists return empty schemas and distinct column dtypes normalize."""
+        zones = gpd.GeoDataFrame(
+            {"zone_id": [1, "1", 2]},
+            geometry=[Point(0, 0), Point(1, 0), Point(2, 0)],
+            crs="EPSG:3857",
+        )
+        zero_flows = pd.DataFrame({"source": [1, 2], "target": [2, 1], "flow": [0, 0]})
+        _, empty_edges = od_matrix_to_graph(
+            zero_flows,
+            zones,
+            zone_id_col="zone_id",
+            weight_cols=["flow"],
+            directed=False,
+        )
+        assert empty_edges.empty
+        assert {"weight", "flow"}.issubset(empty_edges.columns)
+
+        mixed_col_dtypes = pd.DataFrame({"source": [1], "target": ["1"], "flow": [5]})
+        _, mixed_edges = od_matrix_to_graph(
+            mixed_col_dtypes,
+            zones,
+            zone_id_col="zone_id",
+            weight_cols=["flow"],
+            directed=False,
+        )
+        assert mixed_edges["weight"].tolist() == [5]
+        assert set(mixed_edges.index[0]) == {1, "1"}
+
+
+@pytest.mark.parametrize("matrix_type", ["edgelist", "adjacency"])
+@pytest.mark.parametrize(("threshold", "expected"), [(None, [6.0]), (8.0, [])])
+def test_undirected_od_threshold_is_applied_after_signed_reciprocal_sum(
+    od_zones_gdf: gpd.GeoDataFrame,
+    matrix_type: Literal["edgelist", "adjacency"],
+    threshold: float | None,
+    expected: list[float],
+) -> None:
+    """A correction in the reverse direction contributes before thresholding."""
+    if matrix_type == "edgelist":
+        data = pd.DataFrame({"source": ["A", "B"], "target": ["B", "A"], "flow": [10, -4]})
+    else:
+        ids = ["A", "B", "C"]
+        data = pd.DataFrame([[0, 10, 0], [-4, 0, 0], [0, 0, 0]], columns=ids, index=ids)
+
+    with pytest.warns(UserWarning, match="negative weights"):
+        _, edges = od_matrix_to_graph(
+            data,
+            od_zones_gdf,
+            zone_id_col="zone_id",
+            matrix_type=matrix_type,
+            weight_cols=["flow"] if matrix_type == "edgelist" else None,
+            threshold=threshold,
+            directed=False,
+        )
+
+    assert edges["weight"].tolist() == expected
+
+
+def test_undirected_od_preserves_explicit_zero_cutoff(od_zones_gdf: gpd.GeoDataFrame) -> None:
+    """An explicit threshold of zero retains observed zero-flow pairs."""
+    data = pd.DataFrame({"source": ["A"], "target": ["B"], "flow": [0]})
+    _, edges = od_matrix_to_graph(
+        data,
+        od_zones_gdf,
+        zone_id_col="zone_id",
+        weight_cols=["flow"],
+        threshold=0,
+        directed=False,
+    )
+    assert list(edges.index) == [("A", "B")]
+    assert edges["weight"].tolist() == [0]

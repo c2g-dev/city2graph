@@ -13,6 +13,8 @@ import networkx as nx
 import pandas as pd
 import pytest
 from geopandas.testing import assert_geodataframe_equal
+from pyproj import Transformer
+from shapely import transform
 from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
@@ -2538,3 +2540,131 @@ class TestPublicInputImmutability(TestMorphologyBase):
         segments_to_graph(sample_segments_gdf)
 
         assert_geodataframe_equal(sample_segments_gdf, segments_before)
+
+
+@pytest.mark.parametrize("as_nx", [False, True])
+def test_place_adjacency_deduplicates_joined_places_without_edges(as_nx: bool) -> None:
+    """A join cannot reintroduce duplicate node IDs in an empty topology."""
+    places = gpd.GeoDataFrame(
+        {"place_id": ["west", "west", "east"]},
+        geometry=[
+            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+            Polygon([(3, 0), (4, 0), (4, 1), (3, 1)]),
+        ],
+        crs=3857,
+    )
+    if as_nx:
+        with pytest.warns(DeprecationWarning, match="as_nx"):
+            graph = place_to_place_graph(places, as_nx=True)
+        assert isinstance(graph, nx.Graph)
+        assert len(graph) == 2
+        assert graph.number_of_edges() == 0
+        assert {data["place_id"] for _, data in graph.nodes(data=True)} == {"west", "east"}
+    else:
+        nodes, edges = place_to_place_graph(places)
+        assert list(nodes["place_id"]) == ["west", "east"]
+        assert edges.empty
+
+        single_nodes, single_edges = place_to_place_graph(places.iloc[:2])
+        assert list(single_nodes["place_id"]) == ["west"]
+        assert single_edges.empty
+
+
+@pytest.mark.parametrize("typed_barrier", [False, True])
+def test_place_movement_reprojects_secondary_barrier_geometry(typed_barrier: bool) -> None:
+    """The spatial join uses the place CRS for the selected barrier column."""
+    place = gpd.GeoDataFrame(
+        {"place_id": ["east"]},
+        geometry=[
+            Polygon([(111300, -10), (111340, -10), (111340, 10), (111300, 10)]),
+        ],
+        crs=3857,
+    )
+    degree_line = LineString([(1.0, -0.001), (1.0, 0.001)])
+    movement = gpd.GeoDataFrame(
+        {"movement_id": ["street"], "barrier": [degree_line]},
+        geometry=[degree_line],
+        crs=4326,
+    )
+    if typed_barrier:
+        movement["barrier"] = gpd.GeoSeries([degree_line], crs=4326)
+
+    with pytest.warns(RuntimeWarning, match="CRS"):
+        _, edges = place_to_movement_graph(
+            place, movement, primary_barrier_col="barrier", max_connection_distance=0
+        )
+
+    assert list(zip(edges["place_id"], edges["movement_id"], strict=True)) == [("east", "street")]
+    assert movement.crs.to_epsg() == 4326
+    assert movement.loc[0, "barrier"].equals_exact(degree_line, 0)
+
+
+@pytest.mark.parametrize("barrier_kind", ["object", "source-crs", "target-crs"])
+@pytest.mark.parametrize("multi_distance", [False, True])
+def test_morphology_reprojects_secondary_barriers(
+    small_buildings_gdf: gpd.GeoDataFrame,
+    small_segments_gdf: gpd.GeoDataFrame,
+    barrier_kind: str,
+    multi_distance: bool,
+) -> None:
+    """Mixed-CRS inputs match an explicitly projected full-pipeline reference."""
+    buildings = small_buildings_gdf.to_crs(3857)
+    segments = small_segments_gdf.to_crs(4326)
+    projector = Transformer.from_crs(4326, 3857, always_xy=True)
+    reference = gpd.GeoDataFrame(
+        segments.drop(columns="geometry"),
+        geometry=[
+            transform(line, projector.transform, interleaved=False) for line in segments.geometry
+        ],
+        crs=3857,
+    )
+    reference["barrier"] = reference.geometry.copy()
+    barrier = segments.geometry.copy()
+    if barrier_kind == "object":
+        segments["barrier"] = list(barrier)
+    elif barrier_kind == "target-crs":
+        segments["barrier"] = reference.geometry.copy()
+    else:
+        segments["barrier"] = barrier
+    before = segments.copy(deep=True)
+    buildings_before = buildings.copy(deep=True)
+    if multi_distance:
+        center = gpd.GeoSeries([reference.geometry.iloc[0].centroid], crs=3857)
+        expected = morphological_graphs(
+            buildings,
+            reference,
+            [50.0, 100.0],
+            center_point=center,
+            primary_barrier_col="barrier",
+            tessellation_n_jobs=1,
+        )
+        actual = morphological_graphs(
+            buildings,
+            segments,
+            [50.0, 100.0],
+            center_point=center,
+            primary_barrier_col="barrier",
+            tessellation_n_jobs=1,
+        )
+    else:
+        expected = {
+            0.0: morphological_graph(
+                buildings, reference, primary_barrier_col="barrier", tessellation_n_jobs=1
+            )
+        }
+        actual = {
+            0.0: morphological_graph(
+                buildings, segments, primary_barrier_col="barrier", tessellation_n_jobs=1
+            )
+        }
+    for distance, (expected_nodes, expected_edges) in expected.items():
+        nodes, edges = actual[distance]
+        assert not expected_nodes["place"].empty
+        assert not expected_edges[("place", "faced_to", "movement")].empty
+        for key, frame in expected_nodes.items():
+            assert_geodataframe_equal(nodes[key], frame, check_less_precise=True)
+        for key, frame in expected_edges.items():
+            assert_geodataframe_equal(edges[key], frame, check_less_precise=True)
+    assert_geodataframe_equal(segments, before)
+    assert_geodataframe_equal(buildings, buildings_before)

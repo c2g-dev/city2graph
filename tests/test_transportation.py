@@ -1,6 +1,7 @@
 """Tests for the transportation module."""
 
 import typing
+import zipfile
 
 # ruff: noqa: D101, D102, S608, PT011
 from datetime import datetime
@@ -40,6 +41,11 @@ def gtfs_zip_invalid_coords() -> typing.Generator[str, None, None]:
                 "stop1,Stop 1,40.7128,-74.0060\n"
                 "stop2,Stop 2,invalid,invalid\n"
                 "stop3,Stop 3,,\n"
+                "stop4,Stop 4,0,NaN\n"
+                "stop5,Stop 5,Infinity,0\n"
+                "stop6,Stop 6,91,0\n"
+                "stop7,Stop 7,0,-181\n"
+                "stop8,Stop 8,0,0\n"
             ),
             "agency.txt": (
                 "agency_id,agency_name,agency_url,agency_timezone\n"
@@ -211,7 +217,47 @@ class TestLoadGtfs:
                 ("stop1", False),
                 ("stop2", True),
                 ("stop3", True),
+                ("stop4", True),
+                ("stop5", True),
+                ("stop6", True),
+                ("stop7", True),
+                ("stop8", False),
             ]
+
+    def test_load_gtfs_requires_coordinate_columns_for_optional_locations(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "missing-coordinate-columns.zip"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("stops.txt", "stop_id,location_type\ngeneric-node,3\n")
+
+        with pytest.raises(ValueError, match="both stop_lon and stop_lat columns"):
+            load_gtfs(path)
+
+    def test_load_gtfs_keeps_optional_locations_with_blank_coordinates(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "blank-optional-coordinates.zip"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr(
+                "stops.txt",
+                "stop_id,stop_name,stop_lat,stop_lon,location_type,parent_station\n"
+                "station,Station,51,-1,1,\n"
+                "platform,Platform,51,-1,0,station\n"
+                "junction,Junction,,,3,station\n"
+                "boarding-area,Boarding Area,,,4,platform\n",
+            )
+
+        with load_gtfs(path) as con:
+            rows = con.execute(
+                "SELECT stop_id, geometry IS NULL FROM stops ORDER BY stop_id"
+            ).fetchall()
+        assert rows == [
+            ("boarding-area", True),
+            ("junction", True),
+            ("platform", False),
+            ("station", False),
+        ]
 
     def test_load_gtfs_nonexistent_file(self) -> None:
         with load_gtfs("nonexistent.zip") as con:
@@ -219,6 +265,17 @@ class TestLoadGtfs:
 
 
 class TestLoadGbfs:
+    def test_bad_json_does_not_hide_valid_station_geometries(self, tmp_path: Path) -> None:
+        (tmp_path / "bad.json").write_text("{invalid", encoding="utf-8")
+        (tmp_path / "station_information.json").write_text(
+            '{"data":{"stations":[{"station_id":"a","lat":40,"lon":-74}]}}',
+            encoding="utf-8",
+        )
+        with load_gbfs(tmp_path) as con:
+            assert con.execute(
+                "SELECT station_id, ST_AsText(geometry) FROM station_information"
+            ).fetchall() == [("a", "POINT (-74 40)")]
+
     def test_load_gbfs_is_public_top_level_api(self) -> None:
         assert c2g.load_gbfs is load_gbfs
 
@@ -382,6 +439,55 @@ class TestGetOdPairs:
         assert isinstance(result, pd.DataFrame)
         assert "geometry" not in result.columns
 
+    @pytest.mark.parametrize("with_coordinates", [True, False])
+    def test_get_od_pairs_with_unmaterialised_stop_geometry(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        with_coordinates: bool,
+    ) -> None:
+        with gtfs_connection(sample_gtfs_dict) as con:
+            con.execute("ALTER TABLE stops DROP COLUMN geometry")
+            if not with_coordinates:
+                con.execute("ALTER TABLE stops DROP COLUMN stop_lon")
+                con.execute("ALTER TABLE stops DROP COLUMN stop_lat")
+            first = get_od_pairs(con, "20240101", "20240101")
+            second = get_od_pairs(con, "20240101", "20240101")
+
+        assert not first.empty
+        if with_coordinates:
+            assert isinstance(first, gpd.GeoDataFrame)
+            assert isinstance(second, gpd.GeoDataFrame)
+            assert first.geometry.notna().all()
+            assert second.geometry.notna().all()
+            pd.testing.assert_frame_equal(
+                first.drop(columns="geometry"), second.drop(columns="geometry")
+            )
+        else:
+            assert "geometry" not in first.columns
+            assert "geometry" not in second.columns
+
+    def test_repeated_calls_handle_temp_stops_view_and_table_transitions(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+    ) -> None:
+        """Repeated calls reuse a connection cleanly across temp view and temp table modes."""
+        with gtfs_connection(sample_gtfs_dict) as con:
+            # First creates TEMP VIEW _stops_for_graph (stops has geometry column).
+            _, edges_view = travel_summary_graph(con)
+            # Drop geometry so subsequent calls create TEMP TABLE _stops_for_graph.
+            con.execute("ALTER TABLE stops DROP COLUMN geometry")
+            _, edges_table_1 = travel_summary_graph(con)
+            _, edges_table_2 = travel_summary_graph(con)
+            od_1 = get_od_pairs(con, "20240101", "20240101")
+            od_2 = get_od_pairs(con, "20240101", "20240101")
+
+        assert len(edges_view) == len(edges_table_1) == len(edges_table_2)
+        assert isinstance(od_1, gpd.GeoDataFrame)
+        assert isinstance(od_2, gpd.GeoDataFrame)
+        assert len(od_1) == len(od_2) > 0
+
     def test_get_od_pairs_incomplete_gtfs(self, gtfs_connection: GtfsConnectionFactory) -> None:
         """A feed without trips or stop times cannot produce OD pairs."""
         con = gtfs_connection({"stops": pd.DataFrame(columns=["stop_id", "stop_lat", "stop_lon"])})
@@ -412,6 +518,20 @@ class TestGetOdPairs:
         con = gtfs_connection(gtfs_copy)
         result = get_od_pairs(con)
         assert isinstance(result, (pd.DataFrame, gpd.GeoDataFrame))
+
+    @pytest.mark.parametrize("column", ["departure_time", "arrival_time"])
+    def test_get_od_pairs_all_missing_times_returns_an_empty_frame(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        column: str,
+    ) -> None:
+        with gtfs_connection(sample_gtfs_dict) as con:
+            con.execute(f"UPDATE stop_times SET {column} = NULL")
+            result = get_od_pairs(con, "20240101", "20240101", include_geometry=False)
+        assert result.empty
+        assert pd.api.types.is_datetime64_any_dtype(result["departure_ts"])
+        assert pd.api.types.is_datetime64_any_dtype(result["arrival_ts"])
 
     def test_get_od_pairs_removal_exception_integration(
         self, gtfs_connection: GtfsConnectionFactory
@@ -467,8 +587,45 @@ class TestGetOdPairs:
 
         assert isinstance(result_directed, pd.DataFrame)
         assert isinstance(result_undirected, pd.DataFrame)
-        # Undirected should have orig_stop_id <= dest_stop_id for all rows
-        assert (result_undirected["orig_stop_id"] <= result_undirected["dest_stop_id"]).all()
+        pd.testing.assert_frame_equal(result_directed, result_undirected)
+
+    @pytest.mark.parametrize("include_geometry", [False, True])
+    @pytest.mark.parametrize("directed", [False, True])
+    def test_od_pair_keeps_actual_departure_stop_and_trip_times(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        include_geometry: bool,
+        directed: bool,
+    ) -> None:
+        sample_gtfs_dict["stop_times"] = pd.DataFrame(
+            {
+                "trip_id": ["trip1", "trip1"],
+                "stop_id": ["stop2", "stop1"],
+                "stop_sequence": [1, 2],
+                "departure_time": ["08:00:00", "08:10:00"],
+                "arrival_time": ["08:00:00", "08:10:00"],
+            }
+        )
+        with gtfs_connection(sample_gtfs_dict) as con:
+            actual = get_od_pairs(
+                con, "20240101", "20240101", directed=directed, include_geometry=include_geometry
+            )
+
+        assert actual.loc[actual["orig_stop_id"] == "stop1"].empty
+        assert len(actual.loc[actual["orig_stop_id"] == "stop2"]) == 1
+        row = actual.iloc[0]
+        assert (row["orig_stop_id"], row["dest_stop_id"]) == ("stop2", "stop1")
+        assert row["departure_ts"] == pd.Timestamp("2024-01-01 08:00")
+        assert row["arrival_ts"] == pd.Timestamp("2024-01-01 08:10")
+        assert row["travel_time_sec"] == 600.0
+        if include_geometry:
+            assert isinstance(actual, gpd.GeoDataFrame)
+            stops = sample_gtfs_dict["stops"].set_index("stop_id")
+            assert list(row.geometry.coords) == [
+                (stops.loc[stop_id, "stop_lon"], stops.loc[stop_id, "stop_lat"])
+                for stop_id in ("stop2", "stop1")
+            ]
 
     def test_get_od_pairs_calendar_dates_only_with_explicit_window(
         self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
@@ -508,6 +665,26 @@ class TestGetOdPairs:
 
 
 class TestTravelSummaryGraph:
+    def test_undirected_summary_orients_geometry_to_its_stop_index(
+        self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
+    ) -> None:
+        sample_gtfs_dict["stop_times"] = pd.DataFrame(
+            {
+                "trip_id": ["trip1", "trip1"],
+                "stop_id": ["stop2", "stop1"],
+                "stop_sequence": [1, 2],
+                "departure_time": ["08:00:00", "08:10:00"],
+                "arrival_time": ["08:00:00", "08:10:00"],
+            }
+        )
+        with gtfs_connection(sample_gtfs_dict) as con:
+            _, actual = travel_summary_graph(con, directed=False)
+            _, directed = travel_summary_graph(con, directed=True)
+
+        assert actual.index.tolist() == [("stop1", "stop2")]
+        assert directed.index.tolist() == [("stop2", "stop1")]
+        assert list(actual.iloc[0].geometry.coords) == list(directed.iloc[0].geometry.coords)[::-1]
+
     @pytest.mark.parametrize(
         "value",
         [
@@ -536,6 +713,38 @@ class TestTravelSummaryGraph:
         assert len(nodes_gdf) > 0
         assert isinstance(edges_gdf, gpd.GeoDataFrame)
         assert len(edges_gdf) > 0
+
+    @pytest.mark.parametrize("prebuilt_geometry", [True, False], ids=["loaded", "numeric-fallback"])
+    def test_travel_summary_graph_retains_missing_geometry_in_frames(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        prebuilt_geometry: bool,
+    ) -> None:
+        stops = sample_gtfs_dict["stops"]
+        stops.loc[stops["stop_id"] == "stop3", "stop_lat"] = 91.0
+        with gtfs_connection(sample_gtfs_dict) as con:
+            if not prebuilt_geometry:
+                con.execute("ALTER TABLE stops DROP COLUMN geometry")
+                con.execute("ALTER TABLE stops ALTER COLUMN stop_lat TYPE DOUBLE")
+                con.execute("ALTER TABLE stops ALTER COLUMN stop_lon TYPE DOUBLE")
+            nodes, edges = travel_summary_graph(
+                con, calendar_start="20240101", calendar_end="20240101"
+            )
+
+        assert nodes.geometry.isna().to_dict() == {"stop1": False, "stop2": False, "stop3": True}
+        assert edges.geometry.isna().to_dict() == {
+            ("stop1", "stop2"): False,
+            ("stop2", "stop3"): True,
+        }
+        assert edges["frequency"].to_dict() == {("stop1", "stop2"): 2, ("stop2", "stop3"): 2}
+
+        graph = c2g.gdf_to_nx(nodes=nodes, edges=edges)
+        assert {attrs["_original_index"] for _, attrs in graph.nodes(data=True)} == {
+            "stop1",
+            "stop2",
+        }
+        assert graph.number_of_edges() == 1
 
     def test_travel_summary_graph_time_filter(
         self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
@@ -727,6 +936,18 @@ class TestTravelSummaryGraph:
         assert len(edges_with) > 0
         # frequency should be higher because of headway expansion
         assert (edges_with["frequency"] > 0).all()
+
+    @pytest.mark.parametrize("column", ["start_time", "end_time"])
+    def test_travel_summary_graph_rejects_missing_frequency_boundary(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict_with_frequencies: dict[str, pd.DataFrame],
+        column: str,
+    ) -> None:
+        with gtfs_connection(sample_gtfs_dict_with_frequencies) as con:
+            con.execute(f"UPDATE frequencies SET {column} = NULL")
+            with pytest.raises(ValueError, match="Invalid or overlapping frequency periods"):
+                travel_summary_graph(con, use_frequencies=True)
 
     def test_travel_summary_graph_without_frequencies(
         self,

@@ -246,8 +246,8 @@ def dual_graph(
     # Handle empty edges case
     if edges_clean.empty:
         dual_nodes = gpd.GeoDataFrame(geometry=[], crs=crs)
-        dual_edges = gpd.GeoDataFrame(geometry=[], crs=crs)
-        return dual_nodes, dual_edges
+        dual_edges = _empty_dual_edge_gdf(crs, edge_id_col)
+        return gdf_to_nx(dual_nodes, dual_edges) if as_nx else (dual_nodes, dual_edges)
 
     # edges_clean is guaranteed to be non-None and non-empty here
     assert edges_clean is not None
@@ -266,7 +266,7 @@ def dual_graph(
             UserWarning,
             stacklevel=2,
         )
-    dual_nodes["geometry"] = dual_nodes.geometry.centroid
+    dual_nodes.set_geometry(dual_nodes.geometry.centroid, inplace=True)
 
     if keep_original_geom:
         dual_nodes["original_geometry"] = edges_clean.geometry
@@ -762,7 +762,7 @@ def clip_graph(
     graph : GeoDataFrame, tuple, or NetworkX graph
         Input graph as edges GeoDataFrame, (nodes, edges) tuple, or NetworkX graph.
     area : Polygon, MultiPolygon, GeoDataFrame, or GeoSeries
-        The area to clip to.
+        The area to clip to. An empty GeoDataFrame or GeoSeries selects no edges.
     keep_outer_neighbors : bool, default False
         If True, keeps segments that intersect the boundary.
     as_nx : bool, default False
@@ -796,6 +796,15 @@ def clip_graph(
 
     # Align clip geometry CRS to edges CRS when area is geospatial tabular input.
     if isinstance(area, (gpd.GeoDataFrame, gpd.GeoSeries)):
+        if area.empty:
+            empty_edges = edges.iloc[:0].copy()
+            return _return_graph_output(
+                _filter_nodes_by_edges(nodes, empty_edges),
+                empty_edges,
+                input_type,
+                as_nx,
+                original_graph,
+            )
         area_aligned = GeoDataProcessor.harmonize_crs(area, edges.crs, warn=False)
         clip_geom = (
             area_aligned.geometry.union_all()
@@ -877,9 +886,29 @@ def remove_isolated_components(
     if edges.empty:
         return _return_graph_output(nodes, edges, input_type, as_nx)
 
+    # Frame labels are not guaranteed unique, so carry source row positions
+    # through conversion. Leave a caller's identically named column untouched.
+    position_column = "_city2graph_edge_position"
+    while position_column in edges.columns:
+        position_column += "_"
+    positions = pd.RangeIndex(len(edges))
+    indexed_edges = edges.copy(deep=False)
+    indexed_edges[position_column] = positions
+    if (
+        isinstance(edges.index, pd.MultiIndex)
+        and edges.index.nlevels == 3
+        and not edges.index.is_unique
+    ):
+        # The third level is the NetworkX edge key. Different rows must keep
+        # distinct keys even if the frame repeats all three index levels.
+        indexed_edges.index = pd.MultiIndex.from_arrays(
+            [edges.index.get_level_values(0), edges.index.get_level_values(1), positions],
+            names=edges.index.names,
+        )
+
     # Build graph for component analysis
     try:
-        nx_graph = gdf_to_nx(edges=edges, multigraph=True)
+        nx_graph = gdf_to_nx(edges=indexed_edges, multigraph=True)
     except (ValueError, TypeError, KeyError):
         return _return_graph_output(nodes, edges, input_type, as_nx)
 
@@ -891,13 +920,11 @@ def remove_isolated_components(
     largest_cc = max(cc_func(nx_graph), key=len)
     subgraph = nx_graph.subgraph(largest_cc)
 
-    # Get original edge indices
-    edge_indices = [
-        d["_original_edge_index"]
-        for _, _, d in subgraph.edges(data=True)
-        if "_original_edge_index" in d
-    ]
-    filtered_edges = edges.loc[edge_indices] if edge_indices else edges.iloc[0:0]
+    retained_rows = np.zeros(len(edges), dtype=bool)
+    for _, _, attrs in subgraph.edges(data=True):
+        if position_column in attrs:
+            retained_rows[int(attrs[position_column])] = True
+    filtered_edges = edges.iloc[retained_rows]
 
     return _return_graph_output(
         _filter_nodes_by_edges(nodes, filtered_edges), filtered_edges, input_type, as_nx

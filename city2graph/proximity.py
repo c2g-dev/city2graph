@@ -14,9 +14,11 @@ from __future__ import annotations
 
 # Standard library imports
 import logging
+import math
 import warnings
 from dataclasses import dataclass
 from itertools import combinations
+from itertools import pairwise
 from numbers import Real
 from typing import TYPE_CHECKING
 from typing import Any
@@ -24,6 +26,7 @@ from typing import Literal
 from typing import cast
 
 if TYPE_CHECKING:  # Only needed for typing annotations
+    from collections.abc import Hashable
     from collections.abc import Iterable
     from collections.abc import Iterator
 
@@ -37,6 +40,7 @@ import pandas as pd
 from scipy.spatial import Delaunay
 from scipy.spatial import cKDTree
 from scipy.spatial import distance as sdist
+from shapely import get_coordinates
 from shapely.geometry import LineString
 
 # Local imports
@@ -68,20 +72,79 @@ __all__ = [
 EdgePair = tuple[Any, Any]
 
 AUTO_NETWORK_LENGTH_ATTR = "__c2g_edge_length"
+_FAST_REAL_TYPES = (float, int, np.floating, np.integer)
+_REAL_NUMBER_TYPES = (*_FAST_REAL_TYPES, Real)
+_MAX_WEIGHT_ERROR_EXAMPLES = 3
+
+
+def _validate_preferred_network_weight(graph: nx.Graph, preferred_attr: str) -> None:
+    """
+    Validate a user-supplied network edge weight attribute in a single pass.
+
+    Checks that every edge provides a real numeric value that is non-negative
+    and not NaN (positive infinity is permitted to represent impassable edges).
+    Missing or non-numeric weights take precedence over negative/NaN values,
+    matching the original two-stage error priority.
+
+    Parameters
+    ----------
+    graph : networkx.Graph
+        Network graph whose edges are validated.
+    preferred_attr : str
+        Edge attribute name to check.
+
+    Raises
+    ------
+    ValueError
+        If any edge is missing a numeric value or has a negative or NaN weight.
+    """
+    missing: list[EdgePair] = []
+    invalid: list[EdgePair] = []
+    for u, v, data in graph.edges(data=True):
+        value = data.get(preferred_attr)
+        # Both negative values and NaN fail ``>= 0`` while +inf passes.
+        if isinstance(value, _FAST_REAL_TYPES):
+            if value >= 0:
+                continue
+        elif isinstance(value, Real):
+            if float(value) >= 0:
+                continue
+        else:
+            missing.append((u, v))
+            if len(missing) == _MAX_WEIGHT_ERROR_EXAMPLES:
+                break
+            continue
+        if len(invalid) < _MAX_WEIGHT_ERROR_EXAMPLES:
+            invalid.append((u, v))
+
+    if missing:
+        sample = ", ".join(map(str, missing))
+        msg = (
+            f"Edges missing numeric '{preferred_attr}' attribute required for network weights;"
+            f" examples: {sample}"
+        )
+        raise ValueError(msg)
+    if invalid:
+        sample = ", ".join(map(str, invalid))
+        msg = f"Network weights in '{preferred_attr}' must be non-negative and not NaN; examples: {sample}"
+        raise ValueError(msg)
 
 
 def _resolve_network_weight_attribute(
     graph: nx.Graph,
     pos: dict[Any, tuple[float, float]],
     preferred_attr: str | None,
+    geometry_column: Hashable | None,
 ) -> str:
     """
     Return edge weight attribute, computing lengths when unspecified.
 
     This helper function determines which edge attribute to use for network
     distance calculations. If a preferred attribute is specified, it validates
-    that all edges have numeric values for that attribute. Otherwise, it
-    computes edge lengths automatically from geometries or node positions.
+    that all edges have non-negative numeric values other than NaN. Positive
+    infinity is allowed to represent an impassable edge.
+    Otherwise, it computes edge lengths automatically from geometries or node
+    positions.
 
     Parameters
     ----------
@@ -92,6 +155,8 @@ def _resolve_network_weight_attribute(
     preferred_attr : str or None
         Preferred edge attribute name to use as weight. If None, lengths
         are computed automatically.
+    geometry_column : hashable or None
+        Name of the network's active geometry column, if present.
 
     Returns
     -------
@@ -102,34 +167,23 @@ def _resolve_network_weight_attribute(
     ------
     ValueError
         If preferred_attr is specified but some edges are missing this
-        attribute or have non-numeric values.
+        attribute or its values are non-numeric, negative, or NaN.
     """
     if preferred_attr:
-        missing = [
-            (u, v)
-            for u, v, data in graph.edges(data=True)
-            if not isinstance(data.get(preferred_attr), Real)
-        ]
-        if missing:
-            sample = ", ".join(map(str, missing[:3]))
-            msg = (
-                f"Edges missing numeric '{preferred_attr}' attribute required for network weights;"
-                f" examples: {sample}"
-            )
-            raise ValueError(msg)
+        _validate_preferred_network_weight(graph, preferred_attr)
         return preferred_attr
 
     for u, v, data in graph.edges(data=True):
         existing = data.get(AUTO_NETWORK_LENGTH_ATTR)
-        if isinstance(existing, Real):
+        if isinstance(existing, _REAL_NUMBER_TYPES):
             continue
-        geom = data.get("geometry")
+        geom = data.get(geometry_column)
         if geom is not None and hasattr(geom, "length"):
             candidate = float(getattr(geom, "length", 0.0))
         elif u in pos and v in pos:
             ux, uy = pos[u]
             vx, vy = pos[v]
-            candidate = float(np.hypot(vx - ux, vy - uy))
+            candidate = math.hypot(vx - ux, vy - uy)
         else:
             candidate = 0.0
         data[AUTO_NETWORK_LENGTH_ATTR] = candidate
@@ -198,6 +252,8 @@ class DistanceMetric:
             | None
         ) = None
         self._net_kdtree: cKDTree | None = None
+        self._network_geometry_column: Hashable | None = None
+        self._network_edge_coordinates: dict[EdgePair, npt.NDArray[np.float64]] = {}
         self._active_search: tuple[Any, dict[Any, list[Any]], dict[Any, float]] | None = None
         self._selected_paths: dict[tuple[Any, Any], tuple[float, LineString | None]] = {}
 
@@ -290,7 +346,10 @@ class DistanceMetric:
             if not pos:
                 msg = "network_gdf must include geometries with valid node positions"
                 raise ValueError(msg)
-            weight_attr = _resolve_network_weight_attribute(net_nx, pos, self.network_weight)
+            self._network_geometry_column = self.network_gdf.active_geometry_name
+            weight_attr = _resolve_network_weight_attribute(
+                net_nx, pos, self.network_weight, self._network_geometry_column
+            )
             net_coords = np.asarray(list(pos.values()), dtype=float)
             net_ids = list(pos.keys())
             self._network_cache = (net_nx, pos, net_coords, net_ids, weight_attr)
@@ -396,6 +455,8 @@ class DistanceMetric:
         Reconstruct the first shortest network path.
 
         Use the first predecessor to preserve the path chosen by NetworkX strict distance improvements.
+        Retain intermediate vertices in traversal order and reuse the coordinate
+        arrays of roads shared by multiple paths.
 
         Parameters
         ----------
@@ -416,8 +477,26 @@ class DistanceMetric:
         path = [target]
         while path[-1] != source:
             path.append(predecessors[path[-1]][0])
-        _graph, positions, _coords, _ids, _weight = self._get_network_support()
-        return LineString([positions[node] for node in reversed(path)])
+        graph, positions, _coords, _ids, _weight = self._get_network_support()
+        coordinates = [np.asarray([positions[source]], dtype=np.float64)]
+        for u, v in pairwise(reversed(path)):
+            edge = (u, v)
+            if edge not in self._network_edge_coordinates:
+                geometry = graph[u][v].get(self._network_geometry_column)
+                start, end = positions[u], positions[v]
+                if isinstance(geometry, LineString) and not geometry.is_empty:
+                    vertices = get_coordinates(geometry)
+                    if tuple(vertices[0]) == end and tuple(vertices[-1]) == start:
+                        vertices = vertices[::-1]
+                    if tuple(vertices[0]) != start or tuple(vertices[-1]) != end:
+                        vertices = np.asarray([start, end], dtype=np.float64)
+                else:
+                    vertices = np.asarray([start, end], dtype=np.float64)
+                # Cache both directions as views, skipping the joint already in the path.
+                self._network_edge_coordinates[edge] = vertices[1:]
+                self._network_edge_coordinates[(v, u)] = vertices[-2::-1]
+            coordinates.append(self._network_edge_coordinates[edge])
+        return LineString(np.concatenate(coordinates))
 
     @staticmethod
     def _normalize_metric(metric: object) -> str:
@@ -1540,6 +1619,28 @@ def _add_minimum_spanning_edges(builder: GraphBuilder, candidates: set[EdgePair]
         builder.G[u][v]["weight"] = weight
 
 
+def _validate_radius(radius: float) -> None:
+    """
+    Check that a fixed-radius cutoff is finite and non-negative.
+
+    A zero cutoff is valid and can select distinct nodes with coincident
+    coordinates. Reject invalid values before querying the neighbor index.
+
+    Parameters
+    ----------
+    radius : float
+        Maximum distance for a connection.
+
+    Raises
+    ------
+    ValueError
+        If the radius is negative or not finite.
+    """
+    if not math.isfinite(radius) or radius < 0:
+        msg = "radius must be finite and non-negative"
+        raise ValueError(msg)
+
+
 def fixed_radius_graph(
     gdf: gpd.GeoDataFrame,
     radius: float,
@@ -1566,7 +1667,8 @@ def fixed_radius_graph(
         of this GeoDataFrame will be used as node IDs.
     radius : float
         The maximum distance for connecting nodes. Nodes within this radius will
-        have an edge between them. Must be positive.
+        have an edge between them. Must be finite and non-negative; ``0``
+        connects distinct coincident points.
     distance_metric : str, default "euclidean"
         The distance metric to use for determining connections. Options are:
         - "euclidean": Straight-line distance
@@ -1608,7 +1710,7 @@ def fixed_radius_graph(
     ------
     ValueError
         If `distance_metric` is "network" but `network_gdf` is not provided.
-        If `radius` is not positive.
+        If `radius` is negative or not finite.
         If `duplicate_edges` is True together with `as_nx=True` or `target_gdf`.
 
     See Also
@@ -1642,6 +1744,7 @@ def fixed_radius_graph(
     as_nx = bool(as_nx)
 
     _validate_duplicate_edges(duplicate_edges, as_nx, target_gdf)
+    _validate_radius(radius)
 
     if target_gdf is not None:
         return _directed_graph(
@@ -2030,7 +2133,7 @@ def bridge_nodes(
     ValueError
         If `nodes_dict` contains fewer than two layers.
         If `proximity_method` is not "knn" or "fixed_radius".
-        If `proximity_method` is "fixed_radius" but `radius` is not provided in kwargs.
+        If `proximity_method` is "fixed_radius" but `radius` is missing, negative or not finite.
         If unknown node types are provided via ``source_node_types`` or ``target_node_types``.
 
     See Also
@@ -2076,8 +2179,14 @@ def bridge_nodes(
     net_weight_raw = kwargs.get("network_weight")
     net_weight: str | None = net_weight_raw if isinstance(net_weight_raw, str) else None
 
-    # Extract param
-    param = float(kwargs.get("k", 1)) if method == "knn" else float(kwargs["radius"])
+    if method == "knn":
+        param = float(kwargs.get("k", 1))
+    else:
+        if "radius" not in kwargs:
+            msg = "radius is required for fixed_radius"
+            raise ValueError(msg)
+        param = float(kwargs["radius"])
+        _validate_radius(param)
 
     node_order = tuple(nodes_dict.keys())
     node_set = set(node_order)

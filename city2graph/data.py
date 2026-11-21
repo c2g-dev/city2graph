@@ -108,6 +108,7 @@ def load_overture_data(
         the boundary polygon. Mutually exclusive with area.
     types : list[str], optional
         List of Overture data types to download. If None, downloads all available types.
+        An empty list returns an empty dictionary without downloading data.
 
         Available types:
 
@@ -201,11 +202,12 @@ def load_overture_data(
         msg = "Exactly one of 'area' or 'place_name' must be provided"
         raise ValueError(msg)
 
-    if place_name is not None:
-        area = get_boundaries(place_name).geometry.iloc[0]
+    if types is None:
+        types = list(VALID_OVERTURE_TYPES)
+    elif not types:
+        return {}
 
     # Validate input parameters
-    types = types or list(VALID_OVERTURE_TYPES)
     invalid_types = [t for t in types if t not in VALID_OVERTURE_TYPES]
     if invalid_types:
         msg = f"Invalid types: {invalid_types}"
@@ -214,6 +216,9 @@ def load_overture_data(
     # Validate release parameter if provided
     if release is not None:
         _validate_overture_release(release)
+
+    if place_name is not None:
+        area = get_boundaries(place_name).geometry.iloc[0]
 
     # Prepare area and bounding box
     bbox_str, clip_geom = _prepare_area_and_bbox(area)
@@ -323,7 +328,8 @@ def process_overture_segments(
         Whether to generate barrier geometries from level rules.
     connectors_gdf : geopandas.GeoDataFrame, optional
         GeoDataFrame containing connector information. If provided, segments
-        will be split at connector positions.
+        will be split at connector positions within the normalized range [0, 1].
+        References without a usable position are ignored.
     threshold : float, default 1.0
         Distance threshold for endpoint clustering in the same units as the CRS.
 
@@ -715,10 +721,11 @@ def _split_segments_at_connectors(
         normalized = pd.json_normalize(connector_rows["_connector"])
         normalized["_segment_pos"] = connector_rows["_segment_pos"].to_numpy()
         if {"connector_id", "at"} <= set(normalized.columns):
+            normalized["at"] = pd.to_numeric(normalized["at"], errors="coerce")
             normalized = normalized[
-                normalized["connector_id"].isin(valid_connector_ids) & normalized["at"].notna()
+                normalized["connector_id"].isin(valid_connector_ids)
+                & normalized["at"].between(0.0, 1.0)
             ]
-            normalized["at"] = normalized["at"].map(float)
             grouped_positions = normalized.groupby("_segment_pos", sort=False)["at"].agg(
                 lambda values: sorted({0.0, *values, 1.0})
             )
