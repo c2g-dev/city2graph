@@ -17,6 +17,7 @@ import logging
 import warnings
 from dataclasses import dataclass
 from itertools import combinations
+from itertools import pairwise
 from numbers import Real
 from typing import TYPE_CHECKING
 from typing import Any
@@ -24,6 +25,7 @@ from typing import Literal
 from typing import cast
 
 if TYPE_CHECKING:  # Only needed for typing annotations
+    from collections.abc import Hashable
     from collections.abc import Iterable
     from collections.abc import Iterator
 
@@ -37,6 +39,7 @@ import pandas as pd
 from scipy.spatial import Delaunay
 from scipy.spatial import cKDTree
 from scipy.spatial import distance as sdist
+from shapely import get_coordinates
 from shapely.geometry import LineString
 
 # Local imports
@@ -74,14 +77,17 @@ def _resolve_network_weight_attribute(
     graph: nx.Graph,
     pos: dict[Any, tuple[float, float]],
     preferred_attr: str | None,
+    geometry_column: Hashable | None,
 ) -> str:
     """
     Return edge weight attribute, computing lengths when unspecified.
 
     This helper function determines which edge attribute to use for network
     distance calculations. If a preferred attribute is specified, it validates
-    that all edges have numeric values for that attribute. Otherwise, it
-    computes edge lengths automatically from geometries or node positions.
+    that all edges have non-negative numeric values other than NaN. Positive
+    infinity is allowed to represent an impassable edge.
+    Otherwise, it computes edge lengths automatically from geometries or node
+    positions.
 
     Parameters
     ----------
@@ -92,6 +98,8 @@ def _resolve_network_weight_attribute(
     preferred_attr : str or None
         Preferred edge attribute name to use as weight. If None, lengths
         are computed automatically.
+    geometry_column : hashable or None
+        Name of the network's active geometry column, if present.
 
     Returns
     -------
@@ -102,7 +110,7 @@ def _resolve_network_weight_attribute(
     ------
     ValueError
         If preferred_attr is specified but some edges are missing this
-        attribute or have non-numeric values.
+        attribute or its values are non-numeric, negative, or NaN.
     """
     if preferred_attr:
         missing = [
@@ -117,13 +125,22 @@ def _resolve_network_weight_attribute(
                 f" examples: {sample}"
             )
             raise ValueError(msg)
+        invalid = [
+            (u, v)
+            for u, v, data in graph.edges(data=True)
+            if data[preferred_attr] < 0 or np.isnan(float(data[preferred_attr]))
+        ]
+        if invalid:
+            sample = ", ".join(map(str, invalid[:3]))
+            msg = f"Network weights in '{preferred_attr}' must be non-negative and not NaN; examples: {sample}"
+            raise ValueError(msg)
         return preferred_attr
 
     for u, v, data in graph.edges(data=True):
         existing = data.get(AUTO_NETWORK_LENGTH_ATTR)
         if isinstance(existing, Real):
             continue
-        geom = data.get("geometry")
+        geom = data.get(geometry_column)
         if geom is not None and hasattr(geom, "length"):
             candidate = float(getattr(geom, "length", 0.0))
         elif u in pos and v in pos:
@@ -198,6 +215,8 @@ class DistanceMetric:
             | None
         ) = None
         self._net_kdtree: cKDTree | None = None
+        self._network_geometry_column: Hashable | None = None
+        self._network_edge_coordinates: dict[EdgePair, npt.NDArray[np.float64]] = {}
         self._active_search: tuple[Any, dict[Any, list[Any]], dict[Any, float]] | None = None
         self._selected_paths: dict[tuple[Any, Any], tuple[float, LineString | None]] = {}
 
@@ -290,7 +309,10 @@ class DistanceMetric:
             if not pos:
                 msg = "network_gdf must include geometries with valid node positions"
                 raise ValueError(msg)
-            weight_attr = _resolve_network_weight_attribute(net_nx, pos, self.network_weight)
+            self._network_geometry_column = self.network_gdf.active_geometry_name
+            weight_attr = _resolve_network_weight_attribute(
+                net_nx, pos, self.network_weight, self._network_geometry_column
+            )
             net_coords = np.asarray(list(pos.values()), dtype=float)
             net_ids = list(pos.keys())
             self._network_cache = (net_nx, pos, net_coords, net_ids, weight_attr)
@@ -396,6 +418,8 @@ class DistanceMetric:
         Reconstruct the first shortest network path.
 
         Use the first predecessor to preserve the path chosen by NetworkX strict distance improvements.
+        Retain intermediate vertices in traversal order and reuse the coordinate
+        arrays of roads shared by multiple paths.
 
         Parameters
         ----------
@@ -416,8 +440,26 @@ class DistanceMetric:
         path = [target]
         while path[-1] != source:
             path.append(predecessors[path[-1]][0])
-        _graph, positions, _coords, _ids, _weight = self._get_network_support()
-        return LineString([positions[node] for node in reversed(path)])
+        graph, positions, _coords, _ids, _weight = self._get_network_support()
+        coordinates = [np.asarray([positions[source]], dtype=np.float64)]
+        for u, v in pairwise(reversed(path)):
+            edge = (u, v)
+            if edge not in self._network_edge_coordinates:
+                geometry = graph[u][v].get(self._network_geometry_column)
+                start, end = positions[u], positions[v]
+                if isinstance(geometry, LineString) and not geometry.is_empty:
+                    vertices = get_coordinates(geometry)
+                    if tuple(vertices[0]) == end and tuple(vertices[-1]) == start:
+                        vertices = vertices[::-1]
+                    if tuple(vertices[0]) != start or tuple(vertices[-1]) != end:
+                        vertices = np.asarray([start, end], dtype=np.float64)
+                else:
+                    vertices = np.asarray([start, end], dtype=np.float64)
+                # Cache both directions as views, skipping the joint already in the path.
+                self._network_edge_coordinates[edge] = vertices[1:]
+                self._network_edge_coordinates[(v, u)] = vertices[-2::-1]
+            coordinates.append(self._network_edge_coordinates[edge])
+        return LineString(np.concatenate(coordinates))
 
     @staticmethod
     def _normalize_metric(metric: object) -> str:

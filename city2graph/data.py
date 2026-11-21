@@ -108,6 +108,7 @@ def load_overture_data(
         the boundary polygon. Mutually exclusive with area.
     types : list[str], optional
         List of Overture data types to download. If None, downloads all available types.
+        An empty list returns an empty dictionary without downloading data.
 
         Available types:
 
@@ -201,11 +202,12 @@ def load_overture_data(
         msg = "Exactly one of 'area' or 'place_name' must be provided"
         raise ValueError(msg)
 
-    if place_name is not None:
-        area = get_boundaries(place_name).geometry.iloc[0]
+    if types is None:
+        types = list(VALID_OVERTURE_TYPES)
+    elif not types:
+        return {}
 
     # Validate input parameters
-    types = types or list(VALID_OVERTURE_TYPES)
     invalid_types = [t for t in types if t not in VALID_OVERTURE_TYPES]
     if invalid_types:
         msg = f"Invalid types: {invalid_types}"
@@ -214,6 +216,9 @@ def load_overture_data(
     # Validate release parameter if provided
     if release is not None:
         _validate_overture_release(release)
+
+    if place_name is not None:
+        area = get_boundaries(place_name).geometry.iloc[0]
 
     # Prepare area and bounding box
     bbox_str, clip_geom = _prepare_area_and_bbox(area)
@@ -323,7 +328,8 @@ def process_overture_segments(
         Whether to generate barrier geometries from level rules.
     connectors_gdf : geopandas.GeoDataFrame, optional
         GeoDataFrame containing connector information. If provided, segments
-        will be split at connector positions.
+        will be split at connector positions within the normalized range [0, 1].
+        References without a usable position are ignored.
     threshold : float, default 1.0
         Distance threshold for endpoint clustering in the same units as the CRS.
 
@@ -333,7 +339,8 @@ def process_overture_segments(
         Processed segments with additional columns:
         - 'split_from', 'split_to': Split positions if segments were split
         - 'length': Length of each segment
-        - 'barrier_geometry': Passable geometry if get_barriers=True
+        - 'barrier_geometry': Passable geometry if get_barriers=True. Level rules
+          retain their source references, and are applied to the relevant split.
 
     See Also
     --------
@@ -714,10 +721,11 @@ def _split_segments_at_connectors(
         normalized = pd.json_normalize(connector_rows["_connector"])
         normalized["_segment_pos"] = connector_rows["_segment_pos"].to_numpy()
         if {"connector_id", "at"} <= set(normalized.columns):
+            normalized["at"] = pd.to_numeric(normalized["at"], errors="coerce")
             normalized = normalized[
-                normalized["connector_id"].isin(valid_connector_ids) & normalized["at"].notna()
+                normalized["connector_id"].isin(valid_connector_ids)
+                & normalized["at"].between(0.0, 1.0)
             ]
-            normalized["at"] = normalized["at"].map(float)
             grouped_positions = normalized.groupby("_segment_pos", sort=False)["at"].agg(
                 lambda values: sorted({0.0, *values, 1.0})
             )
@@ -924,11 +932,23 @@ def _generate_barrier_geometries(segments_gdf: gpd.GeoDataFrame) -> gpd.GeoSerie
     barrier_geometries = segments_gdf.geometry.to_numpy().copy()
     barrier_geometries[full_barrier] = None
     partial_positions = np.flatnonzero(partial_barrier)
+    split_from = pd.to_numeric(
+        segments_gdf.get("split_from", pd.Series(0.0, index=segments_gdf.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    split_to = pd.to_numeric(
+        segments_gdf.get("split_to", pd.Series(1.0, index=segments_gdf.index)),
+        errors="coerce",
+    ).fillna(1.0)
     barrier_geometries[partial_positions] = [
         (
             geometry
             if geometry is None or geometry.is_empty
-            else _create_barrier_geometry(geometry, parsed_rules.iloc[position])
+            else _create_barrier_geometry(
+                geometry,
+                parsed_rules.iloc[position],
+                source_bounds=(split_from.iloc[position], split_to.iloc[position]),
+            )
         )
         for position, geometry in zip(
             partial_positions,
@@ -1002,6 +1022,8 @@ def _parse_level_rules(level_rules_str: str) -> list[tuple[float, float]] | str:
 def _create_barrier_geometry(
     geometry: LineString,
     barrier_intervals: list[tuple[float, float]],
+    *,
+    source_bounds: tuple[float, float] = (0.0, 1.0),
 ) -> LineString | MultiLineString | None:
     """
     Create barrier geometry from intervals.
@@ -1014,7 +1036,9 @@ def _create_barrier_geometry(
     geometry : LineString
         Original road segment geometry.
     barrier_intervals : list[tuple[float, float]]
-        Partial barrier intervals.
+        Partial barrier intervals in the original segment's linear reference.
+    source_bounds : tuple[float, float], default=(0.0, 1.0)
+        Start and end of this geometry along the original segment.
 
     Returns
     -------
@@ -1032,7 +1056,16 @@ def _create_barrier_geometry(
     >>> barriers = [(0.2, 0.8)]
     >>> passable = _create_barrier_geometry(geom, barriers)
     """
-    # Calculate passable intervals (complement of barrier intervals)
+    # Intersect source rules with this part, then express them along the part.
+    lower, upper = source_bounds
+    if 0.0 <= lower < upper <= 1.0 and source_bounds != (0.0, 1.0):
+        span = upper - lower
+        barrier_intervals = [
+            ((max(start, lower) - lower) / span, (min(end, upper) - lower) / span)
+            for start, end in barrier_intervals
+            if max(start, lower) < min(end, upper)
+        ]
+
     passable_intervals = _calculate_passable_intervals(barrier_intervals)
 
     if not passable_intervals:

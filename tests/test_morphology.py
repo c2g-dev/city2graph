@@ -13,6 +13,8 @@ import networkx as nx
 import pandas as pd
 import pytest
 from geopandas.testing import assert_geodataframe_equal
+from pyproj import Transformer
+from shapely import transform
 from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
@@ -2538,3 +2540,102 @@ class TestPublicInputImmutability(TestMorphologyBase):
         segments_to_graph(sample_segments_gdf)
 
         assert_geodataframe_equal(sample_segments_gdf, segments_before)
+
+
+@pytest.mark.parametrize("typed_barrier", [False, True])
+def test_place_movement_reprojects_secondary_barrier_geometry(typed_barrier: bool) -> None:
+    """The spatial join uses the place CRS for the selected barrier column."""
+    place = gpd.GeoDataFrame(
+        {"place_id": ["east"]},
+        geometry=[
+            Polygon([(111300, -10), (111340, -10), (111340, 10), (111300, 10)]),
+        ],
+        crs=3857,
+    )
+    degree_line = LineString([(1.0, -0.001), (1.0, 0.001)])
+    movement = gpd.GeoDataFrame(
+        {"movement_id": ["street"], "barrier": [degree_line]},
+        geometry=[degree_line],
+        crs=4326,
+    )
+    if typed_barrier:
+        movement["barrier"] = gpd.GeoSeries([degree_line], crs=4326)
+
+    with pytest.warns(RuntimeWarning, match="CRS"):
+        _, edges = place_to_movement_graph(
+            place, movement, primary_barrier_col="barrier", max_connection_distance=0
+        )
+
+    assert list(zip(edges["place_id"], edges["movement_id"], strict=True)) == [("east", "street")]
+    assert movement.crs.to_epsg() == 4326
+    assert movement.loc[0, "barrier"].equals_exact(degree_line, 0)
+
+
+@pytest.mark.parametrize("barrier_kind", ["object", "source-crs", "target-crs"])
+@pytest.mark.parametrize("multi_distance", [False, True])
+def test_morphology_reprojects_secondary_barriers(
+    small_buildings_gdf: gpd.GeoDataFrame,
+    small_segments_gdf: gpd.GeoDataFrame,
+    barrier_kind: str,
+    multi_distance: bool,
+) -> None:
+    """Mixed-CRS inputs match an explicitly projected full-pipeline reference."""
+    buildings = small_buildings_gdf.to_crs(3857)
+    segments = small_segments_gdf.to_crs(4326)
+    projector = Transformer.from_crs(4326, 3857, always_xy=True)
+    reference = gpd.GeoDataFrame(
+        segments.drop(columns="geometry"),
+        geometry=[
+            transform(line, projector.transform, interleaved=False) for line in segments.geometry
+        ],
+        crs=3857,
+    )
+    reference["barrier"] = reference.geometry.copy()
+    barrier = segments.geometry.copy()
+    if barrier_kind == "object":
+        segments["barrier"] = list(barrier)
+    elif barrier_kind == "target-crs":
+        segments["barrier"] = reference.geometry.copy()
+    else:
+        segments["barrier"] = barrier
+    before = segments.copy(deep=True)
+    buildings_before = buildings.copy(deep=True)
+    if multi_distance:
+        center = gpd.GeoSeries([reference.geometry.iloc[0].centroid], crs=3857)
+        expected = morphological_graphs(
+            buildings,
+            reference,
+            [50.0, 100.0],
+            center_point=center,
+            primary_barrier_col="barrier",
+            tessellation_n_jobs=1,
+        )
+        actual = morphological_graphs(
+            buildings,
+            segments,
+            [50.0, 100.0],
+            center_point=center,
+            primary_barrier_col="barrier",
+            tessellation_n_jobs=1,
+        )
+    else:
+        expected = {
+            0.0: morphological_graph(
+                buildings, reference, primary_barrier_col="barrier", tessellation_n_jobs=1
+            )
+        }
+        actual = {
+            0.0: morphological_graph(
+                buildings, segments, primary_barrier_col="barrier", tessellation_n_jobs=1
+            )
+        }
+    for distance, (expected_nodes, expected_edges) in expected.items():
+        nodes, edges = actual[distance]
+        assert not expected_nodes["place"].empty
+        assert not expected_edges[("place", "faced_to", "movement")].empty
+        for key, frame in expected_nodes.items():
+            assert_geodataframe_equal(nodes[key], frame, check_less_precise=True)
+        for key, frame in expected_edges.items():
+            assert_geodataframe_equal(edges[key], frame, check_less_precise=True)
+    assert_geodataframe_equal(segments, before)
+    assert_geodataframe_equal(buildings, buildings_before)
