@@ -2566,8 +2566,12 @@ def test_place_adjacency_deduplicates_joined_places_without_edges(as_nx: bool) -
         assert list(nodes["place_id"]) == ["west", "east"]
         assert edges.empty
 
-        
-        @pytest.mark.parametrize("typed_barrier", [False, True])
+        single_nodes, single_edges = place_to_place_graph(places.iloc[:2])
+        assert list(single_nodes["place_id"]) == ["west"]
+        assert single_edges.empty
+
+
+@pytest.mark.parametrize("typed_barrier", [False, True])
 def test_place_movement_reprojects_secondary_barrier_geometry(typed_barrier: bool) -> None:
     """The spatial join uses the place CRS for the selected barrier column."""
     place = gpd.GeoDataFrame(
