@@ -259,6 +259,37 @@ def _table_columns(
     return {row[1] for row in con.execute(f"PRAGMA table_info('{table_name}')").fetchall()}
 
 
+def _drop_temp_relation(con: duckdb.DuckDBPyConnection, name: str) -> None:
+    """
+    Drop an existing temporary DuckDB view or table matching its actual catalog type.
+
+    DuckDB raises a ``CatalogException`` if ``DROP VIEW`` targets an existing
+    table (or vice versa), so this helper inspects the temporary catalog first.
+
+    Parameters
+    ----------
+    con : duckdb.DuckDBPyConnection
+        Open DuckDB connection.
+    name : str
+        Temporary view or table name to remove if present.
+
+    Returns
+    -------
+    None
+        Mutates temporary catalog entries in ``con``.
+    """
+    if con.execute(
+        "SELECT 1 FROM duckdb_views() WHERE temporary AND view_name = ? LIMIT 1",
+        [name],
+    ).fetchone():
+        con.execute(f"DROP VIEW IF EXISTS {name}")
+    if con.execute(
+        "SELECT 1 FROM duckdb_tables() WHERE temporary AND table_name = ? LIMIT 1",
+        [name],
+    ).fetchone():
+        con.execute(f"DROP TABLE IF EXISTS {name}")
+
+
 def _ensure_stops_geometry(con: duckdb.DuckDBPyConnection) -> None:
     """
     Create a temp relation named _stops_for_graph with a geometry column.
@@ -284,8 +315,7 @@ def _ensure_stops_geometry(con: duckdb.DuckDBPyConnection) -> None:
     """
     stop_columns = _table_columns(con, "stops")
 
-    con.execute("DROP VIEW IF EXISTS _stops_for_graph")
-    con.execute("DROP TABLE IF EXISTS _stops_for_graph")
+    _drop_temp_relation(con, "_stops_for_graph")
 
     if "geometry" in stop_columns:
         con.execute("CREATE TEMP VIEW _stops_for_graph AS SELECT * FROM stops")
