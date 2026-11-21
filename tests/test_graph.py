@@ -65,6 +65,70 @@ def not_a_pyg_object() -> str:
     return "not_a_pyg_object"
 
 
+@pytest.mark.parametrize("heterogeneous", [False, True])
+@pytest.mark.parametrize("directed", [False, True])
+@pytest.mark.parametrize("all_dangling", [False, True])
+def test_pyg_dangling_edges_keep_tensors_and_metadata_aligned(
+    heterogeneous: bool, directed: bool, all_dangling: bool
+) -> None:
+    """Ignore invalid edges without misaligning features, keys, or geometry."""
+    nodes = gpd.GeoDataFrame(
+        geometry=[Point(0, 0), Point(1, 0), Point(2, 0)],
+        crs="EPSG:3857",
+        index=pd.Index(["a", "b", "c"], name="place"),
+    )
+    edges = gpd.GeoDataFrame(
+        {
+            "cost": [1.0, 99.0, 2.0],
+            "geometry": [
+                LineString([(0, 0), (1, 0)]),
+                LineString([(9, 0), (2, 0)]),
+                LineString([(1, 0), (2, 0)]),
+            ],
+        },
+        crs=nodes.crs,
+        index=pd.MultiIndex.from_tuples(
+            [("a", "b", "first"), ("missing", "c", "orphan"), ("b", "c", "second")],
+            names=["source", "target", "key"],
+        ),
+    )
+    expected = edges.iloc[:0] if all_dangling else edges.iloc[[0, 2]]
+    edges = edges.iloc[[1]] if all_dangling else edges
+    if heterogeneous:
+        edge_type = ("place", "links", "place")
+        by_type = {edge_type: edges}
+        hetero = gdf_to_pyg(
+            {"place": nodes},
+            by_type,
+            edge_feature_cols={edge_type: ["cost"]},
+            directed=directed,
+            keep_geom=True,
+        )
+        store = hetero[edge_type]
+        _, recovered_by_type = pyg_to_gdf(hetero)
+        assert isinstance(recovered_by_type, dict)
+        recovered = recovered_by_type[edge_type]
+        assert by_type[edge_type] is edges
+    else:
+        data = gdf_to_pyg(
+            nodes, edges, edge_feature_cols=["cost"], directed=directed, keep_geom=True
+        )
+        store = data
+        _, recovered = pyg_to_gdf(data)
+
+    assert isinstance(recovered, gpd.GeoDataFrame)
+    assert (
+        store.edge_index.size(1)
+        == store.edge_attr.size(0)
+        == len(expected) * (1 if directed else 2)
+    )
+    assert store.edge_attr.size(1) == 1
+    assert recovered.index.tolist() == expected.index.tolist()
+    assert recovered.geometry.tolist() == expected.geometry.tolist()
+    if not all_dangling:
+        assert recovered["cost"].tolist() == expected["cost"].tolist()
+
+
 class TestTorchAvailability:
     """Test PyTorch availability detection and error handling."""
 
