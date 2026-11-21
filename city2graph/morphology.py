@@ -982,7 +982,7 @@ def place_to_place_graph(
     tuple[geopandas.GeoDataFrame, geopandas.GeoDataFrame] or networkx.Graph
         If as_nx is False (default), returns a tuple (nodes, edges) where:
 
-        - nodes is a geopandas.GeoDataFrame containing the place nodes.
+        - nodes is a geopandas.GeoDataFrame containing one node per place_id.
         - edges is a geopandas.GeoDataFrame containing the adjacency connections.
 
         If as_nx is True, returns a networkx.Graph representing the place adjacency.
@@ -1034,14 +1034,13 @@ def place_to_place_graph(
         as_nx=as_nx,
     )
 
-    # Handle empty or insufficient data: return empty edges GeoDataFrame
-    if place_gdf.empty or len(place_gdf) < 2:
+    if place_gdf.empty:
         return _return_empty_place_edges(place_gdf, group_col, as_nx)
 
-    # Deduplicate based on place_id to avoid libpysal errors
-    # This handles cases where place_gdf has been joined with other data (e.g. buildings)
-    # resulting in multiple rows per place space. We only need unique place spaces for the graph.
+    # Attribute joins can produce multiple rows for the same place.
     gdf_unique = place_gdf.drop_duplicates(subset=[_PLACE_ID_COL])
+    if len(gdf_unique) < 2:
+        return _return_empty_place_edges(gdf_unique, group_col, as_nx)
 
     # Set index to place_id so contiguity_graph returns edges with correct IDs
     # We must ensure the index is unique for libpysal
@@ -1055,7 +1054,7 @@ def place_to_place_graph(
     )
 
     if edges_gdf.empty:
-        return _return_empty_place_edges(place_gdf, group_col, as_nx)
+        return _return_empty_place_edges(gdf_unique, group_col, as_nx)
 
     # Reshape to from/to place-ID columns and apply the group filter
     edges_gdf = _format_place_edges(edges_gdf, gdf_unique, group_col)
