@@ -324,6 +324,23 @@ class TestLoadOvertureData:
         mock_subprocess.assert_called_once()
         mock_mkdir.assert_called()
 
+    def test_empty_types_does_not_download_every_type(self, tmp_path: Path) -> None:
+        """An explicit empty selection avoids geocoding, downloads and file writes."""
+        output = tmp_path / "unused"
+        with (
+            patch("city2graph.data.get_boundaries") as geocode,
+            patch("city2graph.data.subprocess.run") as download,
+        ):
+            geocode.return_value = gpd.GeoDataFrame(
+                geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])], crs=WGS84_CRS
+            )
+            result = load_overture_data(place_name="Example", types=[], output_dir=str(output))
+
+        assert result == {}
+        geocode.assert_not_called()
+        download.assert_not_called()
+        assert not output.exists()
+
     def test_invalid_types(self, test_bbox: list[float]) -> None:
         """Test that invalid types raise ValueError."""
         invalid_types = ["building", "invalid_type", "another_invalid"]
@@ -1168,6 +1185,37 @@ class TestProcessOvertureSegments:
         )
 
         assert len(result) == len(segments_gdf)
+
+    @pytest.mark.parametrize("bad_at", ["bad", "nan", "inf", -0.25, 1.25])
+    def test_invalid_connector_position_cannot_create_a_road_part(
+        self, bad_at: str | float
+    ) -> None:
+        """Keep the valid split and ignore an unusable linear reference."""
+        segments = gpd.GeoDataFrame(
+            {
+                "id": ["road"],
+                "connectors": [
+                    [
+                        {"connector_id": "valid", "at": "0.5"},
+                        {"connector_id": "bad", "at": bad_at},
+                    ]
+                ],
+            },
+            geometry=[LineString([(0, 0), (8, 0)])],
+            crs="EPSG:3857",
+        )
+        connectors = make_connectors_gdf(
+            ids=["valid", "bad"], coords=[(4, 0), (6, 0)], crs="EPSG:3857"
+        )
+        result = process_overture_segments(
+            segments, connectors_gdf=connectors, get_barriers=False, threshold=0.01
+        )
+        assert result["split_from"].tolist() == [0.0, 0.5]
+        assert result["split_to"].tolist() == [0.5, 1.0]
+        assert result.geometry.tolist() == [
+            LineString([(0, 0), (4, 0)]),
+            LineString([(4, 0), (8, 0)]),
+        ]
 
     def test_connectors_as_list(self) -> None:
         """Test process_overture_segments when connectors column is already a list."""
