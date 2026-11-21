@@ -439,6 +439,55 @@ class TestGetOdPairs:
         assert isinstance(result, pd.DataFrame)
         assert "geometry" not in result.columns
 
+    @pytest.mark.parametrize("with_coordinates", [True, False])
+    def test_get_od_pairs_with_unmaterialised_stop_geometry(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+        with_coordinates: bool,
+    ) -> None:
+        with gtfs_connection(sample_gtfs_dict) as con:
+            con.execute("ALTER TABLE stops DROP COLUMN geometry")
+            if not with_coordinates:
+                con.execute("ALTER TABLE stops DROP COLUMN stop_lon")
+                con.execute("ALTER TABLE stops DROP COLUMN stop_lat")
+            first = get_od_pairs(con, "20240101", "20240101")
+            second = get_od_pairs(con, "20240101", "20240101")
+
+        assert not first.empty
+        if with_coordinates:
+            assert isinstance(first, gpd.GeoDataFrame)
+            assert isinstance(second, gpd.GeoDataFrame)
+            assert first.geometry.notna().all()
+            assert second.geometry.notna().all()
+            pd.testing.assert_frame_equal(
+                first.drop(columns="geometry"), second.drop(columns="geometry")
+            )
+        else:
+            assert "geometry" not in first.columns
+            assert "geometry" not in second.columns
+
+    def test_repeated_calls_handle_temp_stops_view_and_table_transitions(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict: dict[str, pd.DataFrame],
+    ) -> None:
+        """Repeated calls reuse a connection cleanly across temp view and temp table modes."""
+        with gtfs_connection(sample_gtfs_dict) as con:
+            # First creates TEMP VIEW _stops_for_graph (stops has geometry column).
+            _, edges_view = travel_summary_graph(con)
+            # Drop geometry so subsequent calls create TEMP TABLE _stops_for_graph.
+            con.execute("ALTER TABLE stops DROP COLUMN geometry")
+            _, edges_table_1 = travel_summary_graph(con)
+            _, edges_table_2 = travel_summary_graph(con)
+            od_1 = get_od_pairs(con, "20240101", "20240101")
+            od_2 = get_od_pairs(con, "20240101", "20240101")
+
+        assert len(edges_view) == len(edges_table_1) == len(edges_table_2)
+        assert isinstance(od_1, gpd.GeoDataFrame)
+        assert isinstance(od_2, gpd.GeoDataFrame)
+        assert len(od_1) == len(od_2) > 0
+
     def test_get_od_pairs_incomplete_gtfs(self, gtfs_connection: GtfsConnectionFactory) -> None:
         """A feed without trips or stop times cannot produce OD pairs."""
         con = gtfs_connection({"stops": pd.DataFrame(columns=["stop_id", "stop_lat", "stop_lon"])})
