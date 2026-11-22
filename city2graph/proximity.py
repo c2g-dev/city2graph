@@ -29,6 +29,7 @@ if TYPE_CHECKING:  # Only needed for typing annotations
     from collections.abc import Hashable
     from collections.abc import Iterable
     from collections.abc import Iterator
+    from collections.abc import Sequence
 
 # Third-party imports
 import geopandas as gpd
@@ -37,6 +38,8 @@ import networkx as nx
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+from scipy import sparse
+from scipy.sparse import csgraph
 from scipy.spatial import Delaunay
 from scipy.spatial import cKDTree
 from scipy.spatial import distance as sdist
@@ -75,6 +78,10 @@ AUTO_NETWORK_LENGTH_ATTR = "__c2g_edge_length"
 _FAST_REAL_TYPES = (float, int, np.floating, np.integer)
 _REAL_NUMBER_TYPES = (*_FAST_REAL_TYPES, Real)
 _MAX_WEIGHT_ERROR_EXAMPLES = 3
+
+# NetworkX adds these weights with float64 rounding, or exactly for integers,
+# so the sparse search reproduces its distances. Other types keep NetworkX.
+_INTEGER_WEIGHT_TYPES = (int, np.integer)
 
 
 def _validate_preferred_network_weight(graph: nx.Graph, preferred_attr: str) -> None:
@@ -191,6 +198,513 @@ def _resolve_network_weight_attribute(
     return AUTO_NETWORK_LENGTH_ATTR
 
 
+# Shortest-path searches shared by the network distance metric.
+# Unbounded searches from many origins reuse one sparse matrix; NetworkX remains
+# the reference for distances and for the paths chosen among equal-length routes.
+
+
+def _first_predecessor_path(
+    source: Hashable, target: Hashable, predecessors: dict[Any, list[Any]]
+) -> list[Any] | None:
+    """
+    Return the path selected by the first NetworkX predecessors.
+
+    The first predecessor of each node is the one that reached it at its final
+    distance, which is the path NetworkX builds from strict improvements.
+
+    Parameters
+    ----------
+    source : hashable
+        Search origin.
+    target : hashable
+        Search destination.
+    predecessors : dict
+        Predecessor lists from :func:`networkx.dijkstra_predecessor_and_distance`.
+
+    Returns
+    -------
+    list or None
+        Nodes from source to target, or None for an unreached target.
+    """
+    if target not in predecessors:
+        return None
+    path = [target]
+    while path[-1] != source:
+        path.append(predecessors[path[-1]][0])
+    path.reverse()
+    return path
+
+
+class NetworkXSearch:
+    """
+    Single-origin search computed by NetworkX.
+
+    The search retains the predecessor lists and lengths of one Dijkstra
+    traversal so that distances and paths share the same traversal.
+
+    Parameters
+    ----------
+    graph : networkx.Graph
+        Network to search.
+    source : hashable
+        Search origin.
+    weight : str
+        Edge weight attribute.
+    cutoff : float, optional
+        Maximum explored distance; nodes at the cutoff are included.
+    """
+
+    def __init__(
+        self, graph: nx.Graph, source: Hashable, weight: str, cutoff: float | None
+    ) -> None:
+        """
+        Run one Dijkstra traversal and retain its predecessor tree.
+
+        Nodes beyond ``cutoff`` are not reached and have no predecessors.
+
+        Parameters
+        ----------
+        graph : networkx.Graph
+            Network to search.
+        source : hashable
+            Search origin.
+        weight : str
+            Edge weight attribute.
+        cutoff : float, optional
+            Maximum explored distance; nodes at the cutoff are included.
+        """
+        self.source = source
+        self.predecessors, self.lengths = nx.dijkstra_predecessor_and_distance(
+            graph, source, cutoff=cutoff, weight=weight
+        )
+
+    def distances(self, targets: Sequence[Hashable]) -> npt.NDArray[np.float64]:
+        """
+        Return distances to targets, with ``inf`` for unreached nodes.
+
+        Targets keep their order, and repeated targets repeat their distance.
+
+        Parameters
+        ----------
+        targets : sequence of hashable
+            Destination nodes.
+
+        Returns
+        -------
+        numpy.ndarray
+            Distance for each target in order.
+        """
+        return np.asarray([self.lengths.get(t, np.inf) for t in targets], dtype=float)
+
+    def distance(self, target: Hashable) -> float:
+        """
+        Return the distance to one target.
+
+        Targets outside the search, including those beyond its cutoff, are
+        reported as unreached.
+
+        Parameters
+        ----------
+        target : hashable
+            Destination node.
+
+        Returns
+        -------
+        float
+            Shortest-path length, or ``inf`` when unreached.
+        """
+        length: float = self.lengths.get(target, math.inf)
+        return length
+
+    def paths(self, targets: Sequence[Hashable]) -> list[list[Any] | None]:
+        """
+        Return the first-predecessor path to each target.
+
+        Paths start at the search origin and end at the target.
+
+        Parameters
+        ----------
+        targets : sequence of hashable
+            Destination nodes.
+
+        Returns
+        -------
+        list
+            Node path, or None for an unreached target, for each target.
+        """
+        return [_first_predecessor_path(self.source, t, self.predecessors) for t in targets]
+
+
+class SparseNetwork:
+    """
+    Directed CSR adjacency built once from a NetworkX graph.
+
+    Undirected edges are stored in both directions. Parallel edges keep their
+    minimum weight, as NetworkX does when it searches a multigraph. Edges with
+    infinite weight are omitted. Explicit zero weights remain edges.
+
+    Parameters
+    ----------
+    graph : networkx.Graph
+        Source network, which may be directed or a multigraph.
+    weight : str
+        Edge weight attribute; missing values count as 1, as in NetworkX.
+    nodes : list
+        Node order of the matrix.
+    matrix : scipy.sparse.csr_matrix
+        Weighted adjacency from row to column.
+    has_infinite : bool
+        Whether infinite-weight edges were omitted.
+    integral : bool
+        Whether every weight is an integer, so finite distances are integers.
+    """
+
+    def __init__(
+        self,
+        graph: nx.Graph,
+        weight: str,
+        nodes: list[Any],
+        matrix: sparse.csr_matrix,
+        has_infinite: bool,
+        integral: bool,
+    ) -> None:
+        """
+        Store the converted network and its node order.
+
+        Use :meth:`from_graph` to build the matrix from a NetworkX graph.
+
+        Parameters
+        ----------
+        graph : networkx.Graph
+            Source network, retained for NetworkX path decisions.
+        weight : str
+            Edge weight attribute.
+        nodes : list
+            Node order of the matrix.
+        matrix : scipy.sparse.csr_matrix
+            Weighted adjacency from row to column.
+        has_infinite : bool
+            Whether infinite-weight edges were omitted.
+        integral : bool
+            Whether every weight is an integer, so finite distances are integers.
+        """
+        self.graph = graph
+        self.weight = weight
+        self.nodes = nodes
+        self.index = {node: i for i, node in enumerate(nodes)}
+        self.matrix = matrix
+        self.has_infinite = has_infinite
+        self.integral = integral
+        self._incoming: tuple[list[int], list[int], list[float]] | None = None
+
+    @classmethod
+    def from_graph(cls, graph: nx.Graph, weight: str) -> SparseNetwork | None:
+        """
+        Convert a NetworkX graph, or return None if NetworkX must be kept.
+
+        Weights must be all floats or all integers. NetworkX adds them with the
+        same rounding as the sparse search and returns floats or integers in the
+        same way; mixed or other numeric types keep NetworkX.
+
+        Parameters
+        ----------
+        graph : networkx.Graph
+            Network with non-negative weights.
+        weight : str
+            Edge weight attribute.
+
+        Returns
+        -------
+        SparseNetwork or None
+            Converted network, or None when the weights cannot be converted exactly.
+        """
+        nodes = list(graph)
+        index = {node: i for i, node in enumerate(nodes)}
+        rows: list[int] = []
+        cols: list[int] = []
+        weights: list[float] = []
+        integers = 0
+        for u, v, value in graph.edges(data=weight, default=1):
+            if isinstance(value, _INTEGER_WEIGHT_TYPES):
+                integers += 1
+            # numpy.float64 subclasses float; other numpy floats do not.
+            elif not isinstance(value, float):
+                return None
+            rows.append(index[u])
+            cols.append(index[v])
+            weights.append(float(value))
+        if 0 < integers < len(weights):
+            return None
+        row = np.asarray(rows, dtype=np.int64)
+        col = np.asarray(cols, dtype=np.int64)
+        data = np.asarray(weights, dtype=np.float64)
+        if not graph.is_directed():
+            row, col = np.concatenate([row, col]), np.concatenate([col, row])
+            data = np.concatenate([data, data])
+        finite = data < np.inf
+        has_infinite = not bool(finite.all())
+        row, col, data = row[finite], col[finite], data[finite]
+        # Keep the smallest weight of each parallel or reversed duplicate.
+        order = np.lexsort((data, col, row))
+        row, col, data = row[order], col[order], data[order]
+        first = np.ones(len(row), dtype=bool)
+        first[1:] = (row[1:] != row[:-1]) | (col[1:] != col[:-1])
+        n = len(nodes)
+        matrix = sparse.csr_matrix((data[first], (row[first], col[first])), shape=(n, n))
+        return cls(graph, weight, nodes, matrix, has_infinite, integers > 0)
+
+    def searches(
+        self,
+        sources: Sequence[Hashable],
+        targets: Sequence[Hashable],
+        cutoff: float | None = None,
+    ) -> Iterator[tuple[SparseSearch, npt.NDArray[np.float64]]]:
+        """
+        Yield searches and target distances in source order.
+
+        Sources are processed in batches so that temporary distance and
+        predecessor arrays stay bounded.
+
+        Parameters
+        ----------
+        sources : sequence of hashable
+            Search origins; repeated origins are searched again.
+        targets : sequence of hashable
+            Destination nodes whose distances are returned for each origin.
+        cutoff : float, optional
+            Maximum explored distance; nodes at the cutoff are included.
+
+        Yields
+        ------
+        tuple[SparseSearch, numpy.ndarray]
+            Search for one origin and its distances to ``targets``.
+        """
+        source_index = np.asarray([self.index[s] for s in sources], dtype=np.int64)
+        target_index = np.asarray([self.index[t] for t in targets], dtype=np.int64)
+        for batch in row_batches(len(source_index), len(self.nodes)):
+            distances, predecessors = csgraph.dijkstra(
+                self.matrix,
+                directed=True,
+                indices=source_index[batch],
+                return_predecessors=True,
+                limit=np.inf if cutoff is None else cutoff,
+            )
+            for offset, position in enumerate(range(batch.start, batch.stop)):
+                search = SparseSearch(
+                    self, sources[position], distances[offset], predecessors[offset], cutoff
+                )
+                yield search, distances[offset][target_index]
+
+    def incoming(self) -> tuple[list[int], list[int], list[float]]:
+        """
+        Return incoming adjacency lists for predecessor checks.
+
+        The lists are built on first use and reused by every search.
+
+        Returns
+        -------
+        tuple[list[int], list[int], list[float]]
+            CSR pointer, source node positions and weights by target node.
+        """
+        if self._incoming is None:
+            reverse = self.matrix.transpose().tocsr()
+            self._incoming = (
+                reverse.indptr.tolist(),
+                reverse.indices.tolist(),
+                reverse.data.tolist(),
+            )
+        return self._incoming
+
+
+class SparseSearch:
+    """
+    Single-origin search from a sparse batch, with NetworkX path parity.
+
+    NetworkX keeps the first predecessor that reaches each node at its final
+    distance. With non-negative weights, that is the settled predecessor with the
+    smallest distance. When several predecessors share that distance, the choice
+    depends on traversal order, so those paths are recomputed by NetworkX with
+    the furthest affected target as the cutoff.
+
+    Parameters
+    ----------
+    network : SparseNetwork
+        Network that produced the search.
+    source : hashable
+        Search origin.
+    distances : numpy.ndarray
+        Distances from the origin to every network node.
+    predecessors : numpy.ndarray
+        SciPy predecessor positions for every network node.
+    cutoff : float, optional
+        Maximum distance explored by the search.
+    """
+
+    def __init__(
+        self,
+        network: SparseNetwork,
+        source: Hashable,
+        distances: npt.NDArray[np.float64],
+        predecessors: npt.NDArray[np.int32],
+        cutoff: float | None = None,
+    ) -> None:
+        """
+        Retain one row of a batched search.
+
+        The row arrays are views into the batch that produced them.
+
+        Parameters
+        ----------
+        network : SparseNetwork
+            Network that produced the search.
+        source : hashable
+            Search origin.
+        distances : numpy.ndarray
+            Distances from the origin to every network node.
+        predecessors : numpy.ndarray
+            SciPy predecessor positions for every network node.
+        cutoff : float, optional
+            Maximum distance explored by the search.
+        """
+        self.network = network
+        self.source = source
+        self.cutoff = cutoff
+        self._distances = distances
+        self._predecessors = predecessors
+        self._source_index = network.index[source]
+        self._unique: set[int] = set()
+        self._fallback: tuple[float, dict[Any, list[Any]]] | None = None
+
+    def distance(self, target: Hashable) -> float:
+        """
+        Return the distance to one target.
+
+        Targets outside the search, including those beyond its cutoff, are
+        reported as unreached.
+
+        Parameters
+        ----------
+        target : hashable
+            Destination node.
+
+        Returns
+        -------
+        float
+            Shortest-path length, or ``inf`` when unreached. Finite lengths on
+            integer-weighted networks are integers, as in NetworkX.
+        """
+        length = float(self._distances[self.network.index[target]])
+        if self.network.integral and length < math.inf:
+            return int(length)
+        return length
+
+    def paths(self, targets: Sequence[Hashable]) -> list[list[Any] | None]:
+        """
+        Return the path NetworkX would select to each target.
+
+        Targets with tied predecessors share one bounded NetworkX search.
+
+        Parameters
+        ----------
+        targets : sequence of hashable
+            Destination nodes.
+
+        Returns
+        -------
+        list
+            Node path, or None for an unreached target, for each target.
+        """
+        paths: list[list[Any] | None] = []
+        pending: list[int] = []
+        for position, target in enumerate(targets):
+            path = self._sparse_path(self.network.index[target])
+            if path is False:
+                pending.append(position)
+                paths.append(None)
+            else:
+                paths.append(path)
+        if pending:
+            bound = max(self.distance(targets[p]) for p in pending)
+            predecessors = self._networkx_predecessors(bound)
+            for position in pending:
+                paths[position] = _first_predecessor_path(
+                    self.source, targets[position], predecessors
+                )
+        return paths
+
+    def _sparse_path(self, target: int) -> list[Any] | Literal[False] | None:
+        """
+        Follow SciPy predecessors when they match the NetworkX choice.
+
+        Each node on the path must have exactly one incoming edge that reaches
+        it at its final distance from a node no further than the SciPy
+        predecessor.
+
+        Parameters
+        ----------
+        target : int
+            Destination node position.
+
+        Returns
+        -------
+        list, None or bool
+            Node path, None for an unreachable target, or False when NetworkX
+            must decide the path.
+        """
+        distances = self._distances
+        if distances[target] == np.inf:
+            # Infinite-weight edges are omitted here but traversed by NetworkX.
+            return False if self.network.has_infinite else None
+        pointer, sources, weights = self.network.incoming()
+        path = [target]
+        node = target
+        while node != self._source_index:
+            previous = int(self._predecessors[node])
+            if node not in self._unique:
+                bound = distances[previous]
+                reached = distances[node]
+                tied = 0
+                for j in range(pointer[node], pointer[node + 1]):
+                    other = sources[j]
+                    if (
+                        other != node
+                        and distances[other] <= bound
+                        and distances[other] + weights[j] == reached
+                    ):
+                        tied += 1
+                if tied != 1:
+                    return False
+                self._unique.add(node)
+            path.append(previous)
+            node = previous
+        nodes = self.network.nodes
+        return [nodes[i] for i in reversed(path)]
+
+    def _networkx_predecessors(self, bound: float) -> dict[Any, list[Any]]:
+        """
+        Return NetworkX predecessors for nodes within ``bound``.
+
+        A cutoff leaves the predecessor order of nodes within it unchanged.
+
+        Parameters
+        ----------
+        bound : float
+            Largest distance whose path is required.
+
+        Returns
+        -------
+        dict
+            NetworkX predecessor lists.
+        """
+        if self._fallback is None or self._fallback[0] < bound:
+            cutoff = self.cutoff if bound == np.inf else bound
+            predecessors, _ = nx.dijkstra_predecessor_and_distance(
+                self.network.graph, self.source, cutoff=cutoff, weight=self.network.weight
+            )
+            self._fallback = (bound, predecessors)
+        return self._fallback[1]
+
+
 class DistanceMetric:
     """
     Encapsulate distance-metric normalisation and distance-matrix creation.
@@ -254,7 +768,8 @@ class DistanceMetric:
         self._net_kdtree: cKDTree | None = None
         self._network_geometry_column: Hashable | None = None
         self._network_edge_coordinates: dict[EdgePair, npt.NDArray[np.float64]] = {}
-        self._active_search: tuple[Any, dict[Any, list[Any]], dict[Any, float]] | None = None
+        self._sparse_network: tuple[SparseNetwork | None] | None = None
+        self._active_search: NetworkXSearch | SparseSearch | None = None
         self._selected_paths: dict[tuple[Any, Any], tuple[float, LineString | None]] = {}
 
     def validate(self, crs: object) -> None:
@@ -390,8 +905,8 @@ class DistanceMetric:
         Yield per-source network distance rows without a dense matrix.
 
         Sources sharing the same snapped network node are grouped so that a
-        single Dijkstra traversal serves all of them, keeping memory usage
-        proportional to one row of distances at a time.
+        single Dijkstra traversal serves all of them. Unbounded traversals are
+        computed in bounded batches on a cached sparse matrix.
 
         Parameters
         ----------
@@ -410,7 +925,6 @@ class DistanceMetric:
             Pair of source row indices sharing one snapped node and the array
             of network distances from that node to every destination.
         """
-        net_nx, _pos, _net_coords, _net_ids, weight_attr = self._get_network_support()
         src_nearest = self._snap_to_network(src_coords)
         dst_nearest = src_nearest if dst_coords is None else self._snap_to_network(dst_coords)
 
@@ -418,14 +932,49 @@ class DistanceMetric:
         for i, node in enumerate(src_nearest):
             groups.setdefault(node, []).append(i)
 
-        for node, indices in groups.items():
-            predecessors, lengths = nx.dijkstra_predecessor_and_distance(
-                net_nx, node, cutoff=cutoff, weight=weight_attr
-            )
-            self._active_search = (node, predecessors, lengths)
-            row = np.asarray([lengths.get(dn, np.inf) for dn in dst_nearest], dtype=float)
+        searches = self._network_searches(list(groups), dst_nearest, cutoff)
+        for (search, row), indices in zip(searches, groups.values(), strict=True):
+            self._active_search = search
             yield indices, row
             self._active_search = None
+
+    def _network_searches(
+        self, sources: list[Any], targets: list[Any], cutoff: float | None
+    ) -> Iterator[tuple[NetworkXSearch | SparseSearch, npt.NDArray[np.floating]]]:
+        """
+        Yield one shortest-path search per source node in order.
+
+        Unbounded searches from several origins share a cached sparse matrix and
+        run in batches. Bounded searches stay local in NetworkX, where they avoid
+        converting the whole network. Both report the same distances and paths.
+
+        Parameters
+        ----------
+        sources : list
+            Network source nodes; repeated nodes are searched again.
+        targets : list
+            Network nodes whose distances are returned for each source.
+        cutoff : float, optional
+            Maximum explored distance. Targets beyond it receive ``numpy.inf``.
+
+        Yields
+        ------
+        tuple
+            Search for one source and its distances to ``targets``.
+        """
+        graph, _pos, _coords, _ids, weight = self._get_network_support()
+        # Conversion costs about one unbounded NetworkX search, so a single
+        # origin is searched directly unless a matrix already exists.
+        if cutoff is None and (len(sources) > 1 or self._sparse_network is not None):
+            if self._sparse_network is None:
+                self._sparse_network = (SparseNetwork.from_graph(graph, weight),)
+            network = self._sparse_network[0]
+            if network is not None:
+                yield from network.searches(sources, targets)
+                return
+        for source in sources:
+            search = NetworkXSearch(graph, source, weight, cutoff)
+            yield search, search.distances(targets)
 
     def _remember_targets(self, coords: npt.NDArray[np.floating]) -> None:
         """
@@ -438,48 +987,44 @@ class DistanceMetric:
         coords : numpy.ndarray
             Selected destination coordinates.
         """
-        assert self._active_search is not None
-        source, predecessors, lengths = self._active_search
-        for target in self._snap_to_network(coords):
-            key = (source, target)
-            if key not in self._selected_paths:
-                self._selected_paths[key] = (
-                    lengths.get(target, float("inf")),
-                    self._path_geometry(source, target, predecessors),
-                )
+        search = self._active_search
+        assert search is not None
+        source = search.source
+        missing = [
+            target
+            for target in dict.fromkeys(self._snap_to_network(coords))
+            if (source, target) not in self._selected_paths
+        ]
+        for target, path in zip(missing, search.paths(missing), strict=True):
+            self._selected_paths[source, target] = (
+                search.distance(target),
+                self._path_geometry(path),
+            )
 
-    def _path_geometry(
-        self, source: object, target: object, predecessors: dict[Any, list[Any]]
-    ) -> LineString | None:
+    def _path_geometry(self, path: list[Any] | None) -> LineString | None:
         """
-        Reconstruct the first shortest network path.
+        Build the geometry of one shortest network path.
 
-        Use the first predecessor to preserve the path chosen by NetworkX strict distance improvements.
+        Paths follow the first NetworkX predecessor of each node, which is the
+        path chosen by strict distance improvements.
         Retain intermediate vertices in traversal order and reuse the coordinate
         arrays of roads shared by multiple paths.
 
         Parameters
         ----------
-        source : object
-            Snapped source node ID.
-        target : object
-            Snapped destination node ID.
-        predecessors : dict
-            Predecessor lists from a single Dijkstra traversal.
+        path : list or None
+            Network nodes from the snapped source to the snapped destination.
 
         Returns
         -------
         LineString or None
             Network geometry, or None for a missing or zero-edge path.
         """
-        if target == source or target not in predecessors:
+        if path is None or len(path) < 2:
             return None
-        path = [target]
-        while path[-1] != source:
-            path.append(predecessors[path[-1]][0])
         graph, positions, _coords, _ids, _weight = self._get_network_support()
-        coordinates = [np.asarray([positions[source]], dtype=np.float64)]
-        for u, v in pairwise(reversed(path)):
+        coordinates = [np.asarray([positions[path[0]]], dtype=np.float64)]
+        for u, v in pairwise(path):
             edge = (u, v)
             if edge not in self._network_edge_coordinates:
                 geometry = graph[u][v].get(self._network_geometry_column)
@@ -794,37 +1339,47 @@ class GraphBuilder:
         assert self.coords is not None
         assert self.node_ids is not None
 
-        net_nx, _pos, _net_coords, _net_ids_list, weight_attr = self.metric._get_network_support()
-
         snapped = self.metric._snap_to_network(self.coords)
         nearest = {self.node_ids[i]: s for i, s in enumerate(snapped)}
+        selected = self.metric._selected_paths
 
         # Group edges by snapped source node so co-located sources share a Dijkstra
         edges_by_src_nn: dict[Any, list[int]] = {}
         for i, (u, _v) in enumerate(edges):
             edges_by_src_nn.setdefault(nearest[u], []).append(i)
 
-        use_weight = weight_attr
         weights = [0.0] * len(edges)
         geoms = [LineString()] * len(edges)
 
-        for src_nn, indices in edges_by_src_nn.items():
-            missing = any(
-                (src_nn, nearest[edges[i][1]]) not in self.metric._selected_paths for i in indices
-            )
-            if missing:
-                predecessors, dists = nx.dijkstra_predecessor_and_distance(
-                    net_nx, src_nn, cutoff=self.network_cutoff, weight=use_weight
+        # Search only from sources with at least one path not selected earlier.
+        paths: dict[EdgePair, tuple[float, LineString | None]] = {}
+        sources = [
+            src_nn
+            for src_nn, indices in edges_by_src_nn.items()
+            if any((src_nn, nearest[edges[i][1]]) not in selected for i in indices)
+        ]
+        searches = self.metric._network_searches(sources, [], self.network_cutoff)
+        for search, _row in searches:
+            src_nn = search.source
+            targets = list(
+                dict.fromkeys(
+                    nearest[edges[i][1]]
+                    for i in edges_by_src_nn[src_nn]
+                    if (src_nn, nearest[edges[i][1]]) not in selected
                 )
+            )
+            for dst_nn, path in zip(targets, search.paths(targets), strict=True):
+                paths[src_nn, dst_nn] = (
+                    search.distance(dst_nn),
+                    self.metric._path_geometry(path),
+                )
+
+        for src_nn, indices in edges_by_src_nn.items():
             for i in indices:
                 u, v = edges[i]
                 dst_nn = nearest[v]
-                cached = self.metric._selected_paths.get((src_nn, dst_nn))
-                if cached is None:
-                    distance = dists.get(dst_nn, float("inf"))
-                    geometry = self.metric._path_geometry(src_nn, dst_nn, predecessors)
-                else:
-                    distance, geometry = cached
+                cached = selected.get((src_nn, dst_nn))
+                distance, geometry = cached if cached is not None else paths[src_nn, dst_nn]
                 weights[i] = self.dm[idx_map[u], idx_map[v]] if self.dm is not None else distance
                 geoms[i] = (
                     geometry
@@ -1931,13 +2486,9 @@ def waxman_graph(
         # Consume the random stream in original point order, sharing each
         # row's traversal with geometry construction.
         snapped = metric._snap_to_network(builder.coords)
-        graph, _pos, _coords, _ids, weight = metric._get_network_support()
-        for i, source in enumerate(snapped):
-            predecessors, lengths = nx.dijkstra_predecessor_and_distance(
-                graph, source, weight=weight
-            )
-            metric._active_search = (source, predecessors, lengths)
-            distances = np.asarray([lengths.get(target, np.inf) for target in snapped])
+        searches = metric._network_searches(snapped, snapped, None)
+        for i, (search, distances) in enumerate(searches):
+            metric._active_search = search
             targets = _waxman_targets(distances, rng.random(n), i, beta, r0)
             metric._remember_targets(builder.coords[targets])
             edges.extend((builder.node_ids[i], builder.node_ids[j]) for j in targets)

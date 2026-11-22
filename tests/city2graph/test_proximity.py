@@ -18,6 +18,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.sparse import csgraph
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
 from shapely import get_coordinates
@@ -82,6 +83,20 @@ def _make_chain_points_and_network() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame
         crs=pts.crs,
     )
     return pts, net
+
+
+def _count_searches(monkeypatch: pytest.MonkeyPatch) -> tuple[Mock, Mock]:
+    """Record sparse and NetworkX shortest-path searches."""
+    sparse_search = Mock(wraps=csgraph.dijkstra)
+    networkx_search = Mock(wraps=nx.dijkstra_predecessor_and_distance)
+    monkeypatch.setattr(csgraph, "dijkstra", sparse_search)
+    monkeypatch.setattr(nx, "dijkstra_predecessor_and_distance", networkx_search)
+    return sparse_search, networkx_search
+
+
+def _searched_origins(search: Mock) -> int:
+    """Count origins passed to sparse shortest-path searches."""
+    return sum(len(call.kwargs["indices"]) for call in search.call_args_list)
 
 
 def _undirected_edge_weights(edges: gpd.GeoDataFrame) -> dict[tuple[object, object], float]:
@@ -393,13 +408,15 @@ class TestKnnGraph:
             geometry=[LineString([(i, 0), (i + 1, 0)]) for i in range(30)], crs=3857
         )
         points = gpd.GeoDataFrame(geometry=[Point(i, 0) for i in [0, 0, 1, 3, 7]], crs=3857)
-        search = Mock(wraps=nx.dijkstra_predecessor_and_distance)
-        monkeypatch.setattr(nx, "dijkstra_predecessor_and_distance", search)
+        sparse_search, networkx_search = _count_searches(monkeypatch)
         monkeypatch.setattr(
             nx, "single_source_dijkstra", Mock(side_effect=AssertionError("Full paths retained"))
         )
         _, edges = knn_graph(points, k=1, distance_metric="network", network_gdf=roads)
-        assert search.call_count == 4
+        # Unique shortest paths are traced from the sparse search without NetworkX.
+        assert sparse_search.call_count == 1
+        assert _searched_origins(sparse_search) == 4
+        assert networkx_search.call_count == 0
         assert len(edges) == 4
         assert set(edges["weight"]) == {0, 1, 2, 4}
 
@@ -1245,10 +1262,10 @@ class TestBridgeNodes:
             str(i): gpd.GeoDataFrame(geometry=[Point(2 * i, 0), Point(2 * i + 1, 0)], crs=3857)
             for i in range(3)
         }
-        search = Mock(wraps=nx.dijkstra_predecessor_and_distance)
-        monkeypatch.setattr(nx, "dijkstra_predecessor_and_distance", search)
+        sparse_search, networkx_search = _count_searches(monkeypatch)
         _, edges = bridge_nodes(layers, k=1, distance_metric="network", network_gdf=roads)
-        assert search.call_count == 6
+        assert _searched_origins(sparse_search) == 6
+        assert networkx_search.call_count == 0
         assert len(edges) == 6
         assert all(len(frame) == 2 for frame in edges.values())
 
@@ -1418,6 +1435,79 @@ def test_network_weighted_graphs(
     pd.testing.assert_index_equal(nodes.index, points.index)
     assert len(edges) == len(expected_weights)
     assert _undirected_edge_weights(edges) == expected_weights
+
+
+def _without_sparse_network(*_args: object) -> None:
+    """Keep every network search in NetworkX."""
+
+
+def _parity_network(case: str) -> gpd.GeoDataFrame:
+    """Return a seeded grid network with one distance edge case."""
+    rng = np.random.default_rng(3)
+    lines = [LineString([(x, y), (x + 1, y)]) for x in range(5) for y in range(6)]
+    lines += [LineString([(x, y), (x, y + 1)]) for x in range(6) for y in range(5)]
+    cost: np.ndarray = np.ones(len(lines)) if case == "ties" else rng.uniform(1, 2, len(lines))
+    if case == "integer-weight":
+        cost = rng.integers(1, 4, len(lines))
+    if case == "zero-weight":
+        cost[rng.choice(len(lines), 15, replace=False)] = 0
+    elif case == "infinite-weight":
+        cost[rng.choice(len(lines), 10, replace=False)] = np.inf
+        # NetworkX also traverses an impassable edge, reporting an infinite distance.
+        lines += [LineString([(5, 5), (20, 20)]), LineString([(20, 20), (21, 20)])]
+        cost = np.concatenate([cost, [np.inf, 1]])
+    elif case == "parallel":
+        # Duplicate rows join the same nodes with a second cost.
+        lines += lines[:20]
+        cost = np.concatenate([cost, rng.uniform(0.5, 2.5, 20)])
+    elif case == "unreachable":
+        lines += [LineString([(20, 20), (21, 20)]), LineString([(21, 20), (21, 21)])]
+        cost = np.concatenate([cost, [1, 1]])
+    return gpd.GeoDataFrame({"cost": cost}, geometry=lines, crs=3857)
+
+
+def _parity_points(case: str, count: int, seed: int) -> gpd.GeoDataFrame:
+    """Return seeded points on the parity network, some in a separate component."""
+    xy = np.random.default_rng(seed).uniform(0, 5, (count, 2))
+    if case in {"unreachable", "infinite-weight"}:
+        xy[::4] = xy[::4] / 5 + 20
+    return gpd.GeoDataFrame(geometry=gpd.points_from_xy(*xy.T), crs=3857)
+
+
+def _network_proximity_results(case: str) -> list[gpd.GeoDataFrame]:
+    """Run every network proximity builder on one parity input."""
+    network = {"distance_metric": "network", "network_gdf": _parity_network(case)}
+    network["network_weight"] = "cost"
+    points = _parity_points(case, 24, 0)
+    others = _parity_points(case, 10, 1)
+    results = [
+        knn_graph(points, k=4, **network)[1],
+        knn_graph(points, k=3, target_gdf=others, **network)[1],
+        waxman_graph(points, beta=0.8, r0=2, seed=5, **network)[1],
+        euclidean_minimum_spanning_tree(points, **network)[1],
+        fixed_radius_graph(points, radius=2.0, **network)[1],
+    ]
+    _, bridges = bridge_nodes({"a": points, "b": others}, k=2, **network)
+    return results + list(bridges.values())
+
+
+@pytest.mark.parametrize(
+    "case", ["ties", "integer-weight", "zero-weight", "infinite-weight", "parallel", "unreachable"]
+)
+def test_network_searches_match_networkx(monkeypatch: pytest.MonkeyPatch, case: str) -> None:
+    """Sparse network searches keep the NetworkX distances, edges and path geometries."""
+    with monkeypatch.context() as patch:
+        patch.setattr("city2graph.proximity.SparseNetwork.from_graph", _without_sparse_network)
+        expected = _network_proximity_results(case)
+    sparse_search, _ = _count_searches(monkeypatch)
+    actual = _network_proximity_results(case)
+
+    assert sparse_search.call_count > 0
+    for result, reference in zip(actual, expected, strict=True):
+        pd.testing.assert_index_equal(result.index, reference.index)
+        np.testing.assert_array_equal(result["weight"], reference["weight"])
+        assert result["weight"].dtype == reference["weight"].dtype
+        assert list(result.geometry.to_wkb()) == list(reference.geometry.to_wkb())
 
 
 @pytest.mark.parametrize(

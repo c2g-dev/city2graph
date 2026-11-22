@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 ### Changed
+- Sped up unbounded network-distance searches from several origins in `knn_graph()`, `waxman_graph()`, `euclidean_minimum_spanning_tree()`, `bridge_nodes()` and their directed variants. The network is converted once to a SciPy sparse matrix, and origins are searched in bounded batches. Distances, reachability and path geometries are unchanged, including exact shortest-path ties, which are resolved by NetworkX. Bounded searches, such as fixed-radius graphs, still use NetworkX.
 
 ### Deprecated
 
@@ -19,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 ### Documentation
+- Added a network-distance backend benchmark covering graph conversion, search and result generation for small and large origin sets, and a public network kNN benchmark on a jittered road grid.
 
 
 ## 1.1.0 (2026-11-08)
