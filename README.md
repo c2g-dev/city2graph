@@ -153,8 +153,7 @@ The same citation is recorded in the [CITATION.cff](CITATION.cff) file in this r
 
 ## Contributing
 
-Contributions are welcome. The [Contributing Guide](docs/contributing.md)
-contains the complete development and quality requirements.
+Contributions are welcome. Every pull request must have a human contributor actively in the loop who has personally verified the changes and run the full local checks; autonomous or unreviewed AI-agent pull requests are not accepted. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Contributing Guide](docs/contributing.md) for the complete requirements.
 
 ## Documentation
 
