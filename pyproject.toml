@@ -185,6 +185,9 @@ only-include = [
     "SECURITY.md",
 ]
 
+[tool.coverage.run]
+core = "sysmon"
+
 [tool.coverage.report]
 exclude_also = ["@overload", "if TYPE_CHECKING:"]
 

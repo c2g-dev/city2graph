@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import tempfile
 import typing
+import warnings
 import zipfile
-from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 
-import duckdb
 import geopandas as gpd
 import networkx as nx
 import pandas as pd
@@ -26,9 +25,9 @@ from shapely.geometry import Polygon
 from shapely.geometry.base import BaseGeometry
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from collections.abc import Iterable
 
-GtfsConnectionFactory = Callable[[dict[str, pd.DataFrame]], duckdb.DuckDBPyConnection]
 
 # Public constants used in multiple test modules
 TOLERANCE = 1e-6
@@ -256,26 +255,6 @@ def assert_valid_proximity_result(
         assert {"weight", "geometry"}.issubset(edges.columns)
 
 
-def assert_network_metric_requires_network_gdf(
-    func: Callable[..., object],
-    gdf: gpd.GeoDataFrame,
-    **kwargs: object,
-) -> None:
-    """Assert function raises when network metric used without network_gdf.
-
-    Parameters
-    ----------
-    func : Callable
-        Proximity function to test
-    gdf : gpd.GeoDataFrame
-        GeoDataFrame to pass as first argument
-    **kwargs
-        Additional keyword arguments for the function
-    """
-    with pytest.raises(ValueError, match="network_gdf is required"):
-        func(gdf, distance_metric="network", **kwargs)
-
-
 def assert_valid_gdf(gdf: gpd.GeoDataFrame, expected_empty: bool = False) -> None:
     """Perform basic validity checks used in multiple tests."""
     assert isinstance(gdf, gpd.GeoDataFrame)
@@ -294,20 +273,6 @@ def assert_crs_consistency(*gdfs: gpd.GeoDataFrame) -> None:
         return
     ref = non_empty[0].crs
     assert all(g.crs == ref for g in non_empty[1:])
-
-
-def assert_roundtrip_consistency(
-    orig_nodes: gpd.GeoDataFrame,
-    orig_edges: gpd.GeoDataFrame,
-    conv_nodes: gpd.GeoDataFrame,
-    conv_edges: gpd.GeoDataFrame,
-) -> None:
-    """Roundtrip conversions preserve sizes, indices, and CRS."""
-    assert_crs_consistency(orig_nodes, conv_nodes, orig_edges, conv_edges)
-    assert len(orig_nodes) == len(conv_nodes)
-    assert len(orig_edges) == len(conv_edges)
-    pd.testing.assert_index_equal(orig_nodes.index, conv_nodes.index)
-    pd.testing.assert_index_equal(orig_edges.index, conv_edges.index)
 
 
 def assert_valid_nx_graph(
@@ -414,3 +379,17 @@ def temporary_gtfs_zip(files: dict[str, str]) -> typing.Generator[str, None, Non
         yield temp_file.name
     finally:
         Path(temp_file.name).unlink(missing_ok=True)
+
+
+def assert_as_nx_deprecation(builder: Callable[..., Any], *args: object, **kwargs: object) -> None:
+    """Explicit values warn at the call site, including False. Omission stays silent."""
+    for value in (False, True):
+        with pytest.warns(DeprecationWarning, match="`as_nx` is deprecated") as caught:
+            builder(*args, **kwargs, as_nx=value)
+        deprecations = [item for item in caught if issubclass(item.category, DeprecationWarning)]
+        assert len(deprecations) == 1
+        assert deprecations[0].filename == __file__
+    with warnings.catch_warnings(record=True) as implicit:
+        warnings.simplefilter("always")
+        builder(*args, **kwargs)
+    assert not [item for item in implicit if issubclass(item.category, DeprecationWarning)]

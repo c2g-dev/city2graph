@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import cast
@@ -24,8 +23,7 @@ from shapely.geometry import Polygon
 from city2graph import utils
 from city2graph.utils import gdf_to_nx
 from city2graph.utils import spatial as spatial_utils
-from tests import helpers
-from tests.utils.helpers import BaseGraphTest
+from tests.city2graph import helpers
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -63,8 +61,47 @@ def tessellation_barriers_gdf(sample_crs: str) -> gpd.GeoDataFrame:
     )
 
 
-class TestTessellation(BaseGraphTest):
-    """Test tessellation creation functionality."""
+@pytest.fixture
+def disconnected_streets(sample_crs: str) -> nx.Graph:
+    """Two separate one-unit streets, with a centre on each."""
+    graph = nx.Graph(crs=sample_crs)
+    for node, x in enumerate([0, 1, 10, 11], start=1):
+        graph.add_node(node, pos=(x, 0))
+    graph.add_edge(1, 2, length=1.0)
+    graph.add_edge(3, 4, length=1.0)
+    return graph
+
+
+@pytest.fixture
+def isochrone_ring_graph() -> nx.Graph:
+    """Build a square road circuit whose buffer encloses a hole."""
+    graph = nx.cycle_graph(4)
+    graph.graph["crs"] = "EPSG:27700"
+    positions = [(0, 0), (2000, 0), (2000, 2000), (0, 2000)]
+    nx.set_node_attributes(graph, dict(enumerate(positions)), "pos")
+    for source, target in graph.edges:
+        graph.edges[source, target].update(
+            length=1.0,
+            geometry=LineString([positions[source], positions[target]]),
+        )
+    return graph
+
+
+@pytest.fixture
+def single_enclosure(
+    monkeypatch: pytest.MonkeyPatch, sample_buildings_gdf: gpd.GeoDataFrame
+) -> None:
+    """Supply one boundary while testing tessellation retries and fallbacks."""
+    enclosure = gpd.GeoDataFrame(
+        {"eID": [1]},
+        geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
+        crs=sample_buildings_gdf.crs,
+    )
+    monkeypatch.setattr(momepy, "enclosures", mock.Mock(return_value=enclosure))
+
+
+class TestCreateTessellation:
+    """Tests for ``create_tessellation``."""
 
     @pytest.mark.parametrize(
         ("geometry_fixture", "barriers_fixture", "expect_empty"),
@@ -87,7 +124,7 @@ class TestTessellation(BaseGraphTest):
 
         tessellation = utils.create_tessellation(geometry, primary_barriers=barriers)
 
-        self.assert_valid_gdf(tessellation, expect_empty)
+        helpers.assert_valid_gdf(tessellation, expect_empty)
         if not expect_empty:
             helpers.assert_has_columns(tessellation, ["tess_id"])
             assert tessellation.crs == geometry.crs
@@ -99,13 +136,13 @@ class TestTessellation(BaseGraphTest):
     ) -> None:
         """Degenerate geometries or barriers should not raise."""
         single_result = utils.create_tessellation(single_point_geom_gdf)
-        self.assert_valid_gdf(single_result, expected_empty=True)
+        helpers.assert_valid_gdf(single_result, expected_empty=True)
 
         barrier_result = utils.create_tessellation(
             single_point_geom_gdf,
             primary_barriers=tessellation_barriers_gdf,
         )
-        self.assert_valid_gdf(barrier_result, expected_empty=True)
+        helpers.assert_valid_gdf(barrier_result, expected_empty=True)
 
     def test_tessellation_empty_with_barriers(self, empty_gdf: gpd.GeoDataFrame) -> None:
         """Even with barriers an empty geometry should stay empty."""
@@ -114,7 +151,7 @@ class TestTessellation(BaseGraphTest):
             crs=empty_gdf.crs,
         )
         result = utils.create_tessellation(empty_gdf, primary_barriers=barriers)
-        self.assert_valid_gdf(result, expected_empty=True)
+        helpers.assert_valid_gdf(result, expected_empty=True)
         assert list(result.columns) == ["geometry", "enclosure_index", "tess_id"]
 
     @pytest.mark.parametrize("failure_mode", ["geos_error", "concat_error", "no_enclosures"])
@@ -249,6 +286,7 @@ class TestTessellation(BaseGraphTest):
             assert result.empty
             assert result.crs == sample_crs
 
+    @pytest.mark.usefixtures("single_enclosure")
     def test_tessellation_returns_empty_when_momepy_concat_fails_with_enclosures(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -257,15 +295,6 @@ class TestTessellation(BaseGraphTest):
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Enclosed tessellation should warn and return an empty schema on concat failures."""
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
 
         def raise_concat_error(**_kwargs: object) -> gpd.GeoDataFrame:
             msg = "No objects to concatenate"
@@ -283,6 +312,7 @@ class TestTessellation(BaseGraphTest):
         assert list(result.columns) == ["geometry", "enclosure_index", "tess_id"]
         assert "returning empty GeoDataFrame" in caplog.text
 
+    @pytest.mark.usefixtures("single_enclosure")
     def test_enclosed_tessellation_retries_with_grid_size_on_geometry_type_error(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -291,16 +321,6 @@ class TestTessellation(BaseGraphTest):
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A geometry-type TypeError should first retry with a coarser grid_size."""
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
-
         calls: list[tuple[object, object]] = []
 
         def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
@@ -329,6 +349,7 @@ class TestTessellation(BaseGraphTest):
         assert calls == [(None, None), (None, 1e-3)]
         assert "retrying with grid_size=1e-3" in caplog.text
 
+    @pytest.mark.usefixtures("single_enclosure")
     def test_enclosed_tessellation_falls_back_to_jitter_when_grid_size_fails(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -342,16 +363,6 @@ class TestTessellation(BaseGraphTest):
         the third attempt reaches momepy with the original options and can only
         be told apart from the first by the geometry it receives.
         """
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
-
         calls: list[tuple[object, object]] = []
         geometries: list[gpd.GeoDataFrame] = []
 
@@ -581,6 +592,7 @@ class TestTessellation(BaseGraphTest):
         assert set(result["enclosure_index"]) == {1}
         assert "Dropping 1 enclosure(s)" in caplog.text
 
+    @pytest.mark.usefixtures("single_enclosure")
     def test_enclosed_tessellation_salvages_geometry_collections(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -589,16 +601,6 @@ class TestTessellation(BaseGraphTest):
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """GeometryCollection cells should be reduced to their polygonal parts."""
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
-
         polygon_part = Polygon([(1, 1), (2, 1), (2, 2), (1, 2)])
 
         def fake_enclosed_tessellation(**_kwargs: object) -> gpd.GeoDataFrame:
@@ -626,6 +628,7 @@ class TestTessellation(BaseGraphTest):
         assert result.geometry.iloc[1].equals(polygon_part)
         assert "GeometryCollection cell(s)" in caplog.text
 
+    @pytest.mark.usefixtures("single_enclosure")
     def test_enclosed_tessellation_reraises_unrelated_type_error(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -633,15 +636,6 @@ class TestTessellation(BaseGraphTest):
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A TypeError that does not report an incorrect geometry type should propagate."""
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
 
         def raise_unrelated(**_kwargs: object) -> gpd.GeoDataFrame:
             msg = "something else entirely"
@@ -655,6 +649,7 @@ class TestTessellation(BaseGraphTest):
                 primary_barriers=sample_segments_gdf,
             )
 
+    @pytest.mark.usefixtures("single_enclosure")
     def test_enclosed_tessellation_retries_with_coarser_grid_size_on_geos_error(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -663,16 +658,6 @@ class TestTessellation(BaseGraphTest):
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A GEOS topology error should trigger a retry with a coarser grid_size."""
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
-
         calls: list[object] = []
 
         def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
@@ -700,6 +685,7 @@ class TestTessellation(BaseGraphTest):
         assert calls[-1] == 1e-3  # retried with coarser grid_size
         assert "retrying with coarser" in caplog.text
 
+    @pytest.mark.usefixtures("single_enclosure")
     def test_enclosed_tessellation_returns_empty_when_geos_error_persists(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -708,15 +694,6 @@ class TestTessellation(BaseGraphTest):
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A GEOS error that persists at coarser precision degrades to empty output."""
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
 
         def always_raise(**_kwargs: object) -> gpd.GeoDataFrame:
             msg = "TopologyException: side location conflict at 0 0"
@@ -733,6 +710,7 @@ class TestTessellation(BaseGraphTest):
         assert result.empty
         assert "returning empty" in caplog.text
 
+    @pytest.mark.usefixtures("single_enclosure")
     def test_enclosed_tessellation_degrades_to_empty_with_pinned_grid_size(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -741,16 +719,6 @@ class TestTessellation(BaseGraphTest):
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A GEOS error with a caller-pinned grid_size degrades without overriding it."""
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
-
         calls: list[object] = []
 
         def raise_geos(**kwargs: object) -> gpd.GeoDataFrame:
@@ -774,6 +742,7 @@ class TestTessellation(BaseGraphTest):
         assert "retrying with jittered geometry" in caplog.text
         assert "returning empty" in caplog.text
 
+    @pytest.mark.usefixtures("single_enclosure")
     def test_enclosed_tessellation_pinned_grid_size_retries_with_jitter(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -782,16 +751,6 @@ class TestTessellation(BaseGraphTest):
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """With a pinned grid_size, a geometry-type TypeError skips to the jitter rung."""
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
-
         calls: list[tuple[object, object]] = []
 
         def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
@@ -820,6 +779,7 @@ class TestTessellation(BaseGraphTest):
         assert calls == [(None, 1e-5), (None, 1e-5)]
         assert "retrying with jittered geometry" in caplog.text
 
+    @pytest.mark.usefixtures("single_enclosure")
     def test_enclosed_tessellation_reraises_unknown_error_on_retry(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -827,15 +787,6 @@ class TestTessellation(BaseGraphTest):
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """An unknown error raised during a retry must propagate."""
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
 
         def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
             if kwargs.get("grid_size") is None:
@@ -911,125 +862,52 @@ class TestTessellation(BaseGraphTest):
         assert "keeping the original cells" in caplog.text
         assert "Dropping 1 enclosure(s)" in caplog.text
 
-    def test_enclosed_tessellation_degrades_when_concat_error_on_retry(
+    @pytest.mark.parametrize(
+        ("retry_error", "expected_grid_sizes"),
+        [
+            pytest.param(ValueError("No objects to concatenate"), [None, 1e-3], id="empty-retry"),
+            pytest.param(
+                shapely.errors.GEOSException("TopologyException: side location conflict at 0 0"),
+                [None, 1e-3, None],
+                id="geos-retry",
+            ),
+            pytest.param(
+                TypeError("One of the Geometry inputs is of incorrect geometry type."),
+                [None, 1e-3, None],
+                id="type-error-retry",
+            ),
+        ],
+    )
+    def test_enclosed_tessellation_retry_exhaustion(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
         sample_segments_gdf: gpd.GeoDataFrame,
         caplog: pytest.LogCaptureFixture,
         monkeypatch: pytest.MonkeyPatch,
+        retry_error: Exception,
+        expected_grid_sizes: list[float | None],
     ) -> None:
-        """A concat failure during the grid_size retry degrades to empty output."""
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
+        """Return a valid empty tessellation after the available retries fail."""
+        enclosures = gpd.GeoDataFrame(
+            {"eID": [1]},
+            geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
+            crs=sample_buildings_gdf.crs,
+        )
+        first_error = TypeError("One of the Geometry inputs is of incorrect geometry type.")
+        tessellate = mock.Mock(side_effect=[first_error, retry_error, first_error])
+        monkeypatch.setattr(momepy, "enclosures", mock.Mock(return_value=enclosures))
+        monkeypatch.setattr(momepy, "enclosed_tessellation", tessellate)
+
+        result = utils.create_tessellation(
+            sample_buildings_gdf, primary_barriers=sample_segments_gdf
         )
 
-        calls: list[tuple[object, object]] = []
-
-        def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
-            calls.append((kwargs.get("simplify"), kwargs.get("grid_size")))
-            if kwargs.get("grid_size") is None:
-                msg = "One of the Geometry inputs is of incorrect geometry type."
-                raise TypeError(msg)
-            msg = "No objects to concatenate"
-            raise ValueError(msg)
-
-        monkeypatch.setattr(momepy, "enclosed_tessellation", fake_enclosed_tessellation)
-
-        with caplog.at_level("WARNING"):
-            result = utils.create_tessellation(
-                sample_buildings_gdf,
-                primary_barriers=sample_segments_gdf,
-            )
-
         assert result.empty
-        assert calls == [(None, None), (None, 1e-3)]
-        assert "returning empty GeoDataFrame" in caplog.text
-
-    def test_enclosed_tessellation_degrades_when_geos_error_during_grid_size_retry(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        caplog: pytest.LogCaptureFixture,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """A GEOS error during the grid_size retry of a TypeError degrades to empty."""
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
-
-        calls: list[tuple[object, object]] = []
-
-        def fake_enclosed_tessellation(**kwargs: object) -> gpd.GeoDataFrame:
-            calls.append((kwargs.get("simplify"), kwargs.get("grid_size")))
-            if kwargs.get("grid_size") is None:
-                msg = "One of the Geometry inputs is of incorrect geometry type."
-                raise TypeError(msg)
-            msg = "TopologyException: side location conflict at 0 0"
-            raise shapely.errors.GEOSException(msg)
-
-        monkeypatch.setattr(momepy, "enclosed_tessellation", fake_enclosed_tessellation)
-
-        with caplog.at_level("WARNING"):
-            result = utils.create_tessellation(
-                sample_buildings_gdf,
-                primary_barriers=sample_segments_gdf,
-            )
-
-        assert result.empty
-        # After the coarse-grid rung the ladder resets to a jittered attempt
-        # at default options before degrading.
-        assert calls == [(None, None), (None, 1e-3), (None, None)]
-        assert "returning empty" in caplog.text
-
-    def test_enclosed_tessellation_degrades_when_type_error_persists(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        caplog: pytest.LogCaptureFixture,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """A geometry-type TypeError persisting through every rung degrades to empty."""
-        monkeypatch.setattr(
-            momepy,
-            "enclosures",
-            lambda **_kwargs: gpd.GeoDataFrame(
-                {"eID": [1]},
-                geometry=[Polygon([(0, 0), (5, 0), (5, 5), (0, 5)])],
-                crs=sample_buildings_gdf.crs,
-            ),
-        )
-
-        calls: list[tuple[object, object]] = []
-
-        def raise_type_error(**kwargs: object) -> gpd.GeoDataFrame:
-            calls.append((kwargs.get("simplify"), kwargs.get("grid_size")))
-            msg = "One of the Geometry inputs is of incorrect geometry type."
-            raise TypeError(msg)
-
-        monkeypatch.setattr(momepy, "enclosed_tessellation", raise_type_error)
-
-        with caplog.at_level("WARNING"):
-            result = utils.create_tessellation(
-                sample_buildings_gdf,
-                primary_barriers=sample_segments_gdf,
-            )
-
-        assert result.empty
-        # grid_size, then one jittered attempt at default options before
-        # degrading.
-        assert calls == [(None, None), (None, 1e-3), (None, None)]
+        assert result.crs == sample_buildings_gdf.crs
+        assert [
+            call.kwargs.get("grid_size") for call in tessellate.call_args_list
+        ] == expected_grid_sizes
+        assert all(call.kwargs.get("simplify") is None for call in tessellate.call_args_list)
         assert "returning empty" in caplog.text
 
     def test_enclosed_tessellation_overlap_retry_failure_drops_enclosures(
@@ -1225,23 +1103,180 @@ class TestTessellation(BaseGraphTest):
         remote_centroid = buildings.geometry.iloc[1].centroid
         assert result.geometry.contains(remote_centroid).sum() == 1
 
+    def test_create_tessellation_reraises_unexpected_value_error(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Unexpected momepy ValueError instances should still surface to callers."""
 
-class TestGraphAnalysis(BaseGraphTest):
-    """Test graph analysis operations like filtering and isochrone generation."""
+        def raise_boom(*_args: object, **_kwargs: object) -> object:
+            msg = "boom"
+            error = ValueError(msg)
+            raise error
 
-    @pytest.fixture
-    def isochrone_ring_graph(self) -> nx.Graph:
-        """Build a square road circuit whose buffer encloses a hole."""
-        graph = nx.cycle_graph(4)
-        graph.graph["crs"] = "EPSG:27700"
-        positions = [(0, 0), (2000, 0), (2000, 2000), (0, 2000)]
-        nx.set_node_attributes(graph, dict(enumerate(positions)), "pos")
-        for source, target in graph.edges:
-            graph.edges[source, target].update(
-                length=1.0,
-                geometry=LineString([positions[source], positions[target]]),
+        monkeypatch.setattr("city2graph.utils.spatial.momepy.enclosed_tessellation", raise_boom)
+
+        with pytest.raises(ValueError, match="boom"):
+            utils.create_tessellation(sample_buildings_gdf, primary_barriers=sample_segments_gdf)
+
+
+class TestFilterGraphByDistance:
+    """Tests for ``filter_graph_by_distance``."""
+
+    @pytest.mark.parametrize(
+        ("graph_fixture", "as_nx", "center_fixture", "distance", "expect_empty"),
+        [
+            ("sample_segments_gdf", False, "mg_center_point", 100.0, False),
+            ("sample_segments_gdf", False, "mg_center_point", 0.01, True),
+            ("sample_nx_graph", True, "sample_nodes_gdf", 1.0, False),
+            ("empty_gdf", False, "mg_center_point", 100.0, True),
+        ],
+    )
+    def test_graph_distance_filtering(
+        self,
+        graph_fixture: str,
+        as_nx: bool,
+        center_fixture: str,
+        distance: float,
+        expect_empty: bool,
+        request: pytest.FixtureRequest,
+    ) -> None:
+        """Test filtering graphs by distance from center points."""
+        graph = request.getfixturevalue(graph_fixture)
+        center_source = request.getfixturevalue(center_fixture)
+        center_point = helpers.get_center_point(center_source)
+
+        reachable = utils.filter_graph_by_distance(
+            graph,
+            center_point=center_point,
+            threshold=distance,
+            edge_attr="length",
+        )
+
+        if as_nx:
+            assert isinstance(reachable, nx.Graph)
+            assert (reachable.number_of_edges() == 0) == expect_empty
+        else:
+            helpers.assert_valid_gdf(reachable, expect_empty)
+
+    @pytest.mark.parametrize("as_geoseries", [False, True])
+    def test_multi_center_reaches_both_streets(
+        self, disconnected_streets: nx.Graph, as_geoseries: bool
+    ) -> None:
+        """Centres on different streets contribute both connected components."""
+        points = [Point(0, 0), Point(10, 0)]
+        centers = (
+            gpd.GeoSeries(points, crs=disconnected_streets.graph["crs"]) if as_geoseries else points
+        )
+        graph = utils.filter_graph_by_distance(
+            disconnected_streets, center_point=centers, threshold=1
+        )
+        assert set(graph.nodes) == {1, 2, 3, 4}
+        assert {tuple(sorted(pair)) for pair in graph.edges} == {(1, 2), (3, 4)}
+
+    def test_filter_graph_edge_attr_none_falls_back_to_length(self, sample_crs: str) -> None:
+        """edge_attr=None should preserve the existing length fallback."""
+        G = nx.Graph()
+        G.graph["crs"] = sample_crs
+        G.add_node(1, pos=(0, 0))
+        G.add_node(2, pos=(1, 0))
+        G.add_node(3, pos=(0, 1))
+        G.add_edge(1, 2, length=1.0)
+        G.add_edge(1, 3, length=1.0)
+
+        reachable_default = utils.filter_graph_by_distance(
+            G,
+            center_point=Point(0, 0),
+            threshold=1.0,
+            edge_attr=None,
+        )
+        reachable_length = utils.filter_graph_by_distance(
+            G,
+            center_point=Point(0, 0),
+            threshold=1.0,
+            edge_attr="length",
+        )
+
+        assert sorted(reachable_default.nodes()) == sorted(reachable_length.nodes())
+        assert sorted(tuple(sorted(edge)) for edge in reachable_default.edges()) == sorted(
+            tuple(sorted(edge)) for edge in reachable_length.edges()
+        )
+
+    def test_filter_graph_gdf_preserves_edge_membership_and_crs(self, sample_crs: str) -> None:
+        """GeoDataFrame input should keep the same filtered edge set and CRS."""
+        edges = gpd.GeoDataFrame(
+            {
+                "u": [1, 2],
+                "v": [2, 3],
+                "length": [1.0, 1.0],
+                "geometry": [
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(1, 0), (2, 0)]),
+                ],
+            },
+            crs=sample_crs,
+        ).set_index(["u", "v"])
+
+        reachable = utils.filter_graph_by_distance(edges, center_point=Point(0, 0), threshold=1.0)
+
+        assert isinstance(reachable, gpd.GeoDataFrame)
+        assert list(reachable.index) == [(1, 2)]
+        assert reachable.crs == edges.crs
+
+    def test_filter_graph_excludes_disconnected_components(self, sample_crs: str) -> None:
+        """Filtering should not leak into disconnected components."""
+        G = nx.Graph()
+        G.graph["crs"] = sample_crs
+        G.add_node(1, pos=(0, 0))
+        G.add_node(2, pos=(1, 0))
+        G.add_node(3, pos=(10, 10))
+        G.add_node(4, pos=(11, 10))
+        G.add_edge(1, 2, length=1.0)
+        G.add_edge(3, 4, length=1.0)
+
+        reachable = utils.filter_graph_by_distance(G, center_point=Point(0, 0), threshold=2.0)
+
+        assert sorted(reachable.nodes()) == [1, 2]
+        assert sorted(tuple(sorted(edge)) for edge in reachable.edges()) == [(1, 2)]
+
+    def test_filter_graph_invalid_center_sequence_member(self, sample_nx_graph: nx.Graph) -> None:
+        """Invalid sequence members should raise a clear TypeError."""
+        with pytest.raises(TypeError, match="center_point must be a Point"):
+            utils.filter_graph_by_distance(
+                sample_nx_graph,
+                center_point=[Point(0, 0), "bad"],
+                threshold=1.0,
             )
-        return graph
+
+    def test_filter_graph_empty_center_sequence_returns_empty(
+        self, sample_nx_graph: nx.Graph
+    ) -> None:
+        """Empty center sequences should preserve empty-graph behavior."""
+        reachable = utils.filter_graph_by_distance(
+            sample_nx_graph,
+            center_point=[],
+            threshold=1.0,
+        )
+
+        assert isinstance(reachable, nx.Graph)
+        assert len(reachable.nodes()) == 0
+
+    def test_filter_graph_no_pos(self, sample_crs: str) -> None:
+        """Test filter_graph_by_distance with graph missing 'pos' attribute."""
+        G = nx.Graph()
+        G.add_node(1)  # No pos
+        G.graph = {"crs": sample_crs}
+
+        # Should return empty graph or handle gracefully
+        reachable = utils.filter_graph_by_distance(G, center_point=Point(0, 0), threshold=10)
+        assert isinstance(reachable, nx.Graph)
+        assert len(reachable) == 0
+
+
+class TestCreateIsochrone:
+    """Tests for ``create_isochrone``."""
 
     @pytest.mark.parametrize("parts", [1, 2])
     @pytest.mark.parametrize("island", [False, True])
@@ -1450,145 +1485,6 @@ class TestGraphAnalysis(BaseGraphTest):
         monkeypatch.setattr(spatial_utils, "_HULL_NEIGHBOR_CACHE_BYTES", cache_bytes)
         actual = utils.create_isochrone(graph, center_point=Point(0, 0), threshold=20, k=3)
         assert actual.geometry.iloc[0].equals_exact(expected.geometry.iloc[0], 0)
-
-    @pytest.mark.parametrize(
-        ("graph_fixture", "as_nx", "center_fixture", "distance", "expect_empty"),
-        [
-            ("sample_segments_gdf", False, "mg_center_point", 100.0, False),
-            ("sample_segments_gdf", False, "mg_center_point", 0.01, True),
-            ("sample_nx_graph", True, "sample_nodes_gdf", 1.0, False),
-            ("empty_gdf", False, "mg_center_point", 100.0, True),
-        ],
-    )
-    def test_graph_distance_filtering(
-        self,
-        graph_fixture: str,
-        as_nx: bool,
-        center_fixture: str,
-        distance: float,
-        expect_empty: bool,
-        request: pytest.FixtureRequest,
-    ) -> None:
-        """Test filtering graphs by distance from center points."""
-        graph = request.getfixturevalue(graph_fixture)
-        center_source = request.getfixturevalue(center_fixture)
-        center_point = helpers.get_center_point(center_source)
-
-        reachable = utils.filter_graph_by_distance(
-            graph,
-            center_point=center_point,
-            threshold=distance,
-            edge_attr="length",
-        )
-
-        if as_nx:
-            assert isinstance(reachable, nx.Graph)
-            assert (reachable.number_of_edges() == 0) == expect_empty
-        else:
-            self.assert_valid_gdf(reachable, expect_empty)
-
-    def test_filter_graph_multi_center_union(self, sample_crs: str) -> None:
-        """Multiple centers should union the reachable components."""
-        G = nx.Graph()
-        G.graph["crs"] = sample_crs
-        G.add_node(1, pos=(0, 0))
-        G.add_node(2, pos=(1, 0))
-        G.add_node(3, pos=(10, 0))
-        G.add_node(4, pos=(11, 0))
-        G.add_edge(1, 2, length=1.0)
-        G.add_edge(3, 4, length=1.0)
-
-        centers = gpd.GeoSeries([Point(0, 0), Point(10, 0)], crs=sample_crs)
-
-        reachable = utils.filter_graph_by_distance(G, center_point=centers, threshold=1.0)
-
-        assert sorted(reachable.nodes()) == [1, 2, 3, 4]
-        assert sorted(tuple(sorted(edge)) for edge in reachable.edges()) == [(1, 2), (3, 4)]
-
-    def test_filter_graph_multi_center_sequence_union(self, sample_crs: str) -> None:
-        """Plain Point sequences should union the reachable components."""
-        G = nx.Graph()
-        G.graph["crs"] = sample_crs
-        G.add_node(1, pos=(0, 0))
-        G.add_node(2, pos=(1, 0))
-        G.add_node(3, pos=(10, 0))
-        G.add_node(4, pos=(11, 0))
-        G.add_edge(1, 2, length=1.0)
-        G.add_edge(3, 4, length=1.0)
-
-        reachable = utils.filter_graph_by_distance(
-            G,
-            center_point=[Point(0, 0), Point(10, 0)],
-            threshold=1.0,
-        )
-
-        assert sorted(reachable.nodes()) == [1, 2, 3, 4]
-        assert sorted(tuple(sorted(edge)) for edge in reachable.edges()) == [(1, 2), (3, 4)]
-
-    def test_filter_graph_edge_attr_none_falls_back_to_length(self, sample_crs: str) -> None:
-        """edge_attr=None should preserve the existing length fallback."""
-        G = nx.Graph()
-        G.graph["crs"] = sample_crs
-        G.add_node(1, pos=(0, 0))
-        G.add_node(2, pos=(1, 0))
-        G.add_node(3, pos=(0, 1))
-        G.add_edge(1, 2, length=1.0)
-        G.add_edge(1, 3, length=1.0)
-
-        reachable_default = utils.filter_graph_by_distance(
-            G,
-            center_point=Point(0, 0),
-            threshold=1.0,
-            edge_attr=None,
-        )
-        reachable_length = utils.filter_graph_by_distance(
-            G,
-            center_point=Point(0, 0),
-            threshold=1.0,
-            edge_attr="length",
-        )
-
-        assert sorted(reachable_default.nodes()) == sorted(reachable_length.nodes())
-        assert sorted(tuple(sorted(edge)) for edge in reachable_default.edges()) == sorted(
-            tuple(sorted(edge)) for edge in reachable_length.edges()
-        )
-
-    def test_filter_graph_gdf_preserves_edge_membership_and_crs(self, sample_crs: str) -> None:
-        """GeoDataFrame input should keep the same filtered edge set and CRS."""
-        edges = gpd.GeoDataFrame(
-            {
-                "u": [1, 2],
-                "v": [2, 3],
-                "length": [1.0, 1.0],
-                "geometry": [
-                    LineString([(0, 0), (1, 0)]),
-                    LineString([(1, 0), (2, 0)]),
-                ],
-            },
-            crs=sample_crs,
-        ).set_index(["u", "v"])
-
-        reachable = utils.filter_graph_by_distance(edges, center_point=Point(0, 0), threshold=1.0)
-
-        assert isinstance(reachable, gpd.GeoDataFrame)
-        assert list(reachable.index) == [(1, 2)]
-        assert reachable.crs == edges.crs
-
-    def test_filter_graph_excludes_disconnected_components(self, sample_crs: str) -> None:
-        """Filtering should not leak into disconnected components."""
-        G = nx.Graph()
-        G.graph["crs"] = sample_crs
-        G.add_node(1, pos=(0, 0))
-        G.add_node(2, pos=(1, 0))
-        G.add_node(3, pos=(10, 10))
-        G.add_node(4, pos=(11, 10))
-        G.add_edge(1, 2, length=1.0)
-        G.add_edge(3, 4, length=1.0)
-
-        reachable = utils.filter_graph_by_distance(G, center_point=Point(0, 0), threshold=2.0)
-
-        assert sorted(reachable.nodes()) == [1, 2]
-        assert sorted(tuple(sorted(edge)) for edge in reachable.edges()) == [(1, 2)]
 
     def test_create_isochrone_basic(self, sample_nx_graph: nx.Graph) -> None:
         """Test basic isochrone creation."""
@@ -2060,64 +1956,30 @@ class TestGraphAnalysis(BaseGraphTest):
                 threshold=10,
             )
 
-    def test_create_isochrone_multi_center(self, sample_nx_graph: nx.Graph) -> None:
-        """Test isochrone with multiple center points."""
-        centers = gpd.GeoSeries([Point(0, 0), Point(1, 1)], crs=sample_nx_graph.graph["crs"])
-
+    @pytest.mark.parametrize(
+        "centers",
+        [
+            [Point(0, 0), Point(10, 0)],
+            (Point(0, 0), Point(10, 0)),
+            gpd.GeoSeries([Point(0, 0), Point(10, 0)], crs=27700),
+        ],
+        ids=["list", "tuple", "geoseries"],
+    )
+    def test_isochrone_covers_each_center(
+        self,
+        disconnected_streets: nx.Graph,
+        centers: list[Point] | tuple[Point, ...] | gpd.GeoSeries,
+    ) -> None:
+        """All supported centre containers include both streets in the isochrone."""
         iso = utils.create_isochrone(
-            sample_nx_graph, center_point=centers, threshold=2.0, method="convex_hull"
-        )
-        assert not iso.empty
-
-    def test_create_isochrone_multi_center_sequence(self, sample_crs: str) -> None:
-        """Plain Point sequences should work for isochrone generation."""
-        graph = nx.Graph()
-        graph.graph["crs"] = sample_crs
-        graph.add_node(1, pos=(0, 0))
-        graph.add_node(2, pos=(1, 0))
-        graph.add_node(3, pos=(10, 0))
-        graph.add_node(4, pos=(11, 0))
-        graph.add_edge(1, 2, length=1.0)
-        graph.add_edge(3, 4, length=1.0)
-
-        iso = utils.create_isochrone(
-            graph,
-            center_point=[Point(0, 0), Point(10, 0)],
-            threshold=1.0,
+            disconnected_streets,
+            center_point=centers,
+            threshold=1,
             edge_attr="length",
             method="convex_hull",
         )
-
-        assert not iso.empty
-        assert iso.geometry.iloc[0].intersects(Point(0, 0))
-        assert iso.geometry.iloc[0].intersects(Point(10, 0))
-
-    def test_create_isochrone_multi_center_tuple_sequence(self, sample_crs: str) -> None:
-        """Tuple Point sequences should be accepted the same way as lists."""
-        graph = nx.Graph()
-        graph.graph["crs"] = sample_crs
-        graph.add_node(1, pos=(0, 0))
-        graph.add_node(2, pos=(1, 0))
-        graph.add_edge(1, 2, length=1.0)
-
-        iso = utils.create_isochrone(
-            graph,
-            center_point=(Point(0, 0), Point(1, 0)),
-            threshold=1.0,
-            edge_attr="length",
-            method="convex_hull",
-        )
-
-        assert not iso.empty
-
-    def test_filter_graph_invalid_center_sequence_member(self, sample_nx_graph: nx.Graph) -> None:
-        """Invalid sequence members should raise a clear TypeError."""
-        with pytest.raises(TypeError, match="center_point must be a Point"):
-            utils.filter_graph_by_distance(
-                sample_nx_graph,
-                center_point=[Point(0, 0), "bad"],
-                threshold=1.0,
-            )
+        geom = iso.geometry.iloc[0]
+        assert all(geom.intersects(Point(x, 0)) for x in (0, 1, 10, 11))
 
     def test_create_isochrone_empty_center_sequence_returns_empty(
         self, sample_nx_graph: nx.Graph
@@ -2131,19 +1993,6 @@ class TestGraphAnalysis(BaseGraphTest):
         )
 
         assert iso.empty
-
-    def test_filter_graph_empty_center_sequence_returns_empty(
-        self, sample_nx_graph: nx.Graph
-    ) -> None:
-        """Empty center sequences should preserve empty-graph behavior."""
-        reachable = utils.filter_graph_by_distance(
-            sample_nx_graph,
-            center_point=[],
-            threshold=1.0,
-        )
-
-        assert isinstance(reachable, nx.Graph)
-        assert len(reachable.nodes()) == 0
 
     def test_create_isochrone_buffer_none(self, sample_nx_graph: nx.Graph) -> None:
         """Test buffer method with buffer_distance=None (should return Polygon/MultiPolygon)."""
@@ -2176,17 +2025,6 @@ class TestGraphAnalysis(BaseGraphTest):
         assert not iso.empty
         assert iso.geometry.iloc[0].geom_type == "Polygon"
 
-    def test_filter_graph_no_pos(self, sample_crs: str) -> None:
-        """Test filter_graph_by_distance with graph missing 'pos' attribute."""
-        G = nx.Graph()
-        G.add_node(1)  # No pos
-        G.graph = {"crs": sample_crs}
-
-        # Should return empty graph or handle gracefully
-        reachable = utils.filter_graph_by_distance(G, center_point=Point(0, 0), threshold=10)
-        assert isinstance(reachable, nx.Graph)
-        assert len(reachable) == 0
-
     def test_create_isochrone_far_snap(self, sample_nx_graph: nx.Graph) -> None:
         """Test isochrone with far away center (should snap to nearest)."""
         center = Point(1000, 1000)  # Far away
@@ -2201,31 +2039,18 @@ class TestGraphAnalysis(BaseGraphTest):
         # Should be a geometry (Point, LineString, or Polygon depending on neighbors)
         assert iso.geometry.iloc[0].geom_type in ["Point", "LineString", "Polygon"]
 
-    def test_create_isochrone_disconnected_graph_parts(self, sample_crs: str) -> None:
-        """Test isochrone on a graph with completely disconnected components."""
-        # Create two disconnected components
-        G = nx.Graph()
-        G.graph["crs"] = sample_crs
-
-        # Component 1
-        G.add_node(1, pos=(0, 0))
-        G.add_node(2, pos=(1, 0))
-        G.add_edge(1, 2, length=1)
-
-        # Component 2
-        G.add_node(3, pos=(10, 10))
-        G.add_node(4, pos=(11, 10))
-        G.add_edge(3, 4, length=1)
-
-        # Isochrone from Component 1 should not include Component 2
+    def test_isochrone_excludes_unreachable_street(self, disconnected_streets: nx.Graph) -> None:
+        """A centre on the first street cannot reach the other component."""
         iso = utils.create_isochrone(
-            G, center_point=Point(0, 0), threshold=2.0, edge_attr="length", method="convex_hull"
+            disconnected_streets,
+            center_point=Point(0, 0),
+            threshold=2,
+            edge_attr="length",
+            method="convex_hull",
         )
-
         assert len(iso) == 1
-        poly = iso.geometry.iloc[0]
-        assert poly.intersects(Point(0, 0))
-        assert not poly.intersects(Point(10, 10))
+        assert iso.geometry.iloc[0].intersects(Point(1, 0))
+        assert not iso.geometry.iloc[0].intersects(Point(10, 0))
 
     def test_create_isochrone_all_methods(self, sample_nx_graph: nx.Graph) -> None:
         """Ensure all methods run without error on a standard graph."""
@@ -2665,77 +2490,51 @@ class TestGraphAnalysis(BaseGraphTest):
         # Result should always be Polygon or MultiPolygon
         assert result.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
 
-
-class TestPlotting(BaseGraphTest):
-    """Test plotting functionality."""
-
-    def test_plot_graph_homogeneous(self, sample_nx_graph: nx.Graph) -> None:
-        """Test plotting a homogeneous graph."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
-        # Mock plt.show to avoid display
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("matplotlib.pyplot.show", lambda: None)
-            ax = utils.plot_graph(sample_nx_graph)
-        assert isinstance(ax, Axes)
-        assert len(ax.collections) == 2
-        assert ax.get_aspect() == 1
-
-    def test_plot_graph_hetero_subplots(
+    def test_create_isochrone_buffers_non_polygon_union(
         self,
-        regular_hetero_graph: nx.Graph,
+        sample_nx_graph: nx.Graph,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test heterogeneous graph plotting with subplots."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("Matplotlib not available")
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            utils.plot_graph(
-                graph=regular_hetero_graph,
-                subplots=True,
-            )
-
-    def test_plot_graph_hetero_subplots_unused_axes(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Test heterogeneous subplot with more axes than edge types (line 3441)."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("Matplotlib not available")
-
-        # Create a hetero graph with only 2 edge types
-        # When subplot grid is larger than number of edge types, unused axes should be hidden
-        graph = utils.gdf_to_nx(
-            nodes=sample_hetero_nodes_dict,
-            edges=sample_hetero_edges_dict,
-            multigraph=True,
+        """create_isochrone should normalize non-polygon unions back into polygon output."""
+        monkeypatch.setattr(
+            spatial_utils,
+            "_generate_component_polygons",
+            lambda _reachable, _method, _crs, **_kwargs: [LineString([(0, 0), (1, 0)])],
         )
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            # This should create more axes than needed and hide unused ones
-            # The function will internally hide unused axes (line 3441)
-            utils.plot_graph(graph=graph, subplots=True, figsize=(10, 10))
+        result = utils.create_isochrone(
+            sample_nx_graph,
+            center_point=Point(0, 0),
+            threshold=10.0,
+            method="buffer",
+        )
 
-        plt.close("all")
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert len(result) == 1
 
-    def test_plot_graph_hetero_no_subplots_with_graph_input(
-        self,
-        regular_hetero_graph: nx.Graph,
-    ) -> None:
-        """Test plotting heterogeneous graph without subplots using graph input (line 3444)."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("Matplotlib not available")
+    def test_create_isochrone_with_duplicate_positions_uses_degenerate_knn_path(self) -> None:
+        """Duplicate reachable positions should still produce an isochrone through the public API."""
+        graph = nx.Graph()
+        graph.add_node("a", pos=(0.0, 0.0))
+        graph.add_node("b", pos=(0.0, 0.0))
+        graph.add_node("c", pos=(1.0, 0.0))
+        graph.add_edge("a", "b", length=0.0)
+        graph.add_edge("b", "c", length=1.0)
+        graph.graph["crs"] = "EPSG:27700"
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            utils.plot_graph(
-                graph=regular_hetero_graph,
-                subplots=False,
-            )
+        result = utils.create_isochrone(
+            graph,
+            center_point=Point(0, 0),
+            threshold=5.0,
+            method="concave_hull_knn",
+        )
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert len(result) == 1
+
+
+class TestPlotGraph:
+    """Tests for ``plot_graph``."""
 
     def test_plot_graph_no_matplotlib(self, sample_nx_graph: nx.Graph) -> None:
         """Test error when matplotlib is missing."""
@@ -2744,74 +2543,90 @@ class TestPlotting(BaseGraphTest):
             with pytest.raises(ImportError, match=r"(?i)matplotlib is required"):
                 utils.plot_graph(sample_nx_graph)
 
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    def test_plot_graph_homogeneous(self, sample_nx_graph: nx.Graph) -> None:
+        """Test plotting a homogeneous graph."""
+        # Mock plt.show to avoid display
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr("matplotlib.pyplot.show", lambda: None)
+            ax = utils.plot_graph(sample_nx_graph)
+        assert isinstance(ax, Axes)
+        assert len(ax.collections) == 2
+        assert ax.get_aspect() == 1
+
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    @pytest.mark.parametrize("as_graph", [True, False])
+    def test_plot_each_edge_type_on_its_own_axis(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+        as_graph: bool,
+    ) -> None:
+        """NetworkX and GeoDataFrame inputs both draw the two relation types."""
+        if as_graph:
+            graph = utils.gdf_to_nx(
+                sample_hetero_nodes_dict, sample_hetero_edges_dict, multigraph=True
+            )
+            axes = utils.plot_graph(graph=graph, subplots=True)
+        else:
+            axes = utils.plot_graph(
+                nodes=sample_hetero_nodes_dict, edges=sample_hetero_edges_dict, subplots=True
+            )
+        assert isinstance(axes, np.ndarray)
+        assert axes.size == len(sample_hetero_edges_dict)
+        assert all(ax.collections for ax in axes.flat)
+
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    @pytest.mark.parametrize("subplots", [False, True])
+    def test_plot_single_relation_graph(
+        self, regular_hetero_graph: nx.Graph, subplots: bool
+    ) -> None:
+        """A single relationship renders its nodes and edge in either layout."""
+        ax = utils.plot_graph(regular_hetero_graph, subplots=subplots)
+        assert isinstance(ax, Axes)
+        assert ax.collections
+
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_graph_no_input(self) -> None:
         """Test error when no input is provided."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         with pytest.raises(ValueError, match="At least one of graph, nodes, or edges"):
             utils.plot_graph()
 
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_graph_with_gdf_input(
         self,
         sample_nodes_gdf: gpd.GeoDataFrame,
         sample_edges_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test plotting with GeoDataFrame inputs directly."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("matplotlib.pyplot.show", lambda: None)
             utils.plot_graph(nodes=sample_nodes_gdf, edges=sample_edges_gdf)
 
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_graph_gdf_as_graph_param(
         self,
         sample_nodes_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test legacy support: GeoDataFrame passed as graph parameter."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("matplotlib.pyplot.show", lambda: None)
             # This should treat the GDF as nodes (legacy support)
             utils.plot_graph(graph=sample_nodes_gdf)
 
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_graph_unsupported_type(self) -> None:
         """Test error when unsupported type is passed as graph."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         with pytest.raises(TypeError, match="Unsupported data type"):
             utils.plot_graph(graph="not_a_graph")
 
-    def test_plot_graph_hetero_subplots_with_unused_axes(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Test plotting heterogeneous graph with subplots."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("matplotlib.pyplot.show", lambda: None)
-            utils.plot_graph(
-                nodes=sample_hetero_nodes_dict,
-                edges=sample_hetero_edges_dict,
-                subplots=True,
-            )
-
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_graph_hetero_subplots_title_color_override(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
         sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
     ) -> None:
         """Titles should be visible when a custom color is provided."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         edge_count = max(1, len(sample_hetero_edges_dict))
         fig, axes = plt.subplots(1, edge_count)
         axes_flat = axes.flatten() if hasattr(axes, "flatten") else [axes]
@@ -2831,15 +2646,13 @@ class TestPlotting(BaseGraphTest):
         finally:
             plt.close(fig)
 
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_graph_with_ax_bgcolor(
         self,
         sample_nodes_gdf: gpd.GeoDataFrame,
         sample_edges_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test that bgcolor is applied when ax is provided."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         assert plt is not None
         fig, ax = plt.subplots()
         try:
@@ -2854,50 +2667,32 @@ class TestPlotting(BaseGraphTest):
         finally:
             plt.close(fig)
 
-    def test_plot_graph_hetero_no_subplots(
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+    @pytest.mark.parametrize("position", ["upper left", None])
+    def test_combined_heterogeneous_plot_legend(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
         sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+        position: str | None,
     ) -> None:
-        """Test plotting heterogeneous graph without subplots."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
+        """The combined plot displays a legend only when assigned a position."""
+        ax = utils.plot_graph(
+            nodes=sample_hetero_nodes_dict,
+            edges=sample_hetero_edges_dict,
+            subplots=False,
+            legend_position=position,
+        )
+        assert isinstance(ax, Axes)
+        assert ax.collections
+        assert (ax.get_legend() is None) == (position is None)
 
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("matplotlib.pyplot.show", lambda: None)
-            utils.plot_graph(
-                nodes=sample_hetero_nodes_dict,
-                edges=sample_hetero_edges_dict,
-                subplots=False,
-            )
-
-    def test_plot_graph_no_legend(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Test plotting without legend."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("matplotlib.pyplot.show", lambda: None)
-            utils.plot_graph(
-                nodes=sample_hetero_nodes_dict,
-                edges=sample_hetero_edges_dict,
-                legend_position=None,
-                subplots=False,
-            )
-
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_graph_style_kwargs(
         self,
         sample_nodes_gdf: gpd.GeoDataFrame,
         sample_edges_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test plotting with custom style kwargs."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("matplotlib.pyplot.show", lambda: None)
             utils.plot_graph(
@@ -2910,14 +2705,12 @@ class TestPlotting(BaseGraphTest):
                 markersize=10.0,
             )
 
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_graph_with_ax(
         self,
         sample_nodes_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test plotting with provided axes."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         assert plt is not None  # For type checker
         fig, ax = plt.subplots()
         try:
@@ -2927,15 +2720,13 @@ class TestPlotting(BaseGraphTest):
         finally:
             plt.close(fig)
 
+    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_graph_homo_with_legend_kwargs_and_title(
         self,
         sample_nodes_gdf: gpd.GeoDataFrame,
         sample_edges_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Homogeneous plotting should support legend kwargs and title."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         nodes = sample_nodes_gdf.copy()
         nodes["centrality_quantile"] = range(len(nodes))
 
@@ -3053,70 +2844,6 @@ class TestPlotting(BaseGraphTest):
             ncols=2,  # Force 2 columns for 1 item
         )
         plt.close("all")
-
-
-class TestPublicUtilityBranches(BaseGraphTest):
-    """Coverage-oriented tests exercised through public utility APIs."""
-
-    def test_create_isochrone_buffers_non_polygon_union(
-        self,
-        sample_nx_graph: nx.Graph,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """create_isochrone should normalize non-polygon unions back into polygon output."""
-        monkeypatch.setattr(
-            spatial_utils,
-            "_generate_component_polygons",
-            lambda _reachable, _method, _crs, **_kwargs: [LineString([(0, 0), (1, 0)])],
-        )
-
-        result = utils.create_isochrone(
-            sample_nx_graph,
-            center_point=Point(0, 0),
-            threshold=10.0,
-            method="buffer",
-        )
-
-        assert isinstance(result, gpd.GeoDataFrame)
-        assert len(result) == 1
-
-    def test_create_isochrone_with_duplicate_positions_uses_degenerate_knn_path(self) -> None:
-        """Duplicate reachable positions should still produce an isochrone through the public API."""
-        graph = nx.Graph()
-        graph.add_node("a", pos=(0.0, 0.0))
-        graph.add_node("b", pos=(0.0, 0.0))
-        graph.add_node("c", pos=(1.0, 0.0))
-        graph.add_edge("a", "b", length=0.0)
-        graph.add_edge("b", "c", length=1.0)
-        graph.graph["crs"] = "EPSG:27700"
-
-        result = utils.create_isochrone(
-            graph,
-            center_point=Point(0, 0),
-            threshold=5.0,
-            method="concave_hull_knn",
-        )
-
-        assert isinstance(result, gpd.GeoDataFrame)
-        assert len(result) == 1
-
-    def test_create_tessellation_reraises_unexpected_value_error(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Unexpected momepy ValueError instances should still surface to callers."""
-
-        def raise_boom(*_args: object, **_kwargs: object) -> object:
-            msg = "boom"
-            error = ValueError(msg)
-            raise error
-
-        monkeypatch.setattr("city2graph.utils.spatial.momepy.enclosed_tessellation", raise_boom)
-
-        with pytest.raises(ValueError, match="boom"):
-            utils.create_tessellation(sample_buildings_gdf, primary_barriers=sample_segments_gdf)
 
     @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_graph_resolves_type_specific_kwargs_for_subplots(

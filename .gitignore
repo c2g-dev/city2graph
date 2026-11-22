@@ -26,7 +26,7 @@ docs/build/
 *.csv
 # Keep only small, intentional test fixtures.
 *.geojson
-!tests/data/*.geojson
+!tests/city2graph/data/*.geojson
 
 # Jupyter
 .ipynb_checkpoints

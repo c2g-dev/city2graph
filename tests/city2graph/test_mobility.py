@@ -12,6 +12,7 @@ import pytest
 from shapely.geometry import Point
 
 from city2graph.mobility import od_matrix_to_graph
+from tests.city2graph.helpers import assert_as_nx_deprecation
 
 if TYPE_CHECKING:
     import networkx as nx
@@ -32,22 +33,6 @@ def od_zones_gdf() -> gpd.GeoDataFrame:
         },
         crs="EPSG:4326",
     )
-
-
-def test_undirected_od_merges_reciprocal_mixed_type_zone_ids() -> None:
-    """Distinct IDs can have the same string representation."""
-    zones = gpd.GeoDataFrame({"zone_id": [1, "1"]}, geometry=[Point(0, 0), Point(1, 0)], crs=3857)
-    data = pd.DataFrame({"source": [1, "1"], "target": ["1", 1], "flow": [2, 3]})
-    _, edges = od_matrix_to_graph(
-        data,
-        zones,
-        zone_id_col="zone_id",
-        weight_cols=["flow"],
-        directed=False,
-    )
-
-    assert edges["weight"].tolist() == [5]
-    assert set(edges.index[0]) == {1, "1"}
 
 
 class TestODMatrixToGraph:
@@ -593,19 +578,6 @@ class TestODMatrixToGraph:
 
     ## Internal-helper tests removed per guidance.
 
-    def test_self_loop_removed_when_not_included(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
-        """Self-loop is removed by default include_self_loops=False."""
-        E = pd.DataFrame({"source": ["A", "A"], "target": ["A", "B"], "flow": [5, 1]})
-        _nodes, edges = od_matrix_to_graph(
-            E,
-            od_zones_gdf,
-            zone_id_col="zone_id",
-            matrix_type="edgelist",
-            weight_cols=["flow"],
-        )  # default include_self_loops=False
-        assert ("A", "A") not in edges.index
-        assert ("A", "B") in edges.index
-
     def test_align_adjacency_partial_overlap_warns_and_reindexes(
         self, od_zones_gdf: gpd.GeoDataFrame
     ) -> None:
@@ -713,35 +685,25 @@ class TestODMatrixToGraph:
         assert list(edges.index) == [("A", "B")]
         assert edges.iloc[0]["weight"] == 2
 
-    def test_edgelist_directed_self_loops_toggle(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
-        """include_self_loops controls self-loop retention on the directed edgelist path."""
-        E = pd.DataFrame(
-            {
-                "source": ["A", "A"],
-                "target": ["A", "B"],
-                "flow": [3, 1],
-            }
+    @pytest.mark.parametrize(
+        ("options", "expected"),
+        [
+            ({}, {("A", "B"): 1}),
+            ({"include_self_loops": True}, {("A", "A"): 3, ("A", "B"): 1}),
+        ],
+    )
+    def test_directed_self_loop_weights(
+        self,
+        od_zones_gdf: gpd.GeoDataFrame,
+        options: dict[str, Any],
+        expected: dict[tuple[str, str], int],
+    ) -> None:
+        """The self-loop contributes its own flow only when requested."""
+        flows = pd.DataFrame({"source": ["A", "A"], "target": ["A", "B"], "flow": [3, 1]})
+        _, edges = od_matrix_to_graph(
+            flows, od_zones_gdf, zone_id_col="zone_id", weight_cols=["flow"], **options
         )
-        _nodes, edges_default = od_matrix_to_graph(
-            E,
-            od_zones_gdf,
-            zone_id_col="zone_id",
-            matrix_type="edgelist",
-            weight_cols=["flow"],
-        )
-        assert ("A", "A") not in edges_default.index
-        assert ("A", "B") in edges_default.index
-
-        _nodes, edges_loops = od_matrix_to_graph(
-            E,
-            od_zones_gdf,
-            zone_id_col="zone_id",
-            matrix_type="edgelist",
-            weight_cols=["flow"],
-            include_self_loops=True,
-        )
-        assert ("A", "A") in edges_loops.index
-        assert edges_loops.loc[("A", "A"), "weight"] == 3
+        assert edges["weight"].to_dict() == expected
 
     def test_as_nx_metadata_follows_shared_conventions(
         self, od_zones_gdf: gpd.GeoDataFrame
@@ -957,46 +919,71 @@ class TestODMatrixToGraph:
         assert mixed_edges["weight"].tolist() == [5]
         assert set(mixed_edges.index[0]) == {1, "1"}
 
+    def test_undirected_od_merges_reciprocal_mixed_type_zone_ids(self) -> None:
+        """Distinct IDs can have the same string representation."""
+        zones = gpd.GeoDataFrame(
+            {"zone_id": [1, "1"]}, geometry=[Point(0, 0), Point(1, 0)], crs=3857
+        )
+        data = pd.DataFrame({"source": [1, "1"], "target": ["1", 1], "flow": [2, 3]})
+        _, edges = od_matrix_to_graph(
+            data,
+            zones,
+            zone_id_col="zone_id",
+            weight_cols=["flow"],
+            directed=False,
+        )
 
-@pytest.mark.parametrize("matrix_type", ["edgelist", "adjacency"])
-@pytest.mark.parametrize(("threshold", "expected"), [(None, [6.0]), (8.0, [])])
-def test_undirected_od_threshold_is_applied_after_signed_reciprocal_sum(
-    od_zones_gdf: gpd.GeoDataFrame,
-    matrix_type: Literal["edgelist", "adjacency"],
-    threshold: float | None,
-    expected: list[float],
-) -> None:
-    """A correction in the reverse direction contributes before thresholding."""
-    if matrix_type == "edgelist":
-        data = pd.DataFrame({"source": ["A", "B"], "target": ["B", "A"], "flow": [10, -4]})
-    else:
-        ids = ["A", "B", "C"]
-        data = pd.DataFrame([[0, 10, 0], [-4, 0, 0], [0, 0, 0]], columns=ids, index=ids)
+        assert edges["weight"].tolist() == [5]
+        assert set(edges.index[0]) == {1, "1"}
 
-    with pytest.warns(UserWarning, match="negative weights"):
+    @pytest.mark.parametrize("matrix_type", ["edgelist", "adjacency"])
+    @pytest.mark.parametrize(("threshold", "expected"), [(None, [6.0]), (8.0, [])])
+    def test_undirected_od_threshold_is_applied_after_signed_reciprocal_sum(
+        self,
+        od_zones_gdf: gpd.GeoDataFrame,
+        matrix_type: Literal["edgelist", "adjacency"],
+        threshold: float | None,
+        expected: list[float],
+    ) -> None:
+        """A correction in the reverse direction contributes before thresholding."""
+        if matrix_type == "edgelist":
+            data = pd.DataFrame({"source": ["A", "B"], "target": ["B", "A"], "flow": [10, -4]})
+        else:
+            ids = ["A", "B", "C"]
+            data = pd.DataFrame([[0, 10, 0], [-4, 0, 0], [0, 0, 0]], columns=ids, index=ids)
+
+        with pytest.warns(UserWarning, match="negative weights"):
+            _, edges = od_matrix_to_graph(
+                data,
+                od_zones_gdf,
+                zone_id_col="zone_id",
+                matrix_type=matrix_type,
+                weight_cols=["flow"] if matrix_type == "edgelist" else None,
+                threshold=threshold,
+                directed=False,
+            )
+
+        assert edges["weight"].tolist() == expected
+
+    def test_undirected_od_preserves_explicit_zero_cutoff(
+        self, od_zones_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """An explicit threshold of zero retains observed zero-flow pairs."""
+        data = pd.DataFrame({"source": ["A"], "target": ["B"], "flow": [0]})
         _, edges = od_matrix_to_graph(
             data,
             od_zones_gdf,
             zone_id_col="zone_id",
-            matrix_type=matrix_type,
-            weight_cols=["flow"] if matrix_type == "edgelist" else None,
-            threshold=threshold,
+            weight_cols=["flow"],
+            threshold=0,
             directed=False,
         )
+        assert list(edges.index) == [("A", "B")]
+        assert edges["weight"].tolist() == [0]
 
-    assert edges["weight"].tolist() == expected
-
-
-def test_undirected_od_preserves_explicit_zero_cutoff(od_zones_gdf: gpd.GeoDataFrame) -> None:
-    """An explicit threshold of zero retains observed zero-flow pairs."""
-    data = pd.DataFrame({"source": ["A"], "target": ["B"], "flow": [0]})
-    _, edges = od_matrix_to_graph(
-        data,
-        od_zones_gdf,
-        zone_id_col="zone_id",
-        weight_cols=["flow"],
-        threshold=0,
-        directed=False,
-    )
-    assert list(edges.index) == [("A", "B")]
-    assert edges["weight"].tolist() == [0]
+    def test_od_as_nx_warning(self, od_zones_gdf: gpd.GeoDataFrame) -> None:
+        """Explicit as_nx on the OD builder emits a caller warning."""
+        flows = pd.DataFrame({"source": ["A"], "target": ["B"], "flow": [3]})
+        assert_as_nx_deprecation(
+            od_matrix_to_graph, flows, od_zones_gdf, zone_id_col="zone_id", weight_cols=["flow"]
+        )
