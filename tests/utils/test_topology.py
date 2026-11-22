@@ -17,7 +17,7 @@ from shapely.geometry import Polygon
 
 from city2graph import utils
 from city2graph.utils import topology as topology_utils
-from tests.utils.helpers import BaseGraphTest
+from tests import helpers
 
 
 @pytest.fixture
@@ -26,7 +26,7 @@ def segments_gdf_no_crs(sample_segments_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFra
     return sample_segments_gdf.set_crs(None, allow_override=True)
 
 
-class TestGraphStructures(BaseGraphTest):
+class TestGraphStructures:
     """Test graph structure operations like dual graph and segments conversion."""
 
     @pytest.mark.parametrize(
@@ -85,13 +85,13 @@ class TestGraphStructures(BaseGraphTest):
 
             # Handle empty case
             if isinstance(graph_input, tuple) and graph_input[1].empty:
-                self.assert_valid_gdf(dual_nodes, expected_empty=True)
-                self.assert_valid_gdf(dual_edges, expected_empty=True)
+                helpers.assert_valid_gdf(dual_nodes, expected_empty=True)
+                helpers.assert_valid_gdf(dual_edges, expected_empty=True)
                 return
 
-            self.assert_valid_gdf(dual_nodes)
-            self.assert_valid_gdf(dual_edges)
-            self.assert_crs_consistency(dual_nodes, dual_edges)
+            helpers.assert_valid_gdf(dual_nodes)
+            helpers.assert_valid_gdf(dual_edges)
+            helpers.assert_crs_consistency(dual_nodes, dual_edges)
 
             if keep_geom:
                 assert "original_geometry" in dual_nodes.columns
@@ -210,8 +210,8 @@ class TestGraphStructures(BaseGraphTest):
     def test_dual_graph_accepts_networkx_input(self, simple_nx_graph: nx.Graph) -> None:
         """Dual graph should accept NetworkX graphs directly."""
         dual_nodes, dual_edges = utils.dual_graph(simple_nx_graph)
-        self.assert_valid_gdf(dual_nodes)
-        self.assert_valid_gdf(dual_edges, expected_empty=True)
+        helpers.assert_valid_gdf(dual_nodes)
+        helpers.assert_valid_gdf(dual_edges, expected_empty=True)
 
     def test_dual_graph_warns_on_geographic_crs(self) -> None:
         """Warn users when dual graph is computed on geographic CRS data."""
@@ -258,8 +258,8 @@ class TestGraphStructures(BaseGraphTest):
         )
 
         dual_nodes, dual_edges = utils.dual_graph((nodes, edges), edge_id_col="edge_id")
-        self.assert_valid_gdf(dual_nodes)
-        self.assert_valid_gdf(dual_edges)
+        helpers.assert_valid_gdf(dual_nodes)
+        helpers.assert_valid_gdf(dual_edges)
 
     def test_empty_primal_graph_honors_networkx_output(self, sample_crs: str) -> None:
         """The requested output form applies even when there are no primal edges."""
@@ -307,7 +307,7 @@ class TestGraphStructures(BaseGraphTest):
         assert topology_utils._canonical_edge_pair("a", "a") == ("a", "a")
 
 
-class TestCanonicalizeEdges(BaseGraphTest):
+class TestCanonicalizeEdges:
     """Test canonicalize_edges collapsing of reciprocal and parallel rows."""
 
     @staticmethod
@@ -420,7 +420,7 @@ class TestCanonicalizeEdges(BaseGraphTest):
             utils.canonicalize_edges(edges, duplicates="drop")  # type: ignore[arg-type]
 
 
-class TestSymmetrizeEdges(BaseGraphTest):
+class TestSymmetrizeEdges:
     """Test symmetrize_edges adding reverse rows of undirected edges."""
 
     @staticmethod
@@ -519,7 +519,7 @@ class TestSymmetrizeEdges(BaseGraphTest):
             utils.symmetrize_edges(edges)
 
 
-class TestClipGraph(BaseGraphTest):
+class TestClipGraph:
     """Test graph clipping functionality."""
 
     def test_clip_graph_basic(self, sample_crs: str) -> None:
@@ -854,7 +854,7 @@ class TestClipGraph(BaseGraphTest):
         assert result is not graph
 
 
-class TestRemoveIsolatedComponents(BaseGraphTest):
+class TestRemoveIsolatedComponents:
     """Test remove_isolated_components functionality."""
 
     def test_remove_isolated_basic(self, sample_crs: str) -> None:
@@ -1016,7 +1016,7 @@ class TestRemoveIsolatedComponents(BaseGraphTest):
         assert result is not graph
 
 
-class TestPublicUtilityBranches(BaseGraphTest):
+class TestPublicUtilityBranches:
     """Coverage-oriented tests exercised through public utility APIs."""
 
     def test_clip_graph_rejects_invalid_input_type(self) -> None:

@@ -544,84 +544,26 @@ class TestLoadOvertureData:
         output_path = args[output_index]
         assert prefix in output_path
 
+    @pytest.mark.parametrize("use_stac", [False, True])
     @patch("city2graph.data.subprocess.run")
-    @patch("city2graph.data.gpd.read_file")
-    def test_with_connect_timeout(
-        self,
-        mock_read_file: Mock,
-        mock_subprocess: Mock,
-        test_bbox: list[float],
+    def test_download_cli_options(
+        self, run: Mock, test_bbox: list[float], tmp_path: Path, use_stac: bool
     ) -> None:
-        """Test load_overture_data with connect_timeout parameter.
-
-        The Overture CLI declares underscored options parsed as integers, so the
-        flag must not be hyphenated and the value must not carry a decimal part.
-        """
-        mock_gdf = Mock(spec=gpd.GeoDataFrame)
-        mock_gdf.empty = False
-        mock_read_file.return_value = mock_gdf
-
-        load_overture_data(test_bbox, types=["building"], connect_timeout=5.0)
-
-        args = mock_subprocess.call_args[0][0]
-        assert "--connect_timeout" in args
-        assert "5" in args
-
-    @patch("city2graph.data.subprocess.run")
-    @patch("city2graph.data.gpd.read_file")
-    def test_with_request_timeout(
-        self,
-        mock_read_file: Mock,
-        mock_subprocess: Mock,
-        test_bbox: list[float],
-    ) -> None:
-        """Test load_overture_data with request_timeout parameter."""
-        mock_gdf = Mock(spec=gpd.GeoDataFrame)
-        mock_gdf.empty = False
-        mock_read_file.return_value = mock_gdf
-
-        load_overture_data(test_bbox, types=["building"], request_timeout=10.5)
-
-        args = mock_subprocess.call_args[0][0]
-        assert "--request_timeout" in args
-        # Fractional seconds are rounded: the CLI parses this option as an int.
-        assert "10" in args
-
-    @patch("city2graph.data.subprocess.run")
-    @patch("city2graph.data.gpd.read_file")
-    def test_with_no_stac(
-        self,
-        mock_read_file: Mock,
-        mock_subprocess: Mock,
-        test_bbox: list[float],
-    ) -> None:
-        """Test load_overture_data with use_stac=False parameter."""
-        mock_gdf = Mock(spec=gpd.GeoDataFrame)
-        mock_gdf.empty = False
-        mock_read_file.return_value = mock_gdf
-
-        load_overture_data(test_bbox, types=["building"], use_stac=False)
-
-        args = mock_subprocess.call_args[0][0]
-        assert "--no-stac" in args
-
-    @patch("city2graph.data.subprocess.run")
-    @patch("city2graph.data.gpd.read_file")
-    def test_with_stac_true(
-        self,
-        mock_read_file: Mock,
-        mock_subprocess: Mock,
-        test_bbox: list[float],
-    ) -> None:
-        """Test load_overture_data with use_stac=True (default)."""
-        mock_gdf = Mock(spec=gpd.GeoDataFrame)
-        mock_gdf.empty = False
-        mock_read_file.return_value = mock_gdf
-
-        load_overture_data(test_bbox, types=["building"], use_stac=True)
-
-        args = mock_subprocess.call_args[0][0]
-        assert "--no-stac" not in args
+        """Forward integer timeouts and the STAC flag to the Overture CLI."""
+        load_overture_data(
+            test_bbox,
+            types=["building"],
+            output_dir=str(tmp_path),
+            return_data=False,
+            connect_timeout=5.0,
+            request_timeout=10.5,
+            use_stac=use_stac,
+        )
+        run.assert_called_once()
+        args = run.call_args.args[0]
+        assert args[args.index("--connect_timeout") + 1] == "5"
+        assert args[args.index("--request_timeout") + 1] == "10"
+        assert ("--no-stac" in args) == (not use_stac)
 
     @patch("city2graph.data.subprocess.run")
     @patch("city2graph.data.gpd.read_file")

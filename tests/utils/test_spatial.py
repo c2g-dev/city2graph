@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import warnings
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import cast
@@ -25,7 +24,6 @@ from city2graph import utils
 from city2graph.utils import gdf_to_nx
 from city2graph.utils import spatial as spatial_utils
 from tests import helpers
-from tests.utils.helpers import BaseGraphTest
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -63,7 +61,7 @@ def tessellation_barriers_gdf(sample_crs: str) -> gpd.GeoDataFrame:
     )
 
 
-class TestTessellation(BaseGraphTest):
+class TestTessellation:
     """Test tessellation creation functionality."""
 
     @pytest.mark.parametrize(
@@ -87,7 +85,7 @@ class TestTessellation(BaseGraphTest):
 
         tessellation = utils.create_tessellation(geometry, primary_barriers=barriers)
 
-        self.assert_valid_gdf(tessellation, expect_empty)
+        helpers.assert_valid_gdf(tessellation, expect_empty)
         if not expect_empty:
             helpers.assert_has_columns(tessellation, ["tess_id"])
             assert tessellation.crs == geometry.crs
@@ -99,13 +97,13 @@ class TestTessellation(BaseGraphTest):
     ) -> None:
         """Degenerate geometries or barriers should not raise."""
         single_result = utils.create_tessellation(single_point_geom_gdf)
-        self.assert_valid_gdf(single_result, expected_empty=True)
+        helpers.assert_valid_gdf(single_result, expected_empty=True)
 
         barrier_result = utils.create_tessellation(
             single_point_geom_gdf,
             primary_barriers=tessellation_barriers_gdf,
         )
-        self.assert_valid_gdf(barrier_result, expected_empty=True)
+        helpers.assert_valid_gdf(barrier_result, expected_empty=True)
 
     def test_tessellation_empty_with_barriers(self, empty_gdf: gpd.GeoDataFrame) -> None:
         """Even with barriers an empty geometry should stay empty."""
@@ -114,7 +112,7 @@ class TestTessellation(BaseGraphTest):
             crs=empty_gdf.crs,
         )
         result = utils.create_tessellation(empty_gdf, primary_barriers=barriers)
-        self.assert_valid_gdf(result, expected_empty=True)
+        helpers.assert_valid_gdf(result, expected_empty=True)
         assert list(result.columns) == ["geometry", "enclosure_index", "tess_id"]
 
     @pytest.mark.parametrize("failure_mode", ["geos_error", "concat_error", "no_enclosures"])
@@ -1226,7 +1224,18 @@ class TestTessellation(BaseGraphTest):
         assert result.geometry.contains(remote_centroid).sum() == 1
 
 
-class TestGraphAnalysis(BaseGraphTest):
+@pytest.fixture
+def disconnected_streets(sample_crs: str) -> nx.Graph:
+    """Two separate one-unit streets, with a centre on each."""
+    graph = nx.Graph(crs=sample_crs)
+    for node, x in enumerate([0, 1, 10, 11], start=1):
+        graph.add_node(node, pos=(x, 0))
+    graph.add_edge(1, 2, length=1.0)
+    graph.add_edge(3, 4, length=1.0)
+    return graph
+
+
+class TestGraphAnalysis:
     """Test graph analysis operations like filtering and isochrone generation."""
 
     @pytest.fixture
@@ -1485,45 +1494,22 @@ class TestGraphAnalysis(BaseGraphTest):
             assert isinstance(reachable, nx.Graph)
             assert (reachable.number_of_edges() == 0) == expect_empty
         else:
-            self.assert_valid_gdf(reachable, expect_empty)
+            helpers.assert_valid_gdf(reachable, expect_empty)
 
-    def test_filter_graph_multi_center_union(self, sample_crs: str) -> None:
-        """Multiple centers should union the reachable components."""
-        G = nx.Graph()
-        G.graph["crs"] = sample_crs
-        G.add_node(1, pos=(0, 0))
-        G.add_node(2, pos=(1, 0))
-        G.add_node(3, pos=(10, 0))
-        G.add_node(4, pos=(11, 0))
-        G.add_edge(1, 2, length=1.0)
-        G.add_edge(3, 4, length=1.0)
-
-        centers = gpd.GeoSeries([Point(0, 0), Point(10, 0)], crs=sample_crs)
-
-        reachable = utils.filter_graph_by_distance(G, center_point=centers, threshold=1.0)
-
-        assert sorted(reachable.nodes()) == [1, 2, 3, 4]
-        assert sorted(tuple(sorted(edge)) for edge in reachable.edges()) == [(1, 2), (3, 4)]
-
-    def test_filter_graph_multi_center_sequence_union(self, sample_crs: str) -> None:
-        """Plain Point sequences should union the reachable components."""
-        G = nx.Graph()
-        G.graph["crs"] = sample_crs
-        G.add_node(1, pos=(0, 0))
-        G.add_node(2, pos=(1, 0))
-        G.add_node(3, pos=(10, 0))
-        G.add_node(4, pos=(11, 0))
-        G.add_edge(1, 2, length=1.0)
-        G.add_edge(3, 4, length=1.0)
-
-        reachable = utils.filter_graph_by_distance(
-            G,
-            center_point=[Point(0, 0), Point(10, 0)],
-            threshold=1.0,
+    @pytest.mark.parametrize("as_geoseries", [False, True])
+    def test_multi_center_reaches_both_streets(
+        self, disconnected_streets: nx.Graph, as_geoseries: bool
+    ) -> None:
+        """Centres on different streets contribute both connected components."""
+        points = [Point(0, 0), Point(10, 0)]
+        centers = (
+            gpd.GeoSeries(points, crs=disconnected_streets.graph["crs"]) if as_geoseries else points
         )
-
-        assert sorted(reachable.nodes()) == [1, 2, 3, 4]
-        assert sorted(tuple(sorted(edge)) for edge in reachable.edges()) == [(1, 2), (3, 4)]
+        graph = utils.filter_graph_by_distance(
+            disconnected_streets, center_point=centers, threshold=1
+        )
+        assert set(graph.nodes) == {1, 2, 3, 4}
+        assert {tuple(sorted(pair)) for pair in graph.edges} == {(1, 2), (3, 4)}
 
     def test_filter_graph_edge_attr_none_falls_back_to_length(self, sample_crs: str) -> None:
         """edge_attr=None should preserve the existing length fallback."""
@@ -2060,55 +2046,30 @@ class TestGraphAnalysis(BaseGraphTest):
                 threshold=10,
             )
 
-    def test_create_isochrone_multi_center(self, sample_nx_graph: nx.Graph) -> None:
-        """Test isochrone with multiple center points."""
-        centers = gpd.GeoSeries([Point(0, 0), Point(1, 1)], crs=sample_nx_graph.graph["crs"])
-
+    @pytest.mark.parametrize(
+        "centers",
+        [
+            [Point(0, 0), Point(10, 0)],
+            (Point(0, 0), Point(10, 0)),
+            gpd.GeoSeries([Point(0, 0), Point(10, 0)], crs=27700),
+        ],
+        ids=["list", "tuple", "geoseries"],
+    )
+    def test_isochrone_covers_each_center(
+        self,
+        disconnected_streets: nx.Graph,
+        centers: list[Point] | tuple[Point, ...] | gpd.GeoSeries,
+    ) -> None:
+        """All supported centre containers include both streets in the isochrone."""
         iso = utils.create_isochrone(
-            sample_nx_graph, center_point=centers, threshold=2.0, method="convex_hull"
-        )
-        assert not iso.empty
-
-    def test_create_isochrone_multi_center_sequence(self, sample_crs: str) -> None:
-        """Plain Point sequences should work for isochrone generation."""
-        graph = nx.Graph()
-        graph.graph["crs"] = sample_crs
-        graph.add_node(1, pos=(0, 0))
-        graph.add_node(2, pos=(1, 0))
-        graph.add_node(3, pos=(10, 0))
-        graph.add_node(4, pos=(11, 0))
-        graph.add_edge(1, 2, length=1.0)
-        graph.add_edge(3, 4, length=1.0)
-
-        iso = utils.create_isochrone(
-            graph,
-            center_point=[Point(0, 0), Point(10, 0)],
-            threshold=1.0,
+            disconnected_streets,
+            center_point=centers,
+            threshold=1,
             edge_attr="length",
             method="convex_hull",
         )
-
-        assert not iso.empty
-        assert iso.geometry.iloc[0].intersects(Point(0, 0))
-        assert iso.geometry.iloc[0].intersects(Point(10, 0))
-
-    def test_create_isochrone_multi_center_tuple_sequence(self, sample_crs: str) -> None:
-        """Tuple Point sequences should be accepted the same way as lists."""
-        graph = nx.Graph()
-        graph.graph["crs"] = sample_crs
-        graph.add_node(1, pos=(0, 0))
-        graph.add_node(2, pos=(1, 0))
-        graph.add_edge(1, 2, length=1.0)
-
-        iso = utils.create_isochrone(
-            graph,
-            center_point=(Point(0, 0), Point(1, 0)),
-            threshold=1.0,
-            edge_attr="length",
-            method="convex_hull",
-        )
-
-        assert not iso.empty
+        geom = iso.geometry.iloc[0]
+        assert all(geom.intersects(Point(x, 0)) for x in (0, 1, 10, 11))
 
     def test_filter_graph_invalid_center_sequence_member(self, sample_nx_graph: nx.Graph) -> None:
         """Invalid sequence members should raise a clear TypeError."""
@@ -2201,31 +2162,18 @@ class TestGraphAnalysis(BaseGraphTest):
         # Should be a geometry (Point, LineString, or Polygon depending on neighbors)
         assert iso.geometry.iloc[0].geom_type in ["Point", "LineString", "Polygon"]
 
-    def test_create_isochrone_disconnected_graph_parts(self, sample_crs: str) -> None:
-        """Test isochrone on a graph with completely disconnected components."""
-        # Create two disconnected components
-        G = nx.Graph()
-        G.graph["crs"] = sample_crs
-
-        # Component 1
-        G.add_node(1, pos=(0, 0))
-        G.add_node(2, pos=(1, 0))
-        G.add_edge(1, 2, length=1)
-
-        # Component 2
-        G.add_node(3, pos=(10, 10))
-        G.add_node(4, pos=(11, 10))
-        G.add_edge(3, 4, length=1)
-
-        # Isochrone from Component 1 should not include Component 2
+    def test_isochrone_excludes_unreachable_street(self, disconnected_streets: nx.Graph) -> None:
+        """A centre on the first street cannot reach the other component."""
         iso = utils.create_isochrone(
-            G, center_point=Point(0, 0), threshold=2.0, edge_attr="length", method="convex_hull"
+            disconnected_streets,
+            center_point=Point(0, 0),
+            threshold=2,
+            edge_attr="length",
+            method="convex_hull",
         )
-
         assert len(iso) == 1
-        poly = iso.geometry.iloc[0]
-        assert poly.intersects(Point(0, 0))
-        assert not poly.intersects(Point(10, 10))
+        assert iso.geometry.iloc[0].intersects(Point(1, 0))
+        assert not iso.geometry.iloc[0].intersects(Point(10, 0))
 
     def test_create_isochrone_all_methods(self, sample_nx_graph: nx.Graph) -> None:
         """Ensure all methods run without error on a standard graph."""
@@ -2666,14 +2614,20 @@ class TestGraphAnalysis(BaseGraphTest):
         assert result.geometry.iloc[0].geom_type in ["Polygon", "MultiPolygon"]
 
 
-class TestPlotting(BaseGraphTest):
+def test_plot_graph_no_matplotlib(sample_nx_graph: nx.Graph) -> None:
+    """Test error when matplotlib is missing."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(spatial_utils, "MATPLOTLIB_AVAILABLE", False)
+        with pytest.raises(ImportError, match=r"(?i)matplotlib is required"):
+            utils.plot_graph(sample_nx_graph)
+
+
+@pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
+class TestPlotting:
     """Test plotting functionality."""
 
     def test_plot_graph_homogeneous(self, sample_nx_graph: nx.Graph) -> None:
         """Test plotting a homogeneous graph."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         # Mock plt.show to avoid display
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("matplotlib.pyplot.show", lambda: None)
@@ -2682,73 +2636,38 @@ class TestPlotting(BaseGraphTest):
         assert len(ax.collections) == 2
         assert ax.get_aspect() == 1
 
-    def test_plot_graph_hetero_subplots(
-        self,
-        regular_hetero_graph: nx.Graph,
-    ) -> None:
-        """Test heterogeneous graph plotting with subplots."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("Matplotlib not available")
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            utils.plot_graph(
-                graph=regular_hetero_graph,
-                subplots=True,
-            )
-
-    def test_plot_graph_hetero_subplots_unused_axes(
+    @pytest.mark.parametrize("as_graph", [True, False])
+    def test_plot_each_edge_type_on_its_own_axis(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
         sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+        as_graph: bool,
     ) -> None:
-        """Test heterogeneous subplot with more axes than edge types (line 3441)."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("Matplotlib not available")
-
-        # Create a hetero graph with only 2 edge types
-        # When subplot grid is larger than number of edge types, unused axes should be hidden
-        graph = utils.gdf_to_nx(
-            nodes=sample_hetero_nodes_dict,
-            edges=sample_hetero_edges_dict,
-            multigraph=True,
-        )
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            # This should create more axes than needed and hide unused ones
-            # The function will internally hide unused axes (line 3441)
-            utils.plot_graph(graph=graph, subplots=True, figsize=(10, 10))
-
-        plt.close("all")
-
-    def test_plot_graph_hetero_no_subplots_with_graph_input(
-        self,
-        regular_hetero_graph: nx.Graph,
-    ) -> None:
-        """Test plotting heterogeneous graph without subplots using graph input (line 3444)."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("Matplotlib not available")
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            utils.plot_graph(
-                graph=regular_hetero_graph,
-                subplots=False,
+        """NetworkX and GeoDataFrame inputs both draw the two relation types."""
+        if as_graph:
+            graph = utils.gdf_to_nx(
+                sample_hetero_nodes_dict, sample_hetero_edges_dict, multigraph=True
             )
+            axes = utils.plot_graph(graph=graph, subplots=True)
+        else:
+            axes = utils.plot_graph(
+                nodes=sample_hetero_nodes_dict, edges=sample_hetero_edges_dict, subplots=True
+            )
+        assert isinstance(axes, np.ndarray)
+        assert axes.size == len(sample_hetero_edges_dict)
+        assert all(ax.collections for ax in axes.flat)
 
-    def test_plot_graph_no_matplotlib(self, sample_nx_graph: nx.Graph) -> None:
-        """Test error when matplotlib is missing."""
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(spatial_utils, "MATPLOTLIB_AVAILABLE", False)
-            with pytest.raises(ImportError, match=r"(?i)matplotlib is required"):
-                utils.plot_graph(sample_nx_graph)
+    @pytest.mark.parametrize("subplots", [False, True])
+    def test_plot_single_relation_graph(
+        self, regular_hetero_graph: nx.Graph, subplots: bool
+    ) -> None:
+        """A single relationship renders its nodes and edge in either layout."""
+        ax = utils.plot_graph(regular_hetero_graph, subplots=subplots)
+        assert isinstance(ax, Axes)
+        assert ax.collections
 
     def test_plot_graph_no_input(self) -> None:
         """Test error when no input is provided."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         with pytest.raises(ValueError, match="At least one of graph, nodes, or edges"):
             utils.plot_graph()
 
@@ -2758,9 +2677,6 @@ class TestPlotting(BaseGraphTest):
         sample_edges_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test plotting with GeoDataFrame inputs directly."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("matplotlib.pyplot.show", lambda: None)
             utils.plot_graph(nodes=sample_nodes_gdf, edges=sample_edges_gdf)
@@ -2770,9 +2686,6 @@ class TestPlotting(BaseGraphTest):
         sample_nodes_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test legacy support: GeoDataFrame passed as graph parameter."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("matplotlib.pyplot.show", lambda: None)
             # This should treat the GDF as nodes (legacy support)
@@ -2780,28 +2693,8 @@ class TestPlotting(BaseGraphTest):
 
     def test_plot_graph_unsupported_type(self) -> None:
         """Test error when unsupported type is passed as graph."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         with pytest.raises(TypeError, match="Unsupported data type"):
             utils.plot_graph(graph="not_a_graph")
-
-    def test_plot_graph_hetero_subplots_with_unused_axes(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Test plotting heterogeneous graph with subplots."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("matplotlib.pyplot.show", lambda: None)
-            utils.plot_graph(
-                nodes=sample_hetero_nodes_dict,
-                edges=sample_hetero_edges_dict,
-                subplots=True,
-            )
 
     def test_plot_graph_hetero_subplots_title_color_override(
         self,
@@ -2809,9 +2702,6 @@ class TestPlotting(BaseGraphTest):
         sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
     ) -> None:
         """Titles should be visible when a custom color is provided."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         edge_count = max(1, len(sample_hetero_edges_dict))
         fig, axes = plt.subplots(1, edge_count)
         axes_flat = axes.flatten() if hasattr(axes, "flatten") else [axes]
@@ -2837,9 +2727,6 @@ class TestPlotting(BaseGraphTest):
         sample_edges_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test that bgcolor is applied when ax is provided."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         assert plt is not None
         fig, ax = plt.subplots()
         try:
@@ -2854,40 +2741,23 @@ class TestPlotting(BaseGraphTest):
         finally:
             plt.close(fig)
 
-    def test_plot_graph_hetero_no_subplots(
+    @pytest.mark.parametrize("position", ["upper left", None])
+    def test_combined_heterogeneous_plot_legend(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
         sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+        position: str | None,
     ) -> None:
-        """Test plotting heterogeneous graph without subplots."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("matplotlib.pyplot.show", lambda: None)
-            utils.plot_graph(
-                nodes=sample_hetero_nodes_dict,
-                edges=sample_hetero_edges_dict,
-                subplots=False,
-            )
-
-    def test_plot_graph_no_legend(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Test plotting without legend."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("matplotlib.pyplot.show", lambda: None)
-            utils.plot_graph(
-                nodes=sample_hetero_nodes_dict,
-                edges=sample_hetero_edges_dict,
-                legend_position=None,
-                subplots=False,
-            )
+        """The combined plot displays a legend only when assigned a position."""
+        ax = utils.plot_graph(
+            nodes=sample_hetero_nodes_dict,
+            edges=sample_hetero_edges_dict,
+            subplots=False,
+            legend_position=position,
+        )
+        assert isinstance(ax, Axes)
+        assert ax.collections
+        assert (ax.get_legend() is None) == (position is None)
 
     def test_plot_graph_style_kwargs(
         self,
@@ -2895,9 +2765,6 @@ class TestPlotting(BaseGraphTest):
         sample_edges_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test plotting with custom style kwargs."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr("matplotlib.pyplot.show", lambda: None)
             utils.plot_graph(
@@ -2915,9 +2782,6 @@ class TestPlotting(BaseGraphTest):
         sample_nodes_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test plotting with provided axes."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         assert plt is not None  # For type checker
         fig, ax = plt.subplots()
         try:
@@ -2933,9 +2797,6 @@ class TestPlotting(BaseGraphTest):
         sample_edges_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Homogeneous plotting should support legend kwargs and title."""
-        if not utils.MATPLOTLIB_AVAILABLE:
-            pytest.skip("matplotlib not available")
-
         nodes = sample_nodes_gdf.copy()
         nodes["centrality_quantile"] = range(len(nodes))
 
@@ -2959,7 +2820,6 @@ class TestPlotting(BaseGraphTest):
         finally:
             plt.close(fig)
 
-    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_empty_gdf(self, empty_gdf: gpd.GeoDataFrame) -> None:
         """Test _plot_gdf with empty GeoDataFrame (line 3246)."""
         # This should not raise and should return early
@@ -2969,7 +2829,6 @@ class TestPlotting(BaseGraphTest):
         assert not ax.collections
         plt.close(fig)
 
-    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_with_series_color(
         self,
         sample_nodes_gdf: gpd.GeoDataFrame,
@@ -2989,7 +2848,6 @@ class TestPlotting(BaseGraphTest):
         )
         plt.close("all")
 
-    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_with_column_name(
         self,
         sample_nodes_gdf: gpd.GeoDataFrame,
@@ -3008,7 +2866,6 @@ class TestPlotting(BaseGraphTest):
         )
         plt.close("all")
 
-    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_hetero_subplots_empty_edges(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
@@ -3031,7 +2888,6 @@ class TestPlotting(BaseGraphTest):
         assert result is None
         plt.close(fig)
 
-    @pytest.mark.skipif(not MATPLOTLIB_AVAILABLE, reason="Matplotlib not available")
     def test_plot_graph_subplots_less_than_grid(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
@@ -3055,7 +2911,7 @@ class TestPlotting(BaseGraphTest):
         plt.close("all")
 
 
-class TestPublicUtilityBranches(BaseGraphTest):
+class TestPublicUtilityBranches:
     """Coverage-oriented tests exercised through public utility APIs."""
 
     def test_create_isochrone_buffers_non_polygon_union(

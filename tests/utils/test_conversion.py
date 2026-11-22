@@ -10,14 +10,12 @@ import networkx as nx
 import pandas as pd
 import pytest
 import rustworkx as rx
+from geopandas.testing import assert_geodataframe_equal
 from shapely.geometry import LineString
 from shapely.geometry import Point
-from shapely.geometry import Polygon
 
-from city2graph import morphology
 from city2graph import utils
 from city2graph.base import GeoDataProcessor
-from city2graph.base import GraphMetadata
 from city2graph.utils import NxConverter
 from city2graph.utils import conversion as conversion_utils
 from city2graph.utils import gdf_to_nx
@@ -26,8 +24,6 @@ from city2graph.utils import spatial as spatial_utils
 from city2graph.utils import topology as topology_utils
 from tests import helpers
 from tests.helpers import make_nx_graph
-from tests.utils.helpers import BaseConversionTest
-from tests.utils.helpers import BaseGraphTest
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -52,16 +48,6 @@ def sample_nx_graph_no_pos(sample_crs: str) -> nx.Graph:
         ],
         edges=[(1, 2, {"edge_feature1": 0.5})],
         graph_attrs={"crs": sample_crs, "is_hetero": False},
-    )
-
-
-@pytest.fixture
-def segments_invalid_geom_gdf(sample_crs: str) -> gpd.GeoDataFrame:
-    """Provide a polygon where a street segment is expected."""
-    return gpd.GeoDataFrame(
-        {"seg_id": ["InvalidPolyGeom"]},
-        geometry=[Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])],
-        crs=sample_crs,
     )
 
 
@@ -147,17 +133,6 @@ def single_name_index_nodes_gdf(sample_crs: str) -> gpd.GeoDataFrame:
 @pytest.fixture
 def simple_edges_gdf(sample_crs: str) -> gpd.GeoDataFrame:
     """Fixture for simple edges GeoDataFrame."""
-    return gpd.GeoDataFrame(
-        {
-            "geometry": [LineString([(0, 0), (1, 1)])],
-        },
-        crs=sample_crs,
-    )
-
-
-@pytest.fixture
-def directed_multigraph_edges_gdf(sample_crs: str) -> gpd.GeoDataFrame:
-    """Fixture for edges suitable for directed multigraph testing."""
     return gpd.GeoDataFrame(
         {
             "geometry": [LineString([(0, 0), (1, 1)])],
@@ -287,175 +262,12 @@ def edges_dict_for_hetero(
 
 
 @pytest.fixture
-def duplicate_segments_gdf(sample_crs: str) -> gpd.GeoDataFrame:
-    """Fixture for duplicate segments test data."""
-    return gpd.GeoDataFrame(
-        {
-            "geometry": [
-                LineString([(0, 0), (1, 1)]),
-                LineString([(0, 0), (1, 1)]),
-            ],  # Duplicates
-            "road_type": ["primary", "secondary"],
-        },
-        crs=sample_crs,
-    )
-
-
-@pytest.fixture
 def simple_nodes_dict_type1(sample_crs: str) -> dict[str, gpd.GeoDataFrame]:
     """Fixture for simple nodes dict with type1."""
     return {"type1": gpd.GeoDataFrame({"geometry": [Point(0, 0)]}, crs=sample_crs)}
 
 
-class TestGraphStructures(BaseGraphTest):
-    """Test graph structure operations like dual graph and segments conversion."""
-
-    def test_validate_nx_populates_pos_from_xy(self, sample_crs: str) -> None:
-        """validate_nx should auto-create pos from x/y when missing."""
-        G = nx.Graph()
-        G.add_node(1, x=0.0, y=0.0)
-        G.add_node(2, x=1.0, y=1.0)
-        G.add_edge(1, 2)
-        G.graph = {"crs": sample_crs, "is_hetero": False}
-
-        GeoDataProcessor().validate_nx(G)
-        assert "pos" in G.nodes[1]
-        assert "pos" in G.nodes[2]
-
-    @pytest.mark.parametrize(
-        ("segments_fixture", "expect_empty", "multigraph"),
-        [
-            ("sample_segments_gdf", False, False),
-            ("empty_gdf", True, False),
-            ("segments_invalid_geom_gdf", True, False),
-            ("sample_segments_gdf", False, True),  # Test multigraph functionality
-        ],
-    )
-    def test_segments_to_graph_conversion(
-        self,
-        segments_fixture: str,
-        expect_empty: bool,
-        multigraph: bool,
-        request: pytest.FixtureRequest,
-    ) -> None:
-        """Test conversion of line segments to graph structure."""
-        segments_gdf = request.getfixturevalue(segments_fixture)
-        nodes_gdf, edges_gdf = morphology.segments_to_graph(segments_gdf, multigraph=multigraph)
-
-        self.assert_valid_gdf(nodes_gdf, expect_empty)
-        self.assert_valid_gdf(edges_gdf, expect_empty)
-        self.assert_crs_consistency(nodes_gdf, edges_gdf)
-
-        if not expect_empty:
-            assert nodes_gdf.index.name == "node_id"
-            helpers.assert_geometry_types(nodes_gdf, ["Point"])
-            assert isinstance(edges_gdf.index, pd.MultiIndex)
-
-            expected_index_names = (
-                ["from_node_id", "to_node_id", "edge_key"]
-                if multigraph
-                else ["from_node_id", "to_node_id"]
-            )
-            helpers.assert_index_names(edges_gdf, expected_index_names)
-
-    def test_segments_multigraph_duplicate_handling(
-        self,
-        duplicate_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Test multigraph handling of duplicate edge connections."""
-        nodes_gdf, edges_gdf = morphology.segments_to_graph(duplicate_segments_gdf, multigraph=True)
-
-        assert len(nodes_gdf) == 2  # Two unique points
-        assert len(edges_gdf) == 2  # Both edges preserved
-        assert edges_gdf.index.names == ["from_node_id", "to_node_id", "edge_key"]
-
-        # Verify edge keys are different for duplicates
-        edge_keys = edges_gdf.index.get_level_values("edge_key")
-        assert list(edge_keys) == [0, 1]
-
-    def test_segments_to_graph_default_is_multigraph(
-        self,
-        sample_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """The default output carries a three-level multigraph index."""
-        _, edges_gdf = morphology.segments_to_graph(sample_segments_gdf)
-        assert edges_gdf.index.names == ["from_node_id", "to_node_id", "edge_key"]
-
-    def test_segments_to_graph_multigraph_false_duplicates_raise(
-        self,
-        duplicate_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """multigraph=False raises on duplicate node pairs instead of passing silently."""
-        with pytest.raises(ValueError, match=r"1 duplicate node pair\(s\)"):
-            morphology.segments_to_graph(duplicate_segments_gdf, multigraph=False)
-
-    def test_segments_to_graph_directed_default_preserves_draw_order(
-        self,
-        sample_crs: str,
-    ) -> None:
-        """Default directed=True keeps reverse-drawn segments as reciprocal pairs."""
-        segments = gpd.GeoDataFrame(
-            {"name": ["fwd", "rev"]},
-            geometry=[
-                LineString([(0, 0), (1, 1)]),
-                LineString([(1, 1), (0, 0)]),
-            ],
-            crs=sample_crs,
-        )
-        _, edges_gdf = morphology.segments_to_graph(segments)
-
-        pairs = list(
-            zip(
-                edges_gdf.index.get_level_values("from_node_id"),
-                edges_gdf.index.get_level_values("to_node_id"),
-                strict=True,
-            )
-        )
-        assert pairs == [(0, 1), (1, 0)]
-
-    def test_segments_to_graph_undirected_canonicalizes_reverse_segments(
-        self,
-        sample_crs: str,
-    ) -> None:
-        """directed=False folds reverse-drawn segments into one unordered pair."""
-        segments = gpd.GeoDataFrame(
-            {"name": ["fwd", "rev"]},
-            geometry=[
-                LineString([(0, 0), (1, 1)]),
-                LineString([(1, 1), (0, 0)]),
-            ],
-            crs=sample_crs,
-        )
-        _, edges_gdf = morphology.segments_to_graph(segments, directed=False)
-
-        assert edges_gdf.index.tolist() == [(0, 1, 0), (0, 1, 1)]
-        # Geometries are left unchanged; only the index order is normalized.
-        assert list(edges_gdf.geometry) == list(segments.geometry)
-
-    def test_segments_to_graph_empty_as_nx(
-        self,
-        empty_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Empty input honors as_nx=True instead of returning a tuple."""
-        result = morphology.segments_to_graph(empty_gdf, as_nx=True)
-        assert isinstance(result, nx.MultiGraph)
-        assert result.number_of_nodes() == 0
-
-        simple = morphology.segments_to_graph(empty_gdf, multigraph=False, as_nx=True)
-        assert isinstance(simple, nx.Graph)
-        assert not isinstance(simple, nx.MultiGraph)
-
-    def test_segments_to_graph_as_nx_keeps_parallel_edges(
-        self,
-        duplicate_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """as_nx=True with the multigraph default preserves parallel edges."""
-        graph = morphology.segments_to_graph(duplicate_segments_gdf, as_nx=True)
-        assert isinstance(graph, nx.MultiGraph)
-        assert graph.number_of_edges() == 2
-
-
-class TestNxConversions(BaseConversionTest):
+class TestNxConversions:
     """Test conversions between GeoDataFrame and NetworkX formats."""
 
     def test_nullable_attributes_keep_pandas_scalar_boxing(self) -> None:
@@ -480,12 +292,8 @@ class TestNxConversions(BaseConversionTest):
         graph = gdf_to_nx(sample_nodes_gdf, sample_edges_gdf)
         nodes_converted, edges_converted = nx_to_gdf(graph)
 
-        self.assert_roundtrip_consistency(
-            sample_nodes_gdf,
-            sample_edges_gdf,
-            nodes_converted,
-            edges_converted,
-        )
+        assert_geodataframe_equal(nodes_converted[sample_nodes_gdf.columns], sample_nodes_gdf)
+        assert_geodataframe_equal(edges_converted[sample_edges_gdf.columns], sample_edges_gdf)
 
     def test_heterogeneous_roundtrip_conversion(
         self,
@@ -505,20 +313,10 @@ class TestNxConversions(BaseConversionTest):
         assert sample_hetero_nodes_dict.keys() == nodes_dict_converted.keys()
         assert sample_hetero_edges_dict.keys() == edges_dict_converted.keys()
 
-        for node_type, original_nodes in sample_hetero_nodes_dict.items():
-            assert isinstance(nodes_dict_converted[node_type], gpd.GeoDataFrame)
-            converted_nodes = nodes_dict_converted[node_type]
-            # Use the first available edge type for consistency check
-            first_edge_type = next(iter(sample_hetero_edges_dict.keys()))
-            original_edges = sample_hetero_edges_dict[first_edge_type]
-            assert isinstance(edges_dict_converted[first_edge_type], gpd.GeoDataFrame)
-            converted_edges = edges_dict_converted[first_edge_type]
-            self.assert_roundtrip_consistency(
-                original_nodes,
-                original_edges,
-                converted_nodes,
-                converted_edges,
-            )
+        for node_type, original in sample_hetero_nodes_dict.items():
+            assert_geodataframe_equal(nodes_dict_converted[node_type][original.columns], original)
+        for edge_type, original in sample_hetero_edges_dict.items():
+            assert_geodataframe_equal(edges_dict_converted[edge_type][original.columns], original)
 
     @pytest.mark.parametrize(
         ("input_type", "gdf_fixture"),
@@ -635,11 +433,11 @@ class TestNxConversions(BaseConversionTest):
 
     def test_directed_multigraph_conversion(
         self,
-        directed_multigraph_edges_gdf: gpd.GeoDataFrame,
+        simple_edges_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Directed + multigraph flags should produce a MultiDiGraph."""
         converter = NxConverter(directed=True, multigraph=True)
-        graph = converter.gdf_to_nx(nodes=None, edges=directed_multigraph_edges_gdf)
+        graph = converter.gdf_to_nx(nodes=None, edges=simple_edges_gdf)
         assert isinstance(graph, nx.MultiDiGraph)
 
     @pytest.mark.parametrize(
@@ -742,8 +540,8 @@ class TestNxConversions(BaseConversionTest):
         graph.graph = {"crs": sample_crs, "is_hetero": False}
 
         nodes_gdf, edges_gdf = nx_to_gdf(graph)
-        self.assert_valid_gdf(nodes_gdf)
-        self.assert_valid_gdf(edges_gdf, expected_empty=True)
+        helpers.assert_valid_gdf(nodes_gdf)
+        helpers.assert_valid_gdf(edges_gdf, expected_empty=True)
 
     def test_nx_to_gdf_multigraph_edges(self, sample_crs: str) -> None:
         """Multigraph attributes should be preserved after conversion."""
@@ -754,7 +552,7 @@ class TestNxConversions(BaseConversionTest):
         graph.graph = {"crs": sample_crs, "is_hetero": False}
 
         _, edges_gdf = nx_to_gdf(graph)
-        self.assert_valid_gdf(edges_gdf)
+        helpers.assert_valid_gdf(edges_gdf)
         assert isinstance(edges_gdf, gpd.GeoDataFrame)
         assert "weight" in edges_gdf.columns
 
@@ -771,7 +569,7 @@ class TestNxConversions(BaseConversionTest):
             attrs["_original_edge_index"] = [u, v, k]
 
         _, edges_gdf = nx_to_gdf(graph)
-        self.assert_valid_gdf(edges_gdf)
+        helpers.assert_valid_gdf(edges_gdf)
         assert len(edges_gdf) == 2
 
     def test_nx_to_gdf_single_coord_attr(self, sample_crs: str) -> None:
@@ -782,7 +580,7 @@ class TestNxConversions(BaseConversionTest):
         graph.graph = {"crs": sample_crs, "is_hetero": False}
 
         nodes_gdf = nx_to_gdf(graph, nodes=True, edges=False, set_missing_pos_from=("coords",))
-        self.assert_valid_gdf(nodes_gdf)
+        helpers.assert_valid_gdf(nodes_gdf)
         assert len(nodes_gdf) == 2
 
     @pytest.mark.parametrize("keep_geom", [True, False])
@@ -1182,53 +980,6 @@ class TestValidation:
         assert "pos" in G.nodes[2]
         assert G.nodes[1]["pos"] == (10.0, 20.0)
         assert G.nodes[2]["pos"] == (30.0, 40.0)
-
-
-class TestGraphMetadata:
-    """Test GraphMetadata class functionality."""
-
-    def test_metadata_creation_and_conversion(self) -> None:
-        """Test GraphMetadata creation, conversion, and validation."""
-        metadata = GraphMetadata(crs="EPSG:4326", is_hetero=True)
-        metadata.node_types = ["building", "road"]
-        metadata.edge_types = [("building", "connects", "road")]
-
-        # Test to_dict conversion
-        result_dict = metadata.to_dict()
-        assert result_dict["crs"] == "EPSG:4326"
-        assert result_dict["is_hetero"] is True
-        assert result_dict["node_types"] == ["building", "road"]
-
-        # Test from_dict creation
-        recreated = GraphMetadata.from_dict(result_dict)
-        assert recreated.crs == metadata.crs
-        assert recreated.is_hetero == metadata.is_hetero
-        assert recreated.node_types == metadata.node_types
-
-    @pytest.mark.parametrize(
-        ("invalid_data", "error_type", "error_match"),
-        [
-            ({"crs": 123.45, "is_hetero": False}, TypeError, "CRS must be str, int, dict"),
-            ({"crs": "EPSG:4326", "is_hetero": "not_bool"}, TypeError, "is_hetero must be bool"),
-        ],
-    )
-    def test_metadata_validation_errors(
-        self,
-        invalid_data: dict[str, object],
-        error_type: type[Exception],
-        error_match: str,
-    ) -> None:
-        """Test GraphMetadata validation catches invalid inputs."""
-        with pytest.raises(error_type, match=error_match):
-            GraphMetadata.from_dict(invalid_data)
-
-    def test_metadata_valid_crs_types(self) -> None:
-        """Test GraphMetadata accepts various valid CRS formats."""
-        valid_crs_values = ["EPSG:4326", 4326, {"init": "epsg:4326"}, None]
-
-        for crs_value in valid_crs_values:
-            metadata = GraphMetadata.from_dict({"crs": crs_value, "is_hetero": False})
-            assert metadata.crs == crs_value
 
 
 class TestRustworkxConversions:

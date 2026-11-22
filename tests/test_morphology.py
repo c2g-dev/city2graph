@@ -18,6 +18,7 @@ from shapely import transform
 from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
+from shapely.geometry import box
 
 import city2graph.morphology as morph
 from city2graph.morphology import _filter_tessellation_by_network_distance
@@ -28,6 +29,8 @@ from city2graph.morphology import movement_to_movement_graph
 from city2graph.morphology import place_to_movement_graph
 from city2graph.morphology import place_to_place_graph
 from city2graph.morphology import segments_to_graph
+from tests import helpers
+from tests.helpers import assert_as_nx_deprecation
 from tests.helpers import assert_valid_nx_graph
 from tests.helpers import make_grid_polygons_gdf
 
@@ -52,6 +55,21 @@ IMMUTABILITY_OPTION_SETS: list[dict[str, Any]] = [
 # module scope (never nested inside a test) and receive any per-test state via
 # ``functools.partial`` rather than closures.
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def duplicate_segments_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Fixture for duplicate segments test data."""
+    return gpd.GeoDataFrame(
+        {
+            "geometry": [
+                LineString([(0, 0), (1, 1)]),
+                LineString([(0, 0), (1, 1)]),
+            ],  # Duplicates
+            "road_type": ["primary", "secondary"],
+        },
+        crs=sample_crs,
+    )
 
 
 @pytest.fixture
@@ -1545,6 +1563,118 @@ class TestMorphologicalGraphEdgeCases(TestMorphologyBase):
 class TestIndividualGraphFunctions(TestMorphologyBase):
     """Tests for individual graph creation functions."""
 
+    @pytest.mark.parametrize(
+        ("segments_fixture", "expect_empty", "multigraph"),
+        [
+            ("sample_segments_gdf", False, False),
+            ("empty_gdf", True, False),
+            ("segments_invalid_geom_gdf", True, False),
+            ("sample_segments_gdf", False, True),  # Test multigraph functionality
+        ],
+    )
+    def test_segments_to_graph_conversion(
+        self,
+        segments_fixture: str,
+        expect_empty: bool,
+        multigraph: bool,
+        request: pytest.FixtureRequest,
+    ) -> None:
+        """Test conversion of line segments to graph structure."""
+        segments_gdf = request.getfixturevalue(segments_fixture)
+        nodes_gdf, edges_gdf = segments_to_graph(segments_gdf, multigraph=multigraph)
+
+        helpers.assert_valid_gdf(nodes_gdf, expect_empty)
+        helpers.assert_valid_gdf(edges_gdf, expect_empty)
+        helpers.assert_crs_consistency(nodes_gdf, edges_gdf)
+
+        if not expect_empty:
+            assert nodes_gdf.index.name == "node_id"
+            helpers.assert_geometry_types(nodes_gdf, ["Point"])
+            assert isinstance(edges_gdf.index, pd.MultiIndex)
+
+            expected_index_names = (
+                ["from_node_id", "to_node_id", "edge_key"]
+                if multigraph
+                else ["from_node_id", "to_node_id"]
+            )
+            helpers.assert_index_names(edges_gdf, expected_index_names)
+
+    def test_segments_multigraph_duplicate_handling(
+        self,
+        duplicate_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test multigraph handling of duplicate edge connections."""
+        nodes_gdf, edges_gdf = segments_to_graph(duplicate_segments_gdf, multigraph=True)
+
+        assert len(nodes_gdf) == 2  # Two unique points
+        assert len(edges_gdf) == 2  # Both edges preserved
+        assert edges_gdf.index.names == ["from_node_id", "to_node_id", "edge_key"]
+
+        # Verify edge keys are different for duplicates
+        edge_keys = edges_gdf.index.get_level_values("edge_key")
+        assert list(edge_keys) == [0, 1]
+
+    def test_segments_to_graph_default_is_multigraph(
+        self,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """The default output carries a three-level multigraph index."""
+        _, edges_gdf = segments_to_graph(sample_segments_gdf)
+        assert edges_gdf.index.names == ["from_node_id", "to_node_id", "edge_key"]
+
+    def test_segments_to_graph_multigraph_false_duplicates_raise(
+        self,
+        duplicate_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """multigraph=False raises on duplicate node pairs instead of passing silently."""
+        with pytest.raises(ValueError, match=r"1 duplicate node pair\(s\)"):
+            segments_to_graph(duplicate_segments_gdf, multigraph=False)
+
+    @pytest.mark.parametrize(
+        ("options", "expected"),
+        [
+            ({}, [(0, 1, 0), (1, 0, 0)]),
+            ({"directed": False}, [(0, 1, 0), (0, 1, 1)]),
+        ],
+    )
+    def test_reverse_drawn_segments(
+        self, sample_crs: str, options: dict[str, Any], expected: list[tuple[int, int, int]]
+    ) -> None:
+        """Undirected segments share an endpoint pair and preserve their drawn geometries."""
+        segments = gpd.GeoDataFrame(
+            {"name": ["fwd", "rev"]},
+            geometry=[
+                LineString([(0, 0), (1, 1)]),
+                LineString([(1, 1), (0, 0)]),
+            ],
+            crs=sample_crs,
+        )
+        _, edges = segments_to_graph(segments, **options)
+        assert edges.index.tolist() == expected
+        assert edges.geometry.tolist() == segments.geometry.tolist()
+
+    def test_segments_to_graph_empty_as_nx(
+        self,
+        empty_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Empty input honors as_nx=True instead of returning a tuple."""
+        result = segments_to_graph(empty_gdf, as_nx=True)
+        assert isinstance(result, nx.MultiGraph)
+        assert result.number_of_nodes() == 0
+
+        simple = segments_to_graph(empty_gdf, multigraph=False, as_nx=True)
+        assert isinstance(simple, nx.Graph)
+        assert not isinstance(simple, nx.MultiGraph)
+
+    def test_segments_to_graph_as_nx_keeps_parallel_edges(
+        self,
+        duplicate_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """as_nx=True with the multigraph default preserves parallel edges."""
+        graph = segments_to_graph(duplicate_segments_gdf, as_nx=True)
+        assert isinstance(graph, nx.MultiGraph)
+        assert graph.number_of_edges() == 2
+
     # Place-to-Place Tests
     def test_place_to_place_basic(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
         """Test basic place-to-place graph creation."""
@@ -2051,50 +2181,35 @@ class TestInputValidationAndErrors(TestMorphologyBase):
 class TestIntegrationAndStress(TestMorphologyBase):
     """Integration tests and stress testing scenarios."""
 
-    def test_large_dataset_performance(self, sample_crs: str) -> None:
-        """Test with larger synthetic dataset for performance."""
-        # Create grid of buildings with proper spacing for tessellation
-        buildings = []
-        for i in range(5):
-            for j in range(5):
-                poly = Polygon(
-                    [
-                        (i * 20 + 2, j * 20 + 2),
-                        (i * 20 + 18, j * 20 + 2),
-                        (i * 20 + 18, j * 20 + 18),
-                        (i * 20 + 2, j * 20 + 18),
-                    ],
-                )
-                buildings.append(poly)
-
-        buildings_gdf = gpd.GeoDataFrame(
-            {"bldg_id": range(len(buildings))},
-            geometry=buildings,
-            crs=sample_crs,
+    def test_block_frontages_match_touching_streets(
+        self, small_buildings_gdf: gpd.GeoDataFrame, small_segments_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """Each block faces precisely the streets intersecting its boundary."""
+        limit = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+        nodes, edges = morphological_graph(
+            small_buildings_gdf, small_segments_gdf, limit=limit, keep_buildings=True
         )
-
-        # Create grid of streets
-        streets = []
-        for j in range(6):
-            line = LineString([(0, j * 20), (100, j * 20)])
-            streets.append(line)
-        for i in range(6):
-            line = LineString([(i * 20, 0), (i * 20, 100)])
-            streets.append(line)
-
-        segments_gdf = gpd.GeoDataFrame(
-            {"segment_id": range(len(streets))},
-            geometry=streets,
-            crs=sample_crs,
-        )
-
-        # Test morphological graph creation
-        nodes, edges = morphological_graph(buildings_gdf, segments_gdf)
-        self.validate_basic_output(nodes, edges, ["place", "movement"])
-
-        # Verify that we get some output (tessellation might filter some buildings)
-        assert len(nodes["movement"]) == len(segments_gdf)
-        assert len(nodes["place"]) >= 0  # Some buildings might be filtered out
+        places = nodes["place"]
+        cells = {
+            "sw": box(0, 0, 5, 5),
+            "se": box(5, 0, 10, 5),
+            "nw": box(0, 5, 5, 10),
+            "ne": box(5, 5, 10, 10),
+        }
+        assert places["bldg_id"].is_unique
+        assert set(places["bldg_id"]) == set(cells)
+        for building, cell in places.set_index("bldg_id")["tessellation_geometry"].items():
+            assert cell.equals(cells[building])
+        assert set(nodes["movement"].index) == set(small_segments_gdf["movement_id"])
+        expected = {
+            (place_id, segment.movement_id)
+            for place_id, building in places["bldg_id"].items()
+            for segment in small_segments_gdf.itertuples()
+            if cells[building].boundary.intersects(segment.geometry)
+        }
+        frontages = edges[("place", "faced_to", "movement")]
+        assert frontages.index.is_unique
+        assert set(frontages.index) == expected
 
     def test_function_consistency(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
         """Test consistency between different function calls."""
@@ -2668,3 +2783,14 @@ def test_morphology_reprojects_secondary_barriers(
             assert_geodataframe_equal(edges[key], frame, check_less_precise=True)
     assert_geodataframe_equal(segments, before)
     assert_geodataframe_equal(buildings, buildings_before)
+
+
+def test_morphology_as_nx_warning(small_segments_gdf: gpd.GeoDataFrame) -> None:
+    """Nested morphology calls leave an omitted as_nx silent."""
+    places = make_grid_polygons_gdf(2, 2, crs=small_segments_gdf.crs).reset_index(drop=True)
+    places["place_id"] = places.index
+    assert_as_nx_deprecation(morphological_graph, places, small_segments_gdf)
+    assert_as_nx_deprecation(place_to_place_graph, places)
+    assert_as_nx_deprecation(place_to_movement_graph, places, small_segments_gdf)
+    assert_as_nx_deprecation(movement_to_movement_graph, small_segments_gdf)
+    assert_as_nx_deprecation(segments_to_graph, small_segments_gdf)

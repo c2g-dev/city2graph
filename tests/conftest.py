@@ -1,30 +1,24 @@
 """Shared pytest fixtures for city2graph tests."""
 
 import typing
-import zipfile
-from collections.abc import Iterator
-from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
-import duckdb
 import geopandas as gpd
 import networkx as nx
 import pandas as pd
 import pytest
 from shapely.geometry import LineString
 from shapely.geometry import Point
+from shapely.geometry import Polygon
 
 from city2graph import TransportData
-from city2graph.transportation import load_gtfs
-from tests.helpers import GtfsConnectionFactory
 from tests.helpers import make_nx_graph
 from tests.helpers import temporary_gtfs_zip
 
 TESTS_DIR = Path(__file__).parent
 TEST_DATA_DIR = TESTS_DIR / "data"
 DEFAULT_SAMPLE_CRS = "EPSG:27700"
-WGS84_CRS = "EPSG:4326"
 
 
 @pytest.fixture
@@ -56,27 +50,6 @@ def osm_response() -> dict[str, Any]:
             {"type": "way", "id": 3, "geometry": [{"lat": 51, "lon": 0}, {"lat": 51, "lon": 0.01}]},
         ],
     }
-
-
-@pytest.fixture
-def gtfs_connection(tmp_path: Path) -> Iterator[GtfsConnectionFactory]:
-    """Load independent GTFS feeds and close every connection after the test."""
-    with ExitStack() as connections:
-        counter = 0
-
-        def load(tables: dict[str, pd.DataFrame]) -> duckdb.DuckDBPyConnection:
-            nonlocal counter
-            path = tmp_path / f"feed-{counter}.zip"
-            counter += 1
-            with zipfile.ZipFile(path, "w") as archive:
-                for name, frame in tables.items():
-                    data = frame.drop(columns="geometry", errors="ignore").copy()
-                    for column in data.select_dtypes(include="bool"):
-                        data[column] = data[column].astype(int)
-                    archive.writestr(f"{name}.txt", data.to_csv(index=False))
-            return connections.enter_context(load_gtfs(path))
-
-        yield load
 
 
 EdgeTableData = dict[str, object]
@@ -169,83 +142,20 @@ def _base_gtfs_zip_files() -> dict[str, str]:
     }
 
 
-def _base_gtfs_dict() -> dict[str, pd.DataFrame]:
-    """Return a canonical in-memory GTFS feed used across transportation tests."""
-    return {
-        "stops": gpd.GeoDataFrame(
-            {
-                "stop_id": ["stop1", "stop2", "stop3"],
-                "stop_name": ["Stop 1", "Stop 2", "Stop 3"],
-                "stop_lat": [40.7128, 40.7589, 40.7505],
-                "stop_lon": [-74.0060, -73.9851, -73.9934],
-                "geometry": [
-                    Point(-74.0060, 40.7128),
-                    Point(-73.9851, 40.7589),
-                    Point(-73.9934, 40.7505),
-                ],
-            },
-            crs=WGS84_CRS,
-        ),
-        "routes": pd.DataFrame(
-            {
-                "route_id": ["route1"],
-                "agency_id": ["1"],
-                "route_short_name": ["1"],
-                "route_long_name": ["Test Route 1"],
-                "route_type": [3],
-            },
-        ),
-        "trips": pd.DataFrame(
-            {
-                "route_id": ["route1", "route1"],
-                "service_id": ["service1", "service1"],
-                "trip_id": ["trip1", "trip2"],
-            },
-        ),
-        "stop_times": pd.DataFrame(
-            {
-                "trip_id": ["trip1", "trip1", "trip1", "trip2", "trip2", "trip2"],
-                "arrival_time": [
-                    "08:00:00",
-                    "08:05:00",
-                    "08:10:00",
-                    "09:00:00",
-                    "09:05:00",
-                    "09:10:00",
-                ],
-                "departure_time": [
-                    "08:00:00",
-                    "08:05:00",
-                    "08:10:00",
-                    "09:00:00",
-                    "09:05:00",
-                    "09:10:00",
-                ],
-                "stop_id": ["stop1", "stop2", "stop3", "stop1", "stop2", "stop3"],
-                "stop_sequence": [1, 2, 3, 1, 2, 3],
-            },
-        ),
-        "calendar": pd.DataFrame(
-            {
-                "service_id": ["service1"],
-                "monday": [True],
-                "tuesday": [True],
-                "wednesday": [True],
-                "thursday": [True],
-                "friday": [True],
-                "saturday": [False],
-                "sunday": [False],
-                "start_date": ["20240101"],
-                "end_date": ["20241231"],
-            },
-        ),
-    }
-
-
 @pytest.fixture(scope="session")
 def sample_crs() -> str:
     """Coordinate Reference System fixture."""
     return DEFAULT_SAMPLE_CRS
+
+
+@pytest.fixture
+def segments_invalid_geom_gdf(sample_crs: str) -> gpd.GeoDataFrame:
+    """Provide a polygon where a street segment is expected."""
+    return gpd.GeoDataFrame(
+        {"seg_id": ["InvalidPolyGeom"]},
+        geometry=[Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])],
+        crs=sample_crs,
+    )
 
 
 @pytest.fixture
@@ -369,11 +279,6 @@ def sample_nx_graph(sample_crs: str) -> nx.Graph:
     )
 
 
-# ============================================================================
-# Helper Functions for Creating and Modifying Test Data
-# ============================================================================
-
-
 @pytest.fixture
 def empty_gdf(sample_crs: str) -> gpd.GeoDataFrame:
     """Return an empty GeoDataFrame for testing."""
@@ -436,23 +341,10 @@ def sample_nodes_gdf_alt_crs(sample_nodes_gdf: gpd.GeoDataFrame) -> gpd.GeoDataF
     return sample_nodes_gdf.to_crs("EPSG:4326")
 
 
-# Data module fixtures
-
-
-# Transportation module fixtures
 @pytest.fixture
 def sample_gtfs_zip() -> typing.Generator[str, None, None]:
     """Create a sample GTFS zip file for testing."""
     yield from temporary_gtfs_zip(_base_gtfs_zip_files())
-
-
-@pytest.fixture
-def sample_gtfs_dict() -> dict[str, pd.DataFrame]:
-    """Create a sample GTFS dictionary for testing."""
-    return _base_gtfs_dict()
-
-
-# Additional fixtures for enhanced test coverage
 
 
 @pytest.fixture

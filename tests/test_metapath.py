@@ -1087,30 +1087,27 @@ class TestMetapaths:
                 edge_attr="travel_time",
             )
 
-    def test_add_metapaths_invalid_edge_attr_agg_string(
+    @pytest.mark.parametrize(
+        ("aggregation", "error", "message"),
+        [
+            ("median", ValueError, "Unsupported edge_attr_agg"),
+            (123, TypeError, "edge_attr_agg must be"),
+        ],
+    )
+    def test_invalid_edge_aggregation(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
         sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+        aggregation: str | int,
+        error: type[Exception],
+        message: str,
     ) -> None:
-        """Unsupported string for edge_attr_agg must raise ValueError."""
-        with pytest.raises(ValueError, match="Unsupported edge_attr_agg"):
+        """Unknown reducers and non-callable values report distinct input errors."""
+        with pytest.raises(error, match=message):
             add_metapaths(
                 (sample_hetero_nodes_dict, sample_hetero_edges_dict),
                 sequence=METAPATH,
-                edge_attr_agg="median",
-            )
-
-    def test_add_metapaths_invalid_edge_attr_agg_type(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Non-string, non-callable edge_attr_agg must raise TypeError."""
-        with pytest.raises(TypeError, match="edge_attr_agg must be"):
-            add_metapaths(
-                (sample_hetero_nodes_dict, sample_hetero_edges_dict),
-                sequence=METAPATH,
-                edge_attr_agg=123,
+                edge_attr_agg=aggregation,
             )
 
     def test_add_metapaths_attach_geometry_missing_nodes(
