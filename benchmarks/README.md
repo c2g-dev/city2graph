@@ -12,9 +12,10 @@ Correctness tests live under `tests/` and have no timing thresholds.
 mkdir -p benchmarks/results
 uv run python -m benchmarks.scalability > benchmarks/results/spatial.jsonl
 uv run python -m benchmarks.gtfs_performance > benchmarks/results/gtfs.jsonl
+uv run python -m benchmarks.network_distance > benchmarks/results/network-distance.jsonl
 ```
 
-Both commands accept `--case`, `--size`, `--seed` (default 42), `--repeat`
+These commands accept `--case`, `--size`, `--seed` (default 42), `--repeat`
 (default 3), `--warmup` (default 1) and `--package-root`. An explicit size applies
 to every selected case. Select a small case while developing a workload:
 
@@ -47,6 +48,7 @@ Spatial point inputs use seeded NumPy samples in a unit square with EPSG:3857.
 | `weighted` | Unit-cost chain; weighted metapaths with threshold 1 and all nodes as endpoints. | 1,000 / 2,000 / 4,000 nodes |
 | `paths` | Layers `1, n, 1, n, 1`, fully connected between neighbours; directed metapath aggregation. | 100 / 200 / 400 branches |
 | `network` | Road chain and 20 points on its first nodes; network kNN with `k=1`. | 500 / 1,000 / 2,000 road nodes |
+| `network-grid` | 40 x 40 road grid with seeded junction offsets of up to 0.2 and seeded points; network kNN with `k=3`. | 100 / 400 / 1,600 points |
 | `waxman` | Seeded points; `beta=0.00001`, `r0=1`, seeded edge selection. | 1,000 / 2,000 / 4,000 points |
 | `mst` | Seeded points; Manhattan minimum spanning tree. | 100 / 200 / 400 points |
 | `gabriel` | Seeded points; Gabriel graph. | 1,000 / 2,000 / 4,000 points |
@@ -63,6 +65,34 @@ Generated input hashes cover the GTFS tables and conditions. Spatial hashes
 identify the versioned input recipe, size and seed. Geometry and timetable
 correctness are covered by the public API tests; output counts are a lightweight
 check that measurements performed the same amount of work.
+
+## Network distance backends
+
+`benchmarks.network_distance` compares the two internal shortest-path backends
+used by network proximity graphs on the same inputs. The network is a seeded
+60 x 60 directed grid (3,600 nodes). Each street has two arcs with independent
+weights in [1, 2), and one street in ten is one-way. The size is the number of
+origins (1, 10, 100 and 1,000), drawn with replacement; 100 distinct targets are
+fixed per seed.
+
+| Case | Operation |
+| --- | --- |
+| `networkx-full`, `sparse-full` | Unbounded searches from every origin. |
+| `networkx-cutoff`, `sparse-cutoff` | Searches bounded at distance 5. |
+
+The timed operation includes conversion of the NetworkX graph to a SciPy sparse
+matrix (sparse cases), the searches, the origin-by-target distance array and
+the paths to the three nearest reachable targets of each origin. The two
+backends of one search must report identical output counts for the same inputs.
+Distance and path agreement on directed graphs, zero-weight edges, parallel
+edges, unreachable nodes, impassable edges and cutoff distances is tested in
+`tests/benchmarks/test_network_distance.py`.
+
+Network proximity graphs use the sparse backend for unbounded searches, as in
+k-nearest-neighbour, Waxman and minimum-spanning-tree graphs. Bounded searches,
+as in fixed-radius graphs, remain in NetworkX: a local search is cheaper than
+converting the whole network. Exact shortest-path ties are resolved by a bounded
+NetworkX search so that path geometries are unchanged.
 
 ## Compare results
 

@@ -20,6 +20,7 @@ CASES = {
     "weighted": (1000, 2000, 4000),
     "paths": (100, 200, 400),
     "network": (500, 1000, 2000),
+    "network-grid": (100, 400, 1600),
     "waxman": (1000, 2000, 4000),
     "mst": (100, 200, 400),
     "gabriel": (1000, 2000, 4000),
@@ -81,6 +82,11 @@ def prepare(case: str, size: int, seed: int, _stack: ExitStack) -> Workload:
 
         def operation() -> Any:
             return c2g.knn_graph(nodes, k=1, distance_metric="network", network_gdf=roads)
+    elif case == "network-grid":
+        nodes, roads = _jittered_grid(40, size, seed)
+
+        def operation() -> Any:
+            return c2g.knn_graph(nodes, k=3, distance_metric="network", network_gdf=roads)
     else:
         functions: dict[str, Callable[..., Any]] = {
             "waxman": c2g.waxman_graph,
@@ -105,6 +111,25 @@ def prepare(case: str, size: int, seed: int, _stack: ExitStack) -> Workload:
 
     specification = {"generator": "spatial-v1", "case": case, "size": size, "seed": seed}
     return Workload(operation, describe, {"synthetic": digest(specification)})
+
+
+def _jittered_grid(side: int, size: int, seed: int) -> tuple[Any, Any]:
+    """Return seeded points and a road grid whose jittered junctions give distinct lengths."""
+    import geopandas as gpd
+    import numpy as np
+    import shapely
+
+    rng = np.random.default_rng(seed)
+    grid = np.stack(np.meshgrid(np.arange(side), np.arange(side), indexing="ij"), -1)
+    junctions = grid + rng.uniform(-0.2, 0.2, grid.shape)
+    starts = np.concatenate([junctions[:-1, :].reshape(-1, 2), junctions[:, :-1].reshape(-1, 2)])
+    ends = np.concatenate([junctions[1:, :].reshape(-1, 2), junctions[:, 1:].reshape(-1, 2)])
+    roads = gpd.GeoDataFrame(
+        geometry=shapely.linestrings(np.stack([starts, ends], axis=1)), crs=3857
+    )
+    coordinates = rng.uniform(0, side - 1, (size, 2))
+    points = gpd.GeoDataFrame(geometry=gpd.points_from_xy(*coordinates.T), crs=3857)
+    return points, roads
 
 
 if __name__ == "__main__":
