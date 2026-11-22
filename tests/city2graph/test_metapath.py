@@ -113,8 +113,8 @@ def sample_weight_graph_data() -> tuple[
     return nodes_dict, edges_dict
 
 
-class TestMetapaths:
-    """Test metapath addition functionality."""
+class TestAddMetapaths:
+    """Tests for ``add_metapaths``."""
 
     @pytest.mark.parametrize("aggregation", ["sum", "mean"])
     @pytest.mark.parametrize("attribute_dtype", [float, str])
@@ -225,29 +225,6 @@ class TestMetapaths:
         assert list(output.index) == [(0, 0)]
         assert output.iloc[0]["weight"] == 2
         assert output.iloc[0]["cost"] == (expected_sum if aggregation == "sum" else expected_mean)
-
-    def test_weighted_sources_cross_batch_boundaries(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Global source positions and undirected deduplication survive batching."""
-        n = 270
-        nodes = {"a": gpd.GeoDataFrame(geometry=[Point(i, 0) for i in range(n)], crs=3857)}
-        edges = {
-            ("a", "link", "a"): gpd.GeoDataFrame(
-                {"weight": np.ones(n - 1)},
-                geometry=[None] * (n - 1),
-                index=pd.MultiIndex.from_arrays([np.arange(n - 1), np.arange(1, n)]),
-                crs=3857,
-            )
-        }
-        search = Mock(wraps=csgraph.dijkstra)
-        monkeypatch.setattr(csgraph, "dijkstra", search)
-        _, result = add_metapaths_by_weight(
-            nodes=nodes, edges=edges, endpoint_type="a", threshold=1, weight="weight"
-        )
-        output = list(result.values())[-1]
-        assert len(output) == n - 1
-        assert (output["weight"] == 1).all()
-        assert search.call_count > 1
-        assert sum(len(call.kwargs["indices"]) for call in search.call_args_list) == n
 
     @pytest.mark.parametrize(
         ("aggregation", "values", "expected"),
@@ -777,7 +754,6 @@ class TestMetapaths:
             res_badgeom = edges_badgeom[RESULT_KEY]
             assert res_badgeom["geometry"].isna().any() or res_badgeom.empty
 
-    # --- Error cases ---
     def test_add_metapaths_tuple_length_error(
         self,
         sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
@@ -858,6 +834,150 @@ class TestMetapaths:
         edges_bad_index[("building", "connects_to", "road")] = e0
         with pytest.raises(ValueError, match="must have a two-level MultiIndex"):
             add_metapaths((sample_hetero_nodes_dict, edges_bad_index), sequence=METAPATH)
+
+    def test_add_metapaths_missing_edge_attr_error(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Missing edge attribute at hop level should raise KeyError."""
+        with pytest.raises(KeyError, match=r"Edge attribute\(s\)"):
+            add_metapaths(
+                (sample_hetero_nodes_dict, sample_hetero_edges_dict),
+                sequence=METAPATH,
+                edge_attr="missing_attr",
+            )
+
+    def test_add_metapaths_missing_join_attr_error(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Edge attribute missing in some steps should raise KeyError in join reduction."""
+        edges_partial_attr = {k: v.copy() for k, v in sample_hetero_edges_dict.items()}
+        edges_partial_attr[("building", "connects_to", "road")]["travel_time"] = [1.0] * len(
+            edges_partial_attr[("building", "connects_to", "road")]
+        )
+        with pytest.raises(KeyError, match="missing in metapath steps"):
+            add_metapaths(
+                (sample_hetero_nodes_dict, edges_partial_attr),
+                sequence=METAPATH,
+                edge_attr="travel_time",
+            )
+
+    @pytest.mark.parametrize(
+        ("aggregation", "error", "message"),
+        [
+            ("median", ValueError, "Unsupported edge_attr_agg"),
+            (123, TypeError, "edge_attr_agg must be"),
+        ],
+    )
+    def test_invalid_edge_aggregation(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+        aggregation: str | int,
+        error: type[Exception],
+        message: str,
+    ) -> None:
+        """Unknown reducers and non-callable values report distinct input errors."""
+        with pytest.raises(error, match=message):
+            add_metapaths(
+                (sample_hetero_nodes_dict, sample_hetero_edges_dict),
+                sequence=METAPATH,
+                edge_attr_agg=aggregation,
+            )
+
+    def test_add_metapaths_attach_geometry_missing_nodes(
+        self,
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+    ) -> None:
+        """Missing node GeoDataFrame for start or end types should raise KeyError."""
+        nodes_missing = {k: v for k, v in sample_hetero_nodes_dict.items() if k != "road"}
+        with pytest.raises(KeyError, match="Missing node GeoDataFrame"):
+            add_metapaths((nodes_missing, sample_hetero_edges_dict), sequence=METAPATH)
+
+    def test_add_metapaths_with_graph_and_nodes_error(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Test add_metapaths raises error when both graph and nodes provided."""
+        with pytest.raises(ValueError, match="Cannot provide both"):
+            add_metapaths(
+                graph=(sample_hetero_nodes_dict, sample_hetero_edges_dict),
+                nodes=sample_hetero_nodes_dict,
+                sequence=METAPATH,
+            )
+
+    def test_add_metapaths_with_nodes_only(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Test add_metapaths with nodes parameter only (no graph)."""
+        _, edges_out = add_metapaths(
+            nodes=sample_hetero_nodes_dict,
+            edges=sample_hetero_edges_dict,
+            sequence=METAPATH,
+        )
+        assert RESULT_KEY in edges_out
+
+    def test_add_metapaths_with_new_relation_name(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Test add_metapaths with custom new_relation_name."""
+        _, edges_out = add_metapaths(
+            (sample_hetero_nodes_dict, sample_hetero_edges_dict),
+            sequence=METAPATH,
+            new_relation_name="custom_path",
+        )
+        custom_key = ("building", "custom_path", "road")
+        assert custom_key in edges_out
+
+    def test_add_metapaths_trace_path_logging(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Test add_metapaths with trace_path=True triggers debug logging."""
+        # trace_path=True should just log and continue without error
+        _, edges_out = add_metapaths(
+            (sample_hetero_nodes_dict, sample_hetero_edges_dict),
+            sequence=METAPATH,
+            trace_path=True,
+        )
+        assert RESULT_KEY in edges_out
+
+
+class TestAddMetapathsByWeight:
+    """Tests for ``add_metapaths_by_weight``."""
+
+    def test_weighted_sources_cross_batch_boundaries(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Global source positions and undirected deduplication survive batching."""
+        n = 270
+        nodes = {"a": gpd.GeoDataFrame(geometry=[Point(i, 0) for i in range(n)], crs=3857)}
+        edges = {
+            ("a", "link", "a"): gpd.GeoDataFrame(
+                {"weight": np.ones(n - 1)},
+                geometry=[None] * (n - 1),
+                index=pd.MultiIndex.from_arrays([np.arange(n - 1), np.arange(1, n)]),
+                crs=3857,
+            )
+        }
+        search = Mock(wraps=csgraph.dijkstra)
+        monkeypatch.setattr(csgraph, "dijkstra", search)
+        _, result = add_metapaths_by_weight(
+            nodes=nodes, edges=edges, endpoint_type="a", threshold=1, weight="weight"
+        )
+        output = list(result.values())[-1]
+        assert len(output) == n - 1
+        assert (output["weight"] == 1).all()
+        assert search.call_count > 1
+        assert sum(len(call.kwargs["indices"]) for call in search.call_args_list) == n
 
     def test_add_metapaths_by_weight_basic(self, sample_weight_graph_data: WeightGraphData) -> None:
         """Connect buildings within a threshold and materialize geometry."""
@@ -1057,69 +1177,6 @@ class TestMetapaths:
         assert nodes_out is nodes_dict
         assert len(edges_out) == len(edges_dict)
 
-    def test_add_metapaths_missing_edge_attr_error(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Missing edge attribute at hop level should raise KeyError."""
-        with pytest.raises(KeyError, match=r"Edge attribute\(s\)"):
-            add_metapaths(
-                (sample_hetero_nodes_dict, sample_hetero_edges_dict),
-                sequence=METAPATH,
-                edge_attr="missing_attr",
-            )
-
-    def test_add_metapaths_missing_join_attr_error(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Edge attribute missing in some steps should raise KeyError in join reduction."""
-        edges_partial_attr = {k: v.copy() for k, v in sample_hetero_edges_dict.items()}
-        edges_partial_attr[("building", "connects_to", "road")]["travel_time"] = [1.0] * len(
-            edges_partial_attr[("building", "connects_to", "road")]
-        )
-        with pytest.raises(KeyError, match="missing in metapath steps"):
-            add_metapaths(
-                (sample_hetero_nodes_dict, edges_partial_attr),
-                sequence=METAPATH,
-                edge_attr="travel_time",
-            )
-
-    @pytest.mark.parametrize(
-        ("aggregation", "error", "message"),
-        [
-            ("median", ValueError, "Unsupported edge_attr_agg"),
-            (123, TypeError, "edge_attr_agg must be"),
-        ],
-    )
-    def test_invalid_edge_aggregation(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-        aggregation: str | int,
-        error: type[Exception],
-        message: str,
-    ) -> None:
-        """Unknown reducers and non-callable values report distinct input errors."""
-        with pytest.raises(error, match=message):
-            add_metapaths(
-                (sample_hetero_nodes_dict, sample_hetero_edges_dict),
-                sequence=METAPATH,
-                edge_attr_agg=aggregation,
-            )
-
-    def test_add_metapaths_attach_geometry_missing_nodes(
-        self,
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-    ) -> None:
-        """Missing node GeoDataFrame for start or end types should raise KeyError."""
-        nodes_missing = {k: v for k, v in sample_hetero_nodes_dict.items() if k != "road"}
-        with pytest.raises(KeyError, match="Missing node GeoDataFrame"):
-            add_metapaths((nodes_missing, sample_hetero_edges_dict), sequence=METAPATH)
-
     def test_add_metapaths_by_weight_value_errors(
         self, sample_weight_graph_data: WeightGraphData
     ) -> None:
@@ -1228,60 +1285,6 @@ class TestMetapaths:
             multigraph=False,
         )
         assert isinstance(result, nx.Graph)
-
-    def test_add_metapaths_with_graph_and_nodes_error(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Test add_metapaths raises error when both graph and nodes provided."""
-        with pytest.raises(ValueError, match="Cannot provide both"):
-            add_metapaths(
-                graph=(sample_hetero_nodes_dict, sample_hetero_edges_dict),
-                nodes=sample_hetero_nodes_dict,
-                sequence=METAPATH,
-            )
-
-    def test_add_metapaths_with_nodes_only(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Test add_metapaths with nodes parameter only (no graph)."""
-        _, edges_out = add_metapaths(
-            nodes=sample_hetero_nodes_dict,
-            edges=sample_hetero_edges_dict,
-            sequence=METAPATH,
-        )
-        assert RESULT_KEY in edges_out
-
-    def test_add_metapaths_with_new_relation_name(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Test add_metapaths with custom new_relation_name."""
-        _, edges_out = add_metapaths(
-            (sample_hetero_nodes_dict, sample_hetero_edges_dict),
-            sequence=METAPATH,
-            new_relation_name="custom_path",
-        )
-        custom_key = ("building", "custom_path", "road")
-        assert custom_key in edges_out
-
-    def test_add_metapaths_trace_path_logging(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Test add_metapaths with trace_path=True triggers debug logging."""
-        # trace_path=True should just log and continue without error
-        _, edges_out = add_metapaths(
-            (sample_hetero_nodes_dict, sample_hetero_edges_dict),
-            sequence=METAPATH,
-            trace_path=True,
-        )
-        assert RESULT_KEY in edges_out
 
     def test_add_metapaths_by_weight_nodes_param(
         self, sample_weight_graph_data: WeightGraphData

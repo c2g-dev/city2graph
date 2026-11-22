@@ -29,12 +29,12 @@ from city2graph.morphology import movement_to_movement_graph
 from city2graph.morphology import place_to_movement_graph
 from city2graph.morphology import place_to_place_graph
 from city2graph.morphology import segments_to_graph
-from tests import helpers
-from tests.helpers import assert_as_nx_deprecation
-from tests.helpers import assert_valid_nx_graph
-from tests.helpers import make_grid_polygons_gdf
+from tests.city2graph import helpers
+from tests.city2graph.helpers import assert_as_nx_deprecation
+from tests.city2graph.helpers import assert_valid_nx_graph
+from tests.city2graph.helpers import make_grid_polygons_gdf
 
-# Option sets exercised by TestPublicInputImmutability. The ``with_center`` key
+# Option sets for input immutability tests. The ``with_center`` key
 # marks cases that need the ``mg_center_point`` fixture injected as
 # ``center_point`` at test time.
 IMMUTABILITY_OPTION_SETS: list[dict[str, Any]] = [
@@ -323,67 +323,58 @@ def _field_recording_wrapper(
     return wrapped(*args, **kwargs)
 
 
-class TestMorphologyBase:
-    """Base class with common test utilities and validation methods."""
-
-    @staticmethod
-    def validate_basic_output(
-        nodes: gpd.GeoDataFrame | dict[str, gpd.GeoDataFrame],
-        edges: gpd.GeoDataFrame | dict[tuple[str, str, str], gpd.GeoDataFrame],
-        expected_node_types: list[str] | None = None,
-    ) -> None:
-        """Validate basic output structure for morphology functions."""
-        if expected_node_types:
-            # For morphological_graph (returns dict)
-            assert isinstance(nodes, dict)
-            assert isinstance(edges, dict)
-            assert set(nodes) == set(expected_node_types)
-            for (source, _relation, target), frame in edges.items():
-                assert isinstance(frame, gpd.GeoDataFrame)
-                assert frame.crs == nodes[source].crs == nodes[target].crs
-                if not frame.empty:
-                    assert isinstance(frame.index, pd.MultiIndex)
-                    assert frame.index.get_level_values(0).isin(nodes[source].index).all()
-                    assert frame.index.get_level_values(1).isin(nodes[target].index).all()
-        else:
-            # For individual graph functions (returns GeoDataFrames)
-            assert isinstance(nodes, gpd.GeoDataFrame)
-            assert isinstance(edges, gpd.GeoDataFrame)
-
-    @staticmethod
-    def validate_networkx_output(graph: nx.Graph) -> None:
-        """Validate NetworkX graph output using shared helper."""
-        assert_valid_nx_graph(graph)
-
-    @staticmethod
-    def validate_empty_output(
-        nodes: gpd.GeoDataFrame | dict[str, gpd.GeoDataFrame],
-        edges: gpd.GeoDataFrame | dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Validate output for empty inputs."""
-        if isinstance(nodes, dict):
-            # morphological_graph case
-            for node_gdf in nodes.values():
-                assert node_gdf.empty
-            for edge_gdf in edges.values():
-                assert edge_gdf.empty
-        else:
-            # individual function case
-            assert isinstance(nodes, gpd.GeoDataFrame)
-            assert isinstance(edges, gpd.GeoDataFrame)
-            assert nodes.empty
-            assert edges.empty
-
-    @staticmethod
-    def validate_edge_columns(edges: gpd.GeoDataFrame, expected_columns: list[str]) -> None:
-        """Validate that edges contain expected columns."""
-        if not edges.empty:
-            for col in expected_columns:
-                assert col in edges.columns
+def _assert_output_structure(
+    nodes: gpd.GeoDataFrame | dict[str, gpd.GeoDataFrame],
+    edges: gpd.GeoDataFrame | dict[tuple[str, str, str], gpd.GeoDataFrame],
+    expected_node_types: list[str] | None = None,
+) -> None:
+    """Validate basic output structure for morphology functions."""
+    if expected_node_types:
+        # For morphological_graph (returns dict)
+        assert isinstance(nodes, dict)
+        assert isinstance(edges, dict)
+        assert set(nodes) == set(expected_node_types)
+        for (source, _relation, target), frame in edges.items():
+            assert isinstance(frame, gpd.GeoDataFrame)
+            assert frame.crs == nodes[source].crs == nodes[target].crs
+            if not frame.empty:
+                assert isinstance(frame.index, pd.MultiIndex)
+                assert frame.index.get_level_values(0).isin(nodes[source].index).all()
+                assert frame.index.get_level_values(1).isin(nodes[target].index).all()
+    else:
+        # For individual graph functions (returns GeoDataFrames)
+        assert isinstance(nodes, gpd.GeoDataFrame)
+        assert isinstance(edges, gpd.GeoDataFrame)
 
 
-class TestMorphologicalGraphCore(TestMorphologyBase):
-    """Core tests for morphological_graph function."""
+def _assert_empty_output(
+    nodes: gpd.GeoDataFrame | dict[str, gpd.GeoDataFrame],
+    edges: gpd.GeoDataFrame | dict[tuple[str, str, str], gpd.GeoDataFrame],
+) -> None:
+    """Validate output for empty inputs."""
+    if isinstance(nodes, dict):
+        # morphological_graph case
+        for node_gdf in nodes.values():
+            assert node_gdf.empty
+        for edge_gdf in edges.values():
+            assert edge_gdf.empty
+    else:
+        # individual function case
+        assert isinstance(nodes, gpd.GeoDataFrame)
+        assert isinstance(edges, gpd.GeoDataFrame)
+        assert nodes.empty
+        assert edges.empty
+
+
+def _assert_edge_columns(edges: gpd.GeoDataFrame, expected_columns: list[str]) -> None:
+    """Validate that edges contain expected columns."""
+    if not edges.empty:
+        for col in expected_columns:
+            assert col in edges.columns
+
+
+class TestMorphologicalGraph:
+    """Tests for ``morphological_graph``."""
 
     def test_basic_functionality(
         self,
@@ -393,7 +384,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         """Test basic morphological graph creation."""
         nodes, edges = morphological_graph(sample_buildings_gdf, sample_segments_gdf)
 
-        self.validate_basic_output(nodes, edges, ["place", "movement"])
+        _assert_output_structure(nodes, edges, ["place", "movement"])
 
         # Validate expected edge types
         expected_edges = [
@@ -428,17 +419,6 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         faced_to = ("place", "faced_to", "movement")
         assert dup_edges[faced_to].index.tolist() == base_edges[faced_to].index.tolist()
 
-    def test_duplicate_edges_rejects_as_nx(
-        self,
-        small_buildings_gdf: gpd.GeoDataFrame,
-        small_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """duplicate_edges=True with as_nx=True raises ValueError."""
-        with pytest.raises(ValueError, match="not supported with as_nx=True"):
-            morphological_graph(
-                small_buildings_gdf, small_segments_gdf, as_nx=True, duplicate_edges=True
-            )
-
     def test_missing_enclosure_index_warning(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -467,7 +447,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             # We expect a warning about missing enclosure_index
             assert len(enclosure_warnings) > 0
 
-        self.validate_basic_output(nodes, edges, ["place", "movement"])
+        _assert_output_structure(nodes, edges, ["place", "movement"])
 
     def test_keep_buildings_handles_join_without_index_right(
         self,
@@ -965,35 +945,6 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
                 extent_buffer=-1.0,
             )
 
-    def test_place_to_movement_respects_max_connection_distance(
-        self,
-        sample_crs: str,
-    ) -> None:
-        """Fallback connections farther than max_connection_distance are not created."""
-        place_gdf = gpd.GeoDataFrame(
-            {"place_id": ["near", "far"]},
-            geometry=[
-                Polygon([(0, 1), (2, 1), (2, 3), (0, 3)]),  # 1 m from the segment
-                Polygon([(0, 100), (2, 100), (2, 102), (0, 102)]),  # 100 m from the segment
-            ],
-            crs=sample_crs,
-        )
-        movement_gdf = gpd.GeoDataFrame(
-            {"movement_id": [0]},
-            geometry=[LineString([(0, 0), (50, 0)])],
-            crs=sample_crs,
-        )
-
-        _, edges = place_to_movement_graph(
-            place_gdf,
-            movement_gdf,
-            max_connection_distance=10.0,
-        )
-
-        connected = set(edges["place_id"]) if not edges.empty else set()
-        assert "near" in connected
-        assert "far" not in connected
-
     def test_networkx_conversion(
         self,
         sample_buildings_gdf: gpd.GeoDataFrame,
@@ -1001,7 +952,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
     ) -> None:
         """Test NetworkX graph conversion."""
         graph = morphological_graph(sample_buildings_gdf, sample_segments_gdf, as_nx=True)
-        self.validate_networkx_output(graph)
+        assert_valid_nx_graph(graph)
 
     @pytest.mark.parametrize("contiguity", ["queen", "rook"])
     def test_contiguity_options(
@@ -1016,7 +967,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             small_segments_gdf,
             contiguity=contiguity,
         )
-        self.validate_basic_output(nodes, edges, ["place", "movement"])
+        _assert_output_structure(nodes, edges, ["place", "movement"])
 
     @pytest.mark.parametrize(
         ("distance", "clipping_buffer"),
@@ -1047,7 +998,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
         else:
             nodes, edges = morphological_graph(small_buildings_gdf, small_segments_gdf)
 
-        self.validate_basic_output(nodes, edges, ["place", "movement"])
+        _assert_output_structure(nodes, edges, ["place", "movement"])
 
     def test_comprehensive_parameters(
         self,
@@ -1068,11 +1019,7 @@ class TestMorphologicalGraphCore(TestMorphologyBase):
             tolerance=0.01,
             as_nx=False,
         )
-        self.validate_basic_output(nodes, edges, ["place", "movement"])
-
-
-class TestMorphologicalGraphBarrierAndFallback(TestMorphologyBase):
-    """Barrier-only segments, tessellation fallback and tessellation parallelism."""
+        _assert_output_structure(nodes, edges, ["place", "movement"])
 
     def test_non_movement_barrier_col_excludes_barriers_from_movement(
         self, sample_crs: str
@@ -1176,7 +1123,7 @@ class TestMorphologicalGraphBarrierAndFallback(TestMorphologyBase):
             primary_barrier_col="barrier_geometry",
         )
 
-        self.validate_basic_output(nodes, edges, ["place", "movement"])
+        _assert_output_structure(nodes, edges, ["place", "movement"])
         assert len(nodes["place"]) == len(reference_nodes["place"])
         assert nodes["place"].geometry.area.sum() == pytest.approx(
             reference_nodes["place"].geometry.area.sum()
@@ -1493,15 +1440,11 @@ class TestMorphologicalGraphBarrierAndFallback(TestMorphologyBase):
         morphological_graph(buildings, segments)
         assert captured["n_jobs"] == "absent"
 
-
-class TestMorphologicalGraphEdgeCases(TestMorphologyBase):
-    """Edge cases and error handling for morphological_graph."""
-
     def test_empty_inputs(self, empty_gdf: gpd.GeoDataFrame) -> None:
         """Test various empty input scenarios."""
         # Both empty
         nodes, edges = morphological_graph(empty_gdf, empty_gdf)
-        self.validate_empty_output(nodes, edges)
+        _assert_empty_output(nodes, edges)
 
     def test_single_elements(
         self,
@@ -1510,7 +1453,7 @@ class TestMorphologicalGraphEdgeCases(TestMorphologyBase):
     ) -> None:
         """Test with single building and segment."""
         nodes, edges = morphological_graph(single_building_gdf, single_segment_gdf)
-        self.validate_basic_output(nodes, edges, ["place", "movement"])
+        _assert_output_structure(nodes, edges, ["place", "movement"])
 
     @pytest.mark.parametrize("invalid_contiguity", ["invalid", "diagonal", 123])
     def test_invalid_contiguity(
@@ -1557,11 +1500,512 @@ class TestMorphologicalGraphEdgeCases(TestMorphologyBase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             nodes, edges = morphological_graph(sample_buildings_gdf, segments_diff_crs)
-            self.validate_basic_output(nodes, edges, ["place", "movement"])
+            _assert_output_structure(nodes, edges, ["place", "movement"])
+
+    def test_invalid_building_is_repaired_before_enclosed_tessellation(
+        self,
+        sample_crs: str,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A malformed footprint must not degrade the whole unit to fallbacks."""
+        invalid = Polygon(
+            [(0, 0), (20, 0), (20, 20), (0, 20), (0, 0)],
+            holes=[[(8, -1), (12, -1), (12, 5), (8, 5), (8, -1)]],
+        )
+        buildings = gpd.GeoDataFrame(
+            {"building_name": ["invalid", "valid"]},
+            geometry=[
+                invalid,
+                Polygon([(30, 5), (40, 5), (40, 15), (30, 15), (30, 5)]),
+            ],
+            crs=sample_crs,
+        )
+        segments = gpd.GeoDataFrame(
+            geometry=[
+                LineString([(-10, -10), (60, -10)]),
+                LineString([(60, -10), (60, 40)]),
+                LineString([(60, 40), (-10, 40)]),
+                LineString([(-10, 40), (-10, -10)]),
+            ],
+            crs=sample_crs,
+        )
+
+        with caplog.at_level(logging.WARNING, logger="city2graph.morphology"):
+            nodes, _ = morphological_graph(
+                buildings,
+                segments,
+                keep_buildings=True,
+                include_unenclosed_buildings=True,
+                tessellation_fallback=True,
+                tessellation_n_jobs=1,
+            )
+
+        places = nodes["place"]
+        place_ids = places["place_id"] if "place_id" in places else places.index.to_series()
+        assert not place_ids.astype(str).str.startswith("fallback_").any()
+        assert places.geometry.is_valid.all()
+        assert set(places["building_name"].dropna()) == {"invalid", "valid"}
+        assert not buildings.geometry.is_valid.iloc[0]
+        assert buildings.geometry.iloc[0].equals_exact(invalid, tolerance=0)
+        assert "Repaired 1 invalid building geometries" in caplog.text
+        assert "dropped 0 geometries" in caplog.text
+
+    def test_geometry_type_validation(self, sample_crs: str) -> None:
+        """Test geometry type validation for buildings and segments."""
+        # Test invalid building geometry types
+        invalid_buildings = gpd.GeoDataFrame(
+            {"bldg_id": [1]},
+            geometry=[Point(0, 0)],  # Point instead of Polygon
+            crs=sample_crs,
+        )
+        valid_segments = gpd.GeoDataFrame(
+            {"segment_id": [1]},
+            geometry=[LineString([(0, 0), (1, 0)])],
+            crs=sample_crs,
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="buildings_gdf must contain only Polygon or MultiPolygon geometries",
+        ):
+            morphological_graph(invalid_buildings, valid_segments)
+
+        # Test invalid segment geometry types
+        valid_buildings = gpd.GeoDataFrame(
+            {"bldg_id": [1]},
+            geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+            crs=sample_crs,
+        )
+        invalid_segments = gpd.GeoDataFrame(
+            {"segment_id": [1]},
+            geometry=[Point(0, 0)],  # Point instead of LineString
+            crs=sample_crs,
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="segments_gdf must contain only LineString geometries",
+        ):
+            morphological_graph(valid_buildings, invalid_segments)
+
+    def test_empty_buildings_handling(
+        self,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        sample_crs: str,
+    ) -> None:
+        """Test handling of empty buildings GeoDataFrame."""
+        empty_buildings = gpd.GeoDataFrame(geometry=[], crs=sample_crs)
+
+        # This should work and return results based only on segments
+        nodes, edges = morphological_graph(empty_buildings, sample_segments_gdf)
+        _assert_output_structure(nodes, edges, ["place", "movement"])
+
+        # Place nodes should be empty, movement nodes should match segments
+        assert nodes["place"].empty
+        assert len(nodes["movement"]) == len(sample_segments_gdf)
+
+    def test_network_distance_edge_cases(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test edge cases in network distance filtering."""
+        # Test with center point very far from any graph node
+        far_center = Point(1000000, 1000000)  # Very far away
+
+        # Clear any existing log records
+        caplog.clear()
+
+        with caplog.at_level(logging.WARNING):
+            nodes, edges = morphological_graph(
+                sample_buildings_gdf,
+                sample_segments_gdf,
+                center_point=far_center,
+                distance=100,
+            )
+
+            # Should get warning about source node not found
+            warning_messages = [
+                record.message for record in caplog.records if record.levelno == logging.WARNING
+            ]
+            distance_warnings = [
+                msg
+                for msg in warning_messages
+                if "Source node for distance filtering not found" in msg
+            ]
+            # The projection helper snaps the source to an edge when graph context exists.
+            assert len(distance_warnings) == 0
+
+        # Should still return valid (possibly empty) results
+        _assert_output_structure(nodes, edges, ["place", "movement"])
+
+    def test_successful_network_distance_filtering(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test successful network distance filtering that executes Dijkstra algorithm."""
+        # Use existing sample data but with a center point close to the data
+        # This should find a source node and execute the Dijkstra algorithm (lines 1054-1063)
+
+        # Get a center point near the existing buildings
+        buildings_bounds = sample_buildings_gdf.total_bounds
+        center_x = (buildings_bounds[0] + buildings_bounds[2]) / 2
+        center_y = (buildings_bounds[1] + buildings_bounds[3]) / 2
+        center_point = Point(center_x, center_y)
+
+        # Test with a reasonable distance that should include buildings
+        # This should successfully execute the Dijkstra algorithm (lines 1054-1063)
+        nodes, edges = morphological_graph(
+            sample_buildings_gdf,
+            sample_segments_gdf,
+            center_point=center_point,
+            distance=1000,  # Large enough to include buildings
+        )
+
+        # Should successfully execute and return filtered results
+        _assert_output_structure(nodes, edges, ["place", "movement"])
+
+        # Should have some nodes
+        assert len(nodes["movement"]) > 0
+
+        # Test with a smaller distance to ensure filtering logic is executed
+        nodes_small, edges_small = morphological_graph(
+            sample_buildings_gdf,
+            sample_segments_gdf,
+            center_point=center_point,
+            distance=100,  # Smaller distance
+        )
+
+        _assert_output_structure(nodes_small, edges_small, ["place", "movement"])
+
+    def test_block_frontages_match_touching_streets(
+        self, small_buildings_gdf: gpd.GeoDataFrame, small_segments_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """Each block faces precisely the streets intersecting its boundary."""
+        limit = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+        nodes, edges = morphological_graph(
+            small_buildings_gdf, small_segments_gdf, limit=limit, keep_buildings=True
+        )
+        places = nodes["place"]
+        cells = {
+            "sw": box(0, 0, 5, 5),
+            "se": box(5, 0, 10, 5),
+            "nw": box(0, 5, 5, 10),
+            "ne": box(5, 5, 10, 10),
+        }
+        assert places["bldg_id"].is_unique
+        assert set(places["bldg_id"]) == set(cells)
+        for building, cell in places.set_index("bldg_id")["tessellation_geometry"].items():
+            assert cell.equals(cells[building])
+        assert set(nodes["movement"].index) == set(small_segments_gdf["movement_id"])
+        expected = {
+            (place_id, segment.movement_id)
+            for place_id, building in places["bldg_id"].items()
+            for segment in small_segments_gdf.itertuples()
+            if cells[building].boundary.intersects(segment.geometry)
+        }
+        frontages = edges[("place", "faced_to", "movement")]
+        assert frontages.index.is_unique
+        assert set(frontages.index) == expected
+
+    def test_reproducibility(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test reproducibility of morphological graph creation."""
+        nodes1, edges1 = morphological_graph(sample_buildings_gdf, sample_segments_gdf)
+        nodes2, edges2 = morphological_graph(sample_buildings_gdf, sample_segments_gdf)
+
+        # Check that results are identical
+        for key in nodes1:
+            assert nodes1[key].equals(nodes2[key])
+        for key in edges1:
+            assert edges1[key].equals(edges2[key])
+
+    def test_center_point_variations(
+        self,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Point, GeoSeries and GeoDataFrame centres select identical graphs."""
+        point = Point(2.5, 2.5)
+        limit = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+        expected_nodes, expected_edges = morphological_graph(
+            small_buildings_gdf,
+            small_segments_gdf,
+            center_point=point,
+            distance=1000,
+            limit=limit,
+        )
+        assert len(expected_nodes["place"]) == 4
+        assert len(expected_nodes["movement"]) == 12
+        for center in [
+            gpd.GeoSeries([point], crs=small_buildings_gdf.crs),
+            gpd.GeoDataFrame(geometry=[point], crs=small_buildings_gdf.crs),
+        ]:
+            nodes, edges = morphological_graph(
+                small_buildings_gdf,
+                small_segments_gdf,
+                center_point=center,
+                distance=1000,
+                limit=limit,
+            )
+            assert nodes.keys() == expected_nodes.keys()
+            assert edges.keys() == expected_edges.keys()
+            for key, frame in expected_nodes.items():
+                assert_geodataframe_equal(nodes[key], frame)
+            for key, frame in expected_edges.items():
+                assert_geodataframe_equal(edges[key], frame)
+
+    def test_buildings_multiindex_handling(self, sample_crs: str) -> None:
+        """Test morphological_graph with buildings having MultiIndex to cover lines 178-179."""
+        # Create buildings with MultiIndex
+        buildings_data = {
+            "building_id": ["b1", "b2", "b3"],
+            "geometry": [
+                Polygon([(0, 0), (0, 1), (1, 1), (1, 0)]),
+                Polygon([(1, 0), (1, 1), (2, 1), (2, 0)]),
+                Polygon([(2, 0), (2, 1), (3, 1), (3, 0)]),
+            ],
+        }
+        buildings_gdf = gpd.GeoDataFrame(buildings_data, crs=sample_crs)
+
+        # Create MultiIndex to trigger lines 178-179
+        multi_index = pd.MultiIndex.from_arrays(
+            [["type1", "type1", "type2"], ["b1", "b2", "b3"]],
+            names=["building_type", "building_id"],
+        )
+        buildings_gdf.index = multi_index
+
+        # Create simple segments that intersect with buildings
+        segments_data = {
+            "seg_id": ["s1", "s2"],
+            "geometry": [
+                LineString([(0.5, 0.5), (1.5, 0.5)]),  # Intersects buildings
+                LineString([(1.5, 0.5), (2.5, 0.5)]),  # Intersects buildings
+            ],
+        }
+        segments_gdf = gpd.GeoDataFrame(segments_data, crs=sample_crs)
+
+        nodes, edges = morphological_graph(buildings_gdf, segments_gdf)
+        _assert_output_structure(nodes, edges, ["place", "movement"])
+        assert len(nodes["movement"]) == len(segments_gdf)
+        pd.testing.assert_index_equal(buildings_gdf.index, multi_index)
+
+    def test_reachability_field_computed_once(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        mg_center_point: gpd.GeoSeries,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A budgeted morphological_graph computes the cost field exactly once.
+
+        Previously the field was recomputed independently for segments, buildings
+        and cells (up to three Dijkstra/snap passes). It must now be built once on
+        the full network and shared across all node types.
+        """
+        original = morph._network_reachability_field
+        calls = {"n": 0}
+
+        monkeypatch.setattr(
+            morph,
+            "_network_reachability_field",
+            partial(_counting_wrapper, calls, original),
+        )
+
+        morphological_graph(
+            sample_buildings_gdf,
+            sample_segments_gdf,
+            center_point=mg_center_point,
+            distance=100.0,
+        )
+
+        assert calls["n"] == 1
+
+    def test_shared_field_reaches_cell_and_building_filters(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        mg_center_point: gpd.GeoSeries,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The single full-network field is threaded into the centroid filters.
+
+        This locks in the fix for the full-vs-truncated network discrepancy:
+        buildings and cells are judged against the same field used for streets,
+        not one rebuilt on the already-truncated segments.
+        """
+        original = morph._geometry_ilocs_within_network_distance
+        seen_fields: list[object] = []
+
+        monkeypatch.setattr(
+            morph,
+            "_geometry_ilocs_within_network_distance",
+            partial(_field_recording_wrapper, seen_fields, original),
+        )
+
+        morphological_graph(
+            sample_buildings_gdf,
+            sample_segments_gdf,
+            center_point=mg_center_point,
+            distance=100.0,
+        )
+
+        # The centroid filters (buildings + cells) ran and every one received the
+        # shared field instance rather than None.
+        assert seen_fields
+        assert all(field is not None for field in seen_fields)
+        assert len({id(field) for field in seen_fields}) == 1
+
+    @pytest.mark.parametrize("options", IMMUTABILITY_OPTION_SETS)
+    def test_morphological_graph_does_not_mutate_inputs(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        mg_center_point: gpd.GeoSeries,
+        options: dict[str, Any],
+    ) -> None:
+        """morphological_graph leaves the buildings and segments inputs untouched."""
+        kwargs = dict(options)
+        if kwargs.pop("with_center", False):
+            kwargs["center_point"] = mg_center_point
+        buildings_before = sample_buildings_gdf.copy(deep=True)
+        segments_before = sample_segments_gdf.copy(deep=True)
+
+        morphological_graph(sample_buildings_gdf, sample_segments_gdf, **kwargs)
+
+        assert_geodataframe_equal(sample_buildings_gdf, buildings_before)
+        assert_geodataframe_equal(sample_segments_gdf, segments_before)
+
+    def test_morphological_graph_barrier_split_does_not_mutate_input(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """The barrier-only segment split leaves the segments input untouched."""
+        segments = sample_segments_gdf.copy(deep=True)
+        segments["is_barrier"] = [i % 2 == 0 for i in range(len(segments))]
+        segments_before = segments.copy(deep=True)
+
+        morphological_graph(
+            sample_buildings_gdf,
+            segments,
+            non_movement_barrier_col="is_barrier",
+        )
+
+        assert_geodataframe_equal(segments, segments_before)
+
+    def test_duplicate_edges_rejects_as_nx(
+        self,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """duplicate_edges=True with as_nx=True raises ValueError."""
+        with pytest.raises(ValueError, match="not supported with as_nx=True"):
+            morphological_graph(
+                small_buildings_gdf, small_segments_gdf, as_nx=True, duplicate_edges=True
+            )
 
 
-class TestIndividualGraphFunctions(TestMorphologyBase):
-    """Tests for individual graph creation functions."""
+class TestMorphologicalGraphs:
+    """Tests for ``morphological_graphs``."""
+
+    def test_distance_list_returns_dict_per_distance(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        mg_center_point: gpd.GeoSeries,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A list of distances yields a dict of (nodes, edges) keyed by distance."""
+        search = Mock(wraps=nx.multi_source_dijkstra_path_length)
+        monkeypatch.setattr(nx, "multi_source_dijkstra_path_length", search)
+        distances = [50.0, 100.0]
+
+        result = morphological_graphs(
+            sample_buildings_gdf,
+            sample_segments_gdf,
+            distances,
+            center_point=mg_center_point,
+        )
+
+        assert search.call_count == 1
+        assert isinstance(result, dict)
+        assert set(result) == set(distances)
+        for nodes, edges in result.values():
+            _assert_output_structure(nodes, edges, ["place", "movement"])
+            for edge_type in [
+                ("place", "touched_to", "place"),
+                ("movement", "connected_to", "movement"),
+                ("place", "faced_to", "movement"),
+            ]:
+                assert edge_type in edges
+
+        # A smaller budget can never retain more movement segments than a larger one.
+        small_nodes, _ = result[50.0]
+        large_nodes, _ = result[100.0]
+        assert len(small_nodes["movement"]) <= len(large_nodes["movement"])
+
+    def test_distance_list_as_nx_returns_dict_of_graphs(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        mg_center_point: gpd.GeoSeries,
+    ) -> None:
+        """With as_nx=True each per-distance value is a NetworkX graph."""
+        result = morphological_graphs(
+            sample_buildings_gdf,
+            sample_segments_gdf,
+            [50.0, 100.0],
+            center_point=mg_center_point,
+            as_nx=True,
+        )
+
+        assert isinstance(result, dict)
+        for graph in result.values():
+            assert_valid_nx_graph(graph)
+
+    def test_empty_distance_sequence_raises(
+        self,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """An empty distance sequence is rejected."""
+        with pytest.raises(ValueError, match="distances must contain at least one value"):
+            morphological_graphs(
+                small_buildings_gdf,
+                small_segments_gdf,
+                [],
+                center_point=Point(2.5, 2.5),
+            )
+
+    def test_morphological_graphs_does_not_mutate_inputs(
+        self,
+        sample_buildings_gdf: gpd.GeoDataFrame,
+        sample_segments_gdf: gpd.GeoDataFrame,
+        mg_center_point: gpd.GeoSeries,
+    ) -> None:
+        """The multi-distance pipeline leaves the shared inputs untouched."""
+        buildings_before = sample_buildings_gdf.copy(deep=True)
+        segments_before = sample_segments_gdf.copy(deep=True)
+
+        morphological_graphs(
+            sample_buildings_gdf,
+            sample_segments_gdf,
+            [50.0, 100.0],
+            center_point=mg_center_point,
+        )
+
+        assert_geodataframe_equal(sample_buildings_gdf, buildings_before)
+        assert_geodataframe_equal(sample_segments_gdf, segments_before)
+
+
+class TestSegmentsToGraph:
+    """Tests for ``segments_to_graph``."""
 
     @pytest.mark.parametrize(
         ("segments_fixture", "expect_empty", "multigraph"),
@@ -1675,17 +2119,31 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
         assert isinstance(graph, nx.MultiGraph)
         assert graph.number_of_edges() == 2
 
-    # Place-to-Place Tests
+    def test_segments_to_graph_does_not_mutate_input(
+        self,
+        sample_segments_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """segments_to_graph builds its edge index on a copy of the input."""
+        segments_before = sample_segments_gdf.copy(deep=True)
+
+        segments_to_graph(sample_segments_gdf)
+
+        assert_geodataframe_equal(sample_segments_gdf, segments_before)
+
+
+class TestPlaceToPlaceGraph:
+    """Tests for ``place_to_place_graph``."""
+
     def test_place_to_place_basic(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
         """Test basic place-to-place graph creation."""
         nodes, edges = place_to_place_graph(sample_tessellation_gdf)
-        self.validate_basic_output(nodes, edges)
+        _assert_output_structure(nodes, edges)
         assert nodes.equals(sample_tessellation_gdf)
 
     def test_place_to_place_networkx(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
         """Test place-to-place NetworkX conversion."""
         graph = place_to_place_graph(sample_tessellation_gdf, as_nx=True)
-        self.validate_networkx_output(graph)
+        assert_valid_nx_graph(graph)
 
     @pytest.mark.parametrize("contiguity", ["queen", "rook"])
     def test_place_to_place_contiguity(
@@ -1695,8 +2153,8 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
     ) -> None:
         """Test place-to-place with different contiguity types."""
         nodes, edges = place_to_place_graph(sample_tessellation_gdf, contiguity=contiguity)
-        self.validate_basic_output(nodes, edges)
-        self.validate_edge_columns(edges, ["from_place_id", "to_place_id"])
+        _assert_output_structure(nodes, edges)
+        _assert_edge_columns(edges, ["from_place_id", "to_place_id"])
 
     def test_place_to_place_duplicate_index(
         self, sample_tessellation_gdf: gpd.GeoDataFrame
@@ -1710,7 +2168,7 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
         # This should not raise ValueError: The argument to the ids parameter contains duplicate entries
         nodes, edges = place_to_place_graph(gdf_duplicate)
 
-        self.validate_basic_output(nodes, edges)
+        _assert_output_structure(nodes, edges)
         assert not edges.empty
         # Ensure the from/to columns contain the actual place_ids, not the duplicate index values
         assert edges["from_place_id"].isin(sample_tessellation_gdf["place_id"]).all()
@@ -1746,9 +2204,145 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
         """Test with empty tessellation."""
         empty_tess = gpd.GeoDataFrame(geometry=[], crs=sample_crs)
         nodes, edges = place_to_place_graph(empty_tess)
-        self.validate_empty_output(nodes, edges)
+        _assert_empty_output(nodes, edges)
 
-    # Place-to-Movement Tests
+    def test_place_to_place_duplicate_edges(
+        self, sample_tessellation_gdf: gpd.GeoDataFrame
+    ) -> None:
+        """duplicate_edges=True doubles rows with swapped place id columns."""
+        _, base_edges = place_to_place_graph(sample_tessellation_gdf)
+        _, dup_edges = place_to_place_graph(sample_tessellation_gdf, duplicate_edges=True)
+
+        assert len(dup_edges) == 2 * len(base_edges)
+        pairs = set(zip(base_edges["from_place_id"], base_edges["to_place_id"], strict=True))
+        dup_pairs = set(zip(dup_edges["from_place_id"], dup_edges["to_place_id"], strict=True))
+        assert dup_pairs == pairs | {(v, u) for u, v in pairs}
+
+    def test_missing_required_columns(self, sample_buildings_gdf: gpd.GeoDataFrame) -> None:
+        """Test handling of missing required columns."""
+        # Remove required column
+        gdf_no_place_id = sample_buildings_gdf.drop(columns=["place_id"], errors="ignore")
+
+        with pytest.raises((KeyError, ValueError)):
+            place_to_place_graph(gdf_no_place_id)
+
+    def test_function_consistency(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
+        """Test consistency between different function calls."""
+        # Test that place_to_place_graph produces consistent results
+        nodes1, edges1 = place_to_place_graph(sample_tessellation_gdf)
+        nodes2, edges2 = place_to_place_graph(sample_tessellation_gdf)
+
+        assert nodes1.equals(nodes2)
+        assert edges1.equals(edges2)
+
+    def test_group_column_functionality(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
+        """Test group column functionality in place-to-place graphs."""
+        nodes, edges = place_to_place_graph(
+            sample_tessellation_gdf,
+            group_col="enclosure_index",
+        )
+        _assert_output_structure(nodes, edges)
+        if not edges.empty:
+            assert "enclosure_index" in edges.columns
+
+    def test_empty_adjacency_data_handling(self, sample_crs: str) -> None:
+        """Test handling of empty adjacency data in place-to-place graphs."""
+        # Create two non-adjacent polygons to test empty adjacency scenario
+        non_adjacent_polys = gpd.GeoDataFrame(
+            {"place_id": [1, 2], "enclosure_index": [1, 2]},
+            geometry=[
+                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),  # First polygon
+                Polygon([(10, 10), (11, 10), (11, 11), (10, 11)]),  # Far away polygon
+            ],
+            crs=sample_crs,
+        )
+
+        nodes, edges = place_to_place_graph(non_adjacent_polys, group_col="enclosure_index")
+        # Should handle empty adjacency data gracefully
+        _assert_output_structure(nodes, edges)
+        assert len(nodes) == 2
+        assert edges.empty
+
+    def test_multiindex_edge_case_coverage(self, sample_crs: str) -> None:
+        """Test MultiIndex edge cases in graph processing."""
+        # Create a simple tessellation that will test MultiIndex handling
+        simple_polys = gpd.GeoDataFrame(
+            {"place_id": [1, 2]},
+            geometry=[
+                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),  # Adjacent polygon
+            ],
+            crs=sample_crs,
+        )
+
+        # Test with and without group column to cover different MultiIndex scenarios
+        nodes1, edges1 = place_to_place_graph(simple_polys)
+        nodes2, edges2 = place_to_place_graph(simple_polys, group_col=None)
+
+        _assert_output_structure(nodes1, edges1)
+        _assert_output_structure(nodes2, edges2)
+
+    @pytest.mark.parametrize("as_nx", [False, True])
+    def test_place_adjacency_deduplicates_joined_places_without_edges(self, as_nx: bool) -> None:
+        """A join cannot reintroduce duplicate node IDs in an empty topology."""
+        places = gpd.GeoDataFrame(
+            {"place_id": ["west", "west", "east"]},
+            geometry=[
+                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+                Polygon([(3, 0), (4, 0), (4, 1), (3, 1)]),
+            ],
+            crs=3857,
+        )
+        if as_nx:
+            with pytest.warns(DeprecationWarning, match="as_nx"):
+                graph = place_to_place_graph(places, as_nx=True)
+            assert isinstance(graph, nx.Graph)
+            assert len(graph) == 2
+            assert graph.number_of_edges() == 0
+            assert {data["place_id"] for _, data in graph.nodes(data=True)} == {"west", "east"}
+        else:
+            nodes, edges = place_to_place_graph(places)
+            assert list(nodes["place_id"]) == ["west", "east"]
+            assert edges.empty
+
+            single_nodes, single_edges = place_to_place_graph(places.iloc[:2])
+            assert list(single_nodes["place_id"]) == ["west"]
+            assert single_edges.empty
+
+
+class TestPlaceToMovementGraph:
+    """Tests for ``place_to_movement_graph``."""
+
+    def test_place_to_movement_respects_max_connection_distance(
+        self,
+        sample_crs: str,
+    ) -> None:
+        """Fallback connections farther than max_connection_distance are not created."""
+        place_gdf = gpd.GeoDataFrame(
+            {"place_id": ["near", "far"]},
+            geometry=[
+                Polygon([(0, 1), (2, 1), (2, 3), (0, 3)]),  # 1 m from the segment
+                Polygon([(0, 100), (2, 100), (2, 102), (0, 102)]),  # 100 m from the segment
+            ],
+            crs=sample_crs,
+        )
+        movement_gdf = gpd.GeoDataFrame(
+            {"movement_id": [0]},
+            geometry=[LineString([(0, 0), (50, 0)])],
+            crs=sample_crs,
+        )
+
+        _, edges = place_to_movement_graph(
+            place_gdf,
+            movement_gdf,
+            max_connection_distance=10.0,
+        )
+
+        connected = set(edges["place_id"]) if not edges.empty else set()
+        assert "near" in connected
+        assert "far" not in connected
+
     def test_place_to_movement_basic(
         self,
         sample_tessellation_gdf: gpd.GeoDataFrame,
@@ -1756,8 +2350,8 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
     ) -> None:
         """Test basic place-to-movement graph creation."""
         nodes, edges = place_to_movement_graph(sample_tessellation_gdf, sample_segments_gdf)
-        self.validate_basic_output(nodes, edges)
-        self.validate_edge_columns(edges, ["place_id", "movement_id"])
+        _assert_output_structure(nodes, edges)
+        _assert_edge_columns(edges, ["place_id", "movement_id"])
 
     def test_place_to_movement_networkx(
         self,
@@ -1766,7 +2360,7 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
     ) -> None:
         """Test place-to-movement NetworkX conversion."""
         graph = place_to_movement_graph(sample_tessellation_gdf, sample_segments_gdf, as_nx=True)
-        self.validate_networkx_output(graph)
+        assert_valid_nx_graph(graph)
 
     @pytest.mark.parametrize("tolerance", [1e-6, 1e-3, 0.1, 1.0])
     def test_place_to_movement_tolerance(
@@ -1781,7 +2375,7 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
             sample_segments_gdf,
             tolerance=tolerance,
         )
-        self.validate_basic_output(nodes, edges)
+        _assert_output_structure(nodes, edges)
 
     def test_place_to_movement_missing_id_columns(self, sample_crs: str) -> None:
         """Test error when required ID columns are missing."""
@@ -1837,58 +2431,6 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
         assert edges.empty
         assert len(nodes) == 1
 
-    # Movement-to-Movement Tests
-    def test_movement_to_movement_basic(self, sample_segments_gdf: gpd.GeoDataFrame) -> None:
-        """Test basic movement-to-movement graph creation."""
-        nodes, edges = movement_to_movement_graph(sample_segments_gdf)
-        self.validate_basic_output(nodes, edges)
-        assert nodes.equals(sample_segments_gdf)
-
-    def test_movement_to_movement_networkx(self, sample_segments_gdf: gpd.GeoDataFrame) -> None:
-        """Test movement-to-movement NetworkX conversion."""
-        graph = movement_to_movement_graph(sample_segments_gdf, as_nx=True)
-        self.validate_networkx_output(graph)
-
-    def test_movement_to_movement_edge_structure(
-        self, sample_segments_gdf: gpd.GeoDataFrame
-    ) -> None:
-        """Test movement-to-movement edge structure."""
-        _nodes, edges = movement_to_movement_graph(sample_segments_gdf)
-        self.validate_edge_columns(edges, ["from_movement_id", "to_movement_id"])
-
-    def test_movement_to_movement_multiindex_handling(self, sample_crs: str) -> None:
-        """Test movement-to-movement graph with MultiIndex scenarios."""
-        # Create segments with MultiIndex to test line 702-708
-        segments_data = []
-        for i in range(3):
-            line = LineString([(i, 0), (i + 1, 0)])
-            segments_data.append(line)
-
-        segments_gdf = gpd.GeoDataFrame(
-            {"segment_id": range(len(segments_data))},
-            geometry=segments_data,
-            crs=sample_crs,
-        )
-
-        # Set a MultiIndex to trigger the MultiIndex handling code
-        segments_gdf = segments_gdf.set_index([segments_gdf.index, "segment_id"])
-
-        nodes, edges = movement_to_movement_graph(segments_gdf)
-        self.validate_basic_output(nodes, edges)
-
-    # duplicate_edges Tests
-    def test_place_to_place_duplicate_edges(
-        self, sample_tessellation_gdf: gpd.GeoDataFrame
-    ) -> None:
-        """duplicate_edges=True doubles rows with swapped place id columns."""
-        _, base_edges = place_to_place_graph(sample_tessellation_gdf)
-        _, dup_edges = place_to_place_graph(sample_tessellation_gdf, duplicate_edges=True)
-
-        assert len(dup_edges) == 2 * len(base_edges)
-        pairs = set(zip(base_edges["from_place_id"], base_edges["to_place_id"], strict=True))
-        dup_pairs = set(zip(dup_edges["from_place_id"], dup_edges["to_place_id"], strict=True))
-        assert dup_pairs == pairs | {(v, u) for u, v in pairs}
-
     def test_place_to_movement_duplicate_edges(
         self,
         sample_tessellation_gdf: gpd.GeoDataFrame,
@@ -1910,335 +2452,6 @@ class TestIndividualGraphFunctions(TestMorphologyBase):
         assert len(dup_edges) == len(expected_pairs)
         assert len(dup_edges) > len(base_edges)
 
-    def test_movement_to_movement_duplicate_edges(
-        self, sample_segments_gdf: gpd.GeoDataFrame
-    ) -> None:
-        """duplicate_edges=True doubles rows with swapped movement id columns."""
-        _, base_edges = movement_to_movement_graph(sample_segments_gdf)
-        _, dup_edges = movement_to_movement_graph(sample_segments_gdf, duplicate_edges=True)
-
-        assert len(dup_edges) == 2 * len(base_edges)
-        pairs = set(zip(base_edges["from_movement_id"], base_edges["to_movement_id"], strict=True))
-        dup_pairs = set(
-            zip(dup_edges["from_movement_id"], dup_edges["to_movement_id"], strict=True)
-        )
-        assert dup_pairs == pairs | {(v, u) for u, v in pairs}
-
-    @pytest.mark.parametrize(
-        "call",
-        [
-            lambda tess, _segs, **kw: place_to_place_graph(tess, **kw),
-            place_to_movement_graph,
-            lambda _tess, segs, **kw: movement_to_movement_graph(segs, **kw),
-        ],
-        ids=["place_to_place", "place_to_movement", "movement_to_movement"],
-    )
-    def test_duplicate_edges_rejects_as_nx(
-        self,
-        sample_tessellation_gdf: gpd.GeoDataFrame,
-        small_segments_gdf: gpd.GeoDataFrame,
-        call: Callable[..., object],
-    ) -> None:
-        """duplicate_edges=True with as_nx=True raises ValueError."""
-        with pytest.raises(ValueError, match="not supported with as_nx=True"):
-            call(sample_tessellation_gdf, small_segments_gdf, as_nx=True, duplicate_edges=True)
-
-
-class TestInputValidationAndErrors(TestMorphologyBase):
-    """Comprehensive input validation and error handling tests."""
-
-    def test_invalid_building_is_repaired_before_enclosed_tessellation(
-        self,
-        sample_crs: str,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """A malformed footprint must not degrade the whole unit to fallbacks."""
-        invalid = Polygon(
-            [(0, 0), (20, 0), (20, 20), (0, 20), (0, 0)],
-            holes=[[(8, -1), (12, -1), (12, 5), (8, 5), (8, -1)]],
-        )
-        buildings = gpd.GeoDataFrame(
-            {"building_name": ["invalid", "valid"]},
-            geometry=[
-                invalid,
-                Polygon([(30, 5), (40, 5), (40, 15), (30, 15), (30, 5)]),
-            ],
-            crs=sample_crs,
-        )
-        segments = gpd.GeoDataFrame(
-            geometry=[
-                LineString([(-10, -10), (60, -10)]),
-                LineString([(60, -10), (60, 40)]),
-                LineString([(60, 40), (-10, 40)]),
-                LineString([(-10, 40), (-10, -10)]),
-            ],
-            crs=sample_crs,
-        )
-
-        with caplog.at_level(logging.WARNING, logger="city2graph.morphology"):
-            nodes, _ = morphological_graph(
-                buildings,
-                segments,
-                keep_buildings=True,
-                include_unenclosed_buildings=True,
-                tessellation_fallback=True,
-                tessellation_n_jobs=1,
-            )
-
-        places = nodes["place"]
-        place_ids = places["place_id"] if "place_id" in places else places.index.to_series()
-        assert not place_ids.astype(str).str.startswith("fallback_").any()
-        assert places.geometry.is_valid.all()
-        assert set(places["building_name"].dropna()) == {"invalid", "valid"}
-        assert not buildings.geometry.is_valid.iloc[0]
-        assert buildings.geometry.iloc[0].equals_exact(invalid, tolerance=0)
-        assert "Repaired 1 invalid building geometries" in caplog.text
-        assert "dropped 0 geometries" in caplog.text
-
-    def test_geometry_type_validation(self, sample_crs: str) -> None:
-        """Test geometry type validation for buildings and segments."""
-        # Test invalid building geometry types
-        invalid_buildings = gpd.GeoDataFrame(
-            {"bldg_id": [1]},
-            geometry=[Point(0, 0)],  # Point instead of Polygon
-            crs=sample_crs,
-        )
-        valid_segments = gpd.GeoDataFrame(
-            {"segment_id": [1]},
-            geometry=[LineString([(0, 0), (1, 0)])],
-            crs=sample_crs,
-        )
-
-        with pytest.raises(
-            ValueError,
-            match="buildings_gdf must contain only Polygon or MultiPolygon geometries",
-        ):
-            morphological_graph(invalid_buildings, valid_segments)
-
-        # Test invalid segment geometry types
-        valid_buildings = gpd.GeoDataFrame(
-            {"bldg_id": [1]},
-            geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
-            crs=sample_crs,
-        )
-        invalid_segments = gpd.GeoDataFrame(
-            {"segment_id": [1]},
-            geometry=[Point(0, 0)],  # Point instead of LineString
-            crs=sample_crs,
-        )
-
-        with pytest.raises(
-            ValueError,
-            match="segments_gdf must contain only LineString geometries",
-        ):
-            morphological_graph(valid_buildings, invalid_segments)
-
-    def test_empty_buildings_handling(
-        self,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        sample_crs: str,
-    ) -> None:
-        """Test handling of empty buildings GeoDataFrame."""
-        empty_buildings = gpd.GeoDataFrame(geometry=[], crs=sample_crs)
-
-        # This should work and return results based only on segments
-        nodes, edges = morphological_graph(empty_buildings, sample_segments_gdf)
-        self.validate_basic_output(nodes, edges, ["place", "movement"])
-
-        # Place nodes should be empty, movement nodes should match segments
-        assert nodes["place"].empty
-        assert len(nodes["movement"]) == len(sample_segments_gdf)
-
-    def test_network_distance_edge_cases(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Test edge cases in network distance filtering."""
-        # Test with center point very far from any graph node
-        far_center = Point(1000000, 1000000)  # Very far away
-
-        # Clear any existing log records
-        caplog.clear()
-
-        with caplog.at_level(logging.WARNING):
-            nodes, edges = morphological_graph(
-                sample_buildings_gdf,
-                sample_segments_gdf,
-                center_point=far_center,
-                distance=100,
-            )
-
-            # Should get warning about source node not found
-            warning_messages = [
-                record.message for record in caplog.records if record.levelno == logging.WARNING
-            ]
-            distance_warnings = [
-                msg
-                for msg in warning_messages
-                if "Source node for distance filtering not found" in msg
-            ]
-            # The projection helper snaps the source to an edge when graph context exists.
-            assert len(distance_warnings) == 0
-
-        # Should still return valid (possibly empty) results
-        self.validate_basic_output(nodes, edges, ["place", "movement"])
-
-    def test_successful_network_distance_filtering(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Test successful network distance filtering that executes Dijkstra algorithm."""
-        # Use existing sample data but with a center point close to the data
-        # This should find a source node and execute the Dijkstra algorithm (lines 1054-1063)
-
-        # Get a center point near the existing buildings
-        buildings_bounds = sample_buildings_gdf.total_bounds
-        center_x = (buildings_bounds[0] + buildings_bounds[2]) / 2
-        center_y = (buildings_bounds[1] + buildings_bounds[3]) / 2
-        center_point = Point(center_x, center_y)
-
-        # Test with a reasonable distance that should include buildings
-        # This should successfully execute the Dijkstra algorithm (lines 1054-1063)
-        nodes, edges = morphological_graph(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            center_point=center_point,
-            distance=1000,  # Large enough to include buildings
-        )
-
-        # Should successfully execute and return filtered results
-        self.validate_basic_output(nodes, edges, ["place", "movement"])
-
-        # Should have some nodes
-        assert len(nodes["movement"]) > 0
-
-        # Test with a smaller distance to ensure filtering logic is executed
-        nodes_small, edges_small = morphological_graph(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            center_point=center_point,
-            distance=100,  # Smaller distance
-        )
-
-        self.validate_basic_output(nodes_small, edges_small, ["place", "movement"])
-        # The key is that this executes the filtering code path without errors
-
-    @pytest.mark.parametrize(
-        ("function", "args"),
-        [
-            (morphological_graph, ("not_gdf", "sample_segments_gdf")),
-            (morphological_graph, ("sample_buildings_gdf", "not_gdf")),
-            (place_to_place_graph, ("not_gdf",)),
-            (place_to_movement_graph, ("not_gdf", "sample_segments_gdf")),
-            (place_to_movement_graph, ("sample_tessellation_gdf", "not_gdf")),
-            (movement_to_movement_graph, ("not_gdf",)),
-        ],
-    )
-    def test_invalid_input_types(
-        self,
-        function: Callable[..., Any],
-        args: tuple[str, ...],
-        request: pytest.FixtureRequest,
-    ) -> None:
-        """Test all functions with invalid input types."""
-        # Resolve fixture names to actual objects
-        resolved_args = []
-        for arg in args:
-            if arg == "not_gdf":
-                resolved_args.append("not a geodataframe")
-            else:
-                resolved_args.append(request.getfixturevalue(arg))
-
-        with pytest.raises(TypeError):
-            function(*resolved_args)
-
-    def test_empty_input_handling(self, empty_gdf: gpd.GeoDataFrame) -> None:
-        """Test all functions handle empty inputs gracefully."""
-        # Test each function with appropriate empty inputs
-        functions_and_args: list[tuple[Callable[..., Any], tuple[gpd.GeoDataFrame, ...]]] = [
-            (place_to_place_graph, (empty_gdf,)),
-            (place_to_movement_graph, (empty_gdf, empty_gdf)),
-            (movement_to_movement_graph, (empty_gdf,)),
-            (morphological_graph, (empty_gdf, empty_gdf)),
-        ]
-
-        for func, args in functions_and_args:
-            nodes, edges = func(*args)
-            self.validate_empty_output(nodes, edges)
-
-    def test_missing_required_columns(self, sample_buildings_gdf: gpd.GeoDataFrame) -> None:
-        """Test handling of missing required columns."""
-        # Remove required column
-        gdf_no_place_id = sample_buildings_gdf.drop(columns=["place_id"], errors="ignore")
-
-        with pytest.raises((KeyError, ValueError)):
-            place_to_place_graph(gdf_no_place_id)
-
-
-class TestIntegrationAndStress(TestMorphologyBase):
-    """Integration tests and stress testing scenarios."""
-
-    def test_block_frontages_match_touching_streets(
-        self, small_buildings_gdf: gpd.GeoDataFrame, small_segments_gdf: gpd.GeoDataFrame
-    ) -> None:
-        """Each block faces precisely the streets intersecting its boundary."""
-        limit = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
-        nodes, edges = morphological_graph(
-            small_buildings_gdf, small_segments_gdf, limit=limit, keep_buildings=True
-        )
-        places = nodes["place"]
-        cells = {
-            "sw": box(0, 0, 5, 5),
-            "se": box(5, 0, 10, 5),
-            "nw": box(0, 5, 5, 10),
-            "ne": box(5, 5, 10, 10),
-        }
-        assert places["bldg_id"].is_unique
-        assert set(places["bldg_id"]) == set(cells)
-        for building, cell in places.set_index("bldg_id")["tessellation_geometry"].items():
-            assert cell.equals(cells[building])
-        assert set(nodes["movement"].index) == set(small_segments_gdf["movement_id"])
-        expected = {
-            (place_id, segment.movement_id)
-            for place_id, building in places["bldg_id"].items()
-            for segment in small_segments_gdf.itertuples()
-            if cells[building].boundary.intersects(segment.geometry)
-        }
-        frontages = edges[("place", "faced_to", "movement")]
-        assert frontages.index.is_unique
-        assert set(frontages.index) == expected
-
-    def test_function_consistency(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
-        """Test consistency between different function calls."""
-        # Test that place_to_place_graph produces consistent results
-        nodes1, edges1 = place_to_place_graph(sample_tessellation_gdf)
-        nodes2, edges2 = place_to_place_graph(sample_tessellation_gdf)
-
-        assert nodes1.equals(nodes2)
-        assert edges1.equals(edges2)
-
-    def test_reproducibility(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Test reproducibility of morphological graph creation."""
-        nodes1, edges1 = morphological_graph(sample_buildings_gdf, sample_segments_gdf)
-        nodes2, edges2 = morphological_graph(sample_buildings_gdf, sample_segments_gdf)
-
-        # Check that results are identical
-        for key in nodes1:
-            assert nodes1[key].equals(nodes2[key])
-        for key in edges1:
-            assert edges1[key].equals(edges2[key])
-
-
-class TestSpecialScenarios(TestMorphologyBase):
-    """Tests for special scenarios and advanced features."""
-
     def test_barrier_column_handling(
         self,
         sample_tessellation_gdf: gpd.GeoDataFrame,
@@ -2250,194 +2463,7 @@ class TestSpecialScenarios(TestMorphologyBase):
             segments_gdf_alt_geom,
             primary_barrier_col="barrier_geometry",
         )
-        self.validate_basic_output(nodes, edges)
-
-    def test_group_column_functionality(self, sample_tessellation_gdf: gpd.GeoDataFrame) -> None:
-        """Test group column functionality in place-to-place graphs."""
-        nodes, edges = place_to_place_graph(
-            sample_tessellation_gdf,
-            group_col="enclosure_index",
-        )
-        self.validate_basic_output(nodes, edges)
-        if not edges.empty:
-            assert "enclosure_index" in edges.columns
-
-    def test_center_point_variations(
-        self,
-        small_buildings_gdf: gpd.GeoDataFrame,
-        small_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Point, GeoSeries and GeoDataFrame centres select identical graphs."""
-        point = Point(2.5, 2.5)
-        limit = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
-        expected_nodes, expected_edges = morphological_graph(
-            small_buildings_gdf,
-            small_segments_gdf,
-            center_point=point,
-            distance=1000,
-            limit=limit,
-        )
-        assert len(expected_nodes["place"]) == 4
-        assert len(expected_nodes["movement"]) == 12
-        for center in [
-            gpd.GeoSeries([point], crs=small_buildings_gdf.crs),
-            gpd.GeoDataFrame(geometry=[point], crs=small_buildings_gdf.crs),
-        ]:
-            nodes, edges = morphological_graph(
-                small_buildings_gdf,
-                small_segments_gdf,
-                center_point=center,
-                distance=1000,
-                limit=limit,
-            )
-            assert nodes.keys() == expected_nodes.keys()
-            assert edges.keys() == expected_edges.keys()
-            for key, frame in expected_nodes.items():
-                assert_geodataframe_equal(nodes[key], frame)
-            for key, frame in expected_edges.items():
-                assert_geodataframe_equal(edges[key], frame)
-
-    def test_empty_adjacency_data_handling(self, sample_crs: str) -> None:
-        """Test handling of empty adjacency data in place-to-place graphs."""
-        # Create two non-adjacent polygons to test empty adjacency scenario
-        non_adjacent_polys = gpd.GeoDataFrame(
-            {"place_id": [1, 2], "enclosure_index": [1, 2]},
-            geometry=[
-                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),  # First polygon
-                Polygon([(10, 10), (11, 10), (11, 11), (10, 11)]),  # Far away polygon
-            ],
-            crs=sample_crs,
-        )
-
-        nodes, edges = place_to_place_graph(non_adjacent_polys, group_col="enclosure_index")
-        # Should handle empty adjacency data gracefully
-        self.validate_basic_output(nodes, edges)
-        assert len(nodes) == 2
-        assert edges.empty
-
-    def test_multiindex_edge_case_coverage(self, sample_crs: str) -> None:
-        """Test MultiIndex edge cases in graph processing."""
-        # Create a simple tessellation that will test MultiIndex handling
-        simple_polys = gpd.GeoDataFrame(
-            {"place_id": [1, 2]},
-            geometry=[
-                Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
-                Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),  # Adjacent polygon
-            ],
-            crs=sample_crs,
-        )
-
-        # Test with and without group column to cover different MultiIndex scenarios
-        nodes1, edges1 = place_to_place_graph(simple_polys)
-        nodes2, edges2 = place_to_place_graph(simple_polys, group_col=None)
-
-        self.validate_basic_output(nodes1, edges1)
-        self.validate_basic_output(nodes2, edges2)
-
-    def test_buildings_multiindex_handling(self, sample_crs: str) -> None:
-        """Test morphological_graph with buildings having MultiIndex to cover lines 178-179."""
-        # Create buildings with MultiIndex
-        buildings_data = {
-            "building_id": ["b1", "b2", "b3"],
-            "geometry": [
-                Polygon([(0, 0), (0, 1), (1, 1), (1, 0)]),
-                Polygon([(1, 0), (1, 1), (2, 1), (2, 0)]),
-                Polygon([(2, 0), (2, 1), (3, 1), (3, 0)]),
-            ],
-        }
-        buildings_gdf = gpd.GeoDataFrame(buildings_data, crs=sample_crs)
-
-        # Create MultiIndex to trigger lines 178-179
-        multi_index = pd.MultiIndex.from_arrays(
-            [["type1", "type1", "type2"], ["b1", "b2", "b3"]],
-            names=["building_type", "building_id"],
-        )
-        buildings_gdf.index = multi_index
-
-        # Create simple segments that intersect with buildings
-        segments_data = {
-            "seg_id": ["s1", "s2"],
-            "geometry": [
-                LineString([(0.5, 0.5), (1.5, 0.5)]),  # Intersects buildings
-                LineString([(1.5, 0.5), (2.5, 0.5)]),  # Intersects buildings
-            ],
-        }
-        segments_gdf = gpd.GeoDataFrame(segments_data, crs=sample_crs)
-
-        nodes, edges = morphological_graph(buildings_gdf, segments_gdf)
-        self.validate_basic_output(nodes, edges, ["place", "movement"])
-        assert len(nodes["movement"]) == len(segments_gdf)
-        pd.testing.assert_index_equal(buildings_gdf.index, multi_index)
-
-
-class TestReachabilityFieldRefactor(TestMorphologyBase):
-    """Invariants introduced by the shared reachability-field refactor."""
-
-    def test_reachability_field_computed_once(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        mg_center_point: gpd.GeoSeries,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """A budgeted morphological_graph computes the cost field exactly once.
-
-        Previously the field was recomputed independently for segments, buildings
-        and cells (up to three Dijkstra/snap passes). It must now be built once on
-        the full network and shared across all node types.
-        """
-        original = morph._network_reachability_field
-        calls = {"n": 0}
-
-        monkeypatch.setattr(
-            morph,
-            "_network_reachability_field",
-            partial(_counting_wrapper, calls, original),
-        )
-
-        morphological_graph(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            center_point=mg_center_point,
-            distance=100.0,
-        )
-
-        assert calls["n"] == 1
-
-    def test_shared_field_reaches_cell_and_building_filters(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        mg_center_point: gpd.GeoSeries,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """The single full-network field is threaded into the centroid filters.
-
-        This locks in the fix for the full-vs-truncated network discrepancy:
-        buildings and cells are judged against the same field used for streets,
-        not one rebuilt on the already-truncated segments.
-        """
-        original = morph._geometry_ilocs_within_network_distance
-        seen_fields: list[object] = []
-
-        monkeypatch.setattr(
-            morph,
-            "_geometry_ilocs_within_network_distance",
-            partial(_field_recording_wrapper, seen_fields, original),
-        )
-
-        morphological_graph(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            center_point=mg_center_point,
-            distance=100.0,
-        )
-
-        # The centroid filters (buildings + cells) ran and every one received the
-        # shared field instance rather than None.
-        assert seen_fields
-        assert all(field is not None for field in seen_fields)
-        assert len({id(field) for field in seen_fields}) == 1
+        _assert_output_structure(nodes, edges)
 
     def test_geographic_crs_emits_warning(self) -> None:
         """Distance params are metric, so a geographic CRS input must warn the user.
@@ -2482,156 +2508,93 @@ class TestReachabilityFieldRefactor(TestMorphologyBase):
             # Should not raise: inputs are in EPSG:27700 (projected).
             place_to_movement_graph(place_gdf, movement_gdf)
 
-
-class TestMorphologicalGraphMultiDistance(TestMorphologyBase):
-    """Multi-distance behaviour of morphological_graphs."""
-
-    def test_distance_list_returns_dict_per_distance(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        mg_center_point: gpd.GeoSeries,
-        monkeypatch: pytest.MonkeyPatch,
+    @pytest.mark.parametrize("typed_barrier", [False, True])
+    def test_place_movement_reprojects_secondary_barrier_geometry(
+        self, typed_barrier: bool
     ) -> None:
-        """A list of distances yields a dict of (nodes, edges) keyed by distance."""
-        search = Mock(wraps=nx.multi_source_dijkstra_path_length)
-        monkeypatch.setattr(nx, "multi_source_dijkstra_path_length", search)
-        distances = [50.0, 100.0]
-
-        result = morphological_graphs(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            distances,
-            center_point=mg_center_point,
+        """The spatial join uses the place CRS for the selected barrier column."""
+        place = gpd.GeoDataFrame(
+            {"place_id": ["east"]},
+            geometry=[
+                Polygon([(111300, -10), (111340, -10), (111340, 10), (111300, 10)]),
+            ],
+            crs=3857,
         )
-
-        assert search.call_count == 1
-        assert isinstance(result, dict)
-        assert set(result) == set(distances)
-        for nodes, edges in result.values():
-            self.validate_basic_output(nodes, edges, ["place", "movement"])
-            for edge_type in [
-                ("place", "touched_to", "place"),
-                ("movement", "connected_to", "movement"),
-                ("place", "faced_to", "movement"),
-            ]:
-                assert edge_type in edges
-
-        # A smaller budget can never retain more movement segments than a larger one.
-        small_nodes, _ = result[50.0]
-        large_nodes, _ = result[100.0]
-        assert len(small_nodes["movement"]) <= len(large_nodes["movement"])
-
-    def test_distance_list_as_nx_returns_dict_of_graphs(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        mg_center_point: gpd.GeoSeries,
-    ) -> None:
-        """With as_nx=True each per-distance value is a NetworkX graph."""
-        result = morphological_graphs(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            [50.0, 100.0],
-            center_point=mg_center_point,
-            as_nx=True,
+        degree_line = LineString([(1.0, -0.001), (1.0, 0.001)])
+        movement = gpd.GeoDataFrame(
+            {"movement_id": ["street"], "barrier": [degree_line]},
+            geometry=[degree_line],
+            crs=4326,
         )
+        if typed_barrier:
+            movement["barrier"] = gpd.GeoSeries([degree_line], crs=4326)
 
-        assert isinstance(result, dict)
-        for graph in result.values():
-            self.validate_networkx_output(graph)
-
-    def test_empty_distance_sequence_raises(
-        self,
-        small_buildings_gdf: gpd.GeoDataFrame,
-        small_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """An empty distance sequence is rejected."""
-        with pytest.raises(ValueError, match="distances must contain at least one value"):
-            morphological_graphs(
-                small_buildings_gdf,
-                small_segments_gdf,
-                [],
-                center_point=Point(2.5, 2.5),
+        with pytest.warns(RuntimeWarning, match="CRS"):
+            _, edges = place_to_movement_graph(
+                place, movement, primary_barrier_col="barrier", max_connection_distance=0
             )
 
+        assert list(zip(edges["place_id"], edges["movement_id"], strict=True)) == [
+            ("east", "street")
+        ]
+        assert movement.crs.to_epsg() == 4326
+        assert movement.loc[0, "barrier"].equals_exact(degree_line, 0)
 
-class TestPublicInputImmutability(TestMorphologyBase):
-    """Public morphology functions must leave their input GeoDataFrames unchanged."""
 
-    @pytest.mark.parametrize("options", IMMUTABILITY_OPTION_SETS)
-    def test_morphological_graph_does_not_mutate_inputs(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        mg_center_point: gpd.GeoSeries,
-        options: dict[str, Any],
+class TestMovementToMovementGraph:
+    """Tests for ``movement_to_movement_graph``."""
+
+    def test_movement_to_movement_basic(self, sample_segments_gdf: gpd.GeoDataFrame) -> None:
+        """Test basic movement-to-movement graph creation."""
+        nodes, edges = movement_to_movement_graph(sample_segments_gdf)
+        _assert_output_structure(nodes, edges)
+        assert nodes.equals(sample_segments_gdf)
+
+    def test_movement_to_movement_networkx(self, sample_segments_gdf: gpd.GeoDataFrame) -> None:
+        """Test movement-to-movement NetworkX conversion."""
+        graph = movement_to_movement_graph(sample_segments_gdf, as_nx=True)
+        assert_valid_nx_graph(graph)
+
+    def test_movement_to_movement_edge_structure(
+        self, sample_segments_gdf: gpd.GeoDataFrame
     ) -> None:
-        """morphological_graph leaves the buildings and segments inputs untouched."""
-        kwargs = dict(options)
-        if kwargs.pop("with_center", False):
-            kwargs["center_point"] = mg_center_point
-        buildings_before = sample_buildings_gdf.copy(deep=True)
-        segments_before = sample_segments_gdf.copy(deep=True)
+        """Test movement-to-movement edge structure."""
+        _nodes, edges = movement_to_movement_graph(sample_segments_gdf)
+        _assert_edge_columns(edges, ["from_movement_id", "to_movement_id"])
 
-        morphological_graph(sample_buildings_gdf, sample_segments_gdf, **kwargs)
+    def test_movement_to_movement_multiindex_handling(self, sample_crs: str) -> None:
+        """Test movement-to-movement graph with MultiIndex scenarios."""
+        # Create segments with MultiIndex to test line 702-708
+        segments_data = []
+        for i in range(3):
+            line = LineString([(i, 0), (i + 1, 0)])
+            segments_data.append(line)
 
-        assert_geodataframe_equal(sample_buildings_gdf, buildings_before)
-        assert_geodataframe_equal(sample_segments_gdf, segments_before)
-
-    def test_morphological_graph_barrier_split_does_not_mutate_input(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """The barrier-only segment split leaves the segments input untouched."""
-        segments = sample_segments_gdf.copy(deep=True)
-        segments["is_barrier"] = [i % 2 == 0 for i in range(len(segments))]
-        segments_before = segments.copy(deep=True)
-
-        morphological_graph(
-            sample_buildings_gdf,
-            segments,
-            non_movement_barrier_col="is_barrier",
+        segments_gdf = gpd.GeoDataFrame(
+            {"segment_id": range(len(segments_data))},
+            geometry=segments_data,
+            crs=sample_crs,
         )
 
-        assert_geodataframe_equal(segments, segments_before)
+        # Set a MultiIndex to trigger the MultiIndex handling code
+        segments_gdf = segments_gdf.set_index([segments_gdf.index, "segment_id"])
 
-    def test_morphological_graphs_does_not_mutate_inputs(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        mg_center_point: gpd.GeoSeries,
+        nodes, edges = movement_to_movement_graph(segments_gdf)
+        _assert_output_structure(nodes, edges)
+
+    def test_movement_to_movement_duplicate_edges(
+        self, sample_segments_gdf: gpd.GeoDataFrame
     ) -> None:
-        """The multi-distance pipeline leaves the shared inputs untouched."""
-        buildings_before = sample_buildings_gdf.copy(deep=True)
-        segments_before = sample_segments_gdf.copy(deep=True)
+        """duplicate_edges=True doubles rows with swapped movement id columns."""
+        _, base_edges = movement_to_movement_graph(sample_segments_gdf)
+        _, dup_edges = movement_to_movement_graph(sample_segments_gdf, duplicate_edges=True)
 
-        morphological_graphs(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            [50.0, 100.0],
-            center_point=mg_center_point,
+        assert len(dup_edges) == 2 * len(base_edges)
+        pairs = set(zip(base_edges["from_movement_id"], base_edges["to_movement_id"], strict=True))
+        dup_pairs = set(
+            zip(dup_edges["from_movement_id"], dup_edges["to_movement_id"], strict=True)
         )
-
-        assert_geodataframe_equal(sample_buildings_gdf, buildings_before)
-        assert_geodataframe_equal(sample_segments_gdf, segments_before)
-
-    def test_pairwise_graph_functions_do_not_mutate_inputs(
-        self,
-        sample_tessellation_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """place/movement pairwise builders leave their inputs untouched."""
-        tessellation_before = sample_tessellation_gdf.copy(deep=True)
-        segments_before = sample_segments_gdf.copy(deep=True)
-
-        place_to_place_graph(sample_tessellation_gdf)
-        place_to_movement_graph(sample_tessellation_gdf, sample_segments_gdf)
-        movement_to_movement_graph(sample_segments_gdf)
-
-        assert_geodataframe_equal(sample_tessellation_gdf, tessellation_before)
-        assert_geodataframe_equal(sample_segments_gdf, segments_before)
+        assert dup_pairs == pairs | {(v, u) for u, v in pairs}
 
     def test_movement_graph_without_movement_id_does_not_mutate_input(
         self,
@@ -2645,74 +2608,84 @@ class TestPublicInputImmutability(TestMorphologyBase):
 
         assert_geodataframe_equal(segments, segments_before)
 
-    def test_segments_to_graph_does_not_mutate_input(
-        self,
-        sample_segments_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """segments_to_graph builds its edge index on a copy of the input."""
-        segments_before = sample_segments_gdf.copy(deep=True)
 
-        segments_to_graph(sample_segments_gdf)
-
-        assert_geodataframe_equal(sample_segments_gdf, segments_before)
-
-
-@pytest.mark.parametrize("as_nx", [False, True])
-def test_place_adjacency_deduplicates_joined_places_without_edges(as_nx: bool) -> None:
-    """A join cannot reintroduce duplicate node IDs in an empty topology."""
-    places = gpd.GeoDataFrame(
-        {"place_id": ["west", "west", "east"]},
-        geometry=[
-            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
-            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
-            Polygon([(3, 0), (4, 0), (4, 1), (3, 1)]),
-        ],
-        crs=3857,
-    )
-    if as_nx:
-        with pytest.warns(DeprecationWarning, match="as_nx"):
-            graph = place_to_place_graph(places, as_nx=True)
-        assert isinstance(graph, nx.Graph)
-        assert len(graph) == 2
-        assert graph.number_of_edges() == 0
-        assert {data["place_id"] for _, data in graph.nodes(data=True)} == {"west", "east"}
-    else:
-        nodes, edges = place_to_place_graph(places)
-        assert list(nodes["place_id"]) == ["west", "east"]
-        assert edges.empty
-
-        single_nodes, single_edges = place_to_place_graph(places.iloc[:2])
-        assert list(single_nodes["place_id"]) == ["west"]
-        assert single_edges.empty
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda tess, _segs, **kw: place_to_place_graph(tess, **kw),
+        place_to_movement_graph,
+        lambda _tess, segs, **kw: movement_to_movement_graph(segs, **kw),
+    ],
+    ids=["place_to_place", "place_to_movement", "movement_to_movement"],
+)
+def test_duplicate_edges_rejects_as_nx(
+    sample_tessellation_gdf: gpd.GeoDataFrame,
+    small_segments_gdf: gpd.GeoDataFrame,
+    call: Callable[..., object],
+) -> None:
+    """duplicate_edges=True with as_nx=True raises ValueError."""
+    with pytest.raises(ValueError, match="not supported with as_nx=True"):
+        call(sample_tessellation_gdf, small_segments_gdf, as_nx=True, duplicate_edges=True)
 
 
-@pytest.mark.parametrize("typed_barrier", [False, True])
-def test_place_movement_reprojects_secondary_barrier_geometry(typed_barrier: bool) -> None:
-    """The spatial join uses the place CRS for the selected barrier column."""
-    place = gpd.GeoDataFrame(
-        {"place_id": ["east"]},
-        geometry=[
-            Polygon([(111300, -10), (111340, -10), (111340, 10), (111300, 10)]),
-        ],
-        crs=3857,
-    )
-    degree_line = LineString([(1.0, -0.001), (1.0, 0.001)])
-    movement = gpd.GeoDataFrame(
-        {"movement_id": ["street"], "barrier": [degree_line]},
-        geometry=[degree_line],
-        crs=4326,
-    )
-    if typed_barrier:
-        movement["barrier"] = gpd.GeoSeries([degree_line], crs=4326)
+@pytest.mark.parametrize(
+    ("function", "args"),
+    [
+        (morphological_graph, ("not_gdf", "sample_segments_gdf")),
+        (morphological_graph, ("sample_buildings_gdf", "not_gdf")),
+        (place_to_place_graph, ("not_gdf",)),
+        (place_to_movement_graph, ("not_gdf", "sample_segments_gdf")),
+        (place_to_movement_graph, ("sample_tessellation_gdf", "not_gdf")),
+        (movement_to_movement_graph, ("not_gdf",)),
+    ],
+)
+def test_invalid_input_types(
+    function: Callable[..., Any],
+    args: tuple[str, ...],
+    request: pytest.FixtureRequest,
+) -> None:
+    """Test all functions with invalid input types."""
+    # Resolve fixture names to actual objects
+    resolved_args = []
+    for arg in args:
+        if arg == "not_gdf":
+            resolved_args.append("not a geodataframe")
+        else:
+            resolved_args.append(request.getfixturevalue(arg))
 
-    with pytest.warns(RuntimeWarning, match="CRS"):
-        _, edges = place_to_movement_graph(
-            place, movement, primary_barrier_col="barrier", max_connection_distance=0
-        )
+    with pytest.raises(TypeError):
+        function(*resolved_args)
 
-    assert list(zip(edges["place_id"], edges["movement_id"], strict=True)) == [("east", "street")]
-    assert movement.crs.to_epsg() == 4326
-    assert movement.loc[0, "barrier"].equals_exact(degree_line, 0)
+
+def test_empty_input_handling(empty_gdf: gpd.GeoDataFrame) -> None:
+    """Test all functions handle empty inputs gracefully."""
+    # Test each function with appropriate empty inputs
+    functions_and_args: list[tuple[Callable[..., Any], tuple[gpd.GeoDataFrame, ...]]] = [
+        (place_to_place_graph, (empty_gdf,)),
+        (place_to_movement_graph, (empty_gdf, empty_gdf)),
+        (movement_to_movement_graph, (empty_gdf,)),
+        (morphological_graph, (empty_gdf, empty_gdf)),
+    ]
+
+    for func, args in functions_and_args:
+        nodes, edges = func(*args)
+        _assert_empty_output(nodes, edges)
+
+
+def test_pairwise_graph_functions_do_not_mutate_inputs(
+    sample_tessellation_gdf: gpd.GeoDataFrame,
+    sample_segments_gdf: gpd.GeoDataFrame,
+) -> None:
+    """place/movement pairwise builders leave their inputs untouched."""
+    tessellation_before = sample_tessellation_gdf.copy(deep=True)
+    segments_before = sample_segments_gdf.copy(deep=True)
+
+    place_to_place_graph(sample_tessellation_gdf)
+    place_to_movement_graph(sample_tessellation_gdf, sample_segments_gdf)
+    movement_to_movement_graph(sample_segments_gdf)
+
+    assert_geodataframe_equal(sample_tessellation_gdf, tessellation_before)
+    assert_geodataframe_equal(sample_segments_gdf, segments_before)
 
 
 @pytest.mark.parametrize("barrier_kind", ["object", "source-crs", "target-crs"])

@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 from typing import cast
 from zipfile import ZipFile
 
-import duckdb
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
@@ -25,43 +24,6 @@ pytestmark = pytest.mark.filterwarnings("ignore::city2graph.GTFSGenerationWarnin
 
 
 class TestSaveGtfs:
-    @pytest.mark.parametrize("failure", ["setup", "metadata", "metadata_table", "geometry"])
-    def test_loading_failure_closes_connection(
-        self,
-        transport_input: TransportData,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        failure: str,
-    ) -> None:
-        with c2g.create_gtfs(transport_input, service_date="20000103") as con:
-            path = c2g.save_gtfs(con, tmp_path / "feed.zip", include_metadata=False)
-        with ZipFile(path) as archive:
-            files = {name: archive.read(name) for name in archive.namelist()}
-        if failure == "metadata":
-            files["city2graph_metadata.json"] = b'{"version": 2, "records": []}'
-        elif failure == "metadata_table":
-            files["city2graph_metadata.json"] = b'{"version": 1, "records": []}'
-            files["_city2graph_metadata.txt"] = b"field\nexisting\n"
-        elif failure == "geometry":
-            files["stops.txt"] = b"stop_id,stop_name,stop_lat\nA,A,51.5\n"
-        with ZipFile(path, "w") as archive:
-            for name, content in files.items():
-                archive.writestr(name, content)
-        connection = duckdb.connect(":memory:")
-        monkeypatch.setattr(
-            "city2graph.transportation.duckdb.connect", lambda _database: connection
-        )
-        if failure == "setup":
-
-            def unavailable(_con: duckdb.DuckDBPyConnection) -> None:
-                raise RuntimeError
-
-            monkeypatch.setattr("city2graph.transportation._ensure_graph_sql_support", unavailable)
-        with pytest.raises((RuntimeError, ValueError, duckdb.Error)):
-            c2g.load_gtfs(path)
-        with pytest.raises(duckdb.ConnectionException):
-            connection.execute("SELECT 1")
-
     def test_metadata_input_is_preserved(
         self,
         transport_input: TransportData,

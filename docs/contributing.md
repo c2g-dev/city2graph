@@ -113,16 +113,19 @@ walking graphs and intermediate analysis outputs outside Git. Use the ignored
 location. Benchmark results belong under the ignored `benchmarks/results/`.
 
 Tests construct the smallest synthetic inputs that exercise the public API.
-Share source fixtures through `tests/conftest.py` and create temporary archives
-with pytest's `tmp_path`; avoid city-scale snapshots and fixed real-network counts.
+Keep fixtures in the test module that uses them. Put shared fixtures in the
+nearest common `conftest.py` and create temporary archives with pytest's `tmp_path`.
 The tutorial contains the maintained example code. Retain only figures used by
 published pages, with source attribution. One-off acquisition, rendering and audit
 scripts belong in a separate research workspace.
 
 ## Testing
 
-Tests live under `tests/` and mirror the package layout. Add a new test class
-only when the test does not belong to an existing class.
+Library tests in `tests/city2graph/` mirror the package layout. Put tests for
+a public function in the test file for the module that defines it. Group related
+cases within that file and use parametrization for variations of the same
+behaviour. Documentation and benchmark tests live in `tests/docs/` and
+`tests/benchmarks/`.
 
 Test private helper functions indirectly through the public function that calls
 them. Do not create tests that call private helpers directly. This keeps tests
@@ -162,7 +165,7 @@ For a focused local iteration, run one hook or a selected set of files:
 
 ```bash
 uv run pre-commit run ruff-check --all-files
-uv run pre-commit run --files city2graph/graph.py tests/test_graph.py
+uv run pre-commit run --files city2graph/graph.py tests/city2graph/test_graph.py
 ```
 
 The configured checks cover:
@@ -217,7 +220,7 @@ To run the Chromium smoke tests used by the documentation CI:
 ```bash
 uv run --no-sync playwright install chromium
 uv run --no-sync mkdocs build --strict
-CITY2GRAPH_DOCS_SITE=site uv run --no-sync pytest -q tests/test_docs.py tests/test_docs_browser.py
+CITY2GRAPH_DOCS_SITE=site uv run --no-sync pytest -q tests/docs/
 ```
 
 These checks cover instant navigation, search, copying code, maths, version

@@ -46,4 +46,4 @@ jobs:
       - name: Check generated documentation in Chromium
         env:
           CITY2GRAPH_DOCS_SITE: site
-        run: uv run pytest -q tests/test_docs.py tests/test_docs_browser.py
+        run: uv run pytest -q tests/docs/

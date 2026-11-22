@@ -17,7 +17,7 @@ from shapely.geometry import Polygon
 
 from city2graph import utils
 from city2graph.utils import topology as topology_utils
-from tests import helpers
+from tests.city2graph import helpers
 
 
 @pytest.fixture
@@ -26,7 +26,7 @@ def segments_gdf_no_crs(sample_segments_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFra
     return sample_segments_gdf.set_crs(None, allow_override=True)
 
 
-class TestGraphStructures:
+class TestDualGraph:
     """Test graph structure operations like dual graph and segments conversion."""
 
     @pytest.mark.parametrize(
@@ -307,27 +307,27 @@ class TestGraphStructures:
         assert topology_utils._canonical_edge_pair("a", "a") == ("a", "a")
 
 
+def _make_edges(
+    tuples: list[tuple[Any, ...]],
+    names: list[str] | None = None,
+) -> gpd.GeoDataFrame:
+    """Build an edge GeoDataFrame with one distinct row per index tuple."""
+    if names is None:
+        names = ["u", "v"] if len(tuples[0]) == 2 else ["u", "v", "k"]
+    return gpd.GeoDataFrame(
+        {"name": [f"e{i}" for i in range(len(tuples))]},
+        geometry=[LineString([(i, 0), (i + 1, 1)]) for i in range(len(tuples))],
+        index=pd.MultiIndex.from_tuples(tuples, names=names),
+        crs="EPSG:27700",
+    )
+
+
 class TestCanonicalizeEdges:
     """Test canonicalize_edges collapsing of reciprocal and parallel rows."""
 
-    @staticmethod
-    def _make_edges(
-        tuples: list[tuple[Any, ...]],
-        names: list[str] | None = None,
-    ) -> gpd.GeoDataFrame:
-        """Build an edge GeoDataFrame with one distinct row per index tuple."""
-        if names is None:
-            names = ["u", "v"] if len(tuples[0]) == 2 else ["u", "v", "k"]
-        return gpd.GeoDataFrame(
-            {"name": [f"e{i}" for i in range(len(tuples))]},
-            geometry=[LineString([(i, 0), (i + 1, 1)]) for i in range(len(tuples))],
-            index=pd.MultiIndex.from_tuples(tuples, names=names),
-            crs="EPSG:27700",
-        )
-
     def test_first_keeps_first_row_per_unordered_pair(self) -> None:
         """duplicates='first' keeps the first reciprocal row verbatim."""
-        edges = self._make_edges([(0, 1), (1, 0), (1, 2)])
+        edges = _make_edges([(0, 1), (1, 0), (1, 2)])
         result = utils.canonicalize_edges(edges)
 
         assert result.index.tolist() == [(0, 1), (1, 2)]
@@ -338,7 +338,7 @@ class TestCanonicalizeEdges:
 
     def test_key_keeps_all_rows_as_multigraph(self) -> None:
         """duplicates='key' keeps reciprocal rows under distinct keys."""
-        edges = self._make_edges([(0, 1), (1, 0), (1, 2)])
+        edges = _make_edges([(0, 1), (1, 0), (1, 2)])
         result = utils.canonicalize_edges(edges, duplicates="key")
 
         assert result.index.tolist() == [(0, 1, 0), (0, 1, 1), (1, 2, 0)]
@@ -347,19 +347,19 @@ class TestCanonicalizeEdges:
 
     def test_error_reports_offending_pairs(self) -> None:
         """duplicates='error' raises with row and pair counts."""
-        edges = self._make_edges([(0, 1), (1, 0)])
+        edges = _make_edges([(0, 1), (1, 0)])
         with pytest.raises(ValueError, match=r"2 row\(s\) across 1 unordered pair\(s\)"):
             utils.canonicalize_edges(edges, duplicates="error")
 
     def test_error_passes_when_no_duplicates(self) -> None:
         """duplicates='error' returns canonicalized edges when keys are unique."""
-        edges = self._make_edges([(1, 0), (2, 1)])
+        edges = _make_edges([(1, 0), (2, 1)])
         result = utils.canonicalize_edges(edges, duplicates="error")
         assert result.index.tolist() == [(0, 1), (1, 2)]
 
     def test_three_level_input_preserves_distinct_keys(self) -> None:
         """Three-level input keeps distinct parallel keys under 'first'."""
-        edges = self._make_edges([(1, 0, 0), (0, 1, 1), (1, 0, 1)])
+        edges = _make_edges([(1, 0, 0), (0, 1, 1), (1, 0, 1)])
         result = utils.canonicalize_edges(edges)
 
         # (1, 0, 1) duplicates (0, 1, 1) after canonicalization and is dropped.
@@ -368,26 +368,26 @@ class TestCanonicalizeEdges:
 
     def test_three_level_input_regenerates_keys(self) -> None:
         """duplicates='key' regenerates keys per unordered pair."""
-        edges = self._make_edges([(1, 0, 0), (0, 1, 0)])
+        edges = _make_edges([(1, 0, 0), (0, 1, 0)])
         result = utils.canonicalize_edges(edges, duplicates="key")
         assert result.index.tolist() == [(0, 1, 0), (0, 1, 1)]
         assert result.index.names == ["u", "v", "k"]
 
     def test_self_loops_unchanged(self) -> None:
         """Self-loops keep their index values."""
-        edges = self._make_edges([(2, 2), (1, 0)])
+        edges = _make_edges([(2, 2), (1, 0)])
         result = utils.canonicalize_edges(edges)
         assert result.index.tolist() == [(2, 2), (0, 1)]
 
     def test_string_ids_sorted(self) -> None:
         """String identifiers are ordered lexicographically."""
-        edges = self._make_edges([("b", "a")])
+        edges = _make_edges([("b", "a")])
         result = utils.canonicalize_edges(edges)
         assert result.index.tolist() == [("a", "b")]
 
     def test_mixed_type_ids_use_factorize_fallback(self) -> None:
         """Non-comparable mixed-type identifiers fall back to appearance order."""
-        edges = self._make_edges([("a", 1), (1, "a")])
+        edges = _make_edges([("a", 1), (1, "a")])
         result = utils.canonicalize_edges(edges)
         assert result.index.tolist() == [("a", 1)]
 
@@ -415,7 +415,7 @@ class TestCanonicalizeEdges:
 
     def test_invalid_duplicates_option_raises(self) -> None:
         """Unknown duplicates options are rejected."""
-        edges = self._make_edges([(0, 1)])
+        edges = _make_edges([(0, 1)])
         with pytest.raises(ValueError, match="duplicates must be one of"):
             utils.canonicalize_edges(edges, duplicates="drop")  # type: ignore[arg-type]
 
@@ -423,24 +423,9 @@ class TestCanonicalizeEdges:
 class TestSymmetrizeEdges:
     """Test symmetrize_edges adding reverse rows of undirected edges."""
 
-    @staticmethod
-    def _make_edges(
-        tuples: list[tuple[Any, ...]],
-        names: list[str] | None = None,
-    ) -> gpd.GeoDataFrame:
-        """Build an edge GeoDataFrame with one distinct row per index tuple."""
-        if names is None:
-            names = ["u", "v"] if len(tuples[0]) == 2 else ["u", "v", "k"]
-        return gpd.GeoDataFrame(
-            {"name": [f"e{i}" for i in range(len(tuples))]},
-            geometry=[LineString([(i, 0), (i + 1, 1)]) for i in range(len(tuples))],
-            index=pd.MultiIndex.from_tuples(tuples, names=names),
-            crs="EPSG:27700",
-        )
-
     def test_adds_reverse_rows(self) -> None:
         """Each canonical edge gains a reverse row with copied attributes."""
-        edges = self._make_edges([(0, 1), (1, 2)])
+        edges = _make_edges([(0, 1), (1, 2)])
         result = utils.symmetrize_edges(edges)
 
         assert result.index.tolist() == [(0, 1), (1, 2), (1, 0), (2, 1)]
@@ -450,7 +435,7 @@ class TestSymmetrizeEdges:
 
     def test_reverse_rows_have_reversed_geometry(self) -> None:
         """Reverse rows reverse the LineString so it starts at the source node."""
-        edges = self._make_edges([(0, 1)])
+        edges = _make_edges([(0, 1)])
         result = utils.symmetrize_edges(edges)
 
         forward = list(result.geometry.loc[(0, 1)].coords)
@@ -459,40 +444,40 @@ class TestSymmetrizeEdges:
 
     def test_self_loops_not_duplicated(self) -> None:
         """Self-loops appear only once in the output."""
-        edges = self._make_edges([(2, 2), (0, 1)])
+        edges = _make_edges([(2, 2), (0, 1)])
         result = utils.symmetrize_edges(edges)
         assert result.index.tolist() == [(2, 2), (0, 1), (1, 0)]
 
     def test_idempotent(self) -> None:
         """Applying symmetrize_edges twice equals applying it once."""
-        edges = self._make_edges([(0, 1), (1, 2)])
+        edges = _make_edges([(0, 1), (1, 2)])
         once = utils.symmetrize_edges(edges)
         twice = utils.symmetrize_edges(once)
         assert twice.equals(once)
 
     def test_already_bidirectional_input_unchanged(self) -> None:
         """Inputs already holding both directions gain no extra rows."""
-        edges = self._make_edges([(0, 1), (1, 0)])
+        edges = _make_edges([(0, 1), (1, 0)])
         result = utils.symmetrize_edges(edges)
         assert result.index.tolist() == [(0, 1), (1, 0)]
         assert list(result["name"]) == ["e0", "e1"]
 
     def test_three_level_index_keeps_keys(self) -> None:
         """Multigraph keys are preserved on reverse rows."""
-        edges = self._make_edges([(0, 1, 0), (0, 1, 1)])
+        edges = _make_edges([(0, 1, 0), (0, 1, 1)])
         result = utils.symmetrize_edges(edges)
         assert result.index.tolist() == [(0, 1, 0), (0, 1, 1), (1, 0, 0), (1, 0, 1)]
         assert result.index.names == ["u", "v", "k"]
 
     def test_round_trip_with_canonicalize(self) -> None:
         """canonicalize_edges collapses symmetrized output back to the input."""
-        edges = self._make_edges([(0, 1), (1, 2)])
+        edges = _make_edges([(0, 1), (1, 2)])
         result = utils.canonicalize_edges(utils.symmetrize_edges(edges))
         assert result.equals(edges)
 
     def test_mixed_type_ids_supported(self) -> None:
         """Mixed, non-comparable identifier types are symmetrized verbatim."""
-        edges = self._make_edges([("a", 1)])
+        edges = _make_edges([("a", 1)])
         result = utils.symmetrize_edges(edges)
         assert result.index.tolist() == [("a", 1), (1, "a")]
 
@@ -853,6 +838,45 @@ class TestClipGraph:
         assert nx.utils.graphs_equal(result, graph)
         assert result is not graph
 
+    def test_clip_graph_rejects_invalid_input_type(self) -> None:
+        """clip_graph should reject unsupported graph inputs."""
+        with pytest.raises(TypeError, match="Input must be GeoDataFrame"):
+            utils.clip_graph("not_a_graph", Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]))
+
+    def test_clip_graph_returns_empty_nodes_when_edges_clip_out(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Tuple clipping should return empty nodes when no clipped edges remain."""
+        clip_poly = Polygon([(100, 100), (101, 100), (101, 101), (100, 101)])
+
+        clipped_nodes, clipped_edges = utils.clip_graph(
+            (sample_nodes_gdf, sample_edges_gdf), clip_poly
+        )
+
+        assert clipped_edges.empty
+        assert clipped_nodes is not None
+        assert clipped_nodes.empty
+
+    def test_clip_graph_preserves_nodes_for_non_multiindex_edges(self, sample_crs: str) -> None:
+        """Tuple clipping should leave nodes untouched when edges have no connectivity index."""
+        nodes = gpd.GeoDataFrame({"value": [1]}, geometry=[Point(0, 0)], crs=sample_crs)
+        nodes.index = pd.Index(["n1"])
+        edges = gpd.GeoDataFrame(
+            {"value": [1]},
+            geometry=[LineString([(0, 0), (1, 0)])],
+            crs=sample_crs,
+        )
+        edges.index = pd.Index(["edge-1"])
+        clip_poly = Polygon([(-1, -1), (2, -1), (2, 1), (-1, 1)])
+
+        clipped_nodes, clipped_edges = utils.clip_graph((nodes, edges), clip_poly)
+
+        assert not clipped_edges.empty
+        assert clipped_nodes is not None
+        assert clipped_nodes.equals(nodes)
+
 
 class TestRemoveIsolatedComponents:
     """Test remove_isolated_components functionality."""
@@ -1014,49 +1038,6 @@ class TestRemoveIsolatedComponents:
         assert type(result) is type(graph)
         assert nx.utils.graphs_equal(result, graph)
         assert result is not graph
-
-
-class TestPublicUtilityBranches:
-    """Coverage-oriented tests exercised through public utility APIs."""
-
-    def test_clip_graph_rejects_invalid_input_type(self) -> None:
-        """clip_graph should reject unsupported graph inputs."""
-        with pytest.raises(TypeError, match="Input must be GeoDataFrame"):
-            utils.clip_graph("not_a_graph", Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]))
-
-    def test_clip_graph_returns_empty_nodes_when_edges_clip_out(
-        self,
-        sample_nodes_gdf: gpd.GeoDataFrame,
-        sample_edges_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Tuple clipping should return empty nodes when no clipped edges remain."""
-        clip_poly = Polygon([(100, 100), (101, 100), (101, 101), (100, 101)])
-
-        clipped_nodes, clipped_edges = utils.clip_graph(
-            (sample_nodes_gdf, sample_edges_gdf), clip_poly
-        )
-
-        assert clipped_edges.empty
-        assert clipped_nodes is not None
-        assert clipped_nodes.empty
-
-    def test_clip_graph_preserves_nodes_for_non_multiindex_edges(self, sample_crs: str) -> None:
-        """Tuple clipping should leave nodes untouched when edges have no connectivity index."""
-        nodes = gpd.GeoDataFrame({"value": [1]}, geometry=[Point(0, 0)], crs=sample_crs)
-        nodes.index = pd.Index(["n1"])
-        edges = gpd.GeoDataFrame(
-            {"value": [1]},
-            geometry=[LineString([(0, 0), (1, 0)])],
-            crs=sample_crs,
-        )
-        edges.index = pd.Index(["edge-1"])
-        clip_poly = Polygon([(-1, -1), (2, -1), (2, 1), (-1, 1)])
-
-        clipped_nodes, clipped_edges = utils.clip_graph((nodes, edges), clip_poly)
-
-        assert not clipped_edges.empty
-        assert clipped_nodes is not None
-        assert clipped_nodes.equals(nodes)
 
     def test_remove_isolated_components_returns_original_on_conversion_error(
         self,

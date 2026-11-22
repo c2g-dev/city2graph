@@ -15,15 +15,11 @@ from shapely.geometry import LineString
 from shapely.geometry import Point
 
 from city2graph import utils
-from city2graph.base import GeoDataProcessor
 from city2graph.utils import NxConverter
-from city2graph.utils import conversion as conversion_utils
 from city2graph.utils import gdf_to_nx
 from city2graph.utils import nx_to_gdf
-from city2graph.utils import spatial as spatial_utils
-from city2graph.utils import topology as topology_utils
-from tests import helpers
-from tests.helpers import make_nx_graph
+from tests.city2graph import helpers
+from tests.city2graph.helpers import make_nx_graph
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -71,35 +67,6 @@ def sample_nx_multigraph(sample_crs: str) -> nx.MultiGraph:
             (1, 2, 1, {"edge_feature1": 0.8, "geometry": LineString([(0, 0), (1, 1)])}),
         ],
         graph_attrs={"crs": sample_crs, "is_hetero": False},
-    )
-
-
-@pytest.fixture
-def all_invalid_geom_gdf(sample_crs: str) -> gpd.GeoDataFrame:
-    """Fixture for GeoDataFrame with all invalid geometries."""
-    return gpd.GeoDataFrame(
-        {
-            "id": [1, 2],
-            "geometry": [None, Point(0, 0).buffer(0).buffer(-1)],  # All invalid
-        },
-        crs=sample_crs,
-    )
-
-
-@pytest.fixture
-def invalid_geom_gdf(sample_crs: str) -> gpd.GeoDataFrame:
-    """Fixture for GeoDataFrame with mixed valid/invalid geometries."""
-    return gpd.GeoDataFrame(
-        {
-            "id": [1, 2, 3, 4],
-            "geometry": [
-                Point(0, 0),
-                None,
-                Point(0, 0).buffer(0).buffer(-1),
-                Point(1, 1),
-            ],  # Mixed
-        },
-        crs=sample_crs,
     )
 
 
@@ -267,8 +234,8 @@ def simple_nodes_dict_type1(sample_crs: str) -> dict[str, gpd.GeoDataFrame]:
     return {"type1": gpd.GeoDataFrame({"geometry": [Point(0, 0)]}, crs=sample_crs)}
 
 
-class TestNxConversions:
-    """Test conversions between GeoDataFrame and NetworkX formats."""
+class TestGdfToNx:
+    """Tests for ``gdf_to_nx``."""
 
     def test_nullable_attributes_keep_pandas_scalar_boxing(self) -> None:
         """Lazy attribute records preserve nullable payloads across batches."""
@@ -282,41 +249,6 @@ class TestNxConversions:
         values = [data["value"] for _, data in graph.nodes(data=True)]
         assert values == [1, None] * 135
         assert nodes["value"].isna().sum() == 135
-
-    def test_homogeneous_roundtrip_conversion(
-        self,
-        sample_nodes_gdf: gpd.GeoDataFrame,
-        sample_edges_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Test roundtrip conversion preserves data integrity for homogeneous graphs."""
-        graph = gdf_to_nx(sample_nodes_gdf, sample_edges_gdf)
-        nodes_converted, edges_converted = nx_to_gdf(graph)
-
-        assert_geodataframe_equal(nodes_converted[sample_nodes_gdf.columns], sample_nodes_gdf)
-        assert_geodataframe_equal(edges_converted[sample_edges_gdf.columns], sample_edges_gdf)
-
-    def test_heterogeneous_roundtrip_conversion(
-        self,
-        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
-        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Test roundtrip conversion for heterogeneous graphs."""
-        graph = gdf_to_nx(
-            nodes=sample_hetero_nodes_dict,
-            edges=sample_hetero_edges_dict,
-            multigraph=True,
-        )
-        nodes_dict_converted, edges_dict_converted = nx_to_gdf(graph)
-
-        assert isinstance(nodes_dict_converted, dict)
-        assert isinstance(edges_dict_converted, dict)
-        assert sample_hetero_nodes_dict.keys() == nodes_dict_converted.keys()
-        assert sample_hetero_edges_dict.keys() == edges_dict_converted.keys()
-
-        for node_type, original in sample_hetero_nodes_dict.items():
-            assert_geodataframe_equal(nodes_dict_converted[node_type][original.columns], original)
-        for edge_type, original in sample_hetero_edges_dict.items():
-            assert_geodataframe_equal(edges_dict_converted[edge_type][original.columns], original)
 
     @pytest.mark.parametrize(
         ("input_type", "gdf_fixture"),
@@ -369,30 +301,6 @@ class TestNxConversions:
         assert original_edges == set(sample_edges_gdf.index)
         assert "Could not find nodes for 1 edges by endpoint ID" in caplog.text
 
-    @pytest.mark.parametrize("offset", [0.0, 0.001])
-    @pytest.mark.parametrize("multigraph", [False, True])
-    def test_endpoint_ids_override_geometry(self, offset: float, multigraph: bool) -> None:
-        """Explicit IDs distinguish colocated nodes and tolerate offset line geometry."""
-        nodes = gpd.GeoDataFrame(
-            geometry=[Point(0, 0), Point(0, 0), Point(1, 0)],
-            index=["a", "b", "c"],
-            crs=3857,
-        )
-        edges = gpd.GeoDataFrame(
-            {"weight": [7.0]},
-            geometry=[LineString([(offset, 0), (1, 0)])],
-            crs=3857,
-            index=pd.MultiIndex.from_tuples([("a", "c")], names=["u", "v"]),
-        )
-        graph = gdf_to_nx(nodes, edges, multigraph=multigraph, directed=True)
-        assert [
-            (graph.nodes[u]["_original_index"], graph.nodes[v]["_original_index"])
-            for u, v in graph.edges()
-        ] == [("a", "c")]
-        _, restored = nx_to_gdf(graph)
-        assert isinstance(restored, gpd.GeoDataFrame)
-        assert restored.geometry.iloc[0].equals(edges.geometry.iloc[0])
-
     def test_unknown_endpoint_does_not_fall_back_to_geometry(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -425,11 +333,6 @@ class TestNxConversions:
 
         assert graph.number_of_edges() == 0
         assert "MultiIndex is required" in caplog.text
-
-    def test_nx_to_gdf_requires_nodes_or_edges(self, simple_nx_graph: nx.Graph) -> None:
-        """Requesting neither nodes nor edges should raise."""
-        with pytest.raises(ValueError, match="Must request at least one of nodes or edges"):
-            nx_to_gdf(simple_nx_graph, nodes=False, edges=False)
 
     def test_directed_multigraph_conversion(
         self,
@@ -474,6 +377,106 @@ class TestNxConversions:
         with pytest.raises(error_type, match=error_match):
             gdf_to_nx(nodes=nodes, edges=edges)
 
+    def test_multiindex_nodes_roundtrip(
+        self,
+        multiindex_nodes_gdf: gpd.GeoDataFrame,
+        simple_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """MultiIndex node metadata should be preserved in graph metadata."""
+        graph = gdf_to_nx(nodes=multiindex_nodes_gdf, edges=simple_edges_gdf)
+        assert graph.graph["node_index_names"] == ["node_type", "node_id"]
+
+    def test_gdf_to_nx_edges_none(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:
+        """Test gdf_to_nx raises ValueError when edges is None."""
+        converter = NxConverter()
+        with pytest.raises(ValueError, match="Edges GeoDataFrame cannot be None"):
+            converter.gdf_to_nx(nodes=sample_nodes_gdf, edges=None)
+
+    def test_heterogeneous_validation_errors(
+        self,
+        nodes_dict_bad_keys: dict[int, gpd.GeoDataFrame],
+        edges_dict_bad_tuple: dict[str, gpd.GeoDataFrame],
+        simple_nodes_dict_type1: dict[str, gpd.GeoDataFrame],
+        edges_dict_bad_elements: dict[tuple[int, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Ensure validation catches malformed heterogeneous inputs."""
+        with pytest.raises(TypeError, match="Node type keys must be strings"):
+            gdf_to_nx(nodes=nodes_dict_bad_keys, edges=None)
+
+        with pytest.raises(TypeError, match="Edge type keys must be tuples"):
+            gdf_to_nx(nodes=simple_nodes_dict_type1, edges=edges_dict_bad_tuple)
+
+        with pytest.raises(TypeError, match="All elements in edge type tuples must be strings"):
+            gdf_to_nx(nodes=simple_nodes_dict_type1, edges=edges_dict_bad_elements)
+
+
+class TestNxToGdf:
+    """Tests for ``nx_to_gdf``."""
+
+    def test_homogeneous_roundtrip_conversion(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        sample_edges_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test roundtrip conversion preserves data integrity for homogeneous graphs."""
+        graph = gdf_to_nx(sample_nodes_gdf, sample_edges_gdf)
+        nodes_converted, edges_converted = nx_to_gdf(graph)
+
+        assert_geodataframe_equal(nodes_converted[sample_nodes_gdf.columns], sample_nodes_gdf)
+        assert_geodataframe_equal(edges_converted[sample_edges_gdf.columns], sample_edges_gdf)
+
+    def test_heterogeneous_roundtrip_conversion(
+        self,
+        sample_hetero_nodes_dict: dict[str, gpd.GeoDataFrame],
+        sample_hetero_edges_dict: dict[tuple[str, str, str], gpd.GeoDataFrame],
+    ) -> None:
+        """Test roundtrip conversion for heterogeneous graphs."""
+        graph = gdf_to_nx(
+            nodes=sample_hetero_nodes_dict,
+            edges=sample_hetero_edges_dict,
+            multigraph=True,
+        )
+        nodes_dict_converted, edges_dict_converted = nx_to_gdf(graph)
+
+        assert isinstance(nodes_dict_converted, dict)
+        assert isinstance(edges_dict_converted, dict)
+        assert sample_hetero_nodes_dict.keys() == nodes_dict_converted.keys()
+        assert sample_hetero_edges_dict.keys() == edges_dict_converted.keys()
+
+        for node_type, original in sample_hetero_nodes_dict.items():
+            assert_geodataframe_equal(nodes_dict_converted[node_type][original.columns], original)
+        for edge_type, original in sample_hetero_edges_dict.items():
+            assert_geodataframe_equal(edges_dict_converted[edge_type][original.columns], original)
+
+    @pytest.mark.parametrize("offset", [0.0, 0.001])
+    @pytest.mark.parametrize("multigraph", [False, True])
+    def test_endpoint_ids_override_geometry(self, offset: float, multigraph: bool) -> None:
+        """Explicit IDs distinguish colocated nodes and tolerate offset line geometry."""
+        nodes = gpd.GeoDataFrame(
+            geometry=[Point(0, 0), Point(0, 0), Point(1, 0)],
+            index=["a", "b", "c"],
+            crs=3857,
+        )
+        edges = gpd.GeoDataFrame(
+            {"weight": [7.0]},
+            geometry=[LineString([(offset, 0), (1, 0)])],
+            crs=3857,
+            index=pd.MultiIndex.from_tuples([("a", "c")], names=["u", "v"]),
+        )
+        graph = gdf_to_nx(nodes, edges, multigraph=multigraph, directed=True)
+        assert [
+            (graph.nodes[u]["_original_index"], graph.nodes[v]["_original_index"])
+            for u, v in graph.edges()
+        ] == [("a", "c")]
+        _, restored = nx_to_gdf(graph)
+        assert isinstance(restored, gpd.GeoDataFrame)
+        assert restored.geometry.iloc[0].equals(edges.geometry.iloc[0])
+
+    def test_nx_to_gdf_requires_nodes_or_edges(self, simple_nx_graph: nx.Graph) -> None:
+        """Requesting neither nodes nor edges should raise."""
+        with pytest.raises(ValueError, match="Must request at least one of nodes or edges"):
+            nx_to_gdf(simple_nx_graph, nodes=False, edges=False)
+
     def test_node_index_names_survive_roundtrip(
         self,
         single_name_index_nodes_gdf: gpd.GeoDataFrame,
@@ -489,15 +492,6 @@ class TestNxConversions:
         nodes_back, _ = nx_to_gdf(graph)
         assert isinstance(nodes_back, gpd.GeoDataFrame)
         assert nodes_back.index.name is None
-
-    def test_multiindex_nodes_roundtrip(
-        self,
-        multiindex_nodes_gdf: gpd.GeoDataFrame,
-        simple_edges_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """MultiIndex node metadata should be preserved in graph metadata."""
-        graph = gdf_to_nx(nodes=multiindex_nodes_gdf, edges=simple_edges_gdf)
-        assert graph.graph["node_index_names"] == ["node_type", "node_id"]
 
     @pytest.mark.parametrize(
         ("graph_fixture", "expect_crs", "expect_geom"),
@@ -675,12 +669,6 @@ class TestNxConversions:
         _, edges_gdf = converter.nx_to_gdf(graph)
         assert isinstance(edges_gdf, gpd.GeoDataFrame)
 
-    def test_gdf_to_nx_edges_none(self, sample_nodes_gdf: gpd.GeoDataFrame) -> None:
-        """Test gdf_to_nx raises ValueError when edges is None."""
-        converter = NxConverter()
-        with pytest.raises(ValueError, match="Edges GeoDataFrame cannot be None"):
-            converter.gdf_to_nx(nodes=sample_nodes_gdf, edges=None)
-
     def test_nx_to_gdf_multiindex_nodes(self, sample_crs: str) -> None:
         """Test nx_to_gdf with MultiIndex nodes."""
         G = nx.Graph()
@@ -777,35 +765,8 @@ class TestNxConversions:
         assert nodes_gdf.crs == "EPSG:27700"
 
 
-class TestValidation:
-    """Test validation functions for GeoDataFrames and NetworkX graphs."""
-
-    def test_geo_processor_edge_cases(
-        self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        empty_gdf: gpd.GeoDataFrame,
-        invalid_geom_gdf: gpd.GeoDataFrame,
-        all_invalid_geom_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """GeoDataProcessor should handle geometry filtering and allow-empty toggles."""
-        processor = GeoDataProcessor()
-
-        result = processor.validate_gdf(
-            sample_buildings_gdf,
-            expected_geom_types=["Polygon", "MultiPolygon"],
-        )
-        assert isinstance(result, gpd.GeoDataFrame)
-
-        assert processor.validate_gdf(empty_gdf, allow_empty=True) is not None
-        with pytest.raises(ValueError, match="GeoDataFrame cannot be empty"):
-            processor.validate_gdf(empty_gdf, allow_empty=False)
-
-        filtered = processor.validate_gdf(invalid_geom_gdf)
-        assert filtered is not None
-        assert len(filtered) < len(invalid_geom_gdf)
-
-        with pytest.raises(ValueError, match="GeoDataFrame cannot be empty"):
-            processor.validate_gdf(all_invalid_geom_gdf, allow_empty=False)
+class TestValidateGdf:
+    """Tests for ``validate_gdf``."""
 
     @pytest.mark.parametrize(
         ("nodes_fixture", "edges_fixture", "should_error", "error_match"),
@@ -854,6 +815,23 @@ class TestValidation:
                 utils.validate_gdf(nodes, edges)
         else:
             utils.validate_gdf(nodes, edges)  # Should not raise
+
+    def test_validation_edge_cases(
+        self,
+        sample_nodes_gdf: gpd.GeoDataFrame,
+        empty_gdf: gpd.GeoDataFrame,
+        segments_invalid_geom_gdf: gpd.GeoDataFrame,
+    ) -> None:
+        """Test validation handles edge cases properly."""
+        # Empty edges should be allowed
+        utils.validate_gdf(sample_nodes_gdf, empty_gdf)
+
+        # Invalid geometries should be handled with warning
+        utils.validate_gdf(sample_nodes_gdf, segments_invalid_geom_gdf)
+
+
+class TestValidateNx:
+    """Tests for ``validate_nx``."""
 
     @pytest.mark.parametrize(
         ("graph_fixture", "should_error", "error_match"),
@@ -908,54 +886,21 @@ class TestValidation:
         error_match: str,
         request: pytest.FixtureRequest,
     ) -> None:
-        """GeoDataProcessor.validate_nx should surface detailed errors."""
+        """validate_nx should surface detailed errors."""
         graph = request.getfixturevalue(graph_fixture)
-        processor = GeoDataProcessor()
         with pytest.raises(ValueError, match=error_match):
-            processor.validate_nx(graph)
-
-    def test_validation_edge_cases(
-        self,
-        sample_nodes_gdf: gpd.GeoDataFrame,
-        empty_gdf: gpd.GeoDataFrame,
-        segments_invalid_geom_gdf: gpd.GeoDataFrame,
-    ) -> None:
-        """Test validation handles edge cases properly."""
-        # Empty edges should be allowed
-        utils.validate_gdf(sample_nodes_gdf, empty_gdf)
-
-        # Invalid geometries should be handled with warning
-        utils.validate_gdf(sample_nodes_gdf, segments_invalid_geom_gdf)
-
-    def test_heterogeneous_validation_errors(
-        self,
-        nodes_dict_bad_keys: dict[int, gpd.GeoDataFrame],
-        edges_dict_bad_tuple: dict[str, gpd.GeoDataFrame],
-        simple_nodes_dict_type1: dict[str, gpd.GeoDataFrame],
-        edges_dict_bad_elements: dict[tuple[int, str, str], gpd.GeoDataFrame],
-    ) -> None:
-        """Ensure validation catches malformed heterogeneous inputs."""
-        with pytest.raises(TypeError, match="Node type keys must be strings"):
-            gdf_to_nx(nodes=nodes_dict_bad_keys, edges=None)
-
-        with pytest.raises(TypeError, match="Edge type keys must be tuples"):
-            gdf_to_nx(nodes=simple_nodes_dict_type1, edges=edges_dict_bad_tuple)
-
-        with pytest.raises(TypeError, match="All elements in edge type tuples must be strings"):
-            gdf_to_nx(nodes=simple_nodes_dict_type1, edges=edges_dict_bad_elements)
+            utils.validate_nx(graph)
 
     def test_validate_nx_basic_structure_errors(self) -> None:
         """Graphs with missing metadata or topology should raise informative errors."""
-        processor = GeoDataProcessor()
-
         empty_graph = nx.Graph()
         with pytest.raises(ValueError, match="Graph has no nodes"):
-            processor.validate_nx(empty_graph)
+            utils.validate_nx(empty_graph)
 
         no_edges_graph = nx.Graph()
         no_edges_graph.add_node(1)
         with pytest.raises(ValueError, match="Graph has no edges"):
-            processor.validate_nx(no_edges_graph)
+            utils.validate_nx(no_edges_graph)
 
         incomplete_graph = nx.Graph()
         incomplete_graph.add_node(1, pos=(0, 0))
@@ -982,8 +927,8 @@ class TestValidation:
         assert G.nodes[2]["pos"] == (30.0, 40.0)
 
 
-class TestRustworkxConversions:
-    """Test conversions between NetworkX and rustworkx."""
+class TestRxToNx:
+    """Tests for ``rx_to_nx``."""
 
     @pytest.mark.parametrize(
         "create_graph",
@@ -1117,56 +1062,3 @@ class TestRustworkxConversions:
         assert nx.utils.graphs_equal(first, graph)
         assert nx.utils.graphs_equal(second, graph)
         assert source.edge_index_map() == before
-
-
-class TestPublicUtilityExports:
-    """Verify compatibility exports and focused public submodules."""
-
-    def test_root_all_is_unchanged(self) -> None:
-        """The package-level wildcard API should match the legacy module."""
-        assert utils.__all__ == [
-            "canonicalize_edges",
-            "clip_graph",
-            "create_isochrone",
-            "create_tessellation",
-            "dual_graph",
-            "filter_graph_by_distance",
-            "gdf_to_nx",
-            "nx_to_gdf",
-            "nx_to_rx",
-            "plot_graph",
-            "remove_isolated_components",
-            "rx_to_nx",
-            "symmetrize_edges",
-            "validate_gdf",
-            "validate_nx",
-        ]
-
-    @pytest.mark.parametrize(
-        ("name", "owner"),
-        [
-            ("gdf_to_nx", conversion_utils),
-            ("nx_to_gdf", conversion_utils),
-            ("nx_to_rx", conversion_utils),
-            ("rx_to_nx", conversion_utils),
-            ("validate_gdf", conversion_utils),
-            ("validate_nx", conversion_utils),
-            ("canonicalize_edges", topology_utils),
-            ("clip_graph", topology_utils),
-            ("dual_graph", topology_utils),
-            ("remove_isolated_components", topology_utils),
-            ("symmetrize_edges", topology_utils),
-            ("create_isochrone", spatial_utils),
-            ("create_tessellation", spatial_utils),
-            ("filter_graph_by_distance", spatial_utils),
-            ("plot_graph", spatial_utils),
-        ],
-    )
-    def test_root_exports_are_direct_aliases(self, name: str, owner: object) -> None:
-        """Root utility exports should directly alias their owning implementation."""
-        assert getattr(utils, name) is getattr(owner, name)
-
-    def test_legacy_non_wildcard_exports_remain_available(self) -> None:
-        """Previously importable compatibility names should remain accessible."""
-        assert utils.NxConverter is conversion_utils.NxConverter
-        assert utils.MATPLOTLIB_AVAILABLE is spatial_utils.MATPLOTLIB_AVAILABLE

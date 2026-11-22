@@ -659,27 +659,6 @@ class TestCreateGtfs:
             assert report["services"]["departures"].tolist() == [6, 6]
             assert set(report["edges"]["frequency"]) == {12}
 
-    @pytest.mark.parametrize(("exact", "expected"), [(0, 2.5), (1, 3)])
-    def test_report_expected_and_exact_departures(
-        self, transport_input: TransportData, exact: int, expected: float
-    ) -> None:
-        services = pd.DataFrame([{"pattern_id": "local", "exact_times": exact}])
-        with c2g.create_gtfs(
-            transport_input,
-            services,
-            pattern_ids="local",
-            start_time="08:00:00",
-            end_time="08:25:00",
-            headway_secs=600,
-            service_date="20260105",
-        ) as con:
-            report = c2g.get_gtfs_summary(con)
-            assert report["services"]["departures"].tolist() == [expected]
-            assert set(report["edges"]["frequency"]) == {expected}
-            con.execute("DELETE FROM _city2graph_metadata WHERE table_name='assumptions'")
-            with pytest.raises(ValueError, match="no effective assumptions"):
-                c2g.get_gtfs_summary(con)
-
     def test_reversed_shape_and_zero_distance(self, transport_input: TransportData) -> None:
         transport_input["stop_sequences"] = transport_input["stop_sequences"].drop(
             columns="travel_time_secs"
