@@ -35,13 +35,12 @@ from tests.city2graph.helpers import assert_valid_nx_graph
 from tests.city2graph.helpers import make_grid_polygons_gdf
 
 # Option sets for input immutability tests. The ``with_center`` key
-# marks cases that need the ``mg_center_point`` fixture injected as
-# ``center_point`` at test time.
+# supplies the origin of the synthetic street grid.
 IMMUTABILITY_OPTION_SETS: list[dict[str, Any]] = [
     {},
     {
         "with_center": True,
-        "distance": 100.0,
+        "distance": 20.0,
         "keep_buildings": True,
         "include_unenclosed_buildings": True,
         "tessellation_fallback": True,
@@ -397,13 +396,13 @@ class TestMorphologicalGraph:
 
     def test_duplicate_edges_symmetrizes_same_type_edges(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
         """duplicate_edges=True doubles same-type edges and keeps faced_to as-is."""
-        _, base_edges = morphological_graph(sample_buildings_gdf, sample_segments_gdf)
+        _, base_edges = morphological_graph(small_buildings_gdf, small_segments_gdf)
         _, dup_edges = morphological_graph(
-            sample_buildings_gdf, sample_segments_gdf, duplicate_edges=True
+            small_buildings_gdf, small_segments_gdf, duplicate_edges=True
         )
 
         for edge_type in [
@@ -451,16 +450,16 @@ class TestMorphologicalGraph:
 
     def test_keep_buildings_handles_join_without_index_right(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """keep_buildings should still allocate building_geometry when sjoin omits index_right."""
         monkeypatch.setattr("city2graph.morphology.gpd.sjoin", _fake_sjoin_without_index_right)
 
         nodes, _edges = morphological_graph(
-            sample_buildings_gdf,
-            sample_segments_gdf,
+            small_buildings_gdf,
+            small_segments_gdf,
             keep_buildings=True,
         )
 
@@ -947,11 +946,11 @@ class TestMorphologicalGraph:
 
     def test_networkx_conversion(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test NetworkX graph conversion."""
-        graph = morphological_graph(sample_buildings_gdf, sample_segments_gdf, as_nx=True)
+        graph = morphological_graph(small_buildings_gdf, small_segments_gdf, as_nx=True)
         assert_valid_nx_graph(graph)
 
     @pytest.mark.parametrize("contiguity", ["queen", "rook"])
@@ -1490,16 +1489,16 @@ class TestMorphologicalGraph:
 
     def test_crs_mismatch(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test CRS mismatch handling."""
         # Create segments with different CRS
-        segments_diff_crs = sample_segments_gdf.to_crs("EPSG:4326")
+        segments_diff_crs = small_segments_gdf.to_crs("EPSG:4326")
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            nodes, edges = morphological_graph(sample_buildings_gdf, segments_diff_crs)
+            nodes, edges = morphological_graph(small_buildings_gdf, segments_diff_crs)
             _assert_output_structure(nodes, edges, ["place", "movement"])
 
     def test_invalid_building_is_repaired_before_enclosed_tessellation(
@@ -1642,43 +1641,16 @@ class TestMorphologicalGraph:
 
     def test_successful_network_distance_filtering(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
-        """Test successful network distance filtering that executes Dijkstra algorithm."""
-        # Use existing sample data but with a center point close to the data
-        # This should find a source node and execute the Dijkstra algorithm (lines 1054-1063)
-
-        # Get a center point near the existing buildings
-        buildings_bounds = sample_buildings_gdf.total_bounds
-        center_x = (buildings_bounds[0] + buildings_bounds[2]) / 2
-        center_y = (buildings_bounds[1] + buildings_bounds[3]) / 2
-        center_point = Point(center_x, center_y)
-
-        # Test with a reasonable distance that should include buildings
-        # This should successfully execute the Dijkstra algorithm (lines 1054-1063)
+        """The origin reaches only its incident streets within a two-metre budget."""
         nodes, edges = morphological_graph(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            center_point=center_point,
-            distance=1000,  # Large enough to include buildings
+            small_buildings_gdf, small_segments_gdf, center_point=Point(0, 0), distance=2
         )
 
-        # Should successfully execute and return filtered results
         _assert_output_structure(nodes, edges, ["place", "movement"])
-
-        # Should have some nodes
-        assert len(nodes["movement"]) > 0
-
-        # Test with a smaller distance to ensure filtering logic is executed
-        nodes_small, edges_small = morphological_graph(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            center_point=center_point,
-            distance=100,  # Smaller distance
-        )
-
-        _assert_output_structure(nodes_small, edges_small, ["place", "movement"])
+        assert set(nodes["movement"].index) == {0, 6}
 
     def test_block_frontages_match_touching_streets(
         self, small_buildings_gdf: gpd.GeoDataFrame, small_segments_gdf: gpd.GeoDataFrame
@@ -1712,12 +1684,12 @@ class TestMorphologicalGraph:
 
     def test_reproducibility(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
         """Test reproducibility of morphological graph creation."""
-        nodes1, edges1 = morphological_graph(sample_buildings_gdf, sample_segments_gdf)
-        nodes2, edges2 = morphological_graph(sample_buildings_gdf, sample_segments_gdf)
+        nodes1, edges1 = morphological_graph(small_buildings_gdf, small_segments_gdf)
+        nodes2, edges2 = morphological_graph(small_buildings_gdf, small_segments_gdf)
 
         # Check that results are identical
         for key in nodes1:
@@ -1797,9 +1769,8 @@ class TestMorphologicalGraph:
 
     def test_reachability_field_computed_once(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        mg_center_point: gpd.GeoSeries,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A budgeted morphological_graph computes the cost field exactly once.
@@ -1818,19 +1789,18 @@ class TestMorphologicalGraph:
         )
 
         morphological_graph(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            center_point=mg_center_point,
-            distance=100.0,
+            small_buildings_gdf,
+            small_segments_gdf,
+            center_point=Point(0, 0),
+            distance=20.0,
         )
 
         assert calls["n"] == 1
 
     def test_shared_field_reaches_cell_and_building_filters(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        mg_center_point: gpd.GeoSeries,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """The single full-network field is threaded into the centroid filters.
@@ -1849,10 +1819,10 @@ class TestMorphologicalGraph:
         )
 
         morphological_graph(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            center_point=mg_center_point,
-            distance=100.0,
+            small_buildings_gdf,
+            small_segments_gdf,
+            center_point=Point(0, 0),
+            distance=20.0,
         )
 
         # The centroid filters (buildings + cells) ran and every one received the
@@ -1864,35 +1834,34 @@ class TestMorphologicalGraph:
     @pytest.mark.parametrize("options", IMMUTABILITY_OPTION_SETS)
     def test_morphological_graph_does_not_mutate_inputs(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        mg_center_point: gpd.GeoSeries,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
         options: dict[str, Any],
     ) -> None:
         """morphological_graph leaves the buildings and segments inputs untouched."""
         kwargs = dict(options)
         if kwargs.pop("with_center", False):
-            kwargs["center_point"] = mg_center_point
-        buildings_before = sample_buildings_gdf.copy(deep=True)
-        segments_before = sample_segments_gdf.copy(deep=True)
+            kwargs["center_point"] = Point(0, 0)
+        buildings_before = small_buildings_gdf.copy(deep=True)
+        segments_before = small_segments_gdf.copy(deep=True)
 
-        morphological_graph(sample_buildings_gdf, sample_segments_gdf, **kwargs)
+        morphological_graph(small_buildings_gdf, small_segments_gdf, **kwargs)
 
-        assert_geodataframe_equal(sample_buildings_gdf, buildings_before)
-        assert_geodataframe_equal(sample_segments_gdf, segments_before)
+        assert_geodataframe_equal(small_buildings_gdf, buildings_before)
+        assert_geodataframe_equal(small_segments_gdf, segments_before)
 
     def test_morphological_graph_barrier_split_does_not_mutate_input(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
         """The barrier-only segment split leaves the segments input untouched."""
-        segments = sample_segments_gdf.copy(deep=True)
+        segments = small_segments_gdf.copy(deep=True)
         segments["is_barrier"] = [i % 2 == 0 for i in range(len(segments))]
         segments_before = segments.copy(deep=True)
 
         morphological_graph(
-            sample_buildings_gdf,
+            small_buildings_gdf,
             segments,
             non_movement_barrier_col="is_barrier",
         )
@@ -1916,21 +1885,20 @@ class TestMorphologicalGraphs:
 
     def test_distance_list_returns_dict_per_distance(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        mg_center_point: gpd.GeoSeries,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A list of distances yields a dict of (nodes, edges) keyed by distance."""
         search = Mock(wraps=nx.multi_source_dijkstra_path_length)
         monkeypatch.setattr(nx, "multi_source_dijkstra_path_length", search)
-        distances = [50.0, 100.0]
+        distances = [2.0, 20.0]
 
         result = morphological_graphs(
-            sample_buildings_gdf,
-            sample_segments_gdf,
+            small_buildings_gdf,
+            small_segments_gdf,
             distances,
-            center_point=mg_center_point,
+            center_point=Point(0, 0),
         )
 
         assert search.call_count == 1
@@ -1945,23 +1913,22 @@ class TestMorphologicalGraphs:
             ]:
                 assert edge_type in edges
 
-        # A smaller budget can never retain more movement segments than a larger one.
-        small_nodes, _ = result[50.0]
-        large_nodes, _ = result[100.0]
-        assert len(small_nodes["movement"]) <= len(large_nodes["movement"])
+        short_nodes, _ = result[2.0]
+        long_nodes, _ = result[20.0]
+        assert set(short_nodes["movement"].index) == {0, 6}
+        assert set(long_nodes["movement"].index) == set(small_segments_gdf["movement_id"])
 
     def test_distance_list_as_nx_returns_dict_of_graphs(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        mg_center_point: gpd.GeoSeries,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
         """With as_nx=True each per-distance value is a NetworkX graph."""
         result = morphological_graphs(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            [50.0, 100.0],
-            center_point=mg_center_point,
+            small_buildings_gdf,
+            small_segments_gdf,
+            [2.0, 20.0],
+            center_point=Point(0, 0),
             as_nx=True,
         )
 
@@ -1985,23 +1952,22 @@ class TestMorphologicalGraphs:
 
     def test_morphological_graphs_does_not_mutate_inputs(
         self,
-        sample_buildings_gdf: gpd.GeoDataFrame,
-        sample_segments_gdf: gpd.GeoDataFrame,
-        mg_center_point: gpd.GeoSeries,
+        small_buildings_gdf: gpd.GeoDataFrame,
+        small_segments_gdf: gpd.GeoDataFrame,
     ) -> None:
         """The multi-distance pipeline leaves the shared inputs untouched."""
-        buildings_before = sample_buildings_gdf.copy(deep=True)
-        segments_before = sample_segments_gdf.copy(deep=True)
+        buildings_before = small_buildings_gdf.copy(deep=True)
+        segments_before = small_segments_gdf.copy(deep=True)
 
         morphological_graphs(
-            sample_buildings_gdf,
-            sample_segments_gdf,
-            [50.0, 100.0],
-            center_point=mg_center_point,
+            small_buildings_gdf,
+            small_segments_gdf,
+            [2.0, 20.0],
+            center_point=Point(0, 0),
         )
 
-        assert_geodataframe_equal(sample_buildings_gdf, buildings_before)
-        assert_geodataframe_equal(sample_segments_gdf, segments_before)
+        assert_geodataframe_equal(small_buildings_gdf, buildings_before)
+        assert_geodataframe_equal(small_segments_gdf, segments_before)
 
 
 class TestSegmentsToGraph:

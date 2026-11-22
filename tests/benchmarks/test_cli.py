@@ -1,4 +1,4 @@
-"""Tests for benchmark cli."""
+"""Tests for benchmark workloads and their command-line entry points."""
 
 from __future__ import annotations
 
@@ -33,30 +33,27 @@ def test_public_workloads(suite: str, case: str) -> None:
     with ExitStack() as stack:
         workload = module.prepare(case, 20 if suite == "scalability" else 2, 42, stack)
         outputs = [
-            measure(workload, phase, repeat=2, warmup=1)["output"]
+            measure(workload, phase, repeat=1, warmup=0)["output"]
             for phase in ("time", "allocations", "rss")
         ]
         assert outputs[0] == outputs[1] == outputs[2]
         assert workload.inputs
 
 
-@pytest.mark.parametrize(
-    ("suite", "case"), [("scalability", "weighted"), ("gtfs_performance", "load-fixed")]
-)
-def test_performance_cli(suite: str, case: str, tmp_path: Path) -> None:
-    """Workers select a checkout and emit a comparable JSONL record."""
+def test_performance_cli(tmp_path: Path) -> None:
+    """Run the shared CLI across warmup, repeated timing and memory phases."""
     command = [
         sys.executable,
         "-m",
-        f"benchmarks.{suite}",
+        "benchmarks.scalability",
         "--case",
-        case,
+        "weighted",
         "--size",
         "2",
         "--repeat",
-        "1",
+        "2",
         "--warmup",
-        "0",
+        "1",
         "--seed",
         "7",
         "--package-root",
@@ -64,13 +61,13 @@ def test_performance_cli(suite: str, case: str, tmp_path: Path) -> None:
     ]
     completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=True)
     row = json.loads(completed.stdout)
-    assert row["case"] == case
+    assert row["case"] == "weighted"
     assert row["parameters"]["size"] == 2
     assert row["parameters"]["seed"] == 7
     assert row["environment"]["package_root"] == str(ROOT)
     assert row["environment"]["python_hash_seed"] == "7"
     assert len(row["environment"]["source_hash"]) == 64
-    assert len(row["metrics"]["samples_seconds"]) == 1
+    assert len(row["metrics"]["samples_seconds"]) == 2
     assert {"median_seconds", "traced_peak_bytes", "process_peak_rss_bytes"} <= row[
         "metrics"
     ].keys()
@@ -84,3 +81,31 @@ def test_performance_cli(suite: str, case: str, tmp_path: Path) -> None:
         check=True,
     )
     assert json.loads(comparison.stdout)["status"] == "matched"
+
+
+def test_gtfs_performance_cli_worker() -> None:
+    """The GTFS entry point selects the checkout and loads a synthetic feed."""
+    command = [
+        sys.executable,
+        "-m",
+        "benchmarks.gtfs_performance",
+        "--case",
+        "load-fixed",
+        "--size",
+        "1",
+        "--seed",
+        "7",
+        "--package-root",
+        str(ROOT),
+        "--phase",
+        "time",
+        "--repeat",
+        "1",
+        "--warmup",
+        "0",
+    ]
+    completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=True)
+    row = json.loads(completed.stdout)
+    assert len(row["inputs"]["synthetic"]) == 64
+    assert len(row["metrics"]["samples_seconds"]) == 1
+    assert row["metrics"]["output"] == {"routes": 1, "stops": 20, "trips": 1, "stop_times": 20}
