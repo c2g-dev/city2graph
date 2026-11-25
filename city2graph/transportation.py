@@ -8,12 +8,14 @@ origin/destination records and transport summary graphs for analysis.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import shutil
 import tempfile
 import warnings
 import zipfile
+from collections import Counter
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
@@ -23,6 +25,7 @@ from typing import Unpack
 
 import duckdb
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 from shapely import reverse
 from shapely import wkt
@@ -737,12 +740,380 @@ def _build_frequency_periods(
         raise ValueError(msg)
 
 
+_LEG_STOP_TIMES = "_stop_times_for_legs"
+_BLANK_TIME_STRINGS = ("", "nan", "none")
+_MISSING_TIME_REASONS = {
+    "endpoint": "at the start or end of a trip",
+    "timepoint": "at a stop with timepoint=1",
+    "decreasing": "between known times that decrease",
+    "malformed": "next to a malformed time",
+}
+
+
+def _blank_times(values: pd.Series) -> pd.Series:
+    """
+    Flag GTFS time values that are missing.
+
+    A value is missing when it is null or a blank, ``nan`` or ``none`` string.
+    Malformed values, such as ``"8am"``, are not missing and are never filled.
+
+    Parameters
+    ----------
+    values : pd.Series
+        Raw ``arrival_time`` or ``departure_time`` values.
+
+    Returns
+    -------
+    pd.Series
+        Boolean flags aligned with ``values``.
+    """
+    text = values.astype("string").str.strip().str.lower()
+    return values.isna() | text.isin(_BLANK_TIME_STRINGS).fillna(value=False).astype(bool)
+
+
+def _parse_gtfs_seconds(values: pd.Series) -> pd.Series:
+    """
+    Convert GTFS time values to seconds after the start of the service day.
+
+    Each distinct value is parsed once, since feeds repeat the same times.
+
+    Parameters
+    ----------
+    values : pd.Series
+        Raw ``arrival_time`` or ``departure_time`` values.
+
+    Returns
+    -------
+    pd.Series
+        Seconds, which may exceed 86400 for times after midnight, or NaN where a
+        value is missing or malformed.
+    """
+    codes, uniques = pd.factorize(values)
+    seconds = np.full(len(uniques) + 1, np.nan)
+    for position, value in enumerate(uniques):
+        with contextlib.suppress(TypeError, ValueError):
+            seconds[position] = _time_to_seconds(str(value))
+    # pd.factorize marks missing values with -1, which selects the trailing NaN
+    return pd.Series(seconds[codes], index=values.index)
+
+
+def _format_gtfs_time(seconds: pd.Series) -> pd.Series:
+    """
+    Format whole seconds as GTFS ``HH:MM:SS`` times.
+
+    Hours are not reduced modulo 24, as GTFS requires for times after midnight.
+
+    Parameters
+    ----------
+    seconds : pd.Series
+        Whole seconds after the start of the service day. Hours may exceed 23.
+
+    Returns
+    -------
+    pd.Series
+        GTFS time strings such as ``"24:05:00"``.
+    """
+    whole = seconds.astype("int64")
+    hours, remainder = whole // 3600, whole % 3600
+    minutes, secs = remainder // 60, remainder % 60
+    return (
+        hours.astype(str).str.zfill(2)
+        + ":"
+        + minutes.astype(str).str.zfill(2)
+        + ":"
+        + secs.astype(str).str.zfill(2)
+    )
+
+
+def _fraction_between_known_stops(frame: pd.DataFrame, known: pd.Series) -> pd.Series:
+    """
+    Locate each stop between the nearest stops of its trip with a known time.
+
+    The fraction is taken from ``shape_dist_traveled`` when the stop and both
+    bracketing stops supply increasing distances, and otherwise from the number
+    of stops between them.
+
+    Parameters
+    ----------
+    frame : pd.DataFrame
+        Stop times sorted by trip and stop sequence.
+    known : pd.Series
+        Whether each stop has a known time.
+
+    Returns
+    -------
+    pd.Series
+        Fraction of the way from the previous to the next stop with a known time,
+        or NaN where a stop is not bracketed.
+    """
+    trips = frame["trip_id"]
+    position = frame.groupby("trip_id", sort=False).cumcount().astype(float)
+    previous_position = position.where(known).groupby(trips).ffill()
+    next_position = position.where(known).groupby(trips).bfill()
+    fraction = (position - previous_position) / (next_position - previous_position)
+    if "shape_dist_traveled" not in frame:
+        return fraction
+    distance = pd.to_numeric(frame["shape_dist_traveled"], errors="coerce")
+    # A bracketing stop without a distance must not take an earlier stop's distance
+    anchored = distance.fillna(-np.inf).where(known)
+    previous_distance = anchored.groupby(trips).ffill().replace(-np.inf, np.nan)
+    next_distance = anchored.groupby(trips).bfill().replace(-np.inf, np.nan)
+    use_distance = (
+        (previous_distance <= distance)
+        & (distance <= next_distance)
+        & (next_distance > previous_distance)
+    )
+    by_distance = (distance - previous_distance) / (next_distance - previous_distance)
+    return fraction.mask(use_distance, by_distance)
+
+
+def _count_unfilled_legs(
+    trips: pd.Series,
+    reason: pd.Series,
+    *,
+    origin_missing: pd.Series,
+    destination_missing: pd.Series,
+) -> Counter[str]:
+    """
+    Count the legs that still lack a time, by the reason the time was not filled.
+
+    A leg takes the reason of its first stop when that stop lacks the departure
+    time, and otherwise the reason of its second stop.
+
+    Parameters
+    ----------
+    trips : pd.Series
+        Trip of each stop, sorted by trip and stop sequence.
+    reason : pd.Series
+        Reason a missing time at each stop was not filled, or NA.
+    origin_missing : pd.Series
+        Whether each stop lacks the departure time of the leg that starts there.
+    destination_missing : pd.Series
+        Whether each stop lacks the arrival time of the leg that ends there.
+
+    Returns
+    -------
+    Counter[str]
+        Number of legs by reason. ``"malformed"`` counts legs whose missing time
+        was not filled because the stop's other time is malformed.
+    """
+    has_next = trips.eq(trips.shift(-1))
+    next_missing = destination_missing.groupby(trips).shift(-1, fill_value=False).astype(bool)
+    leg_reason = reason.where(origin_missing, reason.groupby(trips).shift(-1))
+    excluded = has_next & (origin_missing | next_missing)
+    return Counter(leg_reason[excluded].fillna("malformed").tolist())
+
+
+def _interpolate_stop_times(frame: pd.DataFrame) -> tuple[pd.DataFrame, Counter[str]]:
+    """
+    Fill missing stop times that lie between known times of the same trip.
+
+    A stop with both times missing receives the interpolated time as its arrival
+    and departure. The position between the bracketing stops is the fraction of
+    ``shape_dist_traveled`` when the stop and both bracketing stops supply it,
+    and otherwise the fraction of stops. A stop that supplies only one of its
+    two times receives that time for the other. Interpolated times are rounded
+    to whole seconds. Times are not filled at stops with ``timepoint=1``, whose
+    times the feed declares exact, at the start or end of a trip, where no known
+    time brackets them, or between known times that decrease.
+
+    Parameters
+    ----------
+    frame : pd.DataFrame
+        Stop times with ``trip_id``, ``stop_id``, ``stop_sequence``,
+        ``arrival_time`` and ``departure_time``, sorted by trip and integer
+        ``stop_sequence``, and optionally ``timepoint`` and
+        ``shape_dist_traveled``.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, Counter[str]]
+        Stop times with filled ``arrival_time`` and ``departure_time`` and the
+        boolean columns ``arrival_interpolated`` and ``departure_interpolated``,
+        and the number of legs that still lack a time, by reason.
+    """
+    trips = frame["trip_id"]
+    arrival_blank = _blank_times(frame["arrival_time"])
+    departure_blank = _blank_times(frame["departure_time"])
+    arrival = _parse_gtfs_seconds(frame["arrival_time"])
+    departure = _parse_gtfs_seconds(frame["departure_time"])
+    if "timepoint" in frame:
+        timepoint = (
+            frame["timepoint"].astype("string").str.strip().eq("1").fillna(value=False).astype(bool)
+        )
+    else:
+        timepoint = pd.Series(data=False, index=frame.index)
+
+    # A stop that gives one of its two times keeps it as the other, with no dwell
+    fill_arrival = arrival_blank & departure.notna() & ~timepoint
+    fill_departure = departure_blank & arrival.notna() & ~timepoint
+    arrival = arrival.mask(fill_arrival, departure)
+    departure = departure.mask(fill_departure, arrival)
+
+    known = arrival.notna() | departure.notna()
+    previous_time = departure.fillna(arrival).where(known).groupby(trips).ffill()
+    next_time = arrival.fillna(departure).where(known).groupby(trips).bfill()
+    fraction = _fraction_between_known_stops(frame, known)
+
+    candidate = arrival_blank & departure_blank & ~timepoint
+    bracketed = candidate & previous_time.notna() & next_time.notna()
+    filled = bracketed & (next_time >= previous_time)
+    interpolated = (previous_time + (next_time - previous_time) * fraction).round()
+    arrival = arrival.mask(filled, interpolated)
+    departure = departure.mask(filled, interpolated)
+
+    reason = pd.Series(pd.NA, index=frame.index, dtype="string")
+    reason = reason.mask(bracketed & ~filled, "decreasing")
+    reason = reason.mask(candidate & ~bracketed, "endpoint")
+    reason = reason.mask(timepoint & (arrival_blank | departure_blank), "timepoint")
+    counts = _count_unfilled_legs(
+        trips,
+        reason,
+        origin_missing=departure_blank & departure.isna(),
+        destination_missing=arrival_blank & arrival.isna(),
+    )
+
+    result = frame[["trip_id", "stop_id", "stop_sequence"]].copy()
+    arrival_filled = fill_arrival | filled
+    departure_filled = fill_departure | filled
+    result["arrival_time"] = (
+        frame["arrival_time"]
+        .astype("string")
+        .mask(arrival_filled, _format_gtfs_time(arrival.fillna(0)))
+    )
+    result["departure_time"] = (
+        frame["departure_time"]
+        .astype("string")
+        .mask(departure_filled, _format_gtfs_time(departure.fillna(0)))
+    )
+    result["arrival_interpolated"] = arrival_filled
+    result["departure_interpolated"] = departure_filled
+    return result, counts
+
+
+def _count_legs_missing_times(con: duckdb.DuckDBPyConnection) -> int:
+    """
+    Count the legs that lack a departure or arrival time in ``stop_times``.
+
+    This is the number of legs that the leg queries drop for a missing time
+    when interpolation is disabled.
+
+    Parameters
+    ----------
+    con : duckdb.DuckDBPyConnection
+        Open DuckDB connection containing GTFS tables.
+
+    Returns
+    -------
+    int
+        Number of consecutive stop pairs whose departure time at the first stop
+        or arrival time at the second stop is missing.
+    """
+    blank = "({0} IS NULL OR lower(trim(CAST({0} AS VARCHAR))) IN ('', 'nan', 'none'))"
+    row = con.execute(f"""
+        WITH st AS (
+            SELECT
+                {blank.format("departure_time")} AS departure_missing,
+                LEAD({blank.format("arrival_time")}) OVER legs AS next_arrival_missing,
+                LEAD(stop_id) OVER legs AS next_stop_id
+            FROM stop_times
+            WHERE try_cast(stop_sequence AS INTEGER) IS NOT NULL
+            WINDOW legs AS (PARTITION BY trip_id ORDER BY CAST(stop_sequence AS INTEGER))
+        )
+        SELECT count(*) FROM st
+        WHERE next_stop_id IS NOT NULL AND (departure_missing OR next_arrival_missing)
+    """).fetchone()  # noqa: S608
+    return int(row[0]) if row else 0
+
+
+def _stop_times_for_legs(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    interpolate_times: bool,
+) -> tuple[str, Counter[str]]:
+    """
+    Choose the stop times that leg queries read, interpolating them if asked.
+
+    With interpolation, the filled stop times are written to a temporary table and
+    the ``stop_times`` table is left unchanged.
+
+    Parameters
+    ----------
+    con : duckdb.DuckDBPyConnection
+        Open DuckDB connection containing GTFS tables.
+    interpolate_times : bool
+        Fill missing times between known times when ``True``.
+
+    Returns
+    -------
+    tuple[str, Counter[str]]
+        Name of the relation to read stop times from, and the number of legs
+        excluded for missing times, by reason.
+    """
+    if not interpolate_times:
+        missing = _count_legs_missing_times(con)
+        return "stop_times", Counter({"disabled": missing} if missing else {})
+
+    columns = _table_columns(con, "stop_times")
+    optional = [column for column in ("timepoint", "shape_dist_traveled") if column in columns]
+    selected = ", ".join(
+        ["trip_id", "stop_id", "stop_sequence", "arrival_time", "departure_time", *optional]
+    )
+    frame = con.execute(f"""
+        SELECT {selected} FROM stop_times
+        WHERE try_cast(stop_sequence AS INTEGER) IS NOT NULL
+        ORDER BY trip_id, CAST(stop_sequence AS INTEGER)
+    """).df()  # noqa: S608
+    filled, counts = _interpolate_stop_times(frame.reset_index(drop=True))
+    _drop_temp_relation(con, _LEG_STOP_TIMES)
+    con.register("_stop_times_for_legs_frame", filled)
+    try:
+        con.execute(
+            f"CREATE TEMP TABLE {_LEG_STOP_TIMES} AS SELECT * FROM _stop_times_for_legs_frame"  # noqa: S608
+        )
+    finally:
+        con.unregister("_stop_times_for_legs_frame")
+    return _LEG_STOP_TIMES, counts
+
+
+def _log_missing_time_exclusions(counts: Counter[str], *, interpolate_times: bool) -> None:
+    """
+    Report the legs that were excluded because a stop time was missing.
+
+    Nothing is logged when no leg was excluded.
+
+    Parameters
+    ----------
+    counts : Counter[str]
+        Number of excluded legs by reason.
+    interpolate_times : bool
+        Whether missing times were interpolated.
+    """
+    total = sum(counts.values())
+    if not total:
+        return
+    if not interpolate_times:
+        logger.warning(
+            "Excluded %d legs with a missing departure or arrival time. "
+            "Pass interpolate_times=True to fill times that lie between known times.",
+            total,
+        )
+        return
+    details = ", ".join(
+        f"{counts[key]} {text}" for key, text in _MISSING_TIME_REASONS.items() if counts[key]
+    )
+    logger.warning(
+        "Excluded %d legs whose missing times could not be interpolated: %s.", total, details
+    )
+
+
 def get_od_pairs(
     con: duckdb.DuckDBPyConnection,
     start_date: str | None = None,
     end_date: str | None = None,
     include_geometry: bool = True,
     directed: bool = False,  # noqa: ARG001 - retained for call compatibility
+    interpolate_times: bool = False,
 ) -> pd.DataFrame | gpd.GeoDataFrame:
     """
     Generate stop-to-stop OD pairs from GTFS trip stop sequences.
@@ -772,18 +1143,44 @@ def get_od_pairs(
         ``False`` canonicalized the stop IDs, which could mislabel departures
         from the opposite stop. Use :func:`travel_summary_graph` with
         ``directed=False`` to aggregate trips into undirected edges instead.
+    interpolate_times : bool, default=False
+        If ``True``, fill missing arrival and departure times at stops that
+        lie between known times of the same trip, so that their legs are kept.
+        The position between the known stops is taken from
+        ``shape_dist_traveled`` when the stops supply it, and otherwise from
+        the number of stops. Times are not filled at stops with
+        ``timepoint=1``, at the start or end of a trip, or between known times
+        that decrease. The ``stop_times`` table is not changed. Legs that are
+        excluded for a missing time are reported in a log warning, with the
+        reasons when interpolation is enabled.
 
     Returns
     -------
     pd.DataFrame | gpd.GeoDataFrame
         One row per actual stop-to-stop leg. ``orig_stop_id`` identifies the
-        departure stop and ``dest_stop_id`` identifies the arrival stop.
+        departure stop and ``dest_stop_id`` identifies the arrival stop. With
+        ``interpolate_times=True``, the boolean columns
+        ``departure_interpolated`` and ``arrival_interpolated`` mark times that
+        were filled rather than supplied by the feed.
     """
     tables = _list_tables(con)
     required = {"stop_times", "trips"}
     if not required.issubset(tables):
         logger.error("GTFS feed incomplete - need %s", ", ".join(required))
         return pd.DataFrame()
+
+    relation, excluded = _stop_times_for_legs(con, interpolate_times=interpolate_times)
+    _log_missing_time_exclusions(excluded, interpolate_times=interpolate_times)
+    flag_columns = ["departure_interpolated", "arrival_interpolated"] if interpolate_times else []
+    st_flags = (
+        """,
+                departure_interpolated,
+                LEAD(arrival_interpolated) OVER (PARTITION BY trip_id ORDER BY CAST(stop_sequence AS INTEGER))
+                    as arrival_interpolated"""
+        if interpolate_times
+        else ""
+    )
+    select_flags = "".join(f",\n            v.{column}" for column in flag_columns)
 
     has_cal = "calendar" in tables
 
@@ -814,15 +1211,15 @@ def get_od_pairs(
         """
     )
 
-    query = """
+    query = f"""
         WITH st AS (
             SELECT
                 trip_id,
                 stop_id as orig_stop_id,
                 departure_time,
                 LEAD(stop_id) OVER (PARTITION BY trip_id ORDER BY CAST(stop_sequence AS INTEGER)) as dest_stop_id,
-                LEAD(arrival_time) OVER (PARTITION BY trip_id ORDER BY CAST(stop_sequence AS INTEGER)) as arrival_time_next
-            FROM stop_times
+                LEAD(arrival_time) OVER (PARTITION BY trip_id ORDER BY CAST(stop_sequence AS INTEGER)) as arrival_time_next{st_flags}
+            FROM {relation}
             WHERE try_cast(stop_sequence as integer) IS NOT NULL
         ),
         valid_st AS (
@@ -839,8 +1236,8 @@ def get_od_pairs(
             v.departure_time,
             v.arrival_time_next as arrival_time,
             d.active_date_str,
-            strftime(d.active_date, '%Y-%m-%d') as date
-    """
+            strftime(d.active_date, '%Y-%m-%d') as date{select_flags}
+    """  # noqa: S608
 
     stops_relation = "stops"
     include_geometry = include_geometry and "stops" in tables
@@ -1045,6 +1442,8 @@ def _build_travel_summary_edges(
     min_departure_sec: float | None,
     max_arrival_sec: float | None,
     directed: bool,
+    relation: str = "stop_times",
+    interpolated: bool = False,
 ) -> gpd.GeoDataFrame:
     """
     Build aggregated stop-to-stop edges for the travel summary graph.
@@ -1062,13 +1461,39 @@ def _build_travel_summary_edges(
         Optional upper arrival bound in seconds.
     directed : bool
         Whether to preserve edge direction.
+    relation : str, default="stop_times"
+        Relation to read stop times from.
+    interpolated : bool, default=False
+        Whether ``relation`` carries interpolation flags, which add the
+        ``interpolated_frequency`` edge attribute.
 
     Returns
     -------
     gpd.GeoDataFrame
         Aggregated edge records indexed by stop pairs.
     """
-    edge_query = """
+    st_flags = (
+        """,
+                departure_interpolated,
+                LEAD(arrival_interpolated) OVER (
+                    PARTITION BY trip_id
+                    ORDER BY CAST(stop_sequence AS INTEGER)
+                ) AS next_arrival_interpolated"""
+        if interpolated
+        else ""
+    )
+    weighted_flag = (
+        ",\n                st.departure_interpolated OR st.next_arrival_interpolated AS interpolated"
+        if interpolated
+        else ""
+    )
+    aggregated_flag = (
+        ",\n                SUM(CASE WHEN interpolated THEN service_count ELSE 0 END) AS interpolated_frequency"
+        if interpolated
+        else ""
+    )
+    selected_flag = ",\n            a.interpolated_frequency" if interpolated else ""
+    edge_query = f"""
         WITH st AS (
             SELECT
                 trip_id,
@@ -1093,8 +1518,8 @@ def _build_travel_summary_edges(
                 ) OVER (
                     PARTITION BY trip_id
                     ORDER BY CAST(stop_sequence AS INTEGER)
-                ) AS next_arrival_time_sec
-            FROM stop_times
+                ) AS next_arrival_time_sec{st_flags}
+            FROM {relation}
             WHERE try_cast(stop_sequence AS INTEGER) IS NOT NULL
         ),
         trip_origins AS (
@@ -1102,7 +1527,7 @@ def _build_travel_summary_edges(
             FROM (
                 SELECT trip_id, stop_sequence,
                     time_to_seconds(CAST(departure_time AS VARCHAR)) AS departure_time_sec
-                FROM stop_times
+                FROM {relation}
                 WHERE departure_time IS NOT NULL
                   AND lower(trim(CAST(departure_time AS VARCHAR))) NOT IN ('', 'nan', 'none')
                   AND try_cast(stop_sequence AS INTEGER) IS NOT NULL
@@ -1128,7 +1553,7 @@ def _build_travel_summary_edges(
                                 ceil((f.end_sec - f.start_sec) / f.headway) - 1))
                         - greatest(0.0, coalesce(ceil((b.lower_time - (st.departure_time_sec - o.origin) - f.start_sec) / f.headway), 0.0))
                         + 1.0)
-                END AS service_count
+                END AS service_count{weighted_flag}
             FROM st
             JOIN trips t ON st.trip_id = t.trip_id
             JOIN _service_counts sc ON t.service_id = sc.service_id
@@ -1146,7 +1571,7 @@ def _build_travel_summary_edges(
                 stop_id,
                 next_stop_id,
                 SUM(travel_time * service_count) / SUM(service_count) AS travel_time_sec,
-                SUM(service_count) AS frequency
+                SUM(service_count) AS frequency{aggregated_flag}
             FROM valid_pairs
             GROUP BY stop_id, next_stop_id
         )
@@ -1154,7 +1579,7 @@ def _build_travel_summary_edges(
             a.stop_id AS from_stop_id,
             a.next_stop_id AS to_stop_id,
             a.travel_time_sec,
-            a.frequency,
+            a.frequency{selected_flag},
             ST_AsText(
                 CASE
                     WHEN s1.geometry IS NOT NULL AND s2.geometry IS NOT NULL
@@ -1168,7 +1593,7 @@ def _build_travel_summary_edges(
         LEFT JOIN _stops_for_graph s2
           ON a.next_stop_id = s2.stop_id
         ORDER BY from_stop_id, to_stop_id
-    """
+    """  # noqa: S608
 
     edges_df = con.execute(
         edge_query,
@@ -1184,9 +1609,10 @@ def _build_travel_summary_edges(
         reversed_lines = reverse(edges_df.loc[swap_mask, "geometry"])
         edges_df.loc[swap_mask, "geometry"] = reversed_lines
         edges_df["_weighted_tt"] = edges_df["travel_time_sec"] * edges_df["frequency"]
+        sums = ["frequency", "interpolated_frequency"] if interpolated else ["frequency"]
         agg = edges_df.groupby(["from_stop_id", "to_stop_id"], sort=False).agg(
             _weighted_tt=("_weighted_tt", "sum"),
-            frequency=("frequency", "sum"),
+            **{column: (column, "sum") for column in sums},
             geometry=("geometry", "first"),
         )
         agg["travel_time_sec"] = agg["_weighted_tt"] / agg["frequency"]
@@ -1240,6 +1666,8 @@ def _travel_summary_edges(
     calendar_end: str | None = None,
     directed: bool = False,
     use_frequencies: bool = True,
+    interpolate_times: bool = False,
+    report_missing_times: bool = False,
 ) -> gpd.GeoDataFrame:
     """
     Prepare one calendar aggregation and build summary edges.
@@ -1262,6 +1690,10 @@ def _travel_summary_edges(
         Whether to preserve edge direction.
     use_frequencies : bool
         Whether frequency periods contribute expanded trip counts.
+    interpolate_times : bool
+        Whether to fill missing stop times between known times.
+    report_missing_times : bool
+        Whether to log the legs excluded for a missing time.
 
     Returns
     -------
@@ -1289,11 +1721,16 @@ def _travel_summary_edges(
         tables=tables,
         use_frequencies=use_frequencies,
     )
+    relation, excluded = _stop_times_for_legs(con, interpolate_times=interpolate_times)
+    if report_missing_times:
+        _log_missing_time_exclusions(excluded, interpolate_times=interpolate_times)
     return _build_travel_summary_edges(
         con,
         min_departure_sec=min_departure_sec,
         max_arrival_sec=max_arrival_sec,
         directed=directed,
+        relation=relation,
+        interpolated=interpolate_times,
     )
 
 
@@ -1306,6 +1743,7 @@ def travel_summary_graph(
     as_nx: bool | None = None,
     directed: bool = False,
     use_frequencies: bool = True,
+    interpolate_times: bool = False,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.DiGraph | nx.Graph:
     """
     Aggregate GTFS service into a weighted stop-to-stop summary graph.
@@ -1327,6 +1765,10 @@ def travel_summary_graph(
         service uses expected counts (which may be fractional); exact service
         counts departures in the half-open frequency period. Time bounds apply
         to each leg, accounting for offsets from the first stop.
+    ``interpolated_frequency``
+        Present only with ``interpolate_times=True``. The part of
+        ``frequency`` whose departure or arrival time was interpolated rather
+        than supplied by the feed.
 
     Edge geometry
     ~~~~~~~~~~~~~
@@ -1363,6 +1805,11 @@ def travel_summary_graph(
     use_frequencies : bool, default=True
         If ``True`` and ``frequencies.txt`` exists, expand headway-based
         service into effective trip counts for the ``frequency`` attribute.
+    interpolate_times : bool, default=False
+        If ``True``, fill missing arrival and departure times between known
+        times of the same trip before aggregating, as
+        :func:`get_od_pairs` does with the same option. Legs that are excluded
+        for a missing time are reported in a log warning.
 
     Returns
     -------
@@ -1394,6 +1841,8 @@ def travel_summary_graph(
         calendar_end=calendar_end,
         directed=directed,
         use_frequencies=use_frequencies,
+        interpolate_times=interpolate_times,
+        report_missing_times=True,
     )
     nodes_gdf = _build_travel_summary_nodes(con)
 

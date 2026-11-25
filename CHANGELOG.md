@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- Added `interpolate_times` to `get_od_pairs()` and `travel_summary_graph()`. When enabled, missing arrival and departure times at stops between known times of the same trip are filled, by `shape_dist_traveled` when the stops supply it and otherwise by stop count, so that their legs are kept. Times at stops with `timepoint=1`, at the start or end of a trip, or between decreasing known times are not filled. `get_od_pairs()` marks filled times in `departure_interpolated` and `arrival_interpolated`, and `travel_summary_graph()` adds `interpolated_frequency`. Both functions log how many legs were excluded for a missing time, and why, whether or not interpolation is enabled. The `stop_times` table is not changed.
 
 ### Changed
 - Sped up unbounded network-distance searches from several origins in `knn_graph()`, `waxman_graph()`, `euclidean_minimum_spanning_tree()`, `bridge_nodes()` and their directed variants. The network is converted once to a SciPy sparse matrix, and origins are searched in bounded batches. Distances, reachability and path geometries are unchanged, including exact shortest-path ties, which are resolved by NetworkX. Bounded searches, such as fixed-radius graphs, still use NetworkX.
