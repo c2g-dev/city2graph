@@ -3,7 +3,6 @@
 import copy
 import io
 import json
-import logging
 import typing
 import urllib.error
 import urllib.parse
@@ -32,7 +31,6 @@ from shapely.geometry import Point
 import city2graph as c2g
 from city2graph import TransportData
 from city2graph.transportation import _time_to_seconds
-from city2graph.transportation import _timestamp
 from city2graph.transportation import get_od_pairs
 from city2graph.transportation import load_gbfs
 from city2graph.transportation import load_gtfs
@@ -243,6 +241,17 @@ def sample_gtfs_dict() -> dict[str, pd.DataFrame]:
 
 
 @pytest.fixture
+def intermediate_feed(sample_gtfs_dict: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    """One active trip over three stops with a missing intermediate clock."""
+    feed = sample_gtfs_dict
+    feed["stop_times"] = feed["stop_times"].iloc[:3].copy()
+    feed["stop_times"].loc[1, ["arrival_time", "departure_time"]] = None
+    feed["stop_times"]["stop_sequence"] = [10, 20, 90]
+    feed["calendar"]["end_date"] = "20240101"
+    return feed
+
+
+@pytest.fixture
 def gtfs_connection(tmp_path: Path) -> Iterator[GtfsConnectionFactory]:
     """Load independent GTFS feeds and close every connection after the test."""
     with ExitStack() as connections:
@@ -268,22 +277,18 @@ class _ShowTablesResult:
         return [("stop_times",), ("stops",), ("trips",)]
 
 
-class _FunctionCountResult:
-    def fetchall(self) -> list[tuple[int]]:
-        return [(0,)]
-
-
 class FailingUdfConnection:
     """Connection stub whose UDF registration fails after spatial support loads."""
 
-    def execute(self, query: str) -> _ShowTablesResult | _FunctionCountResult | None:
+    def execute(self, query: str) -> _ShowTablesResult | None:
         if query == "SHOW TABLES":
             return _ShowTablesResult()
         if query == "LOAD spatial;":
             return None
-        if "duckdb_functions()" in query:
-            return _FunctionCountResult()
         raise AssertionError(query)
+
+    def sql(self, query: str) -> None:
+        raise duckdb.CatalogException(query)
 
     def create_function(self, *_args: object, **_kwargs: object) -> None:
         msg = "UDF registration failed"
@@ -298,14 +303,6 @@ class TestTimeHelpers:
 
     def test_time_to_seconds_with_none(self) -> None:
         assert _time_to_seconds(None) == 0.0
-
-    def test_timestamp_with_float(self) -> None:
-        ts = _timestamp(3600.0, datetime(2024, 1, 1))
-        assert ts == datetime(2024, 1, 1, 1, 0, 0)
-
-    def test_timestamp_with_none(self) -> None:
-        ts = _timestamp(None, datetime(2024, 1, 1))
-        assert ts == datetime(2024, 1, 1, 0, 0, 0)
 
 
 class TestLoadGtfs:
@@ -418,7 +415,11 @@ class TestGetGtfsSummary:
 
     @pytest.mark.parametrize(("exact", "expected"), [(0, 2.5), (1, 3)])
     def test_report_expected_and_exact_departures(
-        self, transport_input: TransportData, exact: int, expected: float
+        self,
+        transport_input: TransportData,
+        exact: int,
+        expected: float,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         services = pd.DataFrame([{"pattern_id": "local", "exact_times": exact}])
         with c2g.create_gtfs(
@@ -433,6 +434,10 @@ class TestGetGtfsSummary:
             report = c2g.get_gtfs_summary(con)
             assert report["services"]["departures"].tolist() == [expected]
             assert set(report["edges"]["frequency"]) == {expected}
+            con.execute("UPDATE stop_times SET departure_time = NULL")
+            caplog.clear()
+            assert c2g.get_gtfs_summary(con)["edges"].empty
+            assert not any("missing stop times" in message for message in caplog.messages)
             con.execute("DELETE FROM _city2graph_metadata WHERE table_name='assumptions'")
             with pytest.raises(ValueError, match="no effective assumptions"):
                 c2g.get_gtfs_summary(con)
@@ -497,6 +502,256 @@ class TestLoadGbfs:
 
 
 class TestGetOdPairs:
+    @pytest.mark.parametrize(
+        ("distances", "durations"),
+        [
+            ([0, 3, 4], [450, 150]),
+            ([0, 1, None, 10], [200, 200, 200]),
+            ([0, 8, 3, 10], [200, 200, 200]),
+            ([0, 1, float("inf"), 10], [200, 200, 200]),
+            ([2, 2, 2], [300, 300]),
+        ],
+    )
+    def test_distance_interpolation(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        intermediate_feed: dict[str, pd.DataFrame],
+        distances: list[float | None],
+        durations: list[int],
+    ) -> None:
+        stops = len(distances)
+        times = ["08:00:00", *([None] * (stops - 2)), "08:10:00"]
+        intermediate_feed["stop_times"] = pd.DataFrame(
+            {
+                "trip_id": "trip1",
+                "stop_id": list("ABCD")[:stops],
+                "stop_sequence": range(stops),
+                "arrival_time": times,
+                "departure_time": times,
+                "shape_dist_traveled": distances,
+            }
+        )
+        with gtfs_connection(intermediate_feed) as con:
+            od = get_od_pairs(con, include_geometry=False, interpolate_stop_times=True)
+            _, edges = travel_summary_graph(con, directed=True, interpolate_stop_times=True)
+        assert od["travel_time_sec"].tolist() == edges["travel_time_sec"].tolist() == durations
+        assert od.loc[0, "arrival_ts"] == pd.Timestamp("2024-01-01 08:00") + pd.Timedelta(
+            seconds=durations[0]
+        )
+        assert edges["interpolated_frequency"].tolist() == [1] * (stops - 1)
+
+    @pytest.mark.parametrize("overnight", [False, True])
+    def test_intermediate_stop_times(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        intermediate_feed: dict[str, pd.DataFrame],
+        overnight: bool,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        times = intermediate_feed["stop_times"]
+        if overnight:
+            times.loc[0, ["arrival_time", "departure_time"]] = "23:55:00"
+            times.loc[2, ["arrival_time", "departure_time"]] = "24:05:00"
+        with gtfs_connection(intermediate_feed) as con:
+            before = con.table("stop_times").df()
+            caplog.clear()
+            off = get_od_pairs(con)
+            assert caplog.messages == [
+                "Excluded 2 legs with missing stop times (interpolation_disabled=2)."
+            ]
+            caplog.clear()
+            on = get_od_pairs(con, interpolate_stop_times=True)
+            assert not caplog.messages
+            after = get_od_pairs(con)
+            assert_frame_equal(before, con.table("stop_times").df())
+        assert off.empty
+        assert "arrival_interpolated" not in off
+        assert off.attrs["stop_time_diagnostics"] == {
+            "candidate_legs": 2,
+            "excluded_legs": 2,
+            "excluded_by_reason": {"interpolation_disabled": 2},
+        }
+        assert_frame_equal(off, after)
+        assert off.attrs == after.attrs
+        assert on[["orig_stop_id", "dest_stop_id"]].to_numpy().tolist() == [
+            ["stop1", "stop2"],
+            ["stop2", "stop3"],
+        ]
+        assert on["travel_time_sec"].tolist() == [300, 300]
+        middle = pd.Timestamp("2024-01-02" if overnight else "2024-01-01 08:05")
+        assert on.loc[0, "arrival_ts"] == middle
+        assert on.loc[1, "departure_ts"] == middle
+        assert on["date"].tolist() == ["2024-01-01"] * 2
+        assert on["departure_interpolated"].tolist() == [False, True]
+        assert on["arrival_interpolated"].tolist() == [True, False]
+        assert on.attrs["stop_time_diagnostics"] == {
+            "candidate_legs": 2,
+            "excluded_legs": 0,
+            "excluded_by_reason": {},
+        }
+
+    @pytest.mark.parametrize(
+        ("arrivals", "departures", "durations", "flags"),
+        [
+            # Two missing stops before a known stop with a three-minute dwell.
+            (
+                [None, None, None, "08:10:00", "08:15:00"],
+                ["08:00:00", None, None, "08:13:00", None],
+                [200, 200, 200, 120],
+                [(False, True), (True, True), (True, False), (False, False)],
+            ),
+            # Both partial-stop directions, with the earlier half-second rounded up.
+            (
+                [None, None, None, "08:04:00", "08:06:00"],
+                ["08:00:00", None, "08:00:05", None, None],
+                [3, 2, 235, 120],
+                [(False, True), (True, True), (False, False), (True, False)],
+            ),
+        ],
+    )
+    def test_gap_and_partial_times(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        intermediate_feed: dict[str, pd.DataFrame],
+        arrivals: list[str | None],
+        departures: list[str | None],
+        durations: list[int],
+        flags: list[tuple[bool, bool]],
+    ) -> None:
+        intermediate_feed["stop_times"] = pd.DataFrame(
+            {
+                "trip_id": "trip1",
+                "stop_id": list("ABCDE"),
+                "stop_sequence": [1, 8, 11, 80, 92],
+                "arrival_time": arrivals,
+                "departure_time": departures,
+            }
+        )
+        with gtfs_connection(intermediate_feed) as con:
+            od = get_od_pairs(con, include_geometry=False, interpolate_stop_times=True)
+        assert od["travel_time_sec"].tolist() == durations
+        assert (
+            list(zip(od["departure_interpolated"], od["arrival_interpolated"], strict=True))
+            == flags
+        )
+
+    @pytest.mark.parametrize(
+        ("sql", "reasons", "legs"),
+        [
+            (
+                "UPDATE stop_times SET timepoint = '1' WHERE stop_id = 'stop2'",
+                {"required_time_missing": 2},
+                [],
+            ),
+            (
+                "UPDATE stop_times SET end_pickup_drop_off_window = '08:05:00' WHERE stop_id = 'stop2'",
+                {"pickup_drop_off_window": 2},
+                [],
+            ),
+            (
+                "UPDATE stop_times SET departure_time = NULL WHERE stop_id = 'stop1'",
+                {"required_time_missing": 1, "missing_anchor": 1},
+                [],
+            ),
+            (
+                "UPDATE stop_times SET arrival_time = NULL WHERE stop_id = 'stop3'",
+                {"missing_anchor": 1, "required_time_missing": 1},
+                [],
+            ),
+            (
+                "UPDATE stop_times SET departure_time = '08:11:00' WHERE stop_id = 'stop1'",
+                {"inconsistent_times": 2},
+                [],
+            ),
+            (
+                "UPDATE stop_times SET arrival_time = '08:12:00' WHERE stop_id = 'stop2'",
+                {"inconsistent_times": 1},
+                ["stop1"],
+            ),
+            (
+                "UPDATE stop_times SET arrival_time = '08:05:00', timepoint = '1' WHERE stop_id = 'stop2'",
+                {"required_time_missing": 1},
+                ["stop1"],
+            ),
+        ],
+    )
+    def test_unresolved_times(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        intermediate_feed: dict[str, pd.DataFrame],
+        sql: str,
+        reasons: dict[str, int],
+        legs: list[str],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        with gtfs_connection(intermediate_feed) as con:
+            con.execute("ALTER TABLE stop_times ADD timepoint VARCHAR DEFAULT '0'")
+            con.execute("ALTER TABLE stop_times ADD end_pickup_drop_off_window VARCHAR")
+            con.execute(sql)
+            caplog.clear()
+            od = get_od_pairs(con, interpolate_stop_times=True)
+            _, edges = travel_summary_graph(con, interpolate_stop_times=True, directed=True)
+        warnings = [message for message in caplog.messages if "missing stop times" in message]
+        assert len(warnings) == 2
+        assert warnings[0] == warnings[1]
+        assert all(f"{reason}={count}" in warnings[0] for reason, count in reasons.items())
+        assert od["orig_stop_id"].tolist() == legs
+        assert edges.index.get_level_values("from_stop_id").tolist() == legs
+        assert (
+            od.attrs["stop_time_diagnostics"]
+            == edges.attrs["stop_time_diagnostics"]
+            == {
+                "candidate_legs": 2,
+                "excluded_legs": sum(reasons.values()),
+                "excluded_by_reason": reasons,
+            }
+        )
+
+    def test_protected_stop_splits_gap(
+        self, gtfs_connection: GtfsConnectionFactory, intermediate_feed: dict[str, pd.DataFrame]
+    ) -> None:
+        # The middle stop supplies a departure only. It can anchor the second gap.
+        intermediate_feed["stop_times"] = pd.DataFrame(
+            {
+                "trip_id": "trip1",
+                "stop_id": list("ABCDE"),
+                "stop_sequence": range(5),
+                "arrival_time": [None, None, None, None, "08:10:00"],
+                "departure_time": ["08:00:00", None, "08:06:00", None, None],
+                "timepoint": [1, 0, 1, 0, 1],
+            }
+        )
+        with gtfs_connection(intermediate_feed) as con:
+            od = get_od_pairs(con, include_geometry=False, interpolate_stop_times=True)
+        assert od["orig_stop_id"].tolist() == ["C", "D"]
+        assert od["travel_time_sec"].tolist() == [120, 120]
+        assert od.attrs["stop_time_diagnostics"]["excluded_by_reason"] == {
+            "required_time_missing": 1,
+            "missing_anchor": 1,
+        }
+
+    def test_od_without_spatial_and_with_numeric_clocks(self) -> None:
+        with duckdb.connect() as con:
+            con.begin()
+            con.execute(
+                "CREATE TABLE trips AS SELECT * FROM (VALUES ('t', 's'), ('other', 'off')) t(trip_id, service_id)"
+            )
+            con.execute(
+                "CREATE TABLE calendar_dates AS SELECT 's' AS service_id, '20240101' AS date, 1 AS exception_type"
+            )
+            con.execute("""
+                CREATE TABLE stop_times AS SELECT trip_id, stop_id, stop_sequence, clock AS arrival_time,
+                       clock AS departure_time FROM trips CROSS JOIN
+                       (VALUES ('A', 1, 86000.5), ('B', 2, NULL), ('C', 3, 87000.5)) s(stop_id, stop_sequence, clock)
+            """)
+            od = get_od_pairs(con, include_geometry=False, interpolate_stop_times=True)
+            assert con.execute(
+                "SELECT loaded FROM duckdb_extensions() WHERE extension_name = 'spatial'"
+            ).fetchone() == (False,)
+        assert od["travel_time_sec"].tolist() == [500, 500]
+        assert od["arrival_ts"].tolist()[-1] == pd.Timestamp("2024-01-02 00:10")
+        assert od.attrs["stop_time_diagnostics"]["candidate_legs"] == 2
+
     @pytest.mark.parametrize(
         ("start", "end", "expected"),
         [
@@ -665,7 +920,13 @@ class TestGetOdPairs:
     def test_get_od_pairs_incomplete_gtfs(self, gtfs_connection: GtfsConnectionFactory) -> None:
         """A feed without trips or stop times cannot produce OD pairs."""
         con = gtfs_connection({"stops": pd.DataFrame(columns=["stop_id", "stop_lat", "stop_lon"])})
-        assert get_od_pairs(con).empty
+        result = get_od_pairs(con)
+        assert result.empty
+        assert result.attrs["stop_time_diagnostics"] == {
+            "candidate_legs": 0,
+            "excluded_legs": 0,
+            "excluded_by_reason": {},
+        }
 
     def test_get_od_pairs_with_calendar_dates(
         self,
@@ -839,6 +1100,93 @@ class TestGetOdPairs:
 
 
 class TestTravelSummaryGraph:
+    def test_intermediate_stop_times(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        intermediate_feed: dict[str, pd.DataFrame],
+    ) -> None:
+        times = intermediate_feed["stop_times"]
+        times.loc[0, ["arrival_time", "departure_time"]] = "23:55:00"
+        times.loc[2, ["arrival_time", "departure_time"]] = "24:05:00"
+        with gtfs_connection(intermediate_feed) as con:
+            before = con.table("stop_times").df()
+            _, off = travel_summary_graph(con)
+            _, on = travel_summary_graph(
+                con, start_time="23:55:00", end_time="24:05:00", interpolate_stop_times=True
+            )
+            _, after = travel_summary_graph(con)
+            assert_frame_equal(before, con.table("stop_times").df())
+        assert off.empty
+        assert "interpolated_frequency" not in off
+        assert_frame_equal(off, after)
+        assert off.attrs == after.attrs
+        assert off.attrs["stop_time_diagnostics"]["excluded_by_reason"] == {
+            "interpolation_disabled": 2
+        }
+        assert list(on.index) == [("stop1", "stop2"), ("stop2", "stop3")]
+        assert on["travel_time_sec"].tolist() == [300, 300]
+        assert on["frequency"].tolist() == on["interpolated_frequency"].tolist() == [1, 1]
+
+    def test_weighted_interpolation(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        sample_gtfs_dict_with_frequencies: dict[str, pd.DataFrame],
+    ) -> None:
+        # Two active days, a frequency template and a complete reverse trip.
+        feed = sample_gtfs_dict_with_frequencies
+        times = feed["stop_times"]
+        times.loc[times["trip_id"] == "trip2", "stop_id"] = ["stop3", "stop2", "stop1"]
+        feed["calendar"]["end_date"] = "20240102"
+        with gtfs_connection(feed) as con:
+            _, complete = travel_summary_graph(con)
+            _, enabled = travel_summary_graph(con, interpolate_stop_times=True)
+            assert_frame_equal(complete, enabled.drop(columns="interpolated_frequency"))
+            assert enabled["interpolated_frequency"].tolist() == [0, 0]
+            con.execute(
+                "UPDATE stop_times SET arrival_time = NULL, departure_time = NULL "
+                "WHERE trip_id = 'trip1' AND stop_id = 'stop2'"
+            )
+            with pytest.warns(DeprecationWarning, match="as_nx"):
+                graph = travel_summary_graph(con, as_nx=True, interpolate_stop_times=True)
+            _, edges = travel_summary_graph(
+                con, interpolate_stop_times=True, start_time="08:32:30", end_time="09:10:00"
+            )
+        assert isinstance(graph, nx.Graph)
+        assert graph.number_of_edges() == 2
+        assert (
+            graph.graph["stop_time_diagnostics"]
+            == edges.attrs["stop_time_diagnostics"]
+            == {
+                "candidate_legs": 4,
+                "excluded_legs": 0,
+                "excluded_by_reason": {},
+            }
+        )
+        for _, _, data in graph.edges(data=True):
+            assert data["interpolated_frequency"] == 12
+            assert data["frequency"] == 14
+        assert edges["interpolated_frequency"].tolist() == [5.5, 6.5]
+        assert edges["frequency"].tolist() == [7.5, 8.5]
+
+    def test_nonpositive_duration_diagnostics(
+        self,
+        gtfs_connection: GtfsConnectionFactory,
+        intermediate_feed: dict[str, pd.DataFrame],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        with gtfs_connection(intermediate_feed) as con:
+            caplog.clear()
+            con.execute("UPDATE stop_times SET arrival_time = '08:00:00' WHERE stop_id = 'stop3'")
+            od = get_od_pairs(con, interpolate_stop_times=True)
+            _, edges = travel_summary_graph(con, interpolate_stop_times=True)
+        assert od["travel_time_sec"].tolist() == [0, 0]
+        assert od.attrs["stop_time_diagnostics"]["excluded_legs"] == 0
+        assert not caplog.messages
+        assert edges.empty
+        assert edges.attrs["stop_time_diagnostics"]["excluded_by_reason"] == {
+            "nonpositive_duration": 2
+        }
+
     def test_undirected_summary_orients_geometry_to_its_stop_index(
         self, gtfs_connection: GtfsConnectionFactory, sample_gtfs_dict: dict[str, pd.DataFrame]
     ) -> None:
@@ -2613,249 +2961,3 @@ class TestLoadOsmTransport:
             assert con.sql(
                 "SELECT count(*) FROM _city2graph_metadata WHERE kind='override'"
             ).fetchall() == [(1,)]
-
-
-def _three_stop_feed(stop_times: dict[str, list[Any]]) -> dict[str, pd.DataFrame]:
-    """Return a one-trip feed through stops A, B and C with the given stop times."""
-    return {
-        "stops": pd.DataFrame(
-            {
-                "stop_id": ["A", "B", "C"],
-                "stop_name": ["A", "B", "C"],
-                "stop_lat": [0.0, 0.01, 0.02],
-                "stop_lon": [0.0, 0.0, 0.0],
-            },
-        ),
-        "routes": pd.DataFrame({"route_id": ["r1"], "route_type": [3]}),
-        "trips": pd.DataFrame({"route_id": ["r1"], "service_id": ["s1"], "trip_id": ["t1"]}),
-        "stop_times": pd.DataFrame(
-            {"trip_id": ["t1", "t1", "t1"], "stop_id": ["A", "B", "C"], "stop_sequence": [1, 2, 3]}
-            | stop_times,
-        ),
-        "calendar": pd.DataFrame(
-            {
-                "service_id": ["s1"],
-                "monday": [1],
-                "tuesday": [0],
-                "wednesday": [0],
-                "thursday": [0],
-                "friday": [0],
-                "saturday": [0],
-                "sunday": [0],
-                "start_date": ["20240101"],
-                "end_date": ["20240107"],
-            },
-        ),
-    }
-
-
-def _legs(frame: pd.DataFrame) -> list[tuple[str, str]]:
-    """Return the sorted stop pairs of OD pairs."""
-    return sorted(zip(frame["orig_stop_id"], frame["dest_stop_id"], strict=True))
-
-
-def _missing_time_warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
-    """Return the logged warnings about legs excluded for a missing time."""
-    return [record.getMessage() for record in caplog.records if "Excluded" in record.getMessage()]
-
-
-class TestInterpolateStopTimes:
-    def test_intermediate_stop_is_filled_in_both_functions(
-        self,
-        gtfs_connection: GtfsConnectionFactory,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        times = ["08:00:00", "", "08:10:00"]
-        con = gtfs_connection(_three_stop_feed({"arrival_time": times, "departure_time": times}))
-
-        with caplog.at_level(logging.WARNING, logger="city2graph.transportation"):
-            od_without = get_od_pairs(con, include_geometry=False)
-        assert od_without.empty
-        assert _missing_time_warnings(caplog) == [
-            (
-                "Excluded 2 legs with a missing departure or arrival time. "
-                "Pass interpolate_times=True to fill times that lie between known times."
-            ),
-        ]
-
-        caplog.clear()
-        with caplog.at_level(logging.WARNING, logger="city2graph.transportation"):
-            od = get_od_pairs(con, include_geometry=False, interpolate_times=True)
-            _, edges = travel_summary_graph(con, directed=True, interpolate_times=True)
-        assert _missing_time_warnings(caplog) == []
-        od = od.set_index(["orig_stop_id", "dest_stop_id"]).sort_index()
-        assert list(od.index) == [("A", "B"), ("B", "C")]
-        assert od["departure_ts"].tolist() == [
-            pd.Timestamp("2024-01-01 08:00:00"),
-            pd.Timestamp("2024-01-01 08:05:00"),
-        ]
-        assert od["travel_time_sec"].tolist() == [300.0, 300.0]
-        assert od["departure_interpolated"].tolist() == [False, True]
-        assert od["arrival_interpolated"].tolist() == [True, False]
-        assert list(edges.index) == [("A", "B"), ("B", "C")]
-        assert edges["travel_time_sec"].tolist() == [300.0, 300.0]
-        assert edges["frequency"].tolist() == [1.0, 1.0]
-        assert edges["interpolated_frequency"].tolist() == [1.0, 1.0]
-
-        # The feed's own table keeps its missing times
-        assert con.execute(
-            "SELECT count(*) FROM stop_times WHERE stop_id = 'B' AND arrival_time IS NULL"
-        ).fetchone() == (1,)
-
-    @pytest.mark.parametrize(
-        ("times", "missing_leg"),
-        [
-            (["", "08:05:00", "08:10:00"], ("A", "B")),
-            (["08:00:00", "08:05:00", ""], ("B", "C")),
-        ],
-    )
-    def test_first_and_last_stops_are_not_filled(
-        self,
-        gtfs_connection: GtfsConnectionFactory,
-        caplog: pytest.LogCaptureFixture,
-        times: list[str],
-        missing_leg: tuple[str, str],
-    ) -> None:
-        con = gtfs_connection(_three_stop_feed({"arrival_time": times, "departure_time": times}))
-        with caplog.at_level(logging.WARNING, logger="city2graph.transportation"):
-            od = get_od_pairs(con, include_geometry=False, interpolate_times=True)
-            _, edges = travel_summary_graph(con, directed=True, interpolate_times=True)
-        assert missing_leg not in _legs(od)
-        assert missing_leg not in list(edges.index)
-        assert len(od) == len(edges) == 1
-        message = (
-            "Excluded 1 legs whose missing times could not be interpolated: "
-            "1 at the start or end of a trip."
-        )
-        assert _missing_time_warnings(caplog) == [message, message]
-
-    def test_timepoint_stop_is_not_filled(
-        self,
-        gtfs_connection: GtfsConnectionFactory,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        times = ["08:00:00", "", "08:10:00"]
-        feed = _three_stop_feed(
-            {"arrival_time": times, "departure_time": times, "timepoint": [1, 1, 1]}
-        )
-        con = gtfs_connection(feed)
-        with caplog.at_level(logging.WARNING, logger="city2graph.transportation"):
-            od = get_od_pairs(con, include_geometry=False, interpolate_times=True)
-        assert od.empty
-        assert _missing_time_warnings(caplog) == [
-            "Excluded 2 legs whose missing times could not be interpolated: 2 at a stop with timepoint=1.",
-        ]
-
-        # With timepoint=0 the same stop is filled
-        feed["stop_times"]["timepoint"] = [1, 0, 1]
-        od = get_od_pairs(gtfs_connection(feed), include_geometry=False, interpolate_times=True)
-        assert _legs(od) == [("A", "B"), ("B", "C")]
-
-    def test_times_after_midnight(self, gtfs_connection: GtfsConnectionFactory) -> None:
-        times = ["23:58:00", "", "24:06:00"]
-        con = gtfs_connection(_three_stop_feed({"arrival_time": times, "departure_time": times}))
-        od = get_od_pairs(con, include_geometry=False, interpolate_times=True)
-        od = od.set_index(["orig_stop_id", "dest_stop_id"]).sort_index()
-        assert od.loc[("A", "B"), "arrival_ts"] == pd.Timestamp("2024-01-02 00:02:00")
-        assert od.loc[("B", "C"), "departure_ts"] == pd.Timestamp("2024-01-02 00:02:00")
-        assert od["travel_time_sec"].tolist() == [240.0, 240.0]
-        _, edges = travel_summary_graph(
-            con, directed=True, interpolate_times=True, start_time="24:00:00", end_time="24:10:00"
-        )
-        assert list(edges.index) == [("B", "C")]
-
-    def test_shape_distance_positions_the_stop(
-        self, gtfs_connection: GtfsConnectionFactory
-    ) -> None:
-        times = ["08:00:00", "", "08:10:00"]
-        feed = _three_stop_feed(
-            {"arrival_time": times, "departure_time": times, "shape_dist_traveled": [0.0, 3.0, 4.0]}
-        )
-        od = get_od_pairs(gtfs_connection(feed), include_geometry=False, interpolate_times=True)
-        od = od.set_index(["orig_stop_id", "dest_stop_id"]).sort_index()
-        assert od["travel_time_sec"].tolist() == [450.0, 150.0]
-
-    def test_one_missing_time_takes_the_other(self, gtfs_connection: GtfsConnectionFactory) -> None:
-        feed = _three_stop_feed(
-            {
-                "arrival_time": ["08:00:00", "08:04:00", "08:10:00"],
-                "departure_time": ["08:00:00", "", "08:10:00"],
-            }
-        )
-        od = get_od_pairs(gtfs_connection(feed), include_geometry=False, interpolate_times=True)
-        od = od.set_index(["orig_stop_id", "dest_stop_id"]).sort_index()
-        assert od.loc[("B", "C"), "departure_ts"] == pd.Timestamp("2024-01-01 08:04:00")
-        assert od["departure_interpolated"].tolist() == [False, True]
-        assert od["arrival_interpolated"].tolist() == [False, False]
-
-    def test_decreasing_known_times_are_not_bridged(
-        self,
-        gtfs_connection: GtfsConnectionFactory,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        times = ["08:10:00", "", "08:00:00"]
-        con = gtfs_connection(_three_stop_feed({"arrival_time": times, "departure_time": times}))
-        with caplog.at_level(logging.WARNING, logger="city2graph.transportation"):
-            od = get_od_pairs(con, include_geometry=False, interpolate_times=True)
-        assert od.empty
-        assert _missing_time_warnings(caplog) == [
-            "Excluded 2 legs whose missing times could not be interpolated: 2 between known times that decrease.",
-        ]
-
-    @pytest.mark.parametrize("directed", [True, False])
-    def test_complete_trips_do_not_change(
-        self,
-        gtfs_connection: GtfsConnectionFactory,
-        sample_gtfs_dict_with_frequencies: dict[str, pd.DataFrame],
-        caplog: pytest.LogCaptureFixture,
-        directed: bool,
-    ) -> None:
-        con = gtfs_connection(sample_gtfs_dict_with_frequencies)
-        with caplog.at_level(logging.WARNING, logger="city2graph.transportation"):
-            od = get_od_pairs(con, "20240101", "20240107")
-            od_interpolated = get_od_pairs(con, "20240101", "20240107", interpolate_times=True)
-            _, edges = travel_summary_graph(con, directed=directed)
-            _, edges_interpolated = travel_summary_graph(
-                con, directed=directed, interpolate_times=True
-            )
-        assert _missing_time_warnings(caplog) == []
-        assert not od_interpolated[["departure_interpolated", "arrival_interpolated"]].any().any()
-        assert_frame_equal(
-            pd.DataFrame(
-                od_interpolated.drop(columns=["departure_interpolated", "arrival_interpolated"])
-            ),
-            pd.DataFrame(od),
-        )
-        assert (edges_interpolated["interpolated_frequency"] == 0).all()
-        assert_frame_equal(
-            pd.DataFrame(edges_interpolated.drop(columns="interpolated_frequency")),
-            pd.DataFrame(edges),
-        )
-
-    def test_undirected_summary_sums_interpolated_frequency(
-        self, gtfs_connection: GtfsConnectionFactory
-    ) -> None:
-        feed = _three_stop_feed(
-            {
-                "arrival_time": ["08:00:00", "", "08:10:00"],
-                "departure_time": ["08:00:00", "", "08:10:00"],
-            }
-        )
-        return_trip = pd.DataFrame(
-            {
-                "trip_id": ["t2", "t2", "t2"],
-                "stop_id": ["C", "B", "A"],
-                "stop_sequence": [1, 2, 3],
-                "arrival_time": ["09:00:00", "09:04:00", "09:10:00"],
-                "departure_time": ["09:00:00", "09:04:00", "09:10:00"],
-            },
-        )
-        feed["stop_times"] = pd.concat([feed["stop_times"], return_trip], ignore_index=True)
-        feed["trips"] = pd.DataFrame(
-            {"route_id": ["r1", "r1"], "service_id": ["s1", "s1"], "trip_id": ["t1", "t2"]}
-        )
-        _, edges = travel_summary_graph(
-            gtfs_connection(feed), directed=False, interpolate_times=True
-        )
-        assert edges["frequency"].tolist() == [2.0, 2.0]
-        assert edges["interpolated_frequency"].tolist() == [1.0, 1.0]
