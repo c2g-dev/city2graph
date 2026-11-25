@@ -165,13 +165,35 @@ def _ensure_graph_sql_support(con: duckdb.DuckDBPyConnection) -> None:
             msg = "DuckDB spatial extension is required to build transport graph geometries."
             raise RuntimeError(msg) from error
 
-    registered = con.execute(
-        "SELECT count(*) FROM duckdb_functions() WHERE function_name = 'time_to_seconds'"
-    ).fetchall()
-    if not registered or not registered[0][0]:
+    _ensure_time_sql_support(con)
+
+
+def _ensure_time_sql_support(con: duckdb.DuckDBPyConnection, *, strict: bool = True) -> None:
+    """
+    Register the GTFS clock parser independently of spatial support.
+
+    OD queries use a tolerant parser so malformed clocks affect only their own legs.
+
+    Parameters
+    ----------
+    con : duckdb.DuckDBPyConnection
+        Connection used to analyse a feed.
+    strict : bool, default=True
+        Raise for malformed clock strings. The OD parser returns null for them.
+    """
+    name = "time_to_seconds" if strict else "_od_time_to_seconds"
+    try:
+        # Bind the function without scanning DuckDB's full function catalogue.
+        con.sql(f"SELECT {name}(NULL::VARCHAR) LIMIT 0")
+    except duckdb.CatalogException:
         con.create_function(
-            "time_to_seconds",
+            name,
             _time_to_seconds,
             [duckdb.sqltype("VARCHAR")],
             duckdb.sqltype("DOUBLE"),
+            exception_handling=(
+                duckdb.PythonExceptionHandling.DEFAULT
+                if strict
+                else duckdb.PythonExceptionHandling.RETURN_NULL
+            ),
         )
