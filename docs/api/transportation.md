@@ -25,43 +25,27 @@ interpretation, partial service tables and default values.
 
 ## Missing intermediate stop times
 
-Pass `interpolate_stop_times=True` to `get_od_pairs()` or
-`travel_summary_graph()` to estimate missing intermediate stop times. For example,
-if a trip leaves A at 08:00 and reaches C at 08:10 via an untimed stop B,
-both functions use 08:05 at B when no distances are supplied. With cumulative
-distances of 0, 3 and 4 at A, B and C, they use 08:07:30. By default, both
-legs are excluded because each lacks a clock needed to calculate its duration.
+With `interpolate_stop_times=True`, `get_od_pairs()` and `travel_summary_graph()`
+estimate missing intermediate clocks from the preceding departure and following arrival.
+For A (08:00) → B → C (08:10), cumulative `shape_dist_traveled` values of 0, 3 and 4
+give 08:07:30 at B. When any distance in the gap is missing or non-finite, decreases,
+or the endpoints have equal distances, the interval is divided equally by stop count
+(08:05 at B). Estimates use numeric `stop_sequence` order and round half-seconds up.
 
-For a run of untimed stops, the interval between the preceding departure and
-following arrival is divided in proportion to `shape_dist_traveled` when all
-distances in that gap are finite, never decrease, and the final distance exceeds
-the initial distance. Otherwise the entire interval is divided equally among
-the adjacent legs. Stops are ordered by numeric `stop_sequence`. Estimated
-times are rounded to the nearest second,
-with half-seconds rounded up. If just one clock is missing at an intermediate
-stop, its counterpart supplies the estimate when consistent with neighbouring
-times. The original `stop_times` table retains all supplied values and gaps.
+A one-sided intermediate clock supplies its counterpart when consistent with its neighbours.
+Missing clocks at endpoints, exact timepoints and stops with pickup/drop-off windows
+block interpolation across the gap. Extended hours such as `24:05:00` retain their service day.
+The input `stop_times` table keeps its original values.
 
-First and last stops, explicit `timepoint=1` stops and stops with a pickup or
-drop-off window keep their missing clocks. Estimates cannot cross these gaps
-or use reversed anchor times. A missing `timepoint` column permits interpolation
-at eligible intermediate stops. A time supplied with `timepoint=0` keeps its
-feed provenance. Times such as `24:05:00` belong to the original service day.
+OD rows flag estimated clocks in `departure_interpolated` and `arrival_interpolated`.
+Summary edges report their contribution to `frequency` in `interpolated_frequency`,
+with the same service-day, headway and time-window weights.
 
-When interpolation is enabled, OD rows include the Boolean columns
-`departure_interpolated` and `arrival_interpolated`. Summary edges include
-`interpolated_frequency`, the part of `frequency` contributed by traversals
-with either clock estimated. Both counts use the same service days, headways
-and time bounds.
-
-Read `result.attrs["stop_time_diagnostics"]` on the OD frame or the summary
-edge frame, or `graph.graph["stop_time_diagnostics"]` on a NetworkX result.
-`candidate_legs` counts adjacent legs once per active trip template, before
-expanding service days and frequencies or applying time-of-day filters.
-`excluded_legs` counts candidates excluded for time-related reasons.
-`excluded_by_reason` contains the non-zero counts. Each excluded leg receives
-one reason, taking the first applicable entry in the following table. A single
-warning summarises the missing-time exclusions for that call.
+The OD frame and summary edges expose `attrs["stop_time_diagnostics"]` (on a NetworkX
+result, `graph.graph["stop_time_diagnostics"]`).
+`candidate_legs` and `excluded_legs` count adjacent legs per active trip template
+before service expansion and time-of-day filtering. Each exclusion contributes once
+to `excluded_by_reason`, using the priority below. Missing clocks produce one warning per call.
 
 | Reason | Meaning |
 | --- | --- |

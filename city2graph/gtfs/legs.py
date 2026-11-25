@@ -20,57 +20,49 @@ logger = logging.getLogger(__name__)
 # This prevents the window functions from looking through protected stops.
 _INTERPOLATED_STOPS_SQL = """
     numbered AS (
-        SELECT *, row_number() OVER trip AS pos, count(*) OVER (PARTITION BY trip_id) AS n
-            {previous_distance}
+        SELECT *, row_number() OVER trip AS pos, count(*) OVER (PARTITION BY trip_id) AS n,
+            lag(distance) OVER trip AS previous_distance
         FROM parsed WINDOW trip AS (PARTITION BY trip_id ORDER BY seq)
     ),
-    distances AS (
-        SELECT *, {distance_run} AS distance_run FROM numbered
-    ),
-    -- Required clocks and pickup/drop-off windows split runs of missing times.
     classified AS (
         SELECT *, CASE
             WHEN pos IN (1, n) OR exact_time THEN 1
             WHEN has_window THEN 2
             WHEN invalid_clock THEN 3
         END AS protected_reason,
-        coalesce(dep, arr) AS known_time
-        FROM distances
+        coalesce(dep, arr) AS known_time, {distance_run} AS distance_run,
+            CASE WHEN known_time IS NOT NULL OR protected_reason IS NOT NULL
+                 THEN struct_pack(dep := known_time, arr := coalesce(arr, dep)) END AS clock
+        FROM numbered
     ),
     -- Check a one-sided stop against the nearest supplied clocks before copying.
     neighbours AS (
         SELECT *,
-            lag(CASE WHEN known_time IS NOT NULL OR protected_reason IS NOT NULL
-                THEN struct_pack(t := coalesce(dep, arr)) END IGNORE NULLS) OVER trip AS prev,
-            lead(CASE WHEN known_time IS NOT NULL OR protected_reason IS NOT NULL
-                THEN struct_pack(t := coalesce(arr, dep)) END IGNORE NULLS) OVER trip AS nxt
+            lag(clock IGNORE NULLS) OVER trip AS prev, lead(clock IGNORE NULLS) OVER trip AS nxt
         FROM classified WINDOW trip AS (PARTITION BY trip_id ORDER BY seq)
     ),
     partials AS (
-        SELECT *, coalesce(prev.t > known_time, false) OR coalesce(nxt.t < known_time, false) AS conflicts,
-            CASE WHEN protected_reason IS NULL AND NOT conflicts THEN known_time END AS copied
+        SELECT *, coalesce(prev.dep > known_time, false) OR coalesce(nxt.arr < known_time, false) AS conflicts,
+            CASE WHEN protected_reason IS NULL AND NOT conflicts THEN known_time END AS copied,
+            CASE WHEN clock IS NOT NULL THEN struct_pack(pos := pos, d := distance, run := distance_run,
+                dep := coalesce(dep, copied), arr := coalesce(arr, copied)) END AS anchor
         FROM neighbours
     ),
     -- Resolved partial stops can now bound runs of entirely untimed stops.
     anchors AS (
         SELECT *,
-            lag(CASE WHEN known_time IS NOT NULL OR protected_reason IS NOT NULL
-                THEN struct_pack(pos := pos, t := coalesce(dep, copied), d := distance, run := distance_run) END IGNORE NULLS)
-                OVER trip AS earlier,
-            lead(CASE WHEN known_time IS NOT NULL OR protected_reason IS NOT NULL
-                THEN struct_pack(pos := pos, t := coalesce(arr, copied), d := distance, run := distance_run) END IGNORE NULLS)
-                OVER trip AS later
+            lag(anchor IGNORE NULLS) OVER trip AS earlier, lead(anchor IGNORE NULLS) OVER trip AS later
         FROM partials WINDOW trip AS (PARTITION BY trip_id ORDER BY seq)
     ),
     estimates AS (
         SELECT *, CASE WHEN protected_reason IS NULL AND known_time IS NULL
-            AND earlier.t <= later.t
-            THEN earlier.t + round((later.t - earlier.t) * CASE
+            AND earlier.dep <= later.arr
+            THEN earlier.dep + round((later.arr - earlier.dep) * CASE
                 WHEN earlier.run = later.run AND later.d > earlier.d
                 THEN (distance - earlier.d) / (later.d - earlier.d)
                 ELSE (pos - earlier.pos) / (later.pos - earlier.pos) END)
             ELSE copied END AS estimate,
-            coalesce(protected_reason, CASE WHEN conflicts OR earlier.t > later.t
+            coalesce(protected_reason, CASE WHEN conflicts OR earlier.dep > later.arr
                                             THEN 3 ELSE 4 END) AS reason
         FROM anchors
     ),
@@ -132,19 +124,15 @@ def _stop_time_legs(
     if not summary:
         _ensure_time_sql_support(con, strict=False)
     distance = "NULL::DOUBLE"
-    previous_distance = ""
     distance_run = "0"
     if "shape_dist_traveled" in columns:
         distance = "try_cast(shape_dist_traveled AS DOUBLE)"
-        previous_distance = ", lag(distance) OVER trip AS previous_distance"
         # A change of run anywhere between the two anchors invalidates the whole gap.
         distance_run = """count(*) FILTER (WHERE NOT coalesce(
             isfinite(distance) AND isfinite(previous_distance) AND distance >= previous_distance,
             false)) OVER (PARTITION BY trip_id ORDER BY seq ROWS UNBOUNDED PRECEDING)"""
     resolved = (
-        _INTERPOLATED_STOPS_SQL.format(
-            previous_distance=previous_distance, distance_run=distance_run
-        )
+        _INTERPOLATED_STOPS_SQL.format(distance_run=distance_run)
         if interpolate
         else """
         resolved AS (

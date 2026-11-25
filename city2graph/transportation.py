@@ -23,7 +23,6 @@ from typing import Unpack
 import duckdb
 import geopandas as gpd
 import pandas as pd
-from shapely import reverse
 from shapely import wkt
 
 from . import data as _data
@@ -978,13 +977,15 @@ def _build_travel_summary_edges(
     gpd.GeoDataFrame
         Aggregated edge records indexed by stop pairs.
     """
+    endpoints = (
+        ("stop_id", "next_stop_id")
+        if directed
+        else ("least(stop_id, next_stop_id)", "greatest(stop_id, next_stop_id)")
+    )
     estimated_count = (
-        ", sum(service_count) FILTER (WHERE interpolated) AS interpolated_frequency"
+        ", sum(CASE WHEN interpolated THEN service_count ELSE 0 END) AS interpolated_frequency"
         if interpolate
         else ""
-    )
-    estimated_column = (
-        ", coalesce(a.interpolated_frequency, 0) AS interpolated_frequency" if interpolate else ""
     )
     edge_query = f"""
         WITH bounds AS (SELECT ?::DOUBLE AS lower_time, ?::DOUBLE AS upper_time),
@@ -1017,18 +1018,15 @@ def _build_travel_summary_edges(
         valid_pairs AS (SELECT * FROM weighted WHERE service_count > 0),
         agg_pairs AS (
             SELECT
-                stop_id,
-                next_stop_id,
+                {endpoints[0]} AS from_stop_id, {endpoints[1]} AS to_stop_id,
+                min(struct_pack(origin := stop_id, dest := next_stop_id)) AS first_pair,
                 SUM(travel_time * service_count) / SUM(service_count) AS travel_time_sec,
                 SUM(service_count) AS frequency{estimated_count}
             FROM valid_pairs
-            GROUP BY stop_id, next_stop_id
+            WHERE {directed} OR stop_id IS NOT NULL
+            GROUP BY from_stop_id, to_stop_id
         )
-        SELECT
-            a.stop_id AS from_stop_id,
-            a.next_stop_id AS to_stop_id,
-            a.travel_time_sec,
-            a.frequency{estimated_column},
+        SELECT a.* EXCLUDE (first_pair),
             ST_AsText(
                 CASE
                     WHEN s1.geometry IS NOT NULL AND s2.geometry IS NOT NULL
@@ -1038,10 +1036,10 @@ def _build_travel_summary_edges(
             ) AS geometry_wkt
         FROM agg_pairs a
         LEFT JOIN _stops_for_graph s1
-          ON a.stop_id = s1.stop_id
+          ON a.from_stop_id = s1.stop_id
         LEFT JOIN _stops_for_graph s2
-          ON a.next_stop_id = s2.stop_id
-        ORDER BY from_stop_id, to_stop_id
+          ON a.to_stop_id = s2.stop_id
+        ORDER BY a.first_pair
     """  # noqa: S608
 
     edges_df = con.execute(
@@ -1050,29 +1048,12 @@ def _build_travel_summary_edges(
     ).df()
     edges_df = _convert_wkt_column(edges_df)
 
+    # Preserve the existing column order of non-empty undirected results.
     if not directed and not edges_df.empty:
-        swap_mask = edges_df["from_stop_id"] > edges_df["to_stop_id"]
-        edges_df.loc[swap_mask, ["from_stop_id", "to_stop_id"]] = edges_df.loc[
-            swap_mask, ["to_stop_id", "from_stop_id"]
-        ].to_numpy()
-        reversed_lines = reverse(edges_df.loc[swap_mask, "geometry"])
-        edges_df.loc[swap_mask, "geometry"] = reversed_lines
-        edges_df["_weighted_tt"] = edges_df["travel_time_sec"] * edges_df["frequency"]
-        agg = edges_df.groupby(["from_stop_id", "to_stop_id"], sort=False).agg(
-            _weighted_tt=("_weighted_tt", "sum"),
-            frequency=("frequency", "sum"),
-            **(
-                {"interpolated_frequency": ("interpolated_frequency", "sum")} if interpolate else {}
-            ),
-            geometry=("geometry", "first"),
-        )
-        agg["travel_time_sec"] = agg["_weighted_tt"] / agg["frequency"]
-        edges_df = agg.drop(columns=["_weighted_tt"]).reset_index()
-
-    edges_gdf = gpd.GeoDataFrame(edges_df, geometry="geometry", crs="EPSG:4326")
-    if {"from_stop_id", "to_stop_id"}.issubset(edges_gdf.columns):
-        edges_gdf = edges_gdf.set_index(["from_stop_id", "to_stop_id"])
-    return edges_gdf
+        edges_df["travel_time_sec"] = edges_df.pop("travel_time_sec")
+    return gpd.GeoDataFrame(edges_df, geometry="geometry", crs="EPSG:4326").set_index(
+        ["from_stop_id", "to_stop_id"]
+    )
 
 
 def _build_travel_summary_nodes(con: duckdb.DuckDBPyConnection) -> gpd.GeoDataFrame:
