@@ -4,6 +4,7 @@
 import logging
 import math
 import typing
+from collections.abc import Iterator
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import partial
@@ -405,13 +406,88 @@ def _normalize_center_points(
     return typing.cast("list[Point]", center_points)
 
 
-def minimum_distances(matrix: sparse.csr_matrix, indices: Sequence[int], limit: float) -> np.ndarray:
-    """Run one bounded multi-source search on an oriented CSR matrix."""
-    return csgraph.dijkstra(matrix, indices=indices, limit=limit, min_only=True)
+def distance_batches(
+    matrix: sparse.csr_matrix, sources: np.ndarray, limit: float, *, paths: bool = False
+) -> Iterator[tuple[slice, np.ndarray, np.ndarray | None]]:
+    """
+    Search from multiple vertices in bounded batches.
+
+    Path-producing proximity graphs can retain predecessors from the same
+    traversal. Cost-only callers allocate just the distance rows.
+
+    Parameters
+    ----------
+    matrix : scipy.sparse.csr_matrix
+        Weighted directed adjacency.
+    sources : ndarray
+        Vertex indices in search order.
+    limit : float
+        Inclusive distance cutoff.
+    paths : bool, optional
+        Request predecessor rows alongside distances.
+
+    Yields
+    ------
+    tuple
+        Source slice, distance rows and optional predecessor rows.
+    """
+    for batch in row_batches(len(sources), matrix.shape[0]):
+        result = csgraph.dijkstra(
+            matrix, indices=sources[batch], limit=limit, return_predecessors=paths
+        )
+        if paths:
+            yield batch, result[0], result[1]
+        else:
+            yield batch, result, None
+
+
+def minimum_distances(
+    matrix: sparse.csr_matrix, indices: Sequence[int] | np.ndarray, limit: float
+) -> np.ndarray:
+    """
+    Run a bounded multi-source search.
+
+    The direction of each CSR arc determines traversal direction.
+
+    Parameters
+    ----------
+    matrix : scipy.sparse.csr_matrix
+        Weighted directed adjacency in search order.
+    indices : array-like
+        Source vertex indices.
+    limit : float
+        Inclusive cost cutoff for exploration.
+
+    Returns
+    -------
+    ndarray
+        Minimum cost from any source for each vertex, infinity if unreachable.
+    """
+    return np.asarray(csgraph.dijkstra(matrix, indices=indices, limit=limit, min_only=True))
 
 
 def adjacency(row: np.ndarray, col: np.ndarray, data: np.ndarray, n: int) -> sparse.csr_matrix:
-    """Build a directed CSR retaining zero arcs and the cheapest parallel arc."""
+    """
+    Build directed CSR adjacency from weighted arcs.
+
+    Parallel arcs retain their minimum cost and explicit zero-cost arcs remain traversable.
+
+    Parameters
+    ----------
+    row : ndarray
+        Source vertex indices for each arc.
+    col : ndarray
+        Destination vertex indices for each arc.
+    data : ndarray
+        Non-negative traversal weights in arc order.
+    n : int
+        Total number of vertices, including isolated vertices.
+
+    Returns
+    -------
+    scipy.sparse.csr_matrix
+        Weighted adjacency in vertex order.
+    """
     # Keep the smallest weight of each parallel or reversed duplicate.
     order = np.lexsort((data, col, row))
     row, col, data = row[order], col[order], data[order]
@@ -420,8 +496,28 @@ def adjacency(row: np.ndarray, col: np.ndarray, data: np.ndarray, n: int) -> spa
     return sparse.csr_matrix((data[first], (row[first], col[first])), shape=(n, n))
 
 
-def sparse_adjacency(graph: nx.Graph, weight: str, index: dict) -> tuple[sparse.csr_matrix, bool, bool] | None:
-    """Convert numeric NetworkX weights, preserving the distance metric's fallback rules."""
+def sparse_adjacency(
+    graph: nx.Graph, weight: str, index: dict[Any, int]
+) -> tuple[sparse.csr_matrix, bool, bool] | None:
+    """
+    Convert NetworkX weights for sparse shortest-path searches.
+
+    Unsupported numeric types retain the NetworkX distance metric's fallback behaviour.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or spatial graph
+        Network supplying arcs and node coordinates.
+    weight : str or None
+        Edge cost attribute, or None for geometry length.
+    index : dict
+        Mapping from node label to its matrix position.
+
+    Returns
+    -------
+    tuple or None
+        Adjacency, presence of infinite weights and integral weight status, or None.
+    """
     rows: list[int] = []
     cols: list[int] = []
     weights: list[float] = []

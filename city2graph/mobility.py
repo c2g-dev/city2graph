@@ -30,6 +30,7 @@ import warnings
 from dataclasses import dataclass
 from functools import cached_property
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import Literal
 from typing import cast
 
@@ -39,7 +40,6 @@ import numpy as np
 import pandas as pd
 import shapely
 from scipy import sparse
-from scipy.sparse import csgraph
 from scipy.spatial import cKDTree
 from shapely import get_coordinates
 from shapely import is_empty
@@ -54,6 +54,7 @@ from .base import GeoDataProcessor
 # Use city2graph converters for compatibility across the stack
 from .utils import gdf_to_nx
 from .utils.spatial import adjacency
+from .utils.spatial import distance_batches
 from .utils.spatial import minimum_distances
 
 if TYPE_CHECKING:
@@ -1551,11 +1552,21 @@ def _canonicalize_undirected_endpoints(
 
 
 type Points = gpd.GeoDataFrame | gpd.GeoSeries
-type GraphInput = nx.Graph | gpd.GeoDataFrame | tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | tuple[dict, dict]
+type GraphInput = (
+    nx.Graph
+    | gpd.GeoDataFrame
+    | tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]
+    | tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]
+)
 
 
 @dataclass
 class _Connections:
+    """
+    Store point attachments in input order.
+
+    Feature indices refer to the spatial index owned by the prepared network.
+    """
     network: PreparedNetwork
     labels: pd.Index
     feature: np.ndarray
@@ -1565,6 +1576,11 @@ class _Connections:
 
 @dataclass
 class _Segment:
+    """
+    Store directional costs for a physical line.
+
+    The start and end vertices follow the stored geometry orientation.
+    """
     start: int
     end: int
     geometry: LineString
@@ -1572,8 +1588,24 @@ class _Segment:
     backward: float = math.inf
 
 
-def _normalize(graph: GraphInput, directed: bool | None) -> tuple[nx.Graph, dict]:
-    """Retain all arcs and resolve the active geometry for each edge layer."""
+def _normalize(graph: GraphInput, directed: bool | None) -> tuple[nx.Graph, dict[Any, Any]]:
+    """
+    Normalize graph inputs and resolve active geometry columns.
+
+    GeoDataFrame inputs retain parallel arcs so weight selection can occur after conversion.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or spatial graph
+        Network supplying arcs and node coordinates.
+    directed : bool or None
+        Traversal direction override, inferred from NetworkX when omitted.
+
+    Returns
+    -------
+    tuple
+        NetworkX graph and geometry column names by edge type.
+    """
     if isinstance(graph, nx.Graph):
         return graph, {}
     nodes, edges = (None, graph) if isinstance(graph, gpd.GeoDataFrame) else graph
@@ -1582,9 +1614,24 @@ def _normalize(graph: GraphInput, directed: bool | None) -> tuple[nx.Graph, dict
     return gdf_to_nx(nodes, edges, multigraph=True, directed=bool(directed)), columns
 
 
-def _position(data: dict) -> tuple[float, float]:
+def _position(data: dict[str, Any]) -> tuple[float, float]:
+    """
+    Read a node's planar coordinates.
+
+    NetworkX pos and OSMnx x and y attributes are supported.
+
+    Parameters
+    ----------
+    data : dict
+        NetworkX node attributes.
+
+    Returns
+    -------
+    tuple of float
+        Planar x and y coordinates.
+    """
     if "pos" in data:
-        return tuple(data["pos"][:2])
+        return data["pos"][0], data["pos"][1]
     try:
         return data["x"], data["y"]
     except KeyError as exc:
@@ -1592,8 +1639,37 @@ def _position(data: dict) -> tuple[float, float]:
         raise ValueError(msg) from exc
 
 
-def _segment(segments, u, v, line, cost, directed, coords) -> None:
-    """Group coincident reciprocal arcs, retaining a cost for each direction."""
+def _segment(
+    segments: dict[tuple[int, int, bytes], _Segment],
+    u: int,
+    v: int,
+    line: LineString,
+    cost: float,
+    directed: bool,
+    coords: list[tuple[float, float]],
+) -> None:
+    """
+    Record an eligible directional edge.
+
+    Coincident reciprocal arcs share one line in the spatial index.
+
+    Parameters
+    ----------
+    segments : dict
+        Mutable lookup of physical lines and directional costs.
+    u : int
+        Source vertex index.
+    v : int
+        Target vertex index.
+    line : LineString
+        Geometry of the arc.
+    cost : float
+        Full cost of traversing the arc.
+    directed : bool or None
+        Traversal direction override, inferred from NetworkX when omitted.
+    coords : list of tuple
+        Vertex coordinates in adjacency order.
+    """
     if line.geom_type == "MultiLineString":
         line = shapely.line_merge(line)
     if line.geom_type != "LineString" or line.is_empty:
@@ -1616,11 +1692,23 @@ def _segment(segments, u, v, line, cost, directed, coords) -> None:
 
 
 class PreparedNetwork:
-    """Cache routing adjacency and a spatial index for repeated OD queries.
+    """
+    Prepare a weighted graph for repeated OD queries.
 
-    Supply the same graph, weight, direction and connection options accepted by
-    network_costs. Call connect once on frequently reused origins and pass the
-    result in their place in subsequent queries.
+    Cache the CSR adjacency and spatial index. Call connect once to reuse the same origins.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or spatial graph
+        Network supplying arcs and node coordinates.
+    weight : str or None
+        Edge cost attribute, or None for geometry length.
+    directed : bool or None
+        Traversal direction override, inferred from NetworkX when omitted.
+    connect_to : str
+        Feature used for point attachment, either node or edge.
+    connect_node_types : str or sequence of str, optional
+        Eligible node layers for access and egress.
     """
 
     def __init__(
@@ -1632,6 +1720,24 @@ class PreparedNetwork:
         connect_to: Literal["node", "edge"] = "node",
         connect_node_types: str | Sequence[str] | None = None,
     ) -> None:
+        """
+        Build the adjacency and connection index.
+
+        Only eligible features participate in snapping. All traversable arcs participate in routing.
+
+        Parameters
+        ----------
+        graph : networkx.Graph or spatial graph
+            Network supplying arcs and node coordinates.
+        weight : str or None
+            Edge cost attribute, or None for geometry length.
+        directed : bool or None
+            Traversal direction override, inferred from NetworkX when omitted.
+        connect_to : str
+            Feature used for point attachment, either node or edge.
+        connect_node_types : str or sequence of str, optional
+            Eligible node layers for access and egress.
+        """
         if connect_to not in ("node", "edge"):
             msg = "connect_to must be 'node' or 'edge'"
             raise ValueError(msg)
@@ -1642,13 +1748,15 @@ class PreparedNetwork:
         types = {connect_node_types} if isinstance(connect_node_types, str) else connect_node_types
         index = {node: i for i, node in enumerate(network)}
         coords = [_position(data) for _, data in network.nodes(data=True)]
-        allowed = [types is None or data.get("node_type") in types for _, data in network.nodes(data=True)]
+        allowed = [
+            types is None or data.get("node_type") in types for _, data in network.nodes(data=True)
+        ]
         self.nodes = np.flatnonzero(allowed)
         self.tree = None
         if connect_to == "node" and self.nodes.size:
             self.tree = cKDTree(np.asarray(coords)[self.nodes])
         rows, cols, costs = [], [], []
-        segments = {}
+        segments: dict[tuple[int, int, bytes], _Segment] = {}
         for source, target, data in network.edges(data=True):
             u, v = index[source], index[target]
             column = columns.get(data.get("edge_type"), "geometry")
@@ -1657,7 +1765,7 @@ class PreparedNetwork:
             if line is None and (weight is None or eligible):
                 line = LineString([coords[u], coords[v]])
             value = line.length if weight is None else data.get(weight)
-            if not isinstance(value, numbers.Real) or not value >= 0:
+            if not isinstance(value, numbers.Real) or not float(value) >= 0:
                 msg = f"Edge {(source, target)!r} needs a non-negative numeric cost for {weight!r}"
                 raise ValueError(msg)
             if math.isinf(value):
@@ -1666,7 +1774,7 @@ class PreparedNetwork:
             cols.append(v)
             costs.append(float(value))
             if eligible:
-                _segment(segments, u, v, line, value, directed, coords)
+                _segment(segments, u, v, line, float(value), directed, coords)
         row, col = np.array(rows, dtype=int), np.array(cols, dtype=int)
         values = np.array(costs, dtype=float)
         if not directed:
@@ -1680,10 +1788,36 @@ class PreparedNetwork:
 
     @cached_property
     def _reverse(self) -> sparse.csr_matrix:
+        """
+        Transpose the base adjacency once.
+
+        Multiple destination sets can reuse the reverse graph.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+            Adjacency for searches from destination vertices.
+        """
         return self.matrix.T.tocsr()
 
     def connect(self, points: Points, max_connection_distance: float = math.inf) -> _Connections:
-        """Snap points in graph CRS, retaining their original order and index."""
+        """
+        Connect points to the prepared graph.
+
+        Missing points and points beyond the distance limit retain their input positions.
+
+        Parameters
+        ----------
+        points : GeoSeries or GeoDataFrame
+            Spatial points to connect to the network.
+        max_connection_distance : float
+            Inclusive snapping distance limit in planar CRS units.
+
+        Returns
+        -------
+        _Connections
+            Input labels, connected feature indices, offsets and distances.
+        """
         if not max_connection_distance >= 0:
             msg = "max_connection_distance must be non-negative"
             raise ValueError(msg)
@@ -1702,7 +1836,7 @@ class PreparedNetwork:
         if self.connect_to == "node" and self.tree is not None:
             dist, nearest = self.tree.query(shapely.get_coordinates(geometry[indices]))
             feature[indices], distance[indices] = self.nodes[nearest], dist
-        elif self.connect_to == "edge" and self.lines.size:
+        elif self.connect_to == "edge" and self.tree is not None and self.lines.size:
             pairs, dist = self.tree.query_nearest(geometry[indices], return_distance=True)
             # Resolve equidistant lines in their stable graph order.
             order = np.lexsort((pairs[1], pairs[0]))
@@ -1710,14 +1844,36 @@ class PreparedNetwork:
             hits = order[first]
             points_at, lines_at = indices[pairs[0, hits]], pairs[1, hits]
             feature[points_at], distance[points_at] = lines_at, dist[hits]
-            along = shapely.line_locate_point(self.lines[lines_at], geometry[points_at], normalized=True)
+            along = shapely.line_locate_point(
+                self.lines[lines_at], geometry[points_at], normalized=True
+            )
             fraction[points_at] = np.nan_to_num(along)
         feature[distance > max_connection_distance] = -1
         return _Connections(self, points.index.copy(), feature, fraction, distance)
 
 
-def _split(network, origins, destinations):
-    """Add interior vertices only on lines touched by this set of points."""
+def _split(
+    network: PreparedNetwork, origins: _Connections, destinations: _Connections
+) -> tuple[sparse.csr_matrix, np.ndarray, np.ndarray]:
+    """
+    Insert interior vertices on the lines touched by points.
+
+    A point at an existing endpoint uses its original vertex index.
+
+    Parameters
+    ----------
+    network : PreparedNetwork
+        Prepared graph and its connection index.
+    origins : ndarray
+        Connected source vertices in original point order.
+    destinations : ndarray
+        Connected target vertices in original point order.
+
+    Returns
+    -------
+    tuple
+        Augmented adjacency, source vertices and destination vertices.
+    """
     features = np.r_[origins.feature, destinations.feature]
     fractions = np.r_[origins.fraction, destinations.fraction]
     valid = np.flatnonzero(features >= 0)
@@ -1729,14 +1885,17 @@ def _split(network, origins, destinations):
         if not group.size:
             continue
         segment = network.segments[features[group[0]]]
-        offsets, inverse = np.unique(np.r_[0., fractions[group], 1.], return_inverse=True)
+        offsets, inverse = np.unique(np.r_[0.0, fractions[group], 1.0], return_inverse=True)
         interior = len(offsets) - 2
         ids = np.r_[segment.start, np.arange(n, n + interior, dtype=int), segment.end]
         vertices[group] = ids[inverse[1:-1]]
         if not interior:
             continue
         n += interior
-        for a, b, cost in ((ids[:-1], ids[1:], segment.forward), (ids[1:], ids[:-1], segment.backward)):
+        for a, b, cost in (
+            (ids[:-1], ids[1:], segment.forward),
+            (ids[1:], ids[:-1], segment.backward),
+        ):
             if math.isfinite(cost):
                 rows.extend(a)
                 cols.extend(b)
@@ -1744,18 +1903,41 @@ def _split(network, origins, destinations):
     matrix = network.matrix
     if n > matrix.shape[0]:
         # Preserve explicit zero links. Sparse addition would discard them.
-        overlay = adjacency(np.asarray(rows, dtype=int), np.asarray(cols, dtype=int),
-                            np.asarray(values), n)
+        overlay = adjacency(
+            np.asarray(rows, dtype=int), np.asarray(cols, dtype=int), np.asarray(values), n
+        )
         size = matrix.shape[0]
         matrix = sparse.bmat(
             [[matrix, overlay[:size, size:]], [overlay[size:, :size], overlay[size:, size:]]],
             format="csr",
         )
-    return matrix, vertices[:len(origins.feature)], vertices[len(origins.feature):]
+    return matrix, vertices[: len(origins.feature)], vertices[len(origins.feature) :]
 
 
-def _nearest(matrix, origins, destinations, limit):
-    """Assign equal-distance vertices to the earliest destination, even on zero-cost cycles."""
+def _nearest(
+    matrix: sparse.csr_matrix, origins: np.ndarray, destinations: np.ndarray, limit: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Resolve nearest destinations using one reverse multi-source search.
+
+    A traversal of optimal arcs assigns ties in input order, including zero-cost cycles.
+
+    Parameters
+    ----------
+    matrix : scipy.sparse.csr_matrix
+        Weighted directed adjacency in search order.
+    origins : ndarray
+        Connected source vertices in original point order.
+    destinations : ndarray
+        Connected target vertices in original point order.
+    limit : float
+        Inclusive cost cutoff for exploration.
+
+    Returns
+    -------
+    tuple of ndarray
+        Origin positions, destination positions and finite costs.
+    """
     positions = np.flatnonzero(destinations >= 0)
     seeds, first = np.unique(destinations[positions], return_index=True)
     distances = minimum_distances(matrix, seeds, limit)
@@ -1767,7 +1949,7 @@ def _nearest(matrix, origins, destinations, limit):
         stack = [seed]
         while stack:
             vertex = stack.pop()
-            start, stop = matrix.indptr[vertex:vertex + 2]
+            start, stop = matrix.indptr[vertex : vertex + 2]
             neighbors = matrix.indices[start:stop]
             optimal = distances[vertex] + matrix.data[start:stop] == distances[neighbors]
             reached = neighbors[optimal & (owner[neighbors] < 0)]
@@ -1777,8 +1959,28 @@ def _nearest(matrix, origins, destinations, limit):
     return rows, owner[origins[rows]], distances[origins[rows]]
 
 
-def _nearest_other(matrix, origins, limit):
-    """Keep the first two distinct destination rows reaching each vertex in reverse."""
+def _nearest_other(
+    matrix: sparse.csr_matrix, origins: np.ndarray, limit: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Find the nearest distinct row for every origin.
+
+    Keep two destination labels per vertex so self exclusion also works at coincident points.
+
+    Parameters
+    ----------
+    matrix : scipy.sparse.csr_matrix
+        Weighted directed adjacency in search order.
+    origins : ndarray
+        Connected source vertices in original point order.
+    limit : float
+        Inclusive cost cutoff for exploration.
+
+    Returns
+    -------
+    tuple of ndarray
+        Origin positions, destination positions and finite costs.
+    """
     positions = np.flatnonzero(origins >= 0)
     queue = [(0.0, int(row), int(origins[row])) for row in positions]
     heapq.heapify(queue)
@@ -1792,7 +1994,7 @@ def _nearest_other(matrix, origins, limit):
         slot = int(first >= 0)
         owners[vertex, slot] = row
         distances[vertex, slot] = cost
-        start, stop = matrix.indptr[vertex:vertex + 2]
+        start, stop = matrix.indptr[vertex : vertex + 2]
         for arc in range(start, stop):
             neighbor = matrix.indices[arc]
             length = cost + matrix.data[arc]
@@ -1805,15 +2007,64 @@ def _nearest_other(matrix, origins, limit):
     return positions[reached], cols[reached], distances[nodes, slots][reached]
 
 
-def _groups(vertices):
+def _groups(vertices: np.ndarray) -> dict[int, np.ndarray]:
+    """
+    Group connected point positions by vertex.
+
+    Each group retains the original row order for repeated points.
+
+    Parameters
+    ----------
+    vertices : ndarray
+        Vertex indices, with negative entries marking disconnected points.
+
+    Returns
+    -------
+    dict
+        Point positions keyed by connected vertex.
+    """
     positions = np.flatnonzero(vertices >= 0)
     ordered = positions[np.argsort(vertices[positions], kind="stable")]
     keys, first = np.unique(vertices[ordered], return_index=True)
     return dict(zip(keys, np.split(ordered, first[1:]), strict=True))
 
 
-def _pairs(matrix, reverse_matrix, origins, destinations, limit, k, within):
-    """Search from the smaller set of unique vertices and retain bounded top-k results."""
+def _pairs(
+    matrix: sparse.csr_matrix,
+    reverse_matrix: Callable[[], sparse.csr_matrix],
+    origins: np.ndarray,
+    destinations: np.ndarray,
+    limit: float,
+    k: int | None,
+    within: bool,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Compute finite OD costs from connected vertex indices.
+
+    Single-neighbour queries use reversed searches. Other queries batch the smaller side.
+
+    Parameters
+    ----------
+    matrix : scipy.sparse.csr_matrix
+        Weighted directed adjacency in search order.
+    reverse_matrix : callable
+        Return the reverse adjacency when searching from destinations.
+    origins : ndarray
+        Connected source vertices in original point order.
+    destinations : ndarray
+        Connected target vertices in original point order.
+    limit : float
+        Inclusive cost cutoff for exploration.
+    k : int or None
+        Maximum number of destinations retained per origin.
+    within : bool
+        Whether destinations are the same input rows as origins.
+
+    Returns
+    -------
+    tuple of ndarray
+        Origin positions, destination positions and finite costs.
+    """
     empty = np.empty(0, dtype=int)
     if not np.any(origins >= 0) or not np.any(destinations >= 0):
         return empty, empty, empty.astype(float)
@@ -1828,11 +2079,9 @@ def _pairs(matrix, reverse_matrix, origins, destinations, limit, k, within):
         matrix = reverse_matrix()
     source_ids, target_ids = np.asarray(list(sources)), np.asarray(list(targets))
     result = []
-    best = {}
-    for batch in row_batches(len(sources), matrix.shape[0]):
-        ids = source_ids[batch]
-        distances = csgraph.dijkstra(matrix, indices=ids, limit=limit)
-        for source, lengths in zip(ids, distances, strict=True):
+    best: dict[int, list[tuple[float, int]]] = {}
+    for batch, distances, _ in distance_batches(matrix, source_ids, limit):
+        for source, lengths in zip(source_ids[batch], distances, strict=True):
             costs = lengths[target_ids]
             for hit in np.flatnonzero(np.isfinite(costs)):
                 source_rows, target_rows = sources[source], targets[target_ids[hit]]
@@ -1858,8 +2107,51 @@ def _pairs(matrix, reverse_matrix, origins, destinations, limit, k, within):
     return np.asarray(rows), np.asarray(cols), np.asarray(costs)
 
 
-def _route(origins, destinations, graph, weight, directed, threshold, k, connect_to,
-           max_connection_distance, connect_node_types):
+def _route(
+    origins: Points | _Connections,
+    destinations: Points | _Connections | None,
+    graph: GraphInput | PreparedNetwork | None,
+    weight: str | None,
+    directed: bool | None,
+    threshold: float | None,
+    k: int | None,
+    connect_to: Literal["node", "edge"],
+    max_connection_distance: float,
+    connect_node_types: str | Sequence[str] | None,
+) -> tuple[_Connections, _Connections, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Connect the inputs and compute their qualifying routes.
+
+    Prepared graphs can reuse origin attachments across queries.
+
+    Parameters
+    ----------
+    origins : ndarray
+        Connected source vertices in original point order.
+    destinations : ndarray
+        Connected target vertices in original point order.
+    graph : networkx.Graph or spatial graph
+        Network supplying arcs and node coordinates.
+    weight : str or None
+        Edge cost attribute, or None for geometry length.
+    directed : bool or None
+        Traversal direction override, inferred from NetworkX when omitted.
+    threshold : float or None
+        Inclusive network cost cutoff.
+    k : int or None
+        Maximum number of destinations retained per origin.
+    connect_to : str
+        Feature used for point attachment, either node or edge.
+    max_connection_distance : float
+        Inclusive snapping distance limit in planar CRS units.
+    connect_node_types : str or sequence of str, optional
+        Eligible node layers for access and egress.
+
+    Returns
+    -------
+    tuple
+        Connected point sets, row positions, column positions and network costs.
+    """
     if graph is None:
         msg = "Supply a graph or PreparedNetwork"
         raise ValueError(msg)
@@ -1871,15 +2163,40 @@ def _route(origins, destinations, graph, weight, directed, threshold, k, connect
         msg = "k must be a positive integer"
         raise ValueError(msg)
     if isinstance(graph, PreparedNetwork):
-        if weight is not None or directed is not None or connect_node_types is not None or connect_to != "node":
+        if (
+            weight is not None
+            or directed is not None
+            or connect_node_types is not None
+            or connect_to != "node"
+        ):
             msg = "Set graph options on PreparedNetwork when preparing the graph"
             raise ValueError(msg)
         network = graph
     else:
-        network = PreparedNetwork(graph, weight=weight, directed=directed, connect_to=connect_to,
-                                  connect_node_types=connect_node_types)
+        network = PreparedNetwork(
+            graph,
+            weight=weight,
+            directed=directed,
+            connect_to=connect_to,
+            connect_node_types=connect_node_types,
+        )
 
-    def connect(points):
+    def connect(points: Points | _Connections) -> _Connections:
+        """
+        Resolve raw or preconnected query points.
+
+        A tighter limit may discard a previously prepared attachment.
+
+        Parameters
+        ----------
+        points : GeoSeries or GeoDataFrame
+            Spatial points to connect to the network.
+
+        Returns
+        -------
+        _Connections
+            Input labels, connected feature indices, offsets and distances.
+        """
         if isinstance(points, _Connections):
             if points.network is not network:
                 msg = "Connected points belong to a different PreparedNetwork"
@@ -1887,7 +2204,9 @@ def _route(origins, destinations, graph, weight, directed, threshold, k, connect
             if max_connection_distance != math.inf:
                 feature = points.feature.copy()
                 feature[points.distance > max_connection_distance] = -1
-                return _Connections(network, points.labels, feature, points.fraction, points.distance)
+                return _Connections(
+                    network, points.labels, feature, points.fraction, points.distance
+                )
             return points
         return network.connect(points, max_connection_distance)
 
@@ -1901,10 +2220,22 @@ def _route(origins, destinations, graph, weight, directed, threshold, k, connect
     else:
         matrix, sources, targets = network.matrix, start.feature, end.feature
 
-    def reverse_matrix():
+    def reverse_matrix() -> sparse.csr_matrix:
+        """
+        Get reverse adjacency for the current query.
+
+        The unaugmented base matrix uses the prepared network cache.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+            Reverse adjacency for destination searches.
+        """
         return network._reverse if matrix is network.matrix else matrix.T.tocsr()
 
-    rows, cols, costs = _pairs(matrix, reverse_matrix, sources, targets, limit, k, destinations is None)
+    rows, cols, costs = _pairs(
+        matrix, reverse_matrix, sources, targets, limit, k, destinations is None
+    )
     return start, end, rows, cols, costs
 
 
@@ -1924,6 +2255,8 @@ def network_costs(
 ) -> pd.DataFrame:
     """
     Compute shortest-path OD costs for reachable point pairs.
+
+    Each result keeps the labels of its input points, including duplicate labels.
 
     Parameters
     ----------
@@ -1958,11 +2291,24 @@ def network_costs(
         origin position, cost and destination position.
     """
     start, end, rows, cols, costs = _route(
-        origins, destinations, graph, weight, directed, threshold, k, connect_to,
-        max_connection_distance, connect_node_types,
+        origins,
+        destinations,
+        graph,
+        weight,
+        directed,
+        threshold,
+        k,
+        connect_to,
+        max_connection_distance,
+        connect_node_types,
     )
-    result = pd.DataFrame({"origin": start.labels.take(rows).to_numpy(),
-                           "destination": end.labels.take(cols).to_numpy(), "cost": costs})
+    result = pd.DataFrame(
+        {
+            "origin": start.labels.take(rows).to_numpy(),
+            "destination": end.labels.take(cols).to_numpy(),
+            "cost": costs,
+        }
+    )
     if include_connection_distance:
         result["connection_distance"] = start.distance[rows] + end.distance[cols]
     return result
@@ -1983,6 +2329,8 @@ def network_cost_matrix(
 ) -> sparse.csr_matrix:
     """
     Compute sparse OD costs with explicit entries for reachable zero-cost pairs.
+
+    Row and column positions match the input order even when a point is disconnected.
 
     Parameters
     ----------
@@ -2015,7 +2363,15 @@ def network_cost_matrix(
         have no stored entry.
     """
     start, end, rows, cols, costs = _route(
-        origins, destinations, graph, weight, directed, threshold, k, connect_to,
-        max_connection_distance, connect_node_types,
+        origins,
+        destinations,
+        graph,
+        weight,
+        directed,
+        threshold,
+        k,
+        connect_to,
+        max_connection_distance,
+        connect_node_types,
     )
     return sparse.csr_matrix((costs, (rows, cols)), shape=(len(start.labels), len(end.labels)))

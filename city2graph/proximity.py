@@ -31,6 +31,8 @@ if TYPE_CHECKING:  # Only needed for typing annotations
     from collections.abc import Iterator
     from collections.abc import Sequence
 
+    from scipy import sparse
+
 # Third-party imports
 import geopandas as gpd
 import libpysal
@@ -38,8 +40,6 @@ import networkx as nx
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-from scipy import sparse
-from scipy.sparse import csgraph
 from scipy.spatial import Delaunay
 from scipy.spatial import cKDTree
 from scipy.spatial import distance as sdist
@@ -54,6 +54,7 @@ from .utils import gdf_to_nx
 from .utils import nx_to_gdf
 from .utils import symmetrize_edges
 from .utils import validate_gdf
+from .utils.spatial import distance_batches
 from .utils.spatial import sparse_adjacency
 
 # Module logger configuration
@@ -449,14 +450,11 @@ class SparseNetwork:
         """
         source_index = np.asarray([self.index[s] for s in sources], dtype=np.int64)
         target_index = np.asarray([self.index[t] for t in targets], dtype=np.int64)
-        for batch in row_batches(len(source_index), len(self.nodes)):
-            distances, predecessors = csgraph.dijkstra(
-                self.matrix,
-                directed=True,
-                indices=source_index[batch],
-                return_predecessors=True,
-                limit=np.inf if cutoff is None else cutoff,
-            )
+        limit = np.inf if cutoff is None else cutoff
+        for batch, distances, predecessors in distance_batches(
+            self.matrix, source_index, limit, paths=True
+        ):
+            assert predecessors is not None
             for offset, position in enumerate(range(batch.start, batch.stop)):
                 search = SparseSearch(
                     self, sources[position], distances[offset], predecessors[offset], cutoff
