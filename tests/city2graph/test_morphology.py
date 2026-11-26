@@ -21,7 +21,6 @@ from shapely.geometry import Polygon
 from shapely.geometry import box
 
 import city2graph.morphology as morph
-import city2graph.utils.spatial as spatial
 from city2graph.morphology import _filter_tessellation_by_network_distance
 from city2graph.morphology import _segments_within_network_distance
 from city2graph.morphology import morphological_graph
@@ -30,6 +29,7 @@ from city2graph.morphology import movement_to_movement_graph
 from city2graph.morphology import place_to_movement_graph
 from city2graph.morphology import place_to_place_graph
 from city2graph.morphology import segments_to_graph
+from city2graph.utils import spatial
 from tests.city2graph import helpers
 from tests.city2graph.helpers import assert_as_nx_deprecation
 from tests.city2graph.helpers import assert_valid_nx_graph

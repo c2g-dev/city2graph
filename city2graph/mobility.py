@@ -1567,6 +1567,7 @@ class _Connections:
 
     Feature indices refer to the spatial index owned by the prepared network.
     """
+
     network: PreparedNetwork
     labels: pd.Index
     feature: np.ndarray
@@ -1581,6 +1582,7 @@ class _Segment:
 
     The start and end vertices follow the stored geometry orientation.
     """
+
     start: int
     end: int
     geometry: LineString
