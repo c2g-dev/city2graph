@@ -32,7 +32,6 @@ from .metapath import *  # noqa: F403
 from .mobility import *  # noqa: F403
 from .morphology import *  # noqa: F403
 from .proximity import *  # noqa: F403
-from .routing import *  # noqa: F403
 from .transportation import *  # noqa: F403
 from .utils import *  # noqa: F403
 

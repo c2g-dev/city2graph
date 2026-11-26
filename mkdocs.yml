@@ -237,7 +237,6 @@ nav:
       - Transportation:
           - Module reference: api/transportation.md
           - GTFS generation guide: api/gtfs_generation.md
-      - Routing: api/routing.md
       - Mobility: api/mobility.md
       - Proximity: api/proximity.md
       - Data: api/data.md

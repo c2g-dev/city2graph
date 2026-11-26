@@ -6,15 +6,17 @@ import pytest
 
 from city2graph import utils
 from city2graph.utils import conversion as conversion_utils
-from city2graph.utils import spatial as spatial_utils
+from city2graph.utils import distance as distance_utils
+from city2graph.utils import plotting as plotting_utils
+from city2graph.utils import tessellation as tessellation_utils
 from city2graph.utils import topology as topology_utils
 
 
 class TestPublicUtilityExports:
     """Verify compatibility exports and focused public submodules."""
 
-    def test_root_all_is_unchanged(self) -> None:
-        """The package-level wildcard API should match the legacy module."""
+    def test_root_all_matches_public_api(self) -> None:
+        """The package-level wildcard API should match the expected utility exports."""
         assert utils.__all__ == [
             "canonicalize_edges",
             "clip_graph",
@@ -23,6 +25,8 @@ class TestPublicUtilityExports:
             "dual_graph",
             "filter_graph_by_distance",
             "gdf_to_nx",
+            "network_cost_matrix",
+            "network_costs",
             "nx_to_gdf",
             "nx_to_rx",
             "plot_graph",
@@ -47,10 +51,12 @@ class TestPublicUtilityExports:
             ("dual_graph", topology_utils),
             ("remove_isolated_components", topology_utils),
             ("symmetrize_edges", topology_utils),
-            ("create_isochrone", spatial_utils),
-            ("create_tessellation", spatial_utils),
-            ("filter_graph_by_distance", spatial_utils),
-            ("plot_graph", spatial_utils),
+            ("create_isochrone", distance_utils),
+            ("filter_graph_by_distance", distance_utils),
+            ("network_cost_matrix", distance_utils),
+            ("network_costs", distance_utils),
+            ("create_tessellation", tessellation_utils),
+            ("plot_graph", plotting_utils),
         ],
     )
     def test_root_exports_are_direct_aliases(self, name: str, owner: object) -> None:
@@ -60,4 +66,4 @@ class TestPublicUtilityExports:
     def test_legacy_non_wildcard_exports_remain_available(self) -> None:
         """Previously importable compatibility names should remain accessible."""
         assert utils.NxConverter is conversion_utils.NxConverter
-        assert utils.MATPLOTLIB_AVAILABLE is spatial_utils.MATPLOTLIB_AVAILABLE
+        assert utils.MATPLOTLIB_AVAILABLE is plotting_utils.MATPLOTLIB_AVAILABLE

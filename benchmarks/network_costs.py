@@ -1,4 +1,4 @@
-"""Measure OD network preparation and queries across facility categories."""
+"""Measure OD network cost queries through the public API."""
 
 from __future__ import annotations
 
@@ -17,12 +17,7 @@ if TYPE_CHECKING:
 
     import pandas as pd
 
-SIZES = {"node": 1_000_000, "edge": 50_000, "bounded": 3_000}
-CASES = {
-    f"{mode}-{phase}": (size,)
-    for mode, size in SIZES.items()
-    for phase in ("prepare", "connect", "first", "reuse")
-}
+CASES = {"node": (1_000_000,), "edge": (50_000,), "bounded": (3_000,)}
 
 
 def prepare(case: str, size: int, seed: int, _stack: ExitStack) -> Workload:
@@ -34,8 +29,7 @@ def prepare(case: str, size: int, seed: int, _stack: ExitStack) -> Workload:
 
     import city2graph as c2g
 
-    mode, phase = case.split("-")
-    connect_to: Literal["node", "edge"] = "edge" if mode == "edge" else "node"
+    connect_to: Literal["node", "edge"] = "edge" if case == "edge" else "node"
     side = 64
     cells = np.arange(side**2).reshape(side, side)
     x, y = np.meshgrid(np.arange(side), np.arange(side))
@@ -59,33 +53,21 @@ def prepare(case: str, size: int, seed: int, _stack: ExitStack) -> Workload:
         )
 
     origins = sample(size)
-    first, second = sample(24), sample(24)
-    inputs = {"grid": digest({"side": side, "seed": seed, "mode": mode, "origins": size})}
+    targets = sample(24)
+    inputs = {"grid": digest({"side": side, "seed": seed, "case": case, "origins": size})}
 
-    def prepare_network() -> c2g.PreparedNetwork:
-        return c2g.PreparedNetwork((nodes, edges), weight="cost", connect_to=connect_to)
-
-    if phase == "prepare":
-        return Workload(
-            prepare_network, lambda _result: {"nodes": len(nodes), "edges": len(edges)}, inputs
-        )
-    network = prepare_network()
-    if phase == "connect":
-        return Workload(lambda: network.connect(origins), lambda _result: {"origins": size}, inputs)
-    connected = network.connect(origins)
-
-    def query(targets: gpd.GeoSeries) -> pd.DataFrame:
+    def query() -> pd.DataFrame:
         return c2g.network_costs(
-            connected,
+            origins,
             targets,
-            network,
-            k=2 if mode == "bounded" else 1,
-            threshold=8 if mode == "bounded" else None,
+            (nodes, edges),
+            weight="cost",
+            connect_to=connect_to,
+            k=2 if case == "bounded" else 1,
+            threshold=8 if case == "bounded" else None,
         )
 
-    if phase == "reuse":
-        query(first)
-    return Workload(lambda: query(second if phase == "reuse" else first), describe, inputs)
+    return Workload(query, describe, inputs)
 
 
 def describe(result: pd.DataFrame) -> dict[str, int]:
@@ -97,4 +79,4 @@ def describe(result: pd.DataFrame) -> dict[str, int]:
 
 
 if __name__ == "__main__":
-    run_suite("routing", CASES, prepare)
+    run_suite("network_costs", CASES, prepare)

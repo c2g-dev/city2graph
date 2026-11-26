@@ -55,8 +55,8 @@ from .utils import filter_graph_by_distance
 from .utils import gdf_to_nx
 from .utils import nx_to_gdf
 from .utils import symmetrize_edges
-from .utils.spatial import _build_reachable_subgraph
-from .utils.spatial import _compute_center_node_distances
+from .utils.distance import _build_reachable_subgraph
+from .utils.distance import _compute_center_node_distances
 
 if typing.TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
