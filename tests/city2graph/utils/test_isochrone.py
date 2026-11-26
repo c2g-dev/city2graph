@@ -15,8 +15,8 @@ from shapely.geometry import MultiPolygon
 from shapely.geometry import Point
 from shapely.geometry import Polygon
 
+from city2graph import base
 from city2graph import utils
-from city2graph.utils import distance as distance_utils
 from city2graph.utils import gdf_to_nx
 from city2graph.utils import isochrone as isochrone_utils
 
@@ -415,8 +415,8 @@ class TestCreateIsochrone:
     ) -> None:
         """Layered isochrones should reuse a single distance computation."""
         with mock.patch(
-            "city2graph.utils.isochrone._compute_center_node_distances",
-            wraps=distance_utils._compute_center_node_distances,
+            "city2graph.utils.isochrone.compute_center_node_distances",
+            wraps=base.compute_center_node_distances,
         ) as mock_compute:
             result = utils.create_isochrone(
                 sample_nx_graph,

@@ -6,8 +6,6 @@ import heapq
 import logging
 import math
 import numbers
-import typing
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from typing import Any
@@ -21,16 +19,23 @@ import shapely
 from scipy import sparse
 from scipy.sparse import csgraph
 from scipy.spatial import cKDTree
-from shapely.geometry import Point
 
-from city2graph._processing import row_batches
 from city2graph.base import GeoDataProcessor
+from city2graph.base import adjacency
+from city2graph.base import build_reachable_subgraph
+from city2graph.base import closest_positions
+from city2graph.base import compute_center_node_distances
+from city2graph.base import distance_batches
+from city2graph.base import edge_endpoints
+from city2graph.base import row_batches
 
-from .conversion import NxConverter
-from .conversion import _edge_endpoints
+from .conversion import gdf_to_nx
+from .conversion import nx_to_gdf
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Sequence
+
+    from shapely.geometry import Point
 
 __all__ = [
     "filter_graph_by_distance",
@@ -78,96 +83,6 @@ class _Attachments:
     feature: np.ndarray
     along: np.ndarray
     distance: np.ndarray
-
-
-def _distance_batches(
-    matrix: sparse.csr_matrix, sources: np.ndarray, limit: float, *, paths: bool = False
-) -> Iterator[tuple[slice, np.ndarray, np.ndarray | None]]:
-    """
-    Search from multiple vertices in bounded batches.
-
-    Path-producing proximity graphs can retain predecessors from the same
-    traversal. Cost-only callers allocate just the distance rows.
-
-    Parameters
-    ----------
-    matrix : scipy.sparse.csr_matrix
-        Weighted directed adjacency.
-    sources : ndarray
-        Vertex indices in search order.
-    limit : float
-        Inclusive distance cutoff.
-    paths : bool, optional
-        Request predecessor rows alongside distances.
-
-    Yields
-    ------
-    tuple
-        Source slice, distance rows and optional predecessor rows.
-    """
-    for batch in row_batches(len(sources), matrix.shape[0]):
-        result = csgraph.dijkstra(
-            matrix, indices=sources[batch], limit=limit, return_predecessors=paths
-        )
-        if paths:
-            yield batch, result[0], result[1]
-        else:
-            yield batch, result, None
-
-
-def _adjacency(row: np.ndarray, col: np.ndarray, data: np.ndarray, n: int) -> sparse.csr_matrix:
-    """
-    Build directed CSR adjacency from weighted arcs.
-
-    Parallel arcs retain their minimum cost and explicit zero-cost arcs remain traversable.
-
-    Parameters
-    ----------
-    row : ndarray
-        Source vertex indices for each arc.
-    col : ndarray
-        Destination vertex indices for each arc.
-    data : ndarray
-        Non-negative traversal weights in arc order.
-    n : int
-        Total number of vertices, including isolated vertices.
-
-    Returns
-    -------
-    scipy.sparse.csr_matrix
-        Weighted adjacency in vertex order.
-    """
-    order = np.lexsort((data, col, row))
-    row, col, data = row[order], col[order], data[order]
-    first = np.ones(len(row), dtype=bool)
-    first[1:] = (row[1:] != row[:-1]) | (col[1:] != col[:-1])
-    return sparse.csr_matrix((data[first], (row[first], col[first])), shape=(n, n))
-
-
-def _closest_positions(costs: np.ndarray, k: int) -> np.ndarray:
-    """
-    Select the k lowest costs with stable ties.
-
-    Partition once to find the boundary cost and sort only the retained rows.
-
-    Parameters
-    ----------
-    costs : ndarray
-        Candidate costs in destination order.
-    k : int
-        Maximum number of positions to return.
-
-    Returns
-    -------
-    ndarray
-        Destination positions ranked by cost and then input order.
-    """
-    if k >= len(costs):
-        return np.argsort(costs, kind="stable")
-    boundary = np.partition(costs, k - 1)[k - 1]
-    nearer = np.flatnonzero(costs < boundary)
-    tied = np.flatnonzero(costs == boundary)[: k - len(nearer)]
-    return np.concatenate((nearer[np.argsort(costs[nearer], kind="stable")], tied))
 
 
 def _edge_groups(feature: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -437,7 +352,7 @@ def _edge_arrays(graph: _GraphInput, weight: str | None) -> _GraphArrays:
             if frame.active_geometry_name
             else np.full(len(frame), None)
         )
-        endpoints = _edge_endpoints(frame)
+        endpoints = edge_endpoints(frame)
         if not frames:
             # An edges-only network may supply explicit IDs at coincident crossings.
             ends = _endpoints(lines)
@@ -1037,7 +952,7 @@ def _pairs(
         batch_rows = representatives[batch]
         seeds, inverse = np.unique(source_vertices[batch_rows], return_inverse=True)
         by_endpoint = np.vstack(
-            [distances for _, distances, _ in _distance_batches(base, seeds, limit)]
+            [distances for _, distances, _ in distance_batches(base, seeds, limit)]
         )
         endpoint_rows = inverse.reshape(len(batch_rows), -1)
         for local, rep in enumerate(batch_rows):
@@ -1056,7 +971,7 @@ def _pairs(
                 if reverse:
                     group = np.sort(group)[: k + int(within)]
                 else:
-                    hits = hits[_closest_positions(costs[hits], k + int(within))]
+                    hits = hits[closest_positions(costs[hits], k + int(within))]
             if not len(hits):
                 continue
             a, b = np.repeat(group, len(hits)), np.tile(hits, len(group))
@@ -1152,7 +1067,7 @@ def _route(
     a, b, data = u[finite], v[finite], costs[finite]
     if not directed:
         a, b, data = np.r_[a, b], np.r_[b, a], np.tile(data, 2)
-    matrix = _adjacency(a, b, data, len(coords))
+    matrix = adjacency(a, b, data, len(coords))
 
     tree: cKDTree | shapely.STRtree | None = None
     lines = np.empty(0, object)
@@ -1369,8 +1284,7 @@ def filter_graph_by_distance(
     Examples
     --------
     >>> import networkx as nx
-    >>> from shapely.geometry import Point
-    >>> # Create a graph
+    >>>     >>> # Create a graph
     >>> G = nx.Graph()
     >>> G.add_node(0, pos=(0, 0))
     >>> G.add_node(1, pos=(10, 0))
@@ -1390,11 +1304,10 @@ def filter_graph_by_distance(
         nx_graph = graph
         original_crs = nx_graph.graph.get("crs")
     else:
-        converter = NxConverter()
-        nx_graph = converter.gdf_to_nx(edges=graph)
+        nx_graph = gdf_to_nx(edges=graph)
         original_crs = graph.crs if hasattr(graph, "crs") else None
 
-    distances = _compute_center_node_distances(
+    distances = compute_center_node_distances(
         nx_graph,
         center_point=center_point,
         edge_attr=edge_attr,
@@ -1406,129 +1319,10 @@ def filter_graph_by_distance(
             return graph_type()
         return gpd.GeoDataFrame(geometry=[], crs=original_crs)
 
-    subgraph = _build_reachable_subgraph(nx_graph, distances, threshold)
+    subgraph = build_reachable_subgraph(nx_graph, distances, threshold)
 
     if is_graph_input:
         return subgraph
 
     # Convert back to GeoDataFrame
-    converter = NxConverter()
-    return converter.nx_to_gdf(subgraph, nodes=False, edges=True)
-
-
-def _normalize_center_points(
-    center_point: Point | Sequence[Point] | gpd.GeoSeries | gpd.GeoDataFrame,
-) -> list[Point]:
-    """
-    Normalize center point inputs to a list of Point geometries.
-
-    This ensures downstream snapping logic can always iterate over a
-    homogeneous list of Point objects.
-
-    Parameters
-    ----------
-    center_point : Point or Sequence[Point] or geopandas.GeoSeries or geopandas.GeoDataFrame
-        The center point input.
-
-    Returns
-    -------
-    list[Point]
-        The normalized center points.
-    """
-    if isinstance(center_point, gpd.GeoDataFrame):
-        center_points = center_point.geometry.tolist()
-    elif isinstance(center_point, gpd.GeoSeries):
-        center_points = center_point.tolist()
-    elif isinstance(center_point, Sequence) and not isinstance(center_point, str | bytes):
-        center_points = list(center_point)
-    else:
-        center_points = [center_point]
-
-    invalid_points = [point for point in center_points if not isinstance(point, Point)]
-    if invalid_points:
-        msg = (
-            "center_point must be a Point, a sequence of Point objects, GeoSeries, or GeoDataFrame."
-        )
-        raise TypeError(msg)
-
-    return typing.cast("list[Point]", center_points)
-
-
-def _compute_center_node_distances(
-    graph: nx.Graph | nx.MultiGraph,
-    center_point: Point | Sequence[Point] | gpd.GeoSeries | gpd.GeoDataFrame,
-    edge_attr: str | None,
-    cutoff: float,
-) -> dict[Any, float]:
-    """
-    Compute shortest-path distances from snapped center points once.
-
-    Each center point is snapped to its nearest node, and a single multi-source
-    Dijkstra run is used to obtain distances to all reachable nodes.
-
-    Parameters
-    ----------
-    graph : networkx.Graph or networkx.MultiGraph
-        The graph to traverse.
-    center_point : Point or Sequence[Point] or geopandas.GeoSeries or geopandas.GeoDataFrame
-        Center points that will be snapped to the nearest graph nodes.
-    edge_attr : str or None
-        Edge attribute used as traversal weight.
-    cutoff : float
-        Maximum distance used to limit traversal.
-
-    Returns
-    -------
-    dict[Any, float]
-        Reachable node distances keyed by node id.
-    """
-    pos_dict = nx.get_node_attributes(graph, "pos")
-    if not pos_dict:
-        return {}
-
-    node_ids = list(pos_dict.keys())
-    coordinates = list(pos_dict.values())
-    tree = cKDTree(coordinates)
-
-    points = _normalize_center_points(center_point)
-    if not len(points):
-        return {}
-    _, nearest = tree.query([(p.x, p.y) for p in points])
-    deduped_sources = [node_ids[i] for i in np.unique(nearest)]
-
-    distances = nx.multi_source_dijkstra_path_length(
-        graph,
-        deduped_sources,
-        cutoff=cutoff,
-        weight=edge_attr or "length",
-    )
-    return typing.cast("dict[Any, float]", distances)
-
-
-def _build_reachable_subgraph(
-    graph: nx.Graph | nx.MultiGraph,
-    distances: dict[Any, float],
-    threshold: float,
-) -> nx.Graph | nx.MultiGraph:
-    """
-    Induce a reachable subgraph from precomputed node distances.
-
-    Nodes with shortest-path distance less than or equal to the threshold are
-    retained, preserving graph type and edge attributes.
-
-    Parameters
-    ----------
-    graph : networkx.Graph or networkx.MultiGraph
-        Source graph.
-    distances : dict[Any, float]
-        Precomputed shortest-path distances.
-    threshold : float
-        Threshold used to keep nodes.
-
-    Returns
-    -------
-    networkx.Graph or networkx.MultiGraph
-        Reachable subgraph view.
-    """
-    reachable_nodes = [node for node, distance in distances.items() if distance <= threshold]
-    return graph.subgraph(reachable_nodes)
+    return nx_to_gdf(subgraph, nodes=False, edges=True)

@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover
 if TYPE_CHECKING:
     import matplotlib.axes
 
-from .conversion import NxConverter
+from .conversion import nx_to_gdf
 
 __all__ = ["plot_graph"]
 
@@ -292,8 +292,7 @@ def _normalize_graph_input(
     """
     if graph is not None and nodes is None and edges is None:
         if isinstance(graph, (nx.Graph, nx.MultiGraph)):
-            converter = NxConverter()
-            nodes, edges = converter.nx_to_gdf(graph, nodes=True, edges=True)
+            nodes, edges = nx_to_gdf(graph, nodes=True, edges=True)
         elif isinstance(graph, gpd.GeoDataFrame):
             nodes = graph
         else:

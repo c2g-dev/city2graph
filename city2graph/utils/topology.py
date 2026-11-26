@@ -20,8 +20,8 @@ from shapely.geometry import MultiPolygon
 from shapely.geometry import Polygon
 
 from city2graph.base import GeoDataProcessor
+from city2graph.base import identify_source_target_cols
 
-from .conversion import _identify_source_target_cols
 from .conversion import gdf_to_nx
 from .conversion import nx_to_gdf
 
@@ -290,7 +290,7 @@ def dual_graph(
     v_values = None
 
     # Identify source and target columns/indices
-    u_values, v_values = _identify_source_target_cols(
+    u_values, v_values = identify_source_target_cols(
         edges_clean, source_col=source_col, target_col=target_col
     )
 

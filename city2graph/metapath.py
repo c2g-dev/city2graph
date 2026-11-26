@@ -27,7 +27,7 @@ from scipy import sparse
 from scipy.sparse import csgraph
 from shapely.geometry import LineString
 
-from city2graph._processing import row_batches
+from city2graph.base import row_batches
 from city2graph.utils import gdf_to_nx
 from city2graph.utils import nx_to_gdf
 from city2graph.utils import validate_nx

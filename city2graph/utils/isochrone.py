@@ -20,11 +20,11 @@ from shapely.geometry import MultiPolygon
 from shapely.geometry import Point
 from shapely.geometry import Polygon
 
-from city2graph._processing import row_batches
+from city2graph.base import build_reachable_subgraph
+from city2graph.base import compute_center_node_distances
+from city2graph.base import row_batches
 
-from .conversion import NxConverter
-from .distance import _build_reachable_subgraph
-from .distance import _compute_center_node_distances
+from .conversion import gdf_to_nx
 
 __all__ = ["create_isochrone"]
 
@@ -166,7 +166,7 @@ def create_isochrone(
     nx_graph = _prepare_isochrone_graph(graph, nodes, edges, edge_attr)
     crs = nx_graph.graph.get("crs")
 
-    distances = _compute_center_node_distances(
+    distances = compute_center_node_distances(
         nx_graph,
         center_point=center_point,
         edge_attr=edge_attr,
@@ -176,7 +176,7 @@ def create_isochrone(
     if is_multi_threshold:
         rows: list[dict[str, float | Polygon | MultiPolygon | GeometryCollection]] = []
         for layer_threshold in thresholds:
-            reachable = _build_reachable_subgraph(nx_graph, distances, layer_threshold)
+            reachable = build_reachable_subgraph(nx_graph, distances, layer_threshold)
             if cut_edge_types:
                 reachable = _filter_edges_by_type(reachable, cut_edge_types)
 
@@ -190,7 +190,7 @@ def create_isochrone(
 
         return gpd.GeoDataFrame(rows, geometry="geometry", crs=crs)
 
-    reachable = _build_reachable_subgraph(nx_graph, distances, thresholds[0])
+    reachable = build_reachable_subgraph(nx_graph, distances, thresholds[0])
 
     # Filter Edge Types if requested
     if cut_edge_types:
@@ -338,8 +338,7 @@ def _prepare_isochrone_graph(
     ):
         edges = edges.assign(**{edge_attr: edges.geometry.length})
 
-    converter = NxConverter()
-    return converter.gdf_to_nx(nodes=nodes, edges=edges)
+    return gdf_to_nx(nodes=nodes, edges=edges)
 
 
 def _filter_edges_by_type(

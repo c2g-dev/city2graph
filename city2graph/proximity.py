@@ -48,16 +48,16 @@ from shapely import get_coordinates
 from shapely.geometry import LineString
 
 # Local imports
-from ._processing import frame_records
-from ._processing import row_batches
 from .base import GeoDataProcessor
+from .base import adjacency
+from .base import closest_positions
+from .base import distance_batches
+from .base import frame_records
+from .base import row_batches
 from .utils import gdf_to_nx
 from .utils import nx_to_gdf
 from .utils import symmetrize_edges
 from .utils import validate_gdf
-from .utils.distance import _adjacency
-from .utils.distance import _closest_positions
-from .utils.distance import _distance_batches
 
 # Module logger configuration
 logger = logging.getLogger(__name__)
@@ -449,7 +449,7 @@ class SparseNetwork:
         finite = data < np.inf
         has_infinite = not bool(finite.all())
         row, col, data = row[finite], col[finite], data[finite]
-        matrix = _adjacency(row, col, data, len(nodes))
+        matrix = adjacency(row, col, data, len(nodes))
         return cls(graph, weight, nodes, matrix, has_infinite, integers > 0)
 
     def searches(
@@ -481,7 +481,7 @@ class SparseNetwork:
         source_index = np.asarray([self.index[s] for s in sources], dtype=np.int64)
         target_index = np.asarray([self.index[t] for t in targets], dtype=np.int64)
         limit = np.inf if cutoff is None else cutoff
-        for batch, distances, predecessors in _distance_batches(
+        for batch, distances, predecessors in distance_batches(
             self.matrix, source_index, limit, paths=True
         ):
             assert predecessors is not None
@@ -1575,7 +1575,7 @@ def knn_graph(
         n = len(builder.coords)
         selections: list[npt.NDArray[np.intp]] = [np.empty(0, dtype=np.intp)] * n
         for indices, row in metric._iter_network_rows(builder.coords):
-            nearest = _closest_positions(row, k + 1)
+            nearest = closest_positions(row, k + 1)
             for i in indices:
                 neighbours = nearest[nearest != i][:k]
                 selections[i] = neighbours[row[neighbours] < np.inf]

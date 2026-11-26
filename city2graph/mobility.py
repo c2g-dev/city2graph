@@ -36,9 +36,8 @@ from shapely import is_empty
 from shapely import is_missing
 from shapely import linestrings
 
-from city2graph._processing import row_batches
-
 from .base import GeoDataProcessor
+from .base import row_batches
 
 # Use city2graph converters for compatibility across the stack
 from .utils import gdf_to_nx
