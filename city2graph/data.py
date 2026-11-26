@@ -36,6 +36,8 @@ from shapely.geometry import MultiPolygon
 from shapely.geometry import Polygon
 from shapely.ops import substring
 
+from ._overture import apply_overture_routing_attributes
+from ._overture import validate_travel_mode
 from .utils import clip_graph
 
 # Public API definition
@@ -308,39 +310,76 @@ def get_boundaries(place_name: str, user_agent: str = "city2graph") -> gpd.GeoDa
 
 def process_overture_segments(
     segments_gdf: gpd.GeoDataFrame,
-    get_barriers: bool = True,
+    get_barriers: bool | None = None,
     connectors_gdf: gpd.GeoDataFrame | None = None,
     threshold: float = 1.0,
+    *,
+    travel_mode: str | None = "all",
+    get_speed: bool = False,
 ) -> gpd.GeoDataFrame:
     """
-    Process segments from Overture Maps to be split by connectors and extract barriers.
+    Process Overture Maps segments into topology- and routing-ready LineStrings.
 
-    This function processes road segments by splitting them at connector points and
-    optionally generates barrier geometries based on level rules. It also performs
-    endpoint clustering to snap nearby endpoints together.
+    This function splits segments at connector points, snaps nearby endpoints,
+    computes segment lengths, optionally extracts barrier geometries from level
+    rules, optionally expands passable directions into directed segment rows for
+    a requested Overture ``TravelMode``, and optionally normalises posted speed
+    limits into ``max_speed_kph``.
 
     Parameters
     ----------
     segments_gdf : geopandas.GeoDataFrame
-        GeoDataFrame containing road segments with LineString geometries.
-        Expected to have 'connectors' and 'level_rules' columns.
-    get_barriers : bool, default True
-        Whether to generate barrier geometries from level rules.
+        GeoDataFrame containing Overture transportation segments with
+        LineString geometries. Expected columns vary by requested options
+        (``connectors``, ``level_rules``, ``subtype``, ``class``,
+        ``access_restrictions``, ``road_flags``, ``speed_limits``).
+    get_barriers : bool, optional
+        Whether to generate barrier geometries from ``level_rules``. Defaults
+        to ``True`` when ``travel_mode is None`` and ``False`` when
+        ``travel_mode`` is specified.
     connectors_gdf : geopandas.GeoDataFrame, optional
         GeoDataFrame containing connector information. If provided, segments
-        will be split at connector positions within the normalized range [0, 1].
+        are split at connector positions within the normalised range ``[0, 1]``.
         References without a usable position are ignored.
     threshold : float, default 1.0
         Distance threshold for endpoint clustering in the same units as the CRS.
+    travel_mode : str or None, default "all"
+        Overture ``TravelMode`` used to filter impassable segments and expand
+        passable segments into one directed row per permitted travel direction
+        (two-way segments emit a forward row and a geometry-reversed backward
+        row; backward-only one-way segments have their geometry reversed):
+
+        - ``"all"`` (default): retain traversable ``subtype == "road"`` segments
+          and apply mode-unscoped directional restrictions.
+        - Any official Overture ``TravelMode``: ``"car"``, ``"foot"``,
+          ``"bicycle"``, ``"bus"``, ``"truck"``, ``"hgv"``, ``"motorcycle"``,
+          ``"hov"``, ``"emergency"``, ``"motor_vehicle"``, or ``"vehicle"``.
+        - ``None``: disable mode filtering and directed expansion, preserving
+          one row per physical segment (for morphological analysis, barrier
+          generation, physical street-length totals, or multi-mode reuse after
+          connector splitting).
+    get_speed : bool, default False
+        Whether to extract unit-normalised maximum speed limits from
+        ``speed_limits`` into a ``float64`` column ``max_speed_kph`` (converting
+        ``km/h`` and ``mph``, with ``NaN`` where unposted).
 
     Returns
     -------
     geopandas.GeoDataFrame
         Processed segments with additional columns:
-        - 'split_from', 'split_to': Split positions if segments were split
-        - 'length': Length of each segment
-        - 'barrier_geometry': Passable geometry if get_barriers=True. Level rules
-          retain their source references, and are applied to the relevant split.
+
+        - ``split_from``, ``split_to``: Split positions if segments were split.
+        - ``length``: Length of each segment in CRS units.
+        - ``barrier_geometry``: Passable ground-level geometry when
+          ``get_barriers`` is enabled.
+        - ``max_speed_kph``: Unit-normalised maximum speed in km/h when
+          ``get_speed=True``.
+
+    Raises
+    ------
+    ValueError
+        If ``travel_mode`` is not ``None``, ``"all"``, or a valid Overture
+        ``TravelMode``.
 
     See Also
     --------
@@ -348,22 +387,36 @@ def process_overture_segments(
 
     Examples
     --------
-    >>> # Process segments with connector splitting
-    >>> processed = process_overture_segments(
-    ...     segments_gdf,
-    ...     connectors_gdf=connectors_gdf,
-    ...     threshold=1.0
+    >>> # Project to a metric CRS and expand directed car segments with speeds
+    >>> car_segments = process_overture_segments(
+    ...     segments_gdf.to_crs("EPSG:27700"),
+    ...     connectors_gdf=connectors_gdf.to_crs("EPSG:27700"),
+    ...     travel_mode="car",
+    ...     get_speed=True,
     ... )
-    >>> # Access barrier geometries for routing
-    >>> barriers = processed['barrier_geometry']
+    >>> # Compute unit-safe travel time in seconds on a metric CRS
+    >>> speed_kph = car_segments["max_speed_kph"].fillna(50.0)
+    >>> car_segments["travel_time_sec"] = car_segments["length"] / (speed_kph / 3.6)
+    >>> # Keep one physical row per road for morphological analysis
+    >>> physical = process_overture_segments(
+    ...     segments_gdf.to_crs("EPSG:27700"),
+    ...     connectors_gdf=connectors_gdf.to_crs("EPSG:27700"),
+    ...     travel_mode=None,
+    ... )
     """
+    validated_mode = validate_travel_mode(travel_mode)
+    include_barriers = (validated_mode is None) if get_barriers is None else get_barriers
+
     if segments_gdf.empty:
-        return segments_gdf
+        empty_result = segments_gdf.copy()
+        if get_speed and "max_speed_kph" not in empty_result.columns:
+            empty_result["max_speed_kph"] = pd.Series(dtype="float64")
+        return empty_result
 
     # Warn if CRS is geographic or missing
-    if segments_gdf.crs is None or segments_gdf.crs == WGS84_CRS:
+    if segments_gdf.crs is None or segments_gdf.crs.is_geographic:
         warnings.warn(
-            "Segments GeoDataFrame has no CRS or is in WGS84 (EPSG:4326). "
+            "Segments GeoDataFrame has no CRS or is in a geographic CRS. "
             "Projected CRS is recommended for accurate length calculation and processing.",
             UserWarning,
             stacklevel=2,
@@ -386,11 +439,17 @@ def process_overture_segments(
     # Add segment length
     result_gdf["length"] = result_gdf.geometry.length
 
-    # Generate barrier geometries if requested
-    if get_barriers:
+    # Generate barrier geometries before directed expansion so shared physical
+    # segments are not computed twice.
+    if include_barriers:
         result_gdf["barrier_geometry"] = _generate_barrier_geometries(result_gdf)
 
-    return result_gdf
+    # Apply directed mode expansion and/or speed-limit extraction
+    return apply_overture_routing_attributes(
+        result_gdf,
+        travel_mode=validated_mode,
+        get_speed=get_speed,
+    )
 
 
 def _validate_overture_release(release: str) -> None:
@@ -810,6 +869,8 @@ def _parse_connector_records(value: object) -> list[object]:
     """
     if isinstance(value, list):
         return value
+    if isinstance(value, np.ndarray):
+        return list(value.tolist())
     if value is None or value == "":
         return []
     try:
@@ -992,16 +1053,20 @@ def _parse_level_rules(level_rules_str: str) -> list[tuple[float, float]] | str:
     >>> intervals
     [(0.2, 0.8)]
     """
-    if not level_rules_str:
+    if isinstance(level_rules_str, np.ndarray):
+        rules_data = level_rules_str.tolist()
+    elif not level_rules_str:
         return []
-
-    try:
-        if isinstance(level_rules_str, list):
-            rules_data = level_rules_str
-        else:
-            rules_data = json.loads(str(level_rules_str).replace("'", '"').replace("None", "null"))
-    except (json.JSONDecodeError, AttributeError):
-        return []
+    else:
+        try:
+            if isinstance(level_rules_str, list):
+                rules_data = level_rules_str
+            else:
+                rules_data = json.loads(
+                    str(level_rules_str).replace("'", '"').replace("None", "null")
+                )
+        except (json.JSONDecodeError, AttributeError):
+            return []
 
     barrier_intervals = []
     for rule in rules_data:

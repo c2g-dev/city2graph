@@ -1074,3 +1074,101 @@ class TestRemoveIsolatedComponents:
 
         assert isinstance(result, gpd.GeoDataFrame)
         assert result.equals(sample_edges_gdf)
+
+    def test_remove_isolated_strong_connectivity_on_directed_geodataframe(
+        self,
+        sample_crs: str,
+    ) -> None:
+        """Strong connectivity removes one-way stubs while keeping the largest cycle."""
+        nodes = gpd.GeoDataFrame(
+            {"geometry": [Point(0, 0), Point(1, 0), Point(1, 1), Point(2, 1), Point(-1, 0)]},
+            index=pd.Index([0, 1, 2, 3, 4], name="node_id"),
+            crs=sample_crs,
+        )
+        edges = gpd.GeoDataFrame(
+            {
+                "road": ["c01", "c12", "c20", "out_stub", "in_stub"],
+                "geometry": [
+                    LineString([(0, 0), (1, 0)]),
+                    LineString([(1, 0), (1, 1)]),
+                    LineString([(1, 1), (0, 0)]),
+                    LineString([(1, 1), (2, 1)]),
+                    LineString([(-1, 0), (0, 0)]),
+                ],
+            },
+            index=pd.MultiIndex.from_tuples(
+                [(0, 1, 0), (1, 2, 0), (2, 0, 0), (2, 3, 0), (4, 0, 0)],
+                names=["from_node_id", "to_node_id", "edge_key"],
+            ),
+            crs=sample_crs,
+        )
+
+        strong_nodes, strong_edges = utils.remove_isolated_components(
+            (nodes, edges), directed=True, connectivity="strong"
+        )
+        weak_nodes, weak_edges = utils.remove_isolated_components(
+            (nodes, edges), directed=True, connectivity="weak"
+        )
+
+        assert strong_nodes is not None
+        assert set(strong_nodes.index) == {0, 1, 2}
+        assert strong_edges["road"].tolist() == ["c01", "c12", "c20"]
+        assert weak_nodes is not None
+        assert len(weak_edges) == 5
+
+        strong_nx = utils.remove_isolated_components(
+            (nodes, edges), as_nx=True, directed=True, connectivity="strong"
+        )
+        assert isinstance(strong_nx, nx.MultiDiGraph)
+        assert set(strong_nx.nodes) == {0, 1, 2}
+
+    @pytest.mark.parametrize("graph_cls", [nx.DiGraph, nx.MultiDiGraph])
+    def test_remove_isolated_strong_connectivity_on_directed_networkx(
+        self,
+        graph_cls: type[nx.DiGraph],
+    ) -> None:
+        """Directed NetworkX inputs infer directionality and retain graph class/attributes."""
+        graph = graph_cls(crs="EPSG:3857")
+        for u, v in [(0, 1), (1, 2), (2, 0), (2, 3)]:
+            graph.add_edge(u, v, length=10.0)
+
+        strong = utils.remove_isolated_components(graph, connectivity="strong")
+        weak = utils.remove_isolated_components(graph, directed=False, connectivity="weak")
+
+        assert isinstance(strong, graph_cls)
+        assert type(strong) is graph_cls
+        assert set(strong.nodes) == {0, 1, 2}
+        assert isinstance(weak, graph_cls)
+        assert type(weak) is graph_cls
+        assert set(weak.nodes) == {0, 1, 2, 3}
+
+    def test_remove_isolated_connectivity_validation_errors(
+        self,
+        sample_crs: str,
+    ) -> None:
+        """Contradictory connectivity and direction options raise ValueError."""
+        edges = gpd.GeoDataFrame(
+            {"geometry": [LineString([(0, 0), (1, 0)])]},
+            index=pd.MultiIndex.from_tuples([(0, 1)], names=["u", "v"]),
+            crs=sample_crs,
+        )
+        undirected_nx = nx.Graph([(0, 1)])
+        directed_nx = nx.DiGraph([(0, 1)])
+
+        with pytest.raises(ValueError, match="connectivity must be 'weak' or 'strong'"):
+            utils.remove_isolated_components(edges, connectivity="invalid")  # type: ignore[arg-type]
+
+        with pytest.raises(ValueError, match="requires directed=True"):
+            utils.remove_isolated_components(edges, connectivity="strong")
+
+        with pytest.raises(ValueError, match="requires directed=True"):
+            utils.remove_isolated_components(edges, directed=False, connectivity="strong")
+
+        with pytest.raises(ValueError, match="requires a directed graph"):
+            utils.remove_isolated_components(undirected_nx, connectivity="strong")
+
+        with pytest.raises(ValueError, match="Cannot treat an undirected NetworkX graph"):
+            utils.remove_isolated_components(undirected_nx, directed=True)
+
+        with pytest.raises(ValueError, match="requires a directed graph"):
+            utils.remove_isolated_components(directed_nx, directed=False, connectivity="strong")

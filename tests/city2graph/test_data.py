@@ -8,6 +8,8 @@ from unittest.mock import Mock
 from unittest.mock import patch
 
 import geopandas as gpd
+import networkx as nx
+import numpy as np
 import pytest
 from shapely.geometry import LineString
 from shapely.geometry import MultiLineString
@@ -15,6 +17,7 @@ from shapely.geometry import MultiPolygon
 from shapely.geometry import Point
 from shapely.geometry import Polygon
 
+import city2graph as c2g
 from city2graph import data as data_module
 from tests.city2graph.helpers import make_connectors_gdf
 from tests.city2graph.helpers import make_segments_gdf
@@ -718,7 +721,7 @@ class TestProcessOvertureSegments:
         assert result.crs == WGS84_CRS
 
     def test_basic(self) -> None:
-        """Test basic functionality of process_overture_segments."""
+        """Test basic physical-segment functionality of process_overture_segments."""
         segments_gdf = make_segments_gdf(
             ids=["s1", "s2"],
             geoms_or_coords=[[(0, 0), (1, 0)], [(1, 0), (2, 0)]],
@@ -726,7 +729,7 @@ class TestProcessOvertureSegments:
             crs=WGS84_CRS,
         )
 
-        result = process_overture_segments(segments_gdf, get_barriers=False)
+        result = process_overture_segments(segments_gdf, get_barriers=False, travel_mode=None)
 
         assert "length" in result.columns
         assert all(result["length"] > 0)
@@ -751,6 +754,7 @@ class TestProcessOvertureSegments:
             segments_gdf,
             connectors_gdf=connectors_gdf,
             get_barriers=False,
+            travel_mode=None,
         )
 
         assert result["id"].tolist() == ["seg1_1", "seg1_2", "seg1_3"]
@@ -771,6 +775,11 @@ class TestProcessOvertureSegments:
             pytest.param('[{"value": 1}]', [], id="whole-line"),
             pytest.param('[{"value": 1, "between": [0, 1]}]', [], id="full-interval"),
             pytest.param([{"value": 1, "between": [0.1, 0.5]}], [(0, 1), (5, 10)], id="list"),
+            pytest.param(
+                np.array([{"value": 1, "between": [0.1, 0.5]}], dtype=object),
+                [(0, 1), (5, 10)],
+                id="ndarray",
+            ),
             pytest.param(
                 '[{"value": 1, "between": [0.1, 0.3]}, {"value": 1, "between": [0.7, 0.9]}]',
                 [(0, 1), (3, 7), (9, 10)],
@@ -795,7 +804,7 @@ class TestProcessOvertureSegments:
         segments = make_segments_gdf(["road"], [[(0, 0), (10, 0)]], crs="EPSG:3857")
         segments["level_rules"] = [level_rules]
 
-        result = process_overture_segments(segments, get_barriers=True)
+        result = process_overture_segments(segments, get_barriers=True, travel_mode=None)
 
         expected_parts = [LineString([(start, 0), (end, 0)]) for start, end in passable_intervals]
         geometry = result["barrier_geometry"].iloc[0]
@@ -813,7 +822,7 @@ class TestProcessOvertureSegments:
             None, [[(0, 0), (1, 0)]], level_rules=level_rules, crs="EPSG:3857"
         )
 
-        result = process_overture_segments(segments, get_barriers=True)
+        result = process_overture_segments(segments, get_barriers=True, travel_mode=None)
 
         assert result["level_rules"].tolist() == [""]
         assert result["barrier_geometry"].tolist() == segments.geometry.tolist()
@@ -834,6 +843,7 @@ class TestProcessOvertureSegments:
             segments_gdf,
             connectors_gdf=connectors_gdf,
             threshold=2.0,
+            travel_mode=None,
         )
 
         assert "length" in result.columns
@@ -844,7 +854,9 @@ class TestProcessOvertureSegments:
         segments = make_segments_gdf(None, [[(0, 0), (1, 0)], [(1, 0), (3, 0)]], crs="EPSG:3857")
         connectors = make_connectors_gdf([], [], crs="EPSG:3857") if empty_table else None
 
-        result = process_overture_segments(segments, connectors_gdf=connectors, get_barriers=False)
+        result = process_overture_segments(
+            segments, connectors_gdf=connectors, get_barriers=False, travel_mode=None
+        )
 
         assert result["id"].tolist() == segments["id"].tolist()
         assert result.geometry.equals(segments.geometry)
@@ -857,6 +869,11 @@ class TestProcessOvertureSegments:
             pytest.param('{"invalid": "structure"}', [(0, 2)], id="missing-fields"),
             pytest.param('["not_a_dict"]', [(0, 2)], id="non-record"),
             pytest.param([{"connector_id": "c1", "at": 0.5}], [(0, 1), (1, 2)], id="list"),
+            pytest.param(
+                np.array([{"connector_id": "c1", "at": 0.5}], dtype=object),
+                [(0, 1), (1, 2)],
+                id="ndarray",
+            ),
             pytest.param('{"connector_id": "c1", "at": 0.5}', [(0, 1), (1, 2)], id="json-record"),
         ],
     )
@@ -868,7 +885,9 @@ class TestProcessOvertureSegments:
         segments["connectors"] = [connector_records]
         connectors = make_connectors_gdf(["c1"], [(1, 0)], crs="EPSG:3857")
 
-        result = process_overture_segments(segments, connectors_gdf=connectors, threshold=0.01)
+        result = process_overture_segments(
+            segments, connectors_gdf=connectors, threshold=0.01, travel_mode=None
+        )
 
         assert result["id"].tolist() == (
             ["road_1", "road_2"] if len(expected_intervals) == 2 else ["road"]
@@ -899,7 +918,9 @@ class TestProcessOvertureSegments:
             crs=WGS84_CRS,
         )
 
-        result = process_overture_segments(segments_gdf, connectors_gdf=connectors_gdf)
+        result = process_overture_segments(
+            segments_gdf, connectors_gdf=connectors_gdf, travel_mode=None
+        )
 
         assert result["id"].tolist() == ["seg1_1", "seg1_2"]
         assert result["split_from"].tolist() == [0.0, 0.5]
@@ -924,6 +945,7 @@ class TestProcessOvertureSegments:
             segments_gdf,
             connectors_gdf=connectors_gdf,
             threshold=0.5,
+            travel_mode=None,
         )
 
         assert len(result) >= len(segments_gdf)
@@ -938,7 +960,7 @@ class TestProcessOvertureSegments:
             crs=WGS84_CRS,
         )
 
-        result = process_overture_segments(segments_gdf, get_barriers=True)
+        result = process_overture_segments(segments_gdf, get_barriers=True, travel_mode=None)
         assert "barrier_geometry" in result.columns
 
     def test_with_non_linestring_endpoints(self) -> None:
@@ -956,6 +978,7 @@ class TestProcessOvertureSegments:
             segments_gdf,
             connectors_gdf=connectors_gdf,
             threshold=1.0,
+            travel_mode=None,
         )
 
         # Point geometry should NOT be filtered out (filtering moved to load_overture_data)
@@ -980,6 +1003,7 @@ class TestProcessOvertureSegments:
             segments_gdf,
             connectors_gdf=connectors_gdf,
             get_barriers=False,
+            travel_mode=None,
         )
 
         assert result.geometry.tolist() == segments_gdf.geometry.tolist()
@@ -1000,6 +1024,7 @@ class TestProcessOvertureSegments:
             segments_gdf,
             connectors_gdf=connectors_gdf,
             threshold=1.0,
+            travel_mode=None,
         )
 
         assert len(result) == len(segments_gdf)
@@ -1026,7 +1051,11 @@ class TestProcessOvertureSegments:
             ids=["valid", "bad"], coords=[(4, 0), (6, 0)], crs="EPSG:3857"
         )
         result = process_overture_segments(
-            segments, connectors_gdf=connectors, get_barriers=False, threshold=0.01
+            segments,
+            connectors_gdf=connectors,
+            get_barriers=False,
+            threshold=0.01,
+            travel_mode=None,
         )
         assert result["split_from"].tolist() == [0.0, 0.5]
         assert result["split_to"].tolist() == [0.5, 1.0]
@@ -1045,7 +1074,9 @@ class TestProcessOvertureSegments:
             crs="EPSG:3857",
         )
         connectors = make_connectors_gdf(ids=["middle"], coords=[(5, 0)], crs="EPSG:3857")
-        result = process_overture_segments(segments, connectors_gdf=connectors, threshold=0.01)
+        result = process_overture_segments(
+            segments, connectors_gdf=connectors, threshold=0.01, travel_mode=None
+        )
 
         assert result["id"].tolist() == ["road_1", "road_2"]
         assert result["barrier_geometry"].tolist() == [
@@ -1086,6 +1117,7 @@ class TestProcessOvertureSegments:
             connectors_gdf=connectors_gdf,
             get_barriers=False,
             threshold=0.01,
+            travel_mode=None,
         )
 
         assert result["id"].tolist() == ["split_1", "split_2", "split_3", "unchanged"]
@@ -1131,6 +1163,7 @@ class TestProcessOvertureSegments:
             connectors_gdf=connectors_gdf,
             get_barriers=False,
             threshold=1.0,
+            travel_mode=None,
         )
 
         assert list(result.geometry.iloc[0].coords) == [(0, 0), (0.5, 2), (1.1, 0)]
@@ -1158,7 +1191,7 @@ class TestProcessOvertureSegments:
             crs="EPSG:3857",
         )
 
-        result = process_overture_segments(segments_gdf)
+        result = process_overture_segments(segments_gdf, travel_mode=None)
 
         assert result.index.tolist() == [10, 20, 30, 40]
         assert result["barrier_geometry"].loc[10] == segments_gdf.geometry.loc[10]
@@ -1180,8 +1213,11 @@ class TestProcessOvertureSegments:
         segments_gdf = gpd.GeoDataFrame(
             {
                 "id": ["segment"],
+                "subtype": ["road"],
+                "class": ["primary"],
                 "connectors": [[{"connector_id": "valid", "at": 0.5}]],
                 "level_rules": [[{"value": 1, "between": [0.2, 0.4]}]],
+                "speed_limits": [[{"max_speed": {"value": 30, "unit": "mph"}}]],
             },
             geometry=[LineString([(0, 0), (2, 0)])],
             crs="EPSG:3857",
@@ -1192,9 +1228,516 @@ class TestProcessOvertureSegments:
             crs="EPSG:3857",
         )
 
-        result = process_overture_segments(segments_gdf, connectors_gdf=connectors_gdf)
+        physical = process_overture_segments(
+            segments_gdf, connectors_gdf=connectors_gdf, travel_mode=None
+        )
+        directed = process_overture_segments(
+            segments_gdf,
+            connectors_gdf=connectors_gdf,
+            travel_mode="car",
+            get_speed=True,
+        )
+
+        assert len(physical) == 2
+        assert len(directed) == 4
+
+    def test_default_travel_mode_all_expands_directed_and_skips_barriers(self) -> None:
+        """Default travel_mode='all' expands roads directionally and skips barriers."""
+        segments = gpd.GeoDataFrame(
+            {
+                "id": ["twoway", "oneway_fwd", "oneway_bwd", "rail_seg", "closed"],
+                "subtype": ["road", "road", "road", "rail", "road"],
+                "class": ["primary", "primary", "primary", "standard_gauge", "primary"],
+                "access_restrictions": [
+                    None,
+                    [{"access_type": "denied", "when": {"heading": "backward"}}],
+                    [{"access_type": "denied", "when": {"heading": "forward"}}],
+                    None,
+                    [{"access_type": "denied"}],
+                ],
+            },
+            geometry=[
+                LineString([(0, 0), (10, 0)]),
+                LineString([(10, 0), (20, 0)]),
+                LineString([(20, 0), (30, 0)]),
+                LineString([(30, 0), (40, 0)]),
+                LineString([(40, 0), (50, 0)]),
+            ],
+            crs="EPSG:27700",
+        )
+
+        result = process_overture_segments(segments)
+
+        assert "barrier_geometry" not in result.columns
+        assert result["id"].tolist() == ["twoway", "twoway", "oneway_fwd", "oneway_bwd"]
+        assert result.geometry.tolist() == [
+            LineString([(0, 0), (10, 0)]),
+            LineString([(10, 0), (0, 0)]),
+            LineString([(10, 0), (20, 0)]),
+            LineString([(30, 0), (20, 0)]),
+        ]
+
+    def test_explicit_get_barriers_with_travel_mode(self) -> None:
+        """Explicit get_barriers=True still works alongside directed travel_mode."""
+        segments = gpd.GeoDataFrame(
+            {
+                "id": ["bridge"],
+                "subtype": ["road"],
+                "class": ["primary"],
+                "level_rules": [[{"value": 1}]],
+            },
+            geometry=[LineString([(0, 0), (10, 0)])],
+            crs="EPSG:27700",
+        )
+
+        result = process_overture_segments(segments, get_barriers=True, travel_mode="car")
 
         assert len(result) == 2
+        assert "barrier_geometry" in result.columns
+        assert result["barrier_geometry"].isna().all()
+
+    @pytest.mark.parametrize(
+        ("bad_mode", "hint"),
+        [
+            ("walk", "foot"),
+            ("bike", "bicycle"),
+            ("drive", "car"),
+            ("invalid_mode", ""),
+        ],
+    )
+    def test_invalid_travel_mode_raises_with_hint(self, bad_mode: str, hint: str) -> None:
+        """Unknown travel modes fail fast, including on empty inputs."""
+        empty = gpd.GeoDataFrame(geometry=[], crs="EPSG:27700")
+        with pytest.raises(ValueError, match="Invalid travel_mode") as exc_info:
+            process_overture_segments(empty, travel_mode=bad_mode)
+        if hint:
+            assert hint in str(exc_info.value)
+
+    def test_empty_input_with_get_speed_preserves_float_column(self) -> None:
+        """Empty inputs still emit max_speed_kph with float64 dtype when requested."""
+        empty = gpd.GeoDataFrame(geometry=[], crs="EPSG:27700")
+
+        result = process_overture_segments(empty, travel_mode="car", get_speed=True)
+
+        assert result.empty
+        assert "max_speed_kph" in result.columns
+        assert result["max_speed_kph"].dtype == np.float64
+
+    def test_geographic_crs_warning_triggers_for_non_wgs84_geographic(self) -> None:
+        """Any geographic CRS (not only EPSG:4326) triggers a warning."""
+        segments = gpd.GeoDataFrame(
+            {"id": ["s1"], "subtype": ["road"], "class": ["primary"]},
+            geometry=[LineString([(0, 0), (0.01, 0)])],
+            crs="EPSG:4269",
+        )
+
+        with pytest.warns(UserWarning, match="geographic CRS"):
+            process_overture_segments(segments, travel_mode=None)
+
+    def test_travel_mode_defaults_hierarchy_and_access_rules(self) -> None:
+        """Evaluate subtype/class defaults, mode inheritance, flags, and rule precedence."""
+        segments = gpd.GeoDataFrame(
+            {
+                "id": [
+                    "motorway",
+                    "footway",
+                    "cycleway",
+                    "waterway",
+                    "motor_denied",
+                    "hgv_denied",
+                    "contraflow_bike",
+                    "private_footway",
+                    "permissive_car",
+                    "destination_car",
+                    "timed_and_weight",
+                    "under_construction",
+                    "unknown_class",
+                    "designated_path",
+                ],
+                "subtype": [
+                    "road",
+                    "road",
+                    "road",
+                    "water",
+                    "road",
+                    "road",
+                    "road",
+                    "road",
+                    "road",
+                    "road",
+                    "road",
+                    "road",
+                    "road",
+                    "road",
+                ],
+                "class": [
+                    "motorway",
+                    "footway",
+                    "cycleway",
+                    "river",
+                    "residential",
+                    "primary",
+                    "primary",
+                    "footway",
+                    "service",
+                    "service",
+                    "primary",
+                    "primary",
+                    "unknown",
+                    "path",
+                ],
+                "access_restrictions": [
+                    None,
+                    None,
+                    None,
+                    None,
+                    [{"access_type": "denied", "when": {"mode": ["motor_vehicle"]}}],
+                    [{"access_type": "denied", "when": {"mode": ["truck"]}}],
+                    [
+                        {"access_type": "denied", "when": {"heading": "backward"}},
+                        {"access_type": "allowed", "when": {"mode": ["bicycle"]}},
+                    ],
+                    [{"access_type": "allowed", "when": {"recognized": ["as_private"]}}],
+                    [
+                        {
+                            "access_type": "allowed",
+                            "when": {"mode": ["motor_vehicle"], "recognized": ["as_permitted"]},
+                        }
+                    ],
+                    [
+                        {
+                            "access_type": "allowed",
+                            "when": {"mode": ["motor_vehicle"], "using": ["at_destination"]},
+                        }
+                    ],
+                    [
+                        {
+                            "access_type": "denied",
+                            "when": {"during": "Mo-Fr 07:00-09:00", "mode": ["car"]},
+                        },
+                        {
+                            "access_type": "denied",
+                            "when": {
+                                "vehicle": [
+                                    {
+                                        "dimension": "weight",
+                                        "comparison": "greater_than",
+                                        "value": 7.5,
+                                    }
+                                ]
+                            },
+                        },
+                    ],
+                    None,
+                    None,
+                    [{"access_type": "designated", "when": {"mode": ["car"]}}],
+                ],
+                "road_flags": [
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    [{"values": ["is_under_construction"]}],
+                    None,
+                    None,
+                ],
+            },
+            geometry=[LineString([(i, 0), (i + 1, 0)]) for i in range(14)],
+            crs="EPSG:27700",
+        )
+
+        car = process_overture_segments(segments, travel_mode="car")
+        hgv = process_overture_segments(segments, travel_mode="hgv")
+        bike = process_overture_segments(segments, travel_mode="bicycle")
+        foot = process_overture_segments(segments, travel_mode="foot")
+
+        assert set(car["id"]) == {
+            "motorway",
+            "hgv_denied",
+            "contraflow_bike",
+            "permissive_car",
+            "destination_car",
+            "timed_and_weight",
+            "designated_path",
+        }
+        assert len(car[car["id"] == "contraflow_bike"]) == 1
+        assert "hgv_denied" not in set(hgv["id"])
+        assert "motorway" not in set(bike["id"])
+        assert "cycleway" in set(bike["id"])
+        assert len(bike[bike["id"] == "contraflow_bike"]) == 2
+        assert "motor_denied" in set(bike["id"])
+        assert "footway" in set(foot["id"])
+        assert "private_footway" not in set(foot["id"])
+        assert len(foot[foot["id"] == "contraflow_bike"]) == 2
+
+    def test_oneway_on_footway_applies_to_foot(self) -> None:
+        """One-way rules on pedestrian classes still restrict foot travel."""
+        segments = gpd.GeoDataFrame(
+            {
+                "id": ["oneway_tunnel"],
+                "subtype": ["road"],
+                "class": ["footway"],
+                "access_restrictions": [
+                    [{"access_type": "denied", "when": {"heading": "backward"}}]
+                ],
+            },
+            geometry=[LineString([(0, 0), (10, 0)])],
+            crs="EPSG:27700",
+        )
+
+        foot = process_overture_segments(segments, travel_mode="foot")
+
+        assert len(foot) == 1
+        assert foot.geometry.iloc[0].equals(LineString([(0, 0), (10, 0)]))
+
+    def test_speed_limits_units_direction_mode_and_between(self) -> None:
+        """Normalise km/h and mph, respect heading/mode scoping, and harmonic-mean splits."""
+        segments = gpd.GeoDataFrame(
+            {
+                "id": [
+                    "mph_road",
+                    "directional_speed",
+                    "mode_specific",
+                    "multi_between",
+                    "ignored_rules",
+                    "missing_speed",
+                ],
+                "subtype": ["road"] * 6,
+                "class": ["primary"] * 6,
+                "speed_limits": [
+                    '[{"max_speed": {"value": 30, "unit": "mph"}}]',
+                    [
+                        {
+                            "max_speed": {"value": 80, "unit": "km/h"},
+                            "when": {"heading": "forward"},
+                        },
+                        {
+                            "max_speed": {"value": 60, "unit": "km/h"},
+                            "when": {"heading": "backward"},
+                        },
+                    ],
+                    [
+                        {"max_speed": {"value": 100, "unit": "km/h"}},
+                        {"max_speed": {"value": 70, "unit": "km/h"}, "when": {"mode": ["hgv"]}},
+                        {
+                            "max_speed": {"value": 30, "unit": "km/h"},
+                            "when": {"during": "Mo-Fr 08:00-09:00"},
+                        },
+                        {
+                            "max_speed": {"value": 20, "unit": "km/h"},
+                            "when": {"recognized": ["as_private"]},
+                        },
+                    ],
+                    [
+                        {"max_speed": {"value": 40, "unit": "km/h"}, "between": [0.0, 0.5]},
+                        {"max_speed": {"value": 60, "unit": "km/h"}, "between": [0.5, 1.0]},
+                    ],
+                    [
+                        {"min_speed": {"value": 30, "unit": "km/h"}, "max_speed": None},
+                        {"max_speed": {"value": -10, "unit": "km/h"}},
+                        {"max_speed": {"value": 50, "unit": "knots"}},
+                        {"max_speed": {"value": "bad", "unit": "km/h"}},
+                        {"max_speed": {"value": 50, "unit": "km/h"}, "between": [0.8, 0.2]},
+                    ],
+                    None,
+                ],
+            },
+            geometry=[LineString([(i * 10, 0), ((i + 1) * 10, 0)]) for i in range(6)],
+            crs="EPSG:27700",
+        )
+
+        car = process_overture_segments(segments, travel_mode="car", get_speed=True)
+        hgv = process_overture_segments(segments, travel_mode="hgv", get_speed=True)
+        physical = process_overture_segments(segments, travel_mode=None, get_speed=True)
+
+        assert car.loc[car["id"] == "mph_road", "max_speed_kph"].tolist() == pytest.approx(
+            [48.28032, 48.28032]
+        )
+        assert car.loc[car["id"] == "directional_speed", "max_speed_kph"].tolist() == pytest.approx(
+            [80.0, 60.0]
+        )
+        assert car.loc[car["id"] == "mode_specific", "max_speed_kph"].tolist() == pytest.approx(
+            [100.0, 100.0]
+        )
+        assert hgv.loc[hgv["id"] == "mode_specific", "max_speed_kph"].tolist() == pytest.approx(
+            [70.0, 70.0]
+        )
+        # Harmonic mean of 40 and 60 over equal halves = 2 / (1/40 + 1/60) = 48.0
+        assert car.loc[car["id"] == "multi_between", "max_speed_kph"].tolist() == pytest.approx(
+            [48.0, 48.0]
+        )
+        assert car.loc[car["id"] == "ignored_rules", "max_speed_kph"].isna().all()
+        assert car.loc[car["id"] == "missing_speed", "max_speed_kph"].isna().all()
+
+        # Unexpanded physical mode takes conservative min(80, 60) = 60
+        assert physical.loc[physical["id"] == "directional_speed", "max_speed_kph"].iloc[
+            0
+        ] == pytest.approx(60.0)
+
+    def test_between_partial_override_jitter_and_ndarray_inputs(self) -> None:
+        """Partition [split_from, split_to], ignore split jitter, and handle GeoParquet ndarrays."""
+        segments = gpd.GeoDataFrame(
+            {
+                "id": ["partial_denied", "jitter_split", "ndarray_rules", "bwd_only_speed"],
+                "subtype": ["road", "road", "road", "road"],
+                "class": ["primary", "unclassified", "primary", "primary"],
+                "split_from": [0.0, 0.0, 0.0, np.nan],
+                "split_to": [1.0, 0.042747458, 1.0, np.nan],
+                "access_restrictions": [
+                    # Whole segment denied, only first 30% allowed -> end-to-end impassable
+                    [
+                        {"access_type": "denied"},
+                        {"access_type": "allowed", "between": [0.0, 0.3]},
+                    ],
+                    # Jitter overlap of 5e-5 at upper split boundary should not make split 1 one-way
+                    [
+                        {
+                            "access_type": "denied",
+                            "when": {"heading": "backward"},
+                            "between": [0.042696709, 1.0],
+                        }
+                    ],
+                    np.array(
+                        [
+                            {
+                                "access_type": "denied",
+                                "when": {
+                                    "heading": "backward",
+                                    "mode": np.array(["motor_vehicle"], dtype=object),
+                                },
+                                "between": np.array([0.0, 1.0]),
+                            }
+                        ],
+                        dtype=object,
+                    ),
+                    None,
+                ],
+                "speed_limits": [
+                    None,
+                    None,
+                    np.array(
+                        {"max_speed": {"value": 50, "unit": "km/h"}},
+                        dtype=object,
+                    ),
+                    [{"max_speed": {"value": 45, "unit": "km/h"}, "when": {"heading": "backward"}}],
+                ],
+            },
+            geometry=[LineString([(i * 10, 0), ((i + 1) * 10, 0)]) for i in range(4)],
+            crs="EPSG:27700",
+        )
+
+        car = process_overture_segments(segments, travel_mode="car", get_speed=True)
+        physical = process_overture_segments(segments, travel_mode=None, get_speed=True)
+
+        assert "partial_denied" not in set(car["id"])
+        assert len(car[car["id"] == "jitter_split"]) == 2
+        assert len(car[car["id"] == "ndarray_rules"]) == 1
+        assert car.loc[car["id"] == "ndarray_rules", "max_speed_kph"].iloc[0] == pytest.approx(50.0)
+        assert physical.loc[physical["id"] == "bwd_only_speed", "max_speed_kph"].iloc[
+            0
+        ] == pytest.approx(45.0)
+
+    def test_sample_overture_geojson_modes_and_end_to_end_routing(self) -> None:
+        """Validate real Liverpool Overture data across car, bicycle, foot, routing, and morphology."""
+        sample_path = Path(__file__).parent / "data" / "sample_segments.geojson"
+        raw_segments = gpd.read_file(sample_path)
+
+        car = process_overture_segments(raw_segments, travel_mode="car", get_speed=True)
+        bike = process_overture_segments(raw_segments, travel_mode="bicycle")
+        foot = process_overture_segments(raw_segments, travel_mode="foot")
+
+        # Car excludes footway/steps/pedestrian; retains primary/unclassified/service/etc.
+        assert not set(car["class"]).intersection({"footway", "steps", "pedestrian"})
+        # Water Street (30 mph -> 48.28032 km/h) is one-way for car, bidirectional for bicycle/foot
+        water_id = "0871951073ffffff0469fb4177f86db5_1"
+        assert len(car[car["id"] == water_id]) == 1
+        assert car.loc[car["id"] == water_id, "max_speed_kph"].iloc[0] == pytest.approx(48.28032)
+        assert len(bike[bike["id"] == water_id]) == 2
+        assert len(foot[foot["id"] == water_id]) == 2
+
+        # Fenwick Street split 1 has ~5e-5 boundary jitter -> stays bidirectional for car
+        fenwick_1 = "08819510733fffff047db55f7d0c758c_1"
+        fenwick_2 = "08819510733fffff047db55f7d0c758c_2"
+        assert len(car[car["id"] == fenwick_1]) == 2
+        assert len(car[car["id"] == fenwick_2]) == 1
+
+        # End-to-end directed graph -> strong connectivity -> network_costs
+        car["travel_time_sec"] = car["length"] / (car["max_speed_kph"].fillna(30.0) / 3.6)
+        nodes, edges = c2g.segments_to_graph(car, directed=True, multigraph=True)
+        scc_nodes, scc_edges = c2g.remove_isolated_components(
+            (nodes, edges), directed=True, connectivity="strong"
+        )
+        assert scc_nodes is not None
+        assert not scc_edges.empty
+        nx_graph = c2g.gdf_to_nx(nodes=scc_nodes, edges=scc_edges, directed=True, multigraph=True)
+        assert isinstance(nx_graph, nx.MultiDiGraph)
+        assert nx.is_strongly_connected(nx_graph)
+
+        pts = scc_nodes.iloc[:3]
+        costs = c2g.network_costs(
+            pts, pts, (scc_nodes, scc_edges), weight="travel_time_sec", directed=True
+        )
+        assert len(costs) == 9
+        assert (costs["cost"] >= 0.0).all()
+
+        # Physical mode (travel_mode=None) remains compatible with morphological_graph
+        physical = process_overture_segments(raw_segments, travel_mode=None)
+        assert len(physical) == len(raw_segments)
+        assert "barrier_geometry" in physical.columns
+
+    def test_overture_rule_parsing_edge_cases(self) -> None:
+        """Handle single-quoted strings, invalid JSON, malformed intervals, and split bounds."""
+        segments = gpd.GeoDataFrame(
+            {
+                "id": ["py_literal", "bad_json", "bad_bounds", "fwd_only_speed"],
+                "subtype": ["road", "road", "road", "road"],
+                "class": ["primary", "primary", "primary", "primary"],
+                "split_from": [0.0, 0.0, 0.8, 0.0],
+                "split_to": [1.0, 1.0, 0.2, 1.0],
+                "access_restrictions": [
+                    "[{'access_type': 'denied', 'when': {'heading': 'backward', 'mode': None}}]",
+                    "not valid json",
+                    [
+                        {"access_type": "denied", "between": [0.5]},
+                        {"access_type": "denied", "between": ["a", "b"]},
+                        {"access_type": "unknown_type"},
+                        {"access_type": "denied", "when": {"mode": ["car"]}},
+                    ],
+                    "   ",
+                ],
+                "speed_limits": [
+                    "{'max_speed': {'value': 40, 'unit': 'km/h'}}",
+                    [{"max_speed": {"value": 50, "unit": "km/h"}, "between": [0.2, 0.4]}],
+                    None,
+                    [{"max_speed": {"value": 55, "unit": "km/h"}, "when": {"heading": "forward"}}],
+                ],
+            },
+            geometry=[LineString([(i * 10, 0), ((i + 1) * 10, 0)]) for i in range(4)],
+            crs="EPSG:27700",
+        )
+
+        all_mode = process_overture_segments(segments, travel_mode="all", get_speed=True)
+        physical = process_overture_segments(segments, travel_mode=None, get_speed=True)
+
+        assert len(all_mode[all_mode["id"] == "py_literal"]) == 1
+        assert all_mode.loc[all_mode["id"] == "py_literal", "max_speed_kph"].iloc[
+            0
+        ] == pytest.approx(40.0)
+        # Mode-scoped rule ignored under travel_mode="all"
+        assert len(all_mode[all_mode["id"] == "bad_bounds"]) == 2
+        assert physical.loc[physical["id"] == "fwd_only_speed", "max_speed_kph"].iloc[
+            0
+        ] == pytest.approx(55.0)
+        assert physical.loc[physical["id"] == "bad_json", "max_speed_kph"].iloc[0] == pytest.approx(
+            50.0
+        )
 
 
 # ============================================================================
@@ -1262,7 +1805,7 @@ class TestIntegration:
             crs=WGS84_CRS,
         )
 
-        result = process_overture_segments(segments_gdf)
+        result = process_overture_segments(segments_gdf, travel_mode=None)
 
         expected_columns = [
             "id",
@@ -1310,6 +1853,7 @@ class TestIntegration:
         processed_segments = process_overture_segments(
             data["segment"],
             connectors_gdf=data["connector"],
+            travel_mode=None,
         )
         assert not processed_segments.empty
         assert "barrier_geometry" in processed_segments.columns

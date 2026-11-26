@@ -41,6 +41,7 @@ import geopandas as gpd
 import networkx as nx
 import numpy as np
 import pandas as pd
+import shapely
 from shapely import STRtree
 from shapely.creation import linestrings as sh_linestrings
 from shapely.geometry import LineString
@@ -1648,6 +1649,8 @@ def segments_to_graph(
     multigraph: bool = True,
     directed: bool = True,
     as_nx: bool | None = None,
+    *,
+    oneway_col: str | None = None,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph:
     r"""
     Convert a GeoDataFrame of LineString segments into a graph structure.
@@ -1671,8 +1674,8 @@ def segments_to_graph(
     multigraph : bool, default True
         If True, supports multiple edges between the same pair of nodes by
         adding an `edge_key` level to the MultiIndex. Real-world segment data
-        (e.g. from OSMnx) commonly contains parallel edges, so this is the
-        default. If False, duplicate node pairs raise a ``ValueError``.
+        commonly contains parallel edges, so this is the default. If False,
+        duplicate node pairs raise a ``ValueError``.
 
         .. versionchanged:: 0.4
             The default changed from ``False`` to ``True``, and
@@ -1696,6 +1699,23 @@ def segments_to_graph(
             ``as_nx`` is deprecated and will be removed in a future release.
             Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
             obtain a NetworkX graph.
+    oneway_col : str, optional
+        Name of a column in ``segments_gdf`` encoding per-segment travel
+        directionality when each row represents a physical road. Requires
+        ``directed=True``. Recognised values are:
+
+        - Forward-only: ``True``, ``1``, ``"yes"``, ``"true"``, ``"1"``,
+          ``"forward"``
+        - Backward-only (geometry reversed): ``-1``, ``"-1"``, ``"reverse"``,
+          ``"backward"``
+        - Bidirectional (expanded into forward and geometry-reversed backward
+          edges): ``False``, ``0``, ``"no"``, ``"false"``, ``"0"``, ``"both"``,
+          ``""``, or null
+        - Closed (omitted): ``"none"``, ``"closed"``
+
+        Segments already expanded into one row per permitted direction (for
+        example from :func:`city2graph.process_overture_segments`) do not need
+        ``oneway_col``.
 
     Returns
     -------
@@ -1712,6 +1732,8 @@ def segments_to_graph(
     ValueError
         If ``multigraph=False`` and the segments contain duplicate node pairs
         (after canonicalization when ``directed=False``).
+        If ``oneway_col`` is passed with ``directed=False``, is not a column
+        in ``segments_gdf``, or contains an unsupported value.
 
     See Also
     --------
@@ -1741,17 +1763,19 @@ def segments_to_graph(
     0            1          0                A  LINESTRING (0 0, 1 1)
     1            2          0                B  LINESTRING (1 1, 1 0)
 
-    >>> # Duplicate connections become parallel edges with distinct keys
-    >>> segments_with_duplicates = gpd.GeoDataFrame(
-    ...     {"road_name": ["A", "B", "C"]},
-    ...     geometry=[LineString([(0, 0), (1, 1)]),
-    ...               LineString([(0, 0), (1, 1)]),
-    ...               LineString([(1, 1), (1, 0)])],
-    ...     crs="EPSG:32633"
+    >>> # Expand physical segments with a one-way attribute into directed edges
+    >>> directed_segments = gpd.GeoDataFrame(
+    ...     {"oneway": ["no", "yes", "-1"]},
+    ...     geometry=[
+    ...         LineString([(0, 0), (1, 0)]),
+    ...         LineString([(1, 0), (2, 0)]),
+    ...         LineString([(2, 0), (3, 0)]),
+    ...     ],
+    ...     crs="EPSG:32633",
     ... )
-    >>> nodes_gdf, edges_gdf = segments_to_graph(segments_with_duplicates)
-    >>> print(edges_gdf.index.names)
-    ['from_node_id', 'to_node_id', 'edge_key']
+    >>> nodes_gdf, edges_gdf = segments_to_graph(
+    ...     directed_segments, directed=True, oneway_col="oneway"
+    ... )
     """
     if as_nx is not None:
         warnings.warn(
@@ -1763,6 +1787,14 @@ def segments_to_graph(
         )
     as_nx = bool(as_nx)
 
+    if oneway_col is not None:
+        if not directed:
+            msg = "oneway_col cannot be used with directed=False."
+            raise ValueError(msg)
+        if oneway_col not in segments_gdf.columns:
+            msg = f"Column {oneway_col!r} not found in segments_gdf."
+            raise ValueError(msg)
+
     processor = GeoDataProcessor()
 
     # Validate input
@@ -1770,6 +1802,11 @@ def segments_to_graph(
 
     if segments_clean is None or segments_clean.empty:
         return _empty_segments_result(segments_gdf, multigraph=multigraph, as_nx=as_nx)
+
+    if oneway_col is not None:
+        segments_clean = _expand_oneway_segments(segments_clean, oneway_col)
+        if segments_clean.empty:
+            return _empty_segments_result(segments_gdf, multigraph=multigraph, as_nx=as_nx)
 
     # Extract coordinates
     start_coords = processor.extract_coordinates(segments_clean, start=True)
@@ -1788,8 +1825,135 @@ def segments_to_graph(
     )
 
     if as_nx:
-        return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf, multigraph=multigraph)
+        return gdf_to_nx(
+            nodes=nodes_gdf,
+            edges=edges_gdf,
+            directed=directed if oneway_col is not None else False,
+            multigraph=multigraph,
+        )
     return nodes_gdf, edges_gdf
+
+
+_ONEWAY_NUMERIC_MAP: dict[float, tuple[bool, bool]] = {
+    1.0: (True, False),
+    0.0: (True, True),
+    -1.0: (False, True),
+}
+
+_ONEWAY_STRING_MAP: dict[str, tuple[bool, bool]] = {
+    "yes": (True, False),
+    "true": (True, False),
+    "1": (True, False),
+    "forward": (True, False),
+    "-1": (False, True),
+    "reverse": (False, True),
+    "backward": (False, True),
+    "no": (True, True),
+    "false": (True, True),
+    "0": (True, True),
+    "both": (True, True),
+    "": (True, True),
+    "none": (False, False),
+    "closed": (False, False),
+}
+
+
+def _parse_oneway_value(value: object, column: str) -> tuple[bool, bool]:
+    """
+    Parse a single one-way attribute value into ``(forward, backward)`` flags.
+
+    Maps boolean, numeric, string, and null one-way indicators to permitted
+    forward and backward travel flags for directed segment expansion.
+
+    Parameters
+    ----------
+    value : object
+        Cell value from ``oneway_col``.
+    column : str
+        Column name included in error messages.
+
+    Returns
+    -------
+    tuple[bool, bool]
+        ``(forward_permitted, backward_permitted)``.
+
+    Raises
+    ------
+    ValueError
+        If ``value`` is not a recognised one-way indicator.
+    """
+    if (
+        value is None
+        or value is pd.NA
+        or (isinstance(value, (float, np.floating)) and math.isnan(float(value)))
+    ):
+        return (True, True)
+    if isinstance(value, (bool, np.bool_)):
+        return (True, False) if bool(value) else (True, True)
+
+    parsed: tuple[bool, bool] | None = None
+    if isinstance(value, (int, np.integer, float, np.floating)):
+        parsed = _ONEWAY_NUMERIC_MAP.get(float(value))
+    elif isinstance(value, str):
+        parsed = _ONEWAY_STRING_MAP.get(value.strip().lower())
+
+    if parsed is not None:
+        return parsed
+
+    msg = (
+        f"Unsupported oneway value {value!r} in column {column!r}. "
+        "Expected boolean, 1/0/-1, 'yes'/'no'/'-1', 'forward'/'backward'/'both', "
+        "'none'/'closed', or null."
+    )
+    raise ValueError(msg)
+
+
+def _expand_oneway_segments(
+    segments_clean: gpd.GeoDataFrame,
+    oneway_col: str,
+) -> gpd.GeoDataFrame:
+    """
+    Expand segments according to a one-way attribute column.
+
+    Two-way segments emit both original and geometry-reversed rows, backward-only
+    segments emit a single reversed row, and closed segments are dropped.
+
+    Parameters
+    ----------
+    segments_clean : geopandas.GeoDataFrame
+        Validated LineString segments.
+    oneway_col : str
+        Name of the one-way column.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        Expanded GeoDataFrame with each row oriented in its permitted travel
+        direction.
+    """
+    row_indices: list[int] = []
+    reverse_flags: list[bool] = []
+    for idx, value in enumerate(segments_clean[oneway_col].to_numpy(dtype=object)):
+        fwd, bwd = _parse_oneway_value(value, oneway_col)
+        if fwd:
+            row_indices.append(idx)
+            reverse_flags.append(False)
+        if bwd:
+            row_indices.append(idx)
+            reverse_flags.append(True)
+
+    expanded = segments_clean.iloc[row_indices].copy().reset_index(drop=True)
+    if reverse_flags:
+        rev_mask = np.asarray(reverse_flags, dtype=bool)
+        if rev_mask.any():
+            geoms = expanded.geometry.to_numpy().copy()
+            geoms[rev_mask] = shapely.reverse(geoms[rev_mask])
+            expanded.geometry = gpd.GeoSeries(
+                geoms,
+                index=expanded.index,
+                crs=segments_clean.crs,
+            )
+    return expanded
 
 
 def _empty_segments_result(
