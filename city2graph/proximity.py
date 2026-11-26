@@ -54,6 +54,7 @@ from .utils import gdf_to_nx
 from .utils import nx_to_gdf
 from .utils import symmetrize_edges
 from .utils import validate_gdf
+from .utils.spatial import sparse_adjacency
 
 # Module logger configuration
 logger = logging.getLogger(__name__)
@@ -78,10 +79,6 @@ AUTO_NETWORK_LENGTH_ATTR = "__c2g_edge_length"
 _FAST_REAL_TYPES = (float, int, np.floating, np.integer)
 _REAL_NUMBER_TYPES = (*_FAST_REAL_TYPES, Real)
 _MAX_WEIGHT_ERROR_EXAMPLES = 3
-
-# NetworkX adds these weights with float64 rounding, or exactly for integers,
-# so the sparse search reproduces its distances. Other types keep NetworkX.
-_INTEGER_WEIGHT_TYPES = (int, np.integer)
 
 
 def _validate_preferred_network_weight(graph: nx.Graph, preferred_attr: str) -> None:
@@ -419,39 +416,10 @@ class SparseNetwork:
             Converted network, or None when the weights cannot be converted exactly.
         """
         nodes = list(graph)
-        index = {node: i for i, node in enumerate(nodes)}
-        rows: list[int] = []
-        cols: list[int] = []
-        weights: list[float] = []
-        integers = 0
-        for u, v, value in graph.edges(data=weight, default=1):
-            if isinstance(value, _INTEGER_WEIGHT_TYPES):
-                integers += 1
-            # numpy.float64 subclasses float; other numpy floats do not.
-            elif not isinstance(value, float):
-                return None
-            rows.append(index[u])
-            cols.append(index[v])
-            weights.append(float(value))
-        if 0 < integers < len(weights):
+        converted = sparse_adjacency(graph, weight, {node: i for i, node in enumerate(nodes)})
+        if converted is None:
             return None
-        row = np.asarray(rows, dtype=np.int64)
-        col = np.asarray(cols, dtype=np.int64)
-        data = np.asarray(weights, dtype=np.float64)
-        if not graph.is_directed():
-            row, col = np.concatenate([row, col]), np.concatenate([col, row])
-            data = np.concatenate([data, data])
-        finite = data < np.inf
-        has_infinite = not bool(finite.all())
-        row, col, data = row[finite], col[finite], data[finite]
-        # Keep the smallest weight of each parallel or reversed duplicate.
-        order = np.lexsort((data, col, row))
-        row, col, data = row[order], col[order], data[order]
-        first = np.ones(len(row), dtype=bool)
-        first[1:] = (row[1:] != row[:-1]) | (col[1:] != col[:-1])
-        n = len(nodes)
-        matrix = sparse.csr_matrix((data[first], (row[first], col[first])), shape=(n, n))
-        return cls(graph, weight, nodes, matrix, has_infinite, integers > 0)
+        return cls(graph, weight, nodes, *converted)
 
     def searches(
         self,
@@ -944,9 +912,8 @@ class DistanceMetric:
         """
         Yield one shortest-path search per source node in order.
 
-        Unbounded searches from several origins share a cached sparse matrix and
-        run in batches. Bounded searches stay local in NetworkX, where they avoid
-        converting the whole network. Both report the same distances and paths.
+        Searches from several origins share a cached sparse matrix. The cutoff
+        applies to each traversal in the batch.
 
         Parameters
         ----------
@@ -965,12 +932,12 @@ class DistanceMetric:
         graph, _pos, _coords, _ids, weight = self._get_network_support()
         # Conversion costs about one unbounded NetworkX search, so a single
         # origin is searched directly unless a matrix already exists.
-        if cutoff is None and (len(sources) > 1 or self._sparse_network is not None):
+        if len(sources) > 1 or self._sparse_network is not None:
             if self._sparse_network is None:
                 self._sparse_network = (SparseNetwork.from_graph(graph, weight),)
             network = self._sparse_network[0]
             if network is not None:
-                yield from network.searches(sources, targets)
+                yield from network.searches(sources, targets, cutoff)
                 return
         for source in sources:
             search = NetworkXSearch(graph, source, weight, cutoff)

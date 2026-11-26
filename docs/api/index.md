@@ -19,6 +19,7 @@ from the top-level package, so the examples use `import city2graph as c2g`.
 | Generate and inspect public transport service | `create_gtfs`, `load_osm_transport`, `get_gtfs_summary`, `save_gtfs` | [Transportation](transportation.md) |
 | Load GTFS or GBFS data into DuckDB | `load_gtfs`, `load_gbfs` | [Transportation](transportation.md) |
 | Convert GTFS into a public transport graph | `get_od_pairs`, `travel_summary_graph` | [Transportation](transportation.md) |
+| Calculate OD travel times and catchments | `network_costs`, `network_cost_matrix` | [Mobility](mobility.md) |
 | Convert an OD matrix into a weighted spatial graph | `od_matrix_to_graph` | [Mobility](mobility.md) |
 | Build proximity, contiguity, bridge, or containment relations | `knn_graph`, `waxman_graph`, `contiguity_graph`, `bridge_nodes`, `group_nodes` | [Proximity](proximity.md) |
 | Compose typed relations for a heterogeneous GNN | `add_metapaths`, `add_metapaths_by_weight` | [Metapath](metapath.md) |

@@ -17,6 +17,8 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import shapely
+from scipy import sparse
+from scipy.sparse import csgraph
 from scipy.spatial import cKDTree
 from shapely.geometry import GeometryCollection
 from shapely.geometry import LineString
@@ -403,6 +405,51 @@ def _normalize_center_points(
     return typing.cast("list[Point]", center_points)
 
 
+def minimum_distances(matrix: sparse.csr_matrix, indices: Sequence[int], limit: float) -> np.ndarray:
+    """Run one bounded multi-source search on an oriented CSR matrix."""
+    return csgraph.dijkstra(matrix, indices=indices, limit=limit, min_only=True)
+
+
+def adjacency(row: np.ndarray, col: np.ndarray, data: np.ndarray, n: int) -> sparse.csr_matrix:
+    """Build a directed CSR retaining zero arcs and the cheapest parallel arc."""
+    # Keep the smallest weight of each parallel or reversed duplicate.
+    order = np.lexsort((data, col, row))
+    row, col, data = row[order], col[order], data[order]
+    first = np.ones(len(row), dtype=bool)
+    first[1:] = (row[1:] != row[:-1]) | (col[1:] != col[:-1])
+    return sparse.csr_matrix((data[first], (row[first], col[first])), shape=(n, n))
+
+
+def sparse_adjacency(graph: nx.Graph, weight: str, index: dict) -> tuple[sparse.csr_matrix, bool, bool] | None:
+    """Convert numeric NetworkX weights, preserving the distance metric's fallback rules."""
+    rows: list[int] = []
+    cols: list[int] = []
+    weights: list[float] = []
+    integers = 0
+    for u, v, value in graph.edges(data=weight, default=1):
+        if isinstance(value, (int, np.integer)):
+            integers += 1
+        # numpy.float64 subclasses float; other numpy floats do not.
+        elif not isinstance(value, float):
+            return None
+        rows.append(index[u])
+        cols.append(index[v])
+        weights.append(float(value))
+    if 0 < integers < len(weights):
+        return None
+    row = np.asarray(rows, dtype=np.int64)
+    col = np.asarray(cols, dtype=np.int64)
+    data = np.asarray(weights, dtype=np.float64)
+    if not graph.is_directed():
+        row, col = np.concatenate([row, col]), np.concatenate([col, row])
+        data = np.concatenate([data, data])
+    finite = data < np.inf
+    has_infinite = not bool(finite.all())
+    row, col, data = row[finite], col[finite], data[finite]
+    matrix = adjacency(row, col, data, len(index))
+    return matrix, has_infinite, integers > 0
+
+
 def _compute_center_node_distances(
     graph: nx.Graph | nx.MultiGraph,
     center_point: Point | Sequence[Point] | gpd.GeoSeries | gpd.GeoDataFrame,
@@ -448,6 +495,11 @@ def _compute_center_node_distances(
         return {}
 
     deduped_sources = list(dict.fromkeys(source_nodes))
+    index = {node: i for i, node in enumerate(graph)}
+    converted = sparse_adjacency(graph, edge_attr or "length", index)
+    if converted is not None and cutoff >= 0 and np.all(converted[0].data >= 0):
+        lengths = minimum_distances(converted[0], [index[node] for node in deduped_sources], cutoff)
+        return {node: lengths[i] for node, i in index.items() if np.isfinite(lengths[i])}
     distances = nx.multi_source_dijkstra_path_length(
         graph,
         deduped_sources,
