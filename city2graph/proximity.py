@@ -31,6 +31,9 @@ if TYPE_CHECKING:  # Only needed for typing annotations
     from collections.abc import Iterator
     from collections.abc import Sequence
 
+    from scipy import sparse
+
+
 # Third-party imports
 import geopandas as gpd
 import libpysal
@@ -38,8 +41,6 @@ import networkx as nx
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-from scipy import sparse
-from scipy.sparse import csgraph
 from scipy.spatial import Delaunay
 from scipy.spatial import cKDTree
 from scipy.spatial import distance as sdist
@@ -47,9 +48,12 @@ from shapely import get_coordinates
 from shapely.geometry import LineString
 
 # Local imports
-from ._processing import frame_records
-from ._processing import row_batches
 from .base import GeoDataProcessor
+from .base import adjacency
+from .base import closest_positions
+from .base import distance_batches
+from .base import frame_records
+from .base import row_batches
 from .utils import gdf_to_nx
 from .utils import nx_to_gdf
 from .utils import symmetrize_edges
@@ -78,10 +82,6 @@ AUTO_NETWORK_LENGTH_ATTR = "__c2g_edge_length"
 _FAST_REAL_TYPES = (float, int, np.floating, np.integer)
 _REAL_NUMBER_TYPES = (*_FAST_REAL_TYPES, Real)
 _MAX_WEIGHT_ERROR_EXAMPLES = 3
-
-# NetworkX adds these weights with float64 rounding, or exactly for integers,
-# so the sparse search reproduces its distances. Other types keep NetworkX.
-_INTEGER_WEIGHT_TYPES = (int, np.integer)
 
 
 def _validate_preferred_network_weight(graph: nx.Graph, preferred_attr: str) -> None:
@@ -424,8 +424,11 @@ class SparseNetwork:
         cols: list[int] = []
         weights: list[float] = []
         integers = 0
+        exact_integer_limit = (2**53) // max(1, len(nodes) - 1)
         for u, v, value in graph.edges(data=weight, default=1):
-            if isinstance(value, _INTEGER_WEIGHT_TYPES):
+            if isinstance(value, (int, np.integer)):
+                if int(value) > exact_integer_limit:
+                    return None
                 integers += 1
             # numpy.float64 subclasses float; other numpy floats do not.
             elif not isinstance(value, float):
@@ -441,16 +444,12 @@ class SparseNetwork:
         if not graph.is_directed():
             row, col = np.concatenate([row, col]), np.concatenate([col, row])
             data = np.concatenate([data, data])
+        if np.any(np.isnan(data)):
+            return None
         finite = data < np.inf
         has_infinite = not bool(finite.all())
         row, col, data = row[finite], col[finite], data[finite]
-        # Keep the smallest weight of each parallel or reversed duplicate.
-        order = np.lexsort((data, col, row))
-        row, col, data = row[order], col[order], data[order]
-        first = np.ones(len(row), dtype=bool)
-        first[1:] = (row[1:] != row[:-1]) | (col[1:] != col[:-1])
-        n = len(nodes)
-        matrix = sparse.csr_matrix((data[first], (row[first], col[first])), shape=(n, n))
+        matrix = adjacency(row, col, data, len(nodes))
         return cls(graph, weight, nodes, matrix, has_infinite, integers > 0)
 
     def searches(
@@ -481,14 +480,11 @@ class SparseNetwork:
         """
         source_index = np.asarray([self.index[s] for s in sources], dtype=np.int64)
         target_index = np.asarray([self.index[t] for t in targets], dtype=np.int64)
-        for batch in row_batches(len(source_index), len(self.nodes)):
-            distances, predecessors = csgraph.dijkstra(
-                self.matrix,
-                directed=True,
-                indices=source_index[batch],
-                return_predecessors=True,
-                limit=np.inf if cutoff is None else cutoff,
-            )
+        limit = np.inf if cutoff is None else cutoff
+        for batch, distances, predecessors in distance_batches(
+            self.matrix, source_index, limit, paths=True
+        ):
+            assert predecessors is not None
             for offset, position in enumerate(range(batch.start, batch.stop)):
                 search = SparseSearch(
                     self, sources[position], distances[offset], predecessors[offset], cutoff
@@ -944,9 +940,8 @@ class DistanceMetric:
         """
         Yield one shortest-path search per source node in order.
 
-        Unbounded searches from several origins share a cached sparse matrix and
-        run in batches. Bounded searches stay local in NetworkX, where they avoid
-        converting the whole network. Both report the same distances and paths.
+        Searches from several origins share a cached sparse matrix. The cutoff
+        applies to each traversal in the batch.
 
         Parameters
         ----------
@@ -965,12 +960,12 @@ class DistanceMetric:
         graph, _pos, _coords, _ids, weight = self._get_network_support()
         # Conversion costs about one unbounded NetworkX search, so a single
         # origin is searched directly unless a matrix already exists.
-        if cutoff is None and (len(sources) > 1 or self._sparse_network is not None):
+        if len(sources) > 1 or self._sparse_network is not None:
             if self._sparse_network is None:
                 self._sparse_network = (SparseNetwork.from_graph(graph, weight),)
             network = self._sparse_network[0]
             if network is not None:
-                yield from network.searches(sources, targets)
+                yield from network.searches(sources, targets, cutoff)
                 return
         for source in sources:
             search = NetworkXSearch(graph, source, weight, cutoff)
@@ -1580,7 +1575,7 @@ def knn_graph(
         n = len(builder.coords)
         selections: list[npt.NDArray[np.intp]] = [np.empty(0, dtype=np.intp)] * n
         for indices, row in metric._iter_network_rows(builder.coords):
-            nearest = np.argsort(row, kind="stable")[: k + 1]
+            nearest = closest_positions(row, k + 1)
             for i in indices:
                 neighbours = nearest[nearest != i][:k]
                 selections[i] = neighbours[row[neighbours] < np.inf]

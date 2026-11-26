@@ -213,3 +213,14 @@ service. Results record every condition, mean leg time, section traversals and
 comparison metrics. These are scenarios rather than calibrated estimates or
 confidence intervals. Generalising to a city or mode requires suitable reference
 coverage and independently justified operating assumptions.
+
+## Origin-destination network costs
+
+`benchmarks.network_costs` measures end-to-end `network_costs()` queries across node snapping, edge projection, and bounded top-k workloads. The fixtures use a 64 by 64 grid, 24 destinations, and a fixed seed. The `node` case uses one million origins, the `edge` case uses 50,000 projected origins, and the `bounded` case uses 3,000 origins with a cost limit of eight and two destinations per origin. The output digest includes the complete ordered OD table.
+
+Run cold workloads with one repetition and no warm-up. Use the same seed and case in both checkouts. Each run records elapsed time, traced allocations and process peak RSS.
+
+```bash
+uv run python -m benchmarks.network_costs --case edge --seed 310 --repeat 1 --warmup 0
+uv run python -m benchmarks.network_costs --case edge --seed 310 --repeat 1 --warmup 0 --package-root /path/to/checkout
+```

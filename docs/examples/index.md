@@ -15,6 +15,7 @@ The tutorials include Jupyter notebooks built from open data and focused guides 
 | Analyse transit without a GTFS feed | OpenStreetMap route relations or custom tables | Synthetic GTFS, transit graph and accessibility isochrones for any mapped city | [Creating GTFS](creating_gtfs.md) |
 | Analyse public transport | London GTFS feed | Stop-to-stop travel-time graph and multimodal isochrones | [GTFS transit graphs](gtfs.ipynb) |
 | Fill isochrone holes | Synthetic road network | Buffer footprints with optional hole filling and clipping | [Buffer isochrone holes](isochrone_holes.md) |
+| Find the closest facility | Origins, facilities and a weighted spatial graph | Network cost and access distance | [Utils](../api/utils.md#network-costs) |
 | Model migration or commuting | OD edge list or adjacency matrix | Weighted mobility graph | [OD matrices](generating_graphs_from_od_matrix.ipynb) |
 | Connect POIs and zones | Points, polygons, and street networks | KNN, Delaunay, Gilbert, Waxman, and contiguity graphs | [Spatial proximity graphs](generating_graphs_by_proximity.ipynb) |
 | Add composite relations | Typed nodes and edges | Metapath-derived edges for heterogeneous GNNs | [Metapath construction](add_metapaths.ipynb) |

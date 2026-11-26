@@ -1,27 +1,32 @@
 """
-Base Module for Graph Conversion.
+Layer 0 foundation module for city2graph.
 
-This module provides foundational classes for graph conversion operations,
-including metadata management, data validation, and base converter interfaces.
-These classes serve as the core building blocks for the city2graph package's
-graph conversion functionality across different formats (NetworkX, PyTorch Geometric).
+This module provides dependency-free foundational classes for graph conversion
+(metadata management, data validation, and base converter interfaces) together
+with shared low-level primitives for row batching, edge-endpoint extraction,
+sparse adjacency construction, batched shortest-path traversal, and centre-node
+reachability queries.
 """
 
 # Standard library imports
 import logging
+import typing
 import warnings
 from abc import ABC
 from abc import abstractmethod
-from typing import TYPE_CHECKING
+from collections.abc import Iterator
+from collections.abc import Sequence
 from typing import Any
 
 # Third-party imports
 import geopandas as gpd
 import networkx as nx
+import numpy as np
 import pandas as pd
-
-if TYPE_CHECKING:
-    import numpy as np
+from scipy import sparse
+from scipy.sparse import csgraph
+from scipy.spatial import cKDTree
+from shapely.geometry import Point
 
 # Module logger configuration
 logger = logging.getLogger(__name__)
@@ -1120,3 +1125,395 @@ class GeoDataProcessor:
         src_ids = [t[1] for t in index.get_level_values(0)]
         dst_ids = [t[1] for t in index.get_level_values(1)]
         return pd.MultiIndex.from_arrays([src_ids, dst_ids], names=list(names))
+
+
+def row_batches(rows: int, columns: int) -> Iterator[slice]:
+    """
+    Generate bounded slices in original row order.
+
+    A single row may exceed the byte budget; rows are never truncated.
+
+    Parameters
+    ----------
+    rows : int
+        Total number of rows.
+    columns : int
+        Number of float64 values per row.
+
+    Yields
+    ------
+    slice
+        Contiguous row slice containing at most 256 rows.
+    """
+    size = max(1, min(256, (8 * 1024 * 1024) // max(8 * columns, 1)))
+    for start in range(0, rows, size):
+        yield slice(start, min(start + size, rows))
+
+
+def frame_records(frame: pd.DataFrame) -> Iterator[dict[Any, Any]]:
+    """
+    Yield independent attribute dictionaries.
+
+    Bounded record batches preserve pandas scalar boxing, including nullable values,
+    without retaining a full list of attributes.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        Source table; its column order is retained.
+
+    Yields
+    ------
+    dict[str, Any]
+        Attributes for one row.
+    """
+    for batch in row_batches(len(frame), len(frame.columns)):
+        yield from frame.iloc[batch].to_dict("records")
+
+
+def column_or_level(df: pd.DataFrame | gpd.GeoDataFrame, name: str) -> Any | None:  # noqa: ANN401
+    """
+    Get values from a column or index level by name.
+
+    This helper abstracts the logic for retrieving data whether it resides in a
+    DataFrame column or an index level, prioritizing columns.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame or geopandas.GeoDataFrame
+        The DataFrame to search.
+    name : str
+        The name of the column or index level.
+
+    Returns
+    -------
+    Any or None
+        The values if found, otherwise None.
+    """
+    if name in df.columns:
+        return df[name].to_numpy()
+    if isinstance(df.index, pd.MultiIndex) and name in df.index.names:
+        return df.index.get_level_values(name)
+    if df.index.name == name:
+        return df.index.to_numpy()
+    return None
+
+
+def edge_endpoints(edges_df: pd.DataFrame) -> tuple[Any, Any] | None:
+    """
+    Read named endpoints or the first two levels of an edge index.
+
+    A frame without endpoint identifiers can use geometry-based topology.
+
+    Parameters
+    ----------
+    edges_df : pandas.DataFrame
+        Spatial edge records in their original order.
+
+    Returns
+    -------
+    tuple or None
+        Source and target identifiers, or None for implicit nodes.
+    """
+    candidates = [
+        ("from_node_id", "to_node_id"),
+        ("source_id", "target_id"),
+        ("u", "v"),
+        ("source", "target"),
+    ]
+    for u_name, v_name in candidates:
+        u = column_or_level(edges_df, u_name)
+        v = column_or_level(edges_df, v_name)
+        if u is not None and v is not None:
+            return u, v
+    if isinstance(edges_df.index, pd.MultiIndex) and edges_df.index.nlevels >= 2:
+        return edges_df.index.get_level_values(0), edges_df.index.get_level_values(1)
+    return None
+
+
+def identify_source_target_cols(
+    edges_df: gpd.GeoDataFrame,
+    source_col: str | None = None,
+    target_col: str | None = None,
+) -> tuple[Any, Any]:
+    """
+    Identify source and target node identifiers from a GeoDataFrame.
+
+    Checks index levels and columns for standard naming conventions.
+    If source_col and target_col are provided, they are used explicitly.
+
+    Parameters
+    ----------
+    edges_df : geopandas.GeoDataFrame
+        The edges GeoDataFrame.
+    source_col : str, optional
+        Name of the column or index level representing the source node ID.
+    target_col : str, optional
+        Name of the column or index level representing the target node ID.
+
+    Returns
+    -------
+    tuple
+        (u_values, v_values) arrays or Series of source and target node IDs.
+
+    Raises
+    ------
+    ValueError
+        If source/target columns cannot be identified.
+    """
+    if source_col and target_col:
+        u = column_or_level(edges_df, source_col)
+        v = column_or_level(edges_df, target_col)
+        if u is not None and v is not None:
+            return u, v
+        missing = []
+        if u is None:
+            missing.append(source_col)
+        if v is None:
+            missing.append(target_col)
+        msg = f"Source/Target column(s) not found: {', '.join(missing)}"
+        raise ValueError(msg)
+
+    endpoints = edge_endpoints(edges_df)
+    if endpoints is not None:
+        return endpoints
+
+    if len(edges_df.columns) >= 2:
+        return edges_df.iloc[:, 0].to_numpy(), edges_df.iloc[:, 1].to_numpy()
+
+    msg = "Could not identify source and target node columns/indices in edges GeoDataFrame."
+    raise ValueError(msg)
+
+
+def adjacency(row: np.ndarray, col: np.ndarray, data: np.ndarray, n: int) -> sparse.csr_matrix:
+    """
+    Build directed CSR adjacency from weighted arcs.
+
+    Parallel arcs retain their minimum cost and explicit zero-cost arcs remain traversable.
+
+    Parameters
+    ----------
+    row : ndarray
+        Source vertex indices for each arc.
+    col : ndarray
+        Destination vertex indices for each arc.
+    data : ndarray
+        Non-negative traversal weights in arc order.
+    n : int
+        Total number of vertices, including isolated vertices.
+
+    Returns
+    -------
+    scipy.sparse.csr_matrix
+        Weighted adjacency in vertex order.
+    """
+    order = np.lexsort((data, col, row))
+    row, col, data = row[order], col[order], data[order]
+    first = np.ones(len(row), dtype=bool)
+    first[1:] = (row[1:] != row[:-1]) | (col[1:] != col[:-1])
+    return sparse.csr_matrix((data[first], (row[first], col[first])), shape=(n, n))
+
+
+def distance_batches(
+    matrix: sparse.csr_matrix, sources: np.ndarray, limit: float, *, paths: bool = False
+) -> Iterator[tuple[slice, np.ndarray, np.ndarray | None]]:
+    """
+    Search from multiple vertices in bounded batches.
+
+    Path-producing proximity graphs can retain predecessors from the same
+    traversal. Cost-only callers allocate just the distance rows.
+
+    Parameters
+    ----------
+    matrix : scipy.sparse.csr_matrix
+        Weighted directed adjacency.
+    sources : ndarray
+        Vertex indices in search order.
+    limit : float
+        Inclusive distance cutoff.
+    paths : bool, optional
+        Request predecessor rows alongside distances.
+
+    Yields
+    ------
+    tuple
+        Source slice, distance rows and optional predecessor rows.
+    """
+    for batch in row_batches(len(sources), matrix.shape[0]):
+        result = csgraph.dijkstra(
+            matrix, indices=sources[batch], limit=limit, return_predecessors=paths
+        )
+        if paths:
+            yield batch, result[0], result[1]
+        else:
+            yield batch, result, None
+
+
+def closest_positions(costs: np.ndarray, k: int) -> np.ndarray:
+    """
+    Select the k lowest costs with stable ties.
+
+    Partition once to find the boundary cost and sort only the retained rows.
+
+    Parameters
+    ----------
+    costs : ndarray
+        Candidate costs in destination order.
+    k : int
+        Maximum number of positions to return.
+
+    Returns
+    -------
+    ndarray
+        Destination positions ranked by cost and then input order.
+    """
+    if k >= len(costs):
+        return np.argsort(costs, kind="stable")
+    boundary = np.partition(costs, k - 1)[k - 1]
+    nearer = np.flatnonzero(costs < boundary)
+    tied = np.flatnonzero(costs == boundary)[: k - len(nearer)]
+    return np.concatenate((nearer[np.argsort(costs[nearer], kind="stable")], tied))
+
+
+def normalize_center_points(
+    center_point: Point | Sequence[Point] | gpd.GeoSeries | gpd.GeoDataFrame,
+) -> list[Point]:
+    """
+    Normalize center point inputs to a list of Point geometries.
+
+    This ensures downstream snapping logic can always iterate over a
+    homogeneous list of Point objects.
+
+    Parameters
+    ----------
+    center_point : Point or Sequence[Point] or geopandas.GeoSeries or geopandas.GeoDataFrame
+        The center point input.
+
+    Returns
+    -------
+    list[Point]
+        The normalized center points.
+    """
+    if isinstance(center_point, gpd.GeoDataFrame):
+        center_points = center_point.geometry.tolist()
+    elif isinstance(center_point, gpd.GeoSeries):
+        center_points = center_point.tolist()
+    elif isinstance(center_point, Sequence) and not isinstance(center_point, str | bytes):
+        center_points = list(center_point)
+    else:
+        center_points = [center_point]
+
+    invalid_points = [point for point in center_points if not isinstance(point, Point)]
+    if invalid_points:
+        msg = (
+            "center_point must be a Point, a sequence of Point objects, GeoSeries, or GeoDataFrame."
+        )
+        raise TypeError(msg)
+
+    return typing.cast("list[Point]", center_points)
+
+
+def node_positions(graph: nx.Graph | nx.MultiGraph) -> dict[Any, Any]:
+    """
+    Extract node coordinates from ``pos`` or OSMnx-style ``x``/``y`` attributes.
+
+    Nodes with a ``pos`` attribute retain it as-is; nodes missing ``pos`` fall
+    back to ``(x, y)`` when both coordinates are present.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+        Input graph whose node coordinates should be extracted.
+
+    Returns
+    -------
+    dict[Any, Any]
+        Mapping of node identifiers to coordinate tuples.
+    """
+    positions: dict[Any, Any] = dict(nx.get_node_attributes(graph, "pos"))
+    if len(positions) == graph.number_of_nodes():
+        return positions
+    for node, data in graph.nodes(data=True):
+        if node not in positions and "x" in data and "y" in data:
+            positions[node] = (data["x"], data["y"])
+    return positions
+
+
+def compute_center_node_distances(
+    graph: nx.Graph | nx.MultiGraph,
+    center_point: Point | Sequence[Point] | gpd.GeoSeries | gpd.GeoDataFrame,
+    edge_attr: str | None,
+    cutoff: float,
+) -> dict[Any, float]:
+    """
+    Compute shortest-path distances from snapped center points once.
+
+    Each center point is snapped to its nearest node, and a single multi-source
+    Dijkstra run is used to obtain distances to all reachable nodes.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+        The graph to traverse.
+    center_point : Point or Sequence[Point] or geopandas.GeoSeries or geopandas.GeoDataFrame
+        Center points that will be snapped to the nearest graph nodes.
+    edge_attr : str or None
+        Edge attribute used as traversal weight.
+    cutoff : float
+        Maximum distance used to limit traversal.
+
+    Returns
+    -------
+    dict[Any, float]
+        Reachable node distances keyed by node id.
+    """
+    pos_dict = node_positions(graph)
+    if not pos_dict:
+        return {}
+
+    node_ids = list(pos_dict.keys())
+    coordinates = list(pos_dict.values())
+    tree = cKDTree(coordinates)
+
+    points = normalize_center_points(center_point)
+    if not len(points):
+        return {}
+    _, nearest = tree.query([(p.x, p.y) for p in points])
+    deduped_sources = [node_ids[i] for i in np.unique(nearest)]
+
+    distances = nx.multi_source_dijkstra_path_length(
+        graph,
+        deduped_sources,
+        cutoff=cutoff,
+        weight=edge_attr or "length",
+    )
+    return typing.cast("dict[Any, float]", distances)
+
+
+def build_reachable_subgraph(
+    graph: nx.Graph | nx.MultiGraph,
+    distances: dict[Any, float],
+    threshold: float,
+) -> nx.Graph | nx.MultiGraph:
+    """
+    Induce a reachable subgraph from precomputed node distances.
+
+    Nodes with shortest-path distance less than or equal to the threshold are
+    retained, preserving graph type and edge attributes.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+        Source graph.
+    distances : dict[Any, float]
+        Precomputed shortest-path distances.
+    threshold : float
+        Threshold used to keep nodes.
+
+    Returns
+    -------
+    networkx.Graph or networkx.MultiGraph
+        Reachable subgraph view.
+    """
+    reachable_nodes = [node for node, distance in distances.items() if distance <= threshold]
+    return graph.subgraph(reachable_nodes)

@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
+import importlib
+import sys
+
 import pytest
 
 from city2graph import utils
 from city2graph.utils import conversion as conversion_utils
-from city2graph.utils import spatial as spatial_utils
+from city2graph.utils import distance as distance_utils
+from city2graph.utils import isochrone as isochrone_utils
+from city2graph.utils import plotting as plotting_utils
+from city2graph.utils import tessellation as tessellation_utils
 from city2graph.utils import topology as topology_utils
 
 
 class TestPublicUtilityExports:
     """Verify compatibility exports and focused public submodules."""
 
-    def test_root_all_is_unchanged(self) -> None:
-        """The package-level wildcard API should match the legacy module."""
+    def test_root_all_matches_public_api(self) -> None:
+        """The package-level wildcard API should match the expected utility exports."""
         assert utils.__all__ == [
             "canonicalize_edges",
             "clip_graph",
@@ -23,6 +29,8 @@ class TestPublicUtilityExports:
             "dual_graph",
             "filter_graph_by_distance",
             "gdf_to_nx",
+            "network_cost_matrix",
+            "network_costs",
             "nx_to_gdf",
             "nx_to_rx",
             "plot_graph",
@@ -47,10 +55,12 @@ class TestPublicUtilityExports:
             ("dual_graph", topology_utils),
             ("remove_isolated_components", topology_utils),
             ("symmetrize_edges", topology_utils),
-            ("create_isochrone", spatial_utils),
-            ("create_tessellation", spatial_utils),
-            ("filter_graph_by_distance", spatial_utils),
-            ("plot_graph", spatial_utils),
+            ("filter_graph_by_distance", distance_utils),
+            ("network_cost_matrix", distance_utils),
+            ("network_costs", distance_utils),
+            ("create_isochrone", isochrone_utils),
+            ("create_tessellation", tessellation_utils),
+            ("plot_graph", plotting_utils),
         ],
     )
     def test_root_exports_are_direct_aliases(self, name: str, owner: object) -> None:
@@ -60,4 +70,16 @@ class TestPublicUtilityExports:
     def test_legacy_non_wildcard_exports_remain_available(self) -> None:
         """Previously importable compatibility names should remain accessible."""
         assert utils.NxConverter is conversion_utils.NxConverter
-        assert utils.MATPLOTLIB_AVAILABLE is spatial_utils.MATPLOTLIB_AVAILABLE
+        assert utils.MATPLOTLIB_AVAILABLE is plotting_utils.MATPLOTLIB_AVAILABLE
+
+    def test_deprecated_spatial_shim_reexports_legacy_symbols(self) -> None:
+        """Importing city2graph.utils.spatial emits DeprecationWarning and preserves symbols."""
+        sys.modules.pop("city2graph.utils.spatial", None)
+        with pytest.warns(DeprecationWarning, match=r"city2graph\.utils\.spatial is deprecated"):
+            spatial_utils = importlib.import_module("city2graph.utils.spatial")
+
+        assert spatial_utils.create_isochrone is isochrone_utils.create_isochrone
+        assert spatial_utils.create_tessellation is tessellation_utils.create_tessellation
+        assert spatial_utils.filter_graph_by_distance is distance_utils.filter_graph_by_distance
+        assert spatial_utils.plot_graph is plotting_utils.plot_graph
+        assert spatial_utils.MATPLOTLIB_AVAILABLE is plotting_utils.MATPLOTLIB_AVAILABLE

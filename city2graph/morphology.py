@@ -48,6 +48,8 @@ from shapely.geometry import Point
 
 # Local imports
 from .base import GeoDataProcessor
+from .base import build_reachable_subgraph
+from .base import compute_center_node_distances
 from .proximity import contiguity_graph
 from .utils import create_tessellation
 from .utils import dual_graph
@@ -55,8 +57,6 @@ from .utils import filter_graph_by_distance
 from .utils import gdf_to_nx
 from .utils import nx_to_gdf
 from .utils import symmetrize_edges
-from .utils.spatial import _build_reachable_subgraph
-from .utils.spatial import _compute_center_node_distances
 
 if typing.TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
@@ -709,7 +709,7 @@ def _prepare_morphology(  # noqa: PLR0913
     buffer_distances = None
     if center_point is not None and has_distance and not segments_gdf.empty:
         buffer_graph = gdf_to_nx(nodes=segment_graph[0], edges=segment_graph[1])
-        buffer_distances = _compute_center_node_distances(
+        buffer_distances = compute_center_node_distances(
             buffer_graph, center_point=center_point, edge_attr="length", cutoff=math.inf
         )
 
@@ -853,7 +853,7 @@ def _segments_for_distance(
             distance if math.isinf(context.clipping_buffer) else distance + context.clipping_buffer
         )
         if context.buffer_graph is not None and context.buffer_distances is not None:
-            segments_buffer_graph = _build_reachable_subgraph(
+            segments_buffer_graph = build_reachable_subgraph(
                 context.buffer_graph, context.buffer_distances, buffer_radius
             )
         else:
