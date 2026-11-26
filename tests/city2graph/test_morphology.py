@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 from geopandas.testing import assert_geodataframe_equal
 from pyproj import Transformer
+from scipy.sparse import csgraph
 from shapely import transform
 from shapely.geometry import LineString
 from shapely.geometry import Point
@@ -29,7 +30,6 @@ from city2graph.morphology import movement_to_movement_graph
 from city2graph.morphology import place_to_movement_graph
 from city2graph.morphology import place_to_place_graph
 from city2graph.morphology import segments_to_graph
-from city2graph.utils import spatial
 from tests.city2graph import helpers
 from tests.city2graph.helpers import assert_as_nx_deprecation
 from tests.city2graph.helpers import assert_valid_nx_graph
@@ -1891,8 +1891,8 @@ class TestMorphologicalGraphs:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A list of distances yields a dict of (nodes, edges) keyed by distance."""
-        search = Mock(wraps=spatial.minimum_distances)
-        monkeypatch.setattr(spatial, "minimum_distances", search)
+        search = Mock(wraps=csgraph.dijkstra)
+        monkeypatch.setattr(csgraph, "dijkstra", search)
         distances = [2.0, 20.0]
 
         result = morphological_graphs(

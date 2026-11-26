@@ -1125,6 +1125,15 @@ class TestCreateTessellation:
 class TestFilterGraphByDistance:
     """Tests for ``filter_graph_by_distance``."""
 
+    def test_preserves_integer_threshold_above_float_precision(self) -> None:
+        """A road just above an exactly representable limit remains outside the subgraph."""
+        graph = nx.Graph()
+        graph.add_node(0, pos=(0, 0))
+        graph.add_node(1, pos=(1, 0))
+        graph.add_edge(0, 1, length=2**53 + 1)
+        result = utils.filter_graph_by_distance(graph, Point(0, 0), threshold=2**53)
+        assert set(result) == {0}
+
     @pytest.mark.parametrize(
         ("graph_fixture", "as_nx", "center_fixture", "distance", "expect_empty"),
         [

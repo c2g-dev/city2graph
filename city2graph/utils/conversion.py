@@ -18,6 +18,8 @@ import rustworkx as rx
 from shapely.geometry import LineString
 from shapely.geometry import Point
 
+from city2graph._processing import column_or_level
+from city2graph._processing import edge_endpoints
 from city2graph._processing import frame_records
 from city2graph.base import BaseGraphConverter
 from city2graph.base import GeoDataProcessor
@@ -1671,35 +1673,6 @@ def _ensure_metadata_index_dict(
     return result
 
 
-def _get_col_or_level(df: pd.DataFrame | gpd.GeoDataFrame, name: str) -> Any | None:  # noqa: ANN401
-    """
-    Get values from a column or index level by name.
-
-    This helper abstracts the logic for retrieving data whether it resides in a
-    DataFrame column or an index level, prioritizing columns.
-
-    Parameters
-    ----------
-    df : pandas.DataFrame or geopandas.GeoDataFrame
-        The DataFrame to search.
-    name : str
-        The name of the column or index level.
-
-    Returns
-    -------
-    Any or None
-        The values if found, otherwise None.
-    """
-    if name in df.columns:
-        return df[name].to_numpy()
-    if isinstance(df.index, pd.MultiIndex) and name in df.index.names:
-        return df.index.get_level_values(name)
-    # Handle standard Index with a name
-    if df.index.name == name:
-        return df.index.to_numpy()
-    return None
-
-
 def _identify_source_target_cols(
     edges_df: gpd.GeoDataFrame,
     source_col: str | None = None,
@@ -1732,8 +1705,8 @@ def _identify_source_target_cols(
     """
     # 1. Explicit Specification
     if source_col and target_col:
-        u = _get_col_or_level(edges_df, source_col)
-        v = _get_col_or_level(edges_df, target_col)
+        u = column_or_level(edges_df, source_col)
+        v = column_or_level(edges_df, target_col)
 
         if u is not None and v is not None:
             return u, v
@@ -1747,24 +1720,9 @@ def _identify_source_target_cols(
         msg = f"Source/Target column(s) not found: {', '.join(missing)}"
         raise ValueError(msg)
 
-    # 2. Implicit Candidates
-    # List of (u_name, v_name) pairs to check
-    candidates = [
-        ("from_node_id", "to_node_id"),
-        ("source_id", "target_id"),
-        ("u", "v"),
-        ("source", "target"),
-    ]
-
-    for u_name, v_name in candidates:
-        u = _get_col_or_level(edges_df, u_name)
-        v = _get_col_or_level(edges_df, v_name)
-        if u is not None and v is not None:
-            return u, v
-
-    # 3. Fallback: MultiIndex position (first two levels)
-    if isinstance(edges_df.index, pd.MultiIndex) and edges_df.index.nlevels >= 2:
-        return edges_df.index.get_level_values(0), edges_df.index.get_level_values(1)
+    endpoints = edge_endpoints(edges_df)
+    if endpoints is not None:
+        return endpoints
 
     # 4. Fallback: Column position (first two columns)
     if len(edges_df.columns) >= 2:

@@ -4,7 +4,6 @@
 import logging
 import math
 import typing
-from collections.abc import Iterator
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import partial
@@ -18,8 +17,6 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import shapely
-from scipy import sparse
-from scipy.sparse import csgraph
 from scipy.spatial import cKDTree
 from shapely.geometry import GeometryCollection
 from shapely.geometry import LineString
@@ -28,6 +25,9 @@ from shapely.geometry import MultiPolygon
 from shapely.geometry import Point
 from shapely.geometry import Polygon
 from shapely.geometry.base import BaseGeometry
+
+from city2graph.routing._sparse import minimum_distances
+from city2graph.routing._sparse import sparse_adjacency
 
 try:
     import matplotlib.pyplot as plt
@@ -406,146 +406,6 @@ def _normalize_center_points(
     return typing.cast("list[Point]", center_points)
 
 
-def distance_batches(
-    matrix: sparse.csr_matrix, sources: np.ndarray, limit: float, *, paths: bool = False
-) -> Iterator[tuple[slice, np.ndarray, np.ndarray | None]]:
-    """
-    Search from multiple vertices in bounded batches.
-
-    Path-producing proximity graphs can retain predecessors from the same
-    traversal. Cost-only callers allocate just the distance rows.
-
-    Parameters
-    ----------
-    matrix : scipy.sparse.csr_matrix
-        Weighted directed adjacency.
-    sources : ndarray
-        Vertex indices in search order.
-    limit : float
-        Inclusive distance cutoff.
-    paths : bool, optional
-        Request predecessor rows alongside distances.
-
-    Yields
-    ------
-    tuple
-        Source slice, distance rows and optional predecessor rows.
-    """
-    for batch in row_batches(len(sources), matrix.shape[0]):
-        result = csgraph.dijkstra(
-            matrix, indices=sources[batch], limit=limit, return_predecessors=paths
-        )
-        if paths:
-            yield batch, result[0], result[1]
-        else:
-            yield batch, result, None
-
-
-def minimum_distances(
-    matrix: sparse.csr_matrix, indices: Sequence[int] | np.ndarray, limit: float
-) -> np.ndarray:
-    """
-    Run a bounded multi-source search.
-
-    The direction of each CSR arc determines traversal direction.
-
-    Parameters
-    ----------
-    matrix : scipy.sparse.csr_matrix
-        Weighted directed adjacency in search order.
-    indices : array-like
-        Source vertex indices.
-    limit : float
-        Inclusive cost cutoff for exploration.
-
-    Returns
-    -------
-    ndarray
-        Minimum cost from any source for each vertex, infinity if unreachable.
-    """
-    return np.asarray(csgraph.dijkstra(matrix, indices=indices, limit=limit, min_only=True))
-
-
-def adjacency(row: np.ndarray, col: np.ndarray, data: np.ndarray, n: int) -> sparse.csr_matrix:
-    """
-    Build directed CSR adjacency from weighted arcs.
-
-    Parallel arcs retain their minimum cost and explicit zero-cost arcs remain traversable.
-
-    Parameters
-    ----------
-    row : ndarray
-        Source vertex indices for each arc.
-    col : ndarray
-        Destination vertex indices for each arc.
-    data : ndarray
-        Non-negative traversal weights in arc order.
-    n : int
-        Total number of vertices, including isolated vertices.
-
-    Returns
-    -------
-    scipy.sparse.csr_matrix
-        Weighted adjacency in vertex order.
-    """
-    # Keep the smallest weight of each parallel or reversed duplicate.
-    order = np.lexsort((data, col, row))
-    row, col, data = row[order], col[order], data[order]
-    first = np.ones(len(row), dtype=bool)
-    first[1:] = (row[1:] != row[:-1]) | (col[1:] != col[:-1])
-    return sparse.csr_matrix((data[first], (row[first], col[first])), shape=(n, n))
-
-
-def sparse_adjacency(
-    graph: nx.Graph, weight: str, index: dict[Any, int]
-) -> tuple[sparse.csr_matrix, bool, bool] | None:
-    """
-    Convert NetworkX weights for sparse shortest-path searches.
-
-    Unsupported numeric types retain the NetworkX distance metric's fallback behaviour.
-
-    Parameters
-    ----------
-    graph : networkx.Graph or spatial graph
-        Network supplying arcs and node coordinates.
-    weight : str or None
-        Edge cost attribute, or None for geometry length.
-    index : dict
-        Mapping from node label to its matrix position.
-
-    Returns
-    -------
-    tuple or None
-        Adjacency, presence of infinite weights and integral weight status, or None.
-    """
-    rows: list[int] = []
-    cols: list[int] = []
-    weights: list[float] = []
-    integers = 0
-    for u, v, value in graph.edges(data=weight, default=1):
-        if isinstance(value, (int, np.integer)):
-            integers += 1
-        # numpy.float64 subclasses float; other numpy floats do not.
-        elif not isinstance(value, float):
-            return None
-        rows.append(index[u])
-        cols.append(index[v])
-        weights.append(float(value))
-    if 0 < integers < len(weights):
-        return None
-    row = np.asarray(rows, dtype=np.int64)
-    col = np.asarray(cols, dtype=np.int64)
-    data = np.asarray(weights, dtype=np.float64)
-    if not graph.is_directed():
-        row, col = np.concatenate([row, col]), np.concatenate([col, row])
-        data = np.concatenate([data, data])
-    finite = data < np.inf
-    has_infinite = not bool(finite.all())
-    row, col, data = row[finite], col[finite], data[finite]
-    matrix = adjacency(row, col, data, len(index))
-    return matrix, has_infinite, integers > 0
-
-
 def _compute_center_node_distances(
     graph: nx.Graph | nx.MultiGraph,
     center_point: Point | Sequence[Point] | gpd.GeoSeries | gpd.GeoDataFrame,
@@ -582,18 +442,20 @@ def _compute_center_node_distances(
     coordinates = list(pos_dict.values())
     tree = cKDTree(coordinates)
 
-    source_nodes = []
-    for point in _normalize_center_points(center_point):
-        _, idx = tree.query((point.x, point.y))
-        source_nodes.append(node_ids[idx])
-
-    if not source_nodes:
+    points = _normalize_center_points(center_point)
+    if not len(points):
         return {}
+    _, nearest = tree.query([(p.x, p.y) for p in points])
+    deduped_sources = [node_ids[i] for i in np.unique(nearest)]
 
-    deduped_sources = list(dict.fromkeys(source_nodes))
     index = {node: i for i, node in enumerate(graph)}
     converted = sparse_adjacency(graph, edge_attr or "length", index)
-    if converted is not None and cutoff >= 0 and np.all(converted[0].data >= 0):
+    if (
+        converted is not None
+        and cutoff >= 0
+        and np.all(converted[0].data >= 0)
+        and not (math.isinf(cutoff) and converted[1])
+    ):
         lengths = minimum_distances(converted[0], [index[node] for node in deduped_sources], cutoff)
         return {node: lengths[i] for node, i in index.items() if np.isfinite(lengths[i])}
     distances = nx.multi_source_dijkstra_path_length(

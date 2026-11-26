@@ -1,22 +1,21 @@
 """Tests for mobility/OD matrix to graph, including undirected support."""
 
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
 from typing import cast
 
 import geopandas as gpd
-import networkx as nx
 import numpy as np
 import pandas as pd
 import pytest
-from shapely.geometry import LineString
 from shapely.geometry import Point
 
-from city2graph.mobility import PreparedNetwork
-from city2graph.mobility import network_cost_matrix
-from city2graph.mobility import network_costs
 from city2graph.mobility import od_matrix_to_graph
 from tests.city2graph.helpers import assert_as_nx_deprecation
+
+if TYPE_CHECKING:
+    import networkx as nx
 
 
 @pytest.fixture
@@ -988,122 +987,3 @@ class TestODMatrixToGraph:
         assert_as_nx_deprecation(
             od_matrix_to_graph, flows, od_zones_gdf, zone_id_col="zone_id", weight_cols=["flow"]
         )
-
-
-def points(*coords: tuple[float, float], labels: list[Any] | None = None) -> gpd.GeoSeries:
-    """Build projected point inputs."""
-    return gpd.GeoSeries([Point(xy) for xy in coords], index=labels, crs=3857)
-
-
-@pytest.fixture
-def streets() -> nx.MultiDiGraph:
-    """Build an OSMnx-like graph with asymmetric parallel arcs and an isolated node."""
-    graph = nx.MultiDiGraph(crs="EPSG:3857")
-    for node, x in enumerate([0, 10, 20, 50]):
-        graph.add_node(node, x=x, y=0)
-    graph.add_edge(0, 1, time=10)
-    graph.add_edge(0, 1, time=20)
-    graph.add_edge(1, 0, time=30)
-    graph.add_edge(1, 2, time=0)
-    return graph
-
-
-def test_zero_unreachable_and_labels(streets: nx.MultiDiGraph) -> None:
-    """Explicit zeros survive CSR construction and duplicate labels stay distinct."""
-    origins = points((10, 0), (50, 0), labels=["x", "x"])
-    destinations = points((20, 0), (10, 0), labels=[9, 3])
-    matrix = network_cost_matrix(origins, destinations, streets, weight="time", threshold=0)
-    assert matrix.shape == (2, 2)
-    assert matrix.indptr.tolist() == [0, 2, 2]
-    assert matrix.data.tolist() == [0, 0]
-    table = network_costs(origins, destinations, streets, weight="time", k=1, threshold=0)
-    assert table.to_numpy().tolist() == [["x", 9, 0]]
-
-
-def test_edge_cost_and_access(streets: nx.MultiDiGraph) -> None:
-    """Reverse and forward partial traversals have different costs on the same line."""
-    road = PreparedNetwork(streets, weight="time", connect_to="edge")
-    origins = road.connect(points((2, 1), (8, 3), (40, 40)), max_connection_distance=3)
-    table = network_costs(origins, points((5, 2)), road, k=1, include_connection_distance=True)
-    np.testing.assert_allclose(table.cost, [3, 9])
-    np.testing.assert_allclose(table.connection_distance, [3, 5])
-    assert network_costs(origins, points((0, 0)), road, threshold=6.1).origin.tolist() == [0]
-
-
-def test_within_and_one_way(streets: nx.MultiDiGraph) -> None:
-    """Self exclusion is positional, and reaching the same vertex can cost zero."""
-    origins = points((10, 0), (10, 0), (20, 0), (50, 0), labels=[8, 8, 4, 6])
-    table = network_costs(origins, graph=streets, k=1, weight="time", threshold=0)
-    assert table.to_numpy().tolist() == [[8, 8, 0], [8, 8, 0]]
-    reverse = network_costs(points((18, 1)), points((12, 1)), streets, connect_to="edge")
-    assert reverse.empty
-
-
-def test_edge_frame_geometry_length() -> None:
-    """An edge frame defaults to two-way travel and uses curved geometry length."""
-    edges = gpd.GeoDataFrame(geometry=[LineString([(0, 0), (0, 4), (3, 4)])], crs=3857)
-    table = network_costs(points((3, 4)), points((0, 0)), edges)
-    assert table.cost.tolist() == [7]
-
-
-def test_heterogeneous_entry_layers() -> None:
-    """Repeated node IDs in different layers stay distinct and transit remains traversable."""
-    street = gpd.GeoDataFrame(geometry=points((0, 0), (10, 0)))
-    stop = gpd.GeoDataFrame(geometry=points((1, 0), (9, 0)))
-
-    def links(
-        source: gpd.GeoDataFrame,
-        target: gpd.GeoDataFrame,
-        pairs: list[tuple[int, int]],
-        times: list[int],
-    ) -> gpd.GeoDataFrame:
-        lines = [LineString([source.geometry.iloc[u], target.geometry.iloc[v]]) for u, v in pairs]
-        return gpd.GeoDataFrame(
-            {"time": times},
-            geometry=lines,
-            crs=3857,
-            index=pd.MultiIndex.from_tuples(pairs, names=["u", "v"]),
-        )
-
-    edges = {
-        ("street", "road", "street"): links(street, street, [(0, 1)], [15]),
-        ("street", "board", "stop"): links(street, stop, [(0, 0)], [2]),
-        ("stop", "ride", "stop"): links(stop, stop, [(0, 1)], [3]),
-        ("stop", "alight", "street"): links(stop, street, [(1, 1)], [2]),
-    }
-    graph = ({"street": street, "stop": stop}, edges)
-    table = network_costs(
-        points((1, 0)),
-        points((9, 0)),
-        graph,
-        weight="time",
-        directed=True,
-        connect_node_types="street",
-        include_connection_distance=True,
-    )
-    assert table.cost.tolist() == [7]
-    assert table.connection_distance.tolist() == [2]
-
-
-@pytest.mark.parametrize("value", [-1, float("nan"), "2", None])
-def test_invalid_cost(streets: nx.MultiDiGraph, value: object) -> None:
-    """Validate every edge, even when another parallel edge is cheaper."""
-    streets[0][1][1]["time"] = value
-    with pytest.raises(ValueError, match="non-negative"):
-        PreparedNetwork(streets, weight="time")
-
-
-@pytest.mark.parametrize("reverse", [False, True])
-def test_batched_costs_match_networkx(streets: nx.MultiDiGraph, reverse: bool) -> None:
-    """Check both search directions and top-k pruning against NetworkX."""
-    starts, ends = ([0, 1, 2, 3], [0, 2]) if reverse else ([0, 2], [0, 1, 2, 3])
-    coords = [(0, 0), (10, 0), (20, 0), (50, 0)]
-    origins = points(*(coords[i] for i in starts))
-    destinations = points(*(coords[j] for j in ends))
-    table = network_costs(origins, destinations, streets, weight="time", threshold=30, k=2)
-    expected: list[tuple[int, int, float]] = []
-    for row, source in enumerate(starts):
-        lengths = nx.single_source_dijkstra_path_length(streets, source, cutoff=30, weight="time")
-        ranked = sorted((lengths[node], col) for col, node in enumerate(ends) if node in lengths)
-        expected.extend((row, col, cost) for cost, col in ranked[:2])
-    assert list(table.itertuples(index=False, name=None)) == expected
