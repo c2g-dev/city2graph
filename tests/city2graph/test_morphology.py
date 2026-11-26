@@ -14,7 +14,6 @@ import pandas as pd
 import pytest
 from geopandas.testing import assert_geodataframe_equal
 from pyproj import Transformer
-from scipy.sparse import csgraph
 from shapely import transform
 from shapely.geometry import LineString
 from shapely.geometry import Point
@@ -1891,8 +1890,8 @@ class TestMorphologicalGraphs:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A list of distances yields a dict of (nodes, edges) keyed by distance."""
-        search = Mock(wraps=csgraph.dijkstra)
-        monkeypatch.setattr(csgraph, "dijkstra", search)
+        search = Mock(wraps=nx.multi_source_dijkstra_path_length)
+        monkeypatch.setattr(nx, "multi_source_dijkstra_path_length", search)
         distances = [2.0, 20.0]
 
         result = morphological_graphs(

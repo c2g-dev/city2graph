@@ -1793,16 +1793,6 @@ def _compute_center_node_distances(
     _, nearest = tree.query([(p.x, p.y) for p in points])
     deduped_sources = [node_ids[i] for i in np.unique(nearest)]
 
-    index = {node: i for i, node in enumerate(graph)}
-    converted = sparse_adjacency(graph, edge_attr or "length", index)
-    if (
-        converted is not None
-        and cutoff >= 0
-        and np.all(converted[0].data >= 0)
-        and not (math.isinf(cutoff) and converted[1])
-    ):
-        lengths = minimum_distances(converted[0], [index[node] for node in deduped_sources], cutoff)
-        return {node: lengths[i] for node, i in index.items() if np.isfinite(lengths[i])}
     distances = nx.multi_source_dijkstra_path_length(
         graph,
         deduped_sources,
