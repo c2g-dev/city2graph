@@ -30,7 +30,7 @@ jobs:
           path: ~/.cache/pre-commit/
           key: pre-commit-3.12-${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Run pre-commit checks
-        run: uv run pre-commit run --all-files
+        run: uv run pre-commit run --all-files --show-diff-on-failure
         env:
           SKIP: no-commit-to-branch
 
