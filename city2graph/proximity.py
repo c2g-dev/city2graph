@@ -55,9 +55,9 @@ from .utils import gdf_to_nx
 from .utils import nx_to_gdf
 from .utils import symmetrize_edges
 from .utils import validate_gdf
+from .utils.distance import _adjacency
 from .utils.distance import _closest_positions
 from .utils.distance import _distance_batches
-from .utils.distance import _sparse_adjacency
 
 # Module logger configuration
 logger = logging.getLogger(__name__)
@@ -419,10 +419,38 @@ class SparseNetwork:
             Converted network, or None when the weights cannot be converted exactly.
         """
         nodes = list(graph)
-        converted = _sparse_adjacency(graph, weight, {node: i for i, node in enumerate(nodes)})
-        if converted is None:
+        index = {node: i for i, node in enumerate(nodes)}
+        rows: list[int] = []
+        cols: list[int] = []
+        weights: list[float] = []
+        integers = 0
+        exact_integer_limit = (2**53) // max(1, len(nodes) - 1)
+        for u, v, value in graph.edges(data=weight, default=1):
+            if isinstance(value, (int, np.integer)):
+                if int(value) > exact_integer_limit:
+                    return None
+                integers += 1
+            # numpy.float64 subclasses float; other numpy floats do not.
+            elif not isinstance(value, float):
+                return None
+            rows.append(index[u])
+            cols.append(index[v])
+            weights.append(float(value))
+        if 0 < integers < len(weights):
             return None
-        return cls(graph, weight, nodes, *converted)
+        row = np.asarray(rows, dtype=np.int64)
+        col = np.asarray(cols, dtype=np.int64)
+        data = np.asarray(weights, dtype=np.float64)
+        if not graph.is_directed():
+            row, col = np.concatenate([row, col]), np.concatenate([col, row])
+            data = np.concatenate([data, data])
+        if np.any(np.isnan(data)):
+            return None
+        finite = data < np.inf
+        has_infinite = not bool(finite.all())
+        row, col, data = row[finite], col[finite], data[finite]
+        matrix = _adjacency(row, col, data, len(nodes))
+        return cls(graph, weight, nodes, matrix, has_infinite, integers > 0)
 
     def searches(
         self,

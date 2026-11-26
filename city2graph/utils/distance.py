@@ -152,61 +152,6 @@ def _adjacency(row: np.ndarray, col: np.ndarray, data: np.ndarray, n: int) -> sp
     return sparse.csr_matrix((data[first], (row[first], col[first])), shape=(n, n))
 
 
-def _sparse_adjacency(
-    graph: nx.Graph, weight: str, index: dict[Any, int]
-) -> tuple[sparse.csr_matrix, bool, bool] | None:
-    """
-    Convert NetworkX weights for sparse shortest-path searches.
-
-    Unsupported numeric types retain the NetworkX distance metric's fallback behaviour.
-
-    Parameters
-    ----------
-    graph : networkx.Graph
-        Network supplying arcs and edge weights.
-    weight : str
-        Edge cost attribute.
-    index : dict
-        Mapping from node label to its matrix position.
-
-    Returns
-    -------
-    tuple or None
-        Adjacency, presence of infinite weights and integral weight status, or None.
-    """
-    rows: list[int] = []
-    cols: list[int] = []
-    weights: list[float] = []
-    integers = 0
-    exact_integer_limit = (2**53) // max(1, len(index) - 1)
-    for u, v, value in graph.edges(data=weight, default=1):
-        if isinstance(value, (int, np.integer)):
-            if int(value) > exact_integer_limit:
-                return None
-            integers += 1
-        # numpy.float64 subclasses float; other numpy floats do not.
-        elif not isinstance(value, float):
-            return None
-        rows.append(index[u])
-        cols.append(index[v])
-        weights.append(float(value))
-    if 0 < integers < len(weights):
-        return None
-    row = np.asarray(rows, dtype=np.int64)
-    col = np.asarray(cols, dtype=np.int64)
-    data = np.asarray(weights, dtype=np.float64)
-    if not graph.is_directed():
-        row, col = np.concatenate([row, col]), np.concatenate([col, row])
-        data = np.concatenate([data, data])
-    if np.any(np.isnan(data)):
-        return None
-    finite = data < np.inf
-    has_infinite = not bool(finite.all())
-    row, col, data = row[finite], col[finite], data[finite]
-    matrix = _adjacency(row, col, data, len(index))
-    return matrix, has_infinite, integers > 0
-
-
 def _closest_positions(costs: np.ndarray, k: int) -> np.ndarray:
     """
     Select the k lowest costs with stable ties.
@@ -333,31 +278,6 @@ def _endpoint_costs(
     return _fraction_cost(fractions, rates)
 
 
-def _position(data: dict[str, Any]) -> tuple[float, float]:
-    """
-    Read a node's planar coordinates.
-
-    NetworkX pos and OSMnx x and y attributes are supported.
-
-    Parameters
-    ----------
-    data : dict
-        NetworkX node attributes.
-
-    Returns
-    -------
-    tuple of float
-        Planar x and y coordinates.
-    """
-    if "pos" in data:
-        return data["pos"][0], data["pos"][1]
-    try:
-        return data["x"], data["y"]
-    except KeyError as exc:
-        msg = "Routing nodes require pos or x and y coordinates"
-        raise ValueError(msg) from exc
-
-
 def _segments(
     coords: np.ndarray,
     u: np.ndarray,
@@ -439,8 +359,19 @@ def _nx_arrays(graph: nx.Graph, weight: str | None) -> _GraphArrays:
     tuple
         Coordinates, layer labels, CRS, endpoints, geometries and weights.
     """
-    coord = np.asarray([_position(data) for _, data in graph.nodes(data=True)]).reshape(-1, 2)
-    layers = np.asarray([data.get("node_type") for _, data in graph.nodes(data=True)])
+    coords_list: list[tuple[float, float]] = []
+    layers_list: list[Any] = []
+    for _, data in graph.nodes(data=True):
+        if "pos" in data:
+            coords_list.append((data["pos"][0], data["pos"][1]))
+        elif "x" in data and "y" in data:
+            coords_list.append((data["x"], data["y"]))
+        else:
+            msg = "Routing nodes require pos or x and y coordinates"
+            raise ValueError(msg)
+        layers_list.append(data.get("node_type"))
+    coord = np.asarray(coords_list).reshape(-1, 2)
+    layers = np.asarray(layers_list)
     ids = {node: i for i, node in enumerate(graph)}
     u, v, lines, values = [], [], [], []
     for source, target, data in graph.edges(data=True):
