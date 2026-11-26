@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import typing
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -22,13 +21,12 @@ from shapely.geometry import Polygon
 
 from city2graph.base import build_reachable_subgraph
 from city2graph.base import compute_center_node_distances
+from city2graph.base import node_positions
 from city2graph.base import row_batches
 
 from .conversion import gdf_to_nx
 
 __all__ = ["create_isochrone"]
-
-logger = logging.getLogger("city2graph.utils")
 
 _KNN_HULL_MAX_ATTEMPTS = 50
 _HULL_NEIGHBOR_CACHE_BYTES = 8 * 1024 * 1024
@@ -754,7 +752,7 @@ def _extract_node_geometries(graph: nx.Graph | nx.MultiGraph) -> list[Point]:
     list[Point]
         List of Point geometries for nodes.
     """
-    pos_dict = nx.get_node_attributes(graph, "pos")
+    pos_dict = node_positions(graph)
     return [Point(p) for p in pos_dict.values()] if pos_dict else []
 
 
@@ -776,7 +774,7 @@ def _extract_node_coordinate_array(graph: nx.Graph | nx.MultiGraph) -> np.ndarra
         Node coordinates with shape ``(n, 2)`` and dtype float. An empty array
         is returned when coordinates are unavailable or malformed.
     """
-    pos_dict = nx.get_node_attributes(graph, "pos")
+    pos_dict = node_positions(graph)
     coords = np.asarray(list(pos_dict.values()), dtype=float) if pos_dict else np.empty((0, 2))
     if coords.ndim != 2 or coords.shape[1] < 2:
         return np.empty((0, 2), dtype=float)

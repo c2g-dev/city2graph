@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from typing import Any
 from typing import cast
 
 import geopandas as gpd
@@ -340,7 +339,6 @@ class TestPlotGraph:
         single_edge_type = next(iter(sample_hetero_edges_dict.keys()))
         single_edge_dict = {single_edge_type: sample_hetero_edges_dict[single_edge_type]}
 
-        _fig, _ax = plt.subplots()
         utils.plot_graph(
             nodes=sample_hetero_nodes_dict,
             edges=single_edge_dict,
@@ -425,7 +423,7 @@ class TestPlotGraph:
                 nodes=sample_hetero_nodes_dict,
                 edges={edge_key: edge_gdf},
                 subplots=True,
-                ax=cast("Any", axes_list),
+                ax=cast("np.ndarray", axes_list),
             )
             assert returned_axes == axes_list
             assert not axes_list[1].get_visible()

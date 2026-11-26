@@ -1303,3 +1303,26 @@ class TestCreateIsochrone:
 
         assert isinstance(result, gpd.GeoDataFrame)
         assert len(result) == 1
+
+    @pytest.mark.parametrize("method", ["convex_hull", "concave_hull_knn"])
+    def test_create_isochrone_supports_osmnx_xy_nodes(self, method: str) -> None:
+        """OSMnx-style x/y node attributes work without a precomputed pos attribute."""
+        graph = nx.Graph(crs="EPSG:27700")
+        graph.add_node("a", x=0.0, y=0.0)
+        graph.add_node("b", x=10.0, y=0.0)
+        graph.add_node("c", x=0.0, y=10.0)
+        graph.add_edge("a", "b", length=10.0)
+        graph.add_edge("a", "c", length=10.0)
+        graph.add_edge("b", "c", length=15.0)
+
+        result = utils.create_isochrone(
+            graph,
+            center_point=Point(0, 0),
+            threshold=12.0,
+            edge_attr="length",
+            method=method,
+        )
+
+        assert isinstance(result, gpd.GeoDataFrame)
+        assert len(result) == 1
+        assert result.geometry.iloc[0].area > 0

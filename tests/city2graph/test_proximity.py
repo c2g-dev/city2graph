@@ -26,6 +26,7 @@ from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.geometry import Polygon
 
+from city2graph.proximity import SparseNetwork
 from city2graph.proximity import bridge_nodes
 from city2graph.proximity import contiguity_graph
 from city2graph.proximity import delaunay_graph
@@ -1508,6 +1509,30 @@ def test_network_searches_match_networkx(monkeypatch: pytest.MonkeyPatch, case: 
         np.testing.assert_array_equal(result["weight"], reference["weight"])
         assert result["weight"].dtype == reference["weight"].dtype
         assert list(result.geometry.to_wkb()) == list(reference.geometry.to_wkb())
+
+
+def test_sparse_network_falls_back_on_large_integers_and_nan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Oversized integer weights fall back to NetworkX and NaN weights reject sparse conversion."""
+    points = make_points_simple([(0, 0), (1, 0), (2, 0)])
+    huge = 2**53
+    network = gpd.GeoDataFrame(
+        {"cost": pd.Series([huge, 1], dtype=object)},
+        geometry=[LineString([(0, 0), (1, 0)]), LineString([(1, 0), (2, 0)])],
+        crs=points.crs,
+    )
+    sparse_search, networkx_search = _count_searches(monkeypatch)
+    _, edges = knn_graph(
+        points, k=2, distance_metric="network", network_gdf=network, network_weight="cost"
+    )
+    assert sparse_search.call_count == 0
+    assert networkx_search.call_count > 0
+    assert (huge + 1) in set(edges["weight"])
+
+    nan_graph = nx.Graph()
+    nan_graph.add_edge(0, 1, cost=float("nan"))
+    assert SparseNetwork.from_graph(nan_graph, "cost") is None
 
 
 @pytest.mark.parametrize(

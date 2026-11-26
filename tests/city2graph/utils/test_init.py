@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
+import sys
+
 import pytest
 
 from city2graph import utils
@@ -68,3 +71,15 @@ class TestPublicUtilityExports:
         """Previously importable compatibility names should remain accessible."""
         assert utils.NxConverter is conversion_utils.NxConverter
         assert utils.MATPLOTLIB_AVAILABLE is plotting_utils.MATPLOTLIB_AVAILABLE
+
+    def test_deprecated_spatial_shim_reexports_legacy_symbols(self) -> None:
+        """Importing city2graph.utils.spatial emits DeprecationWarning and preserves symbols."""
+        sys.modules.pop("city2graph.utils.spatial", None)
+        with pytest.warns(DeprecationWarning, match=r"city2graph\.utils\.spatial is deprecated"):
+            spatial_utils = importlib.import_module("city2graph.utils.spatial")
+
+        assert spatial_utils.create_isochrone is isochrone_utils.create_isochrone
+        assert spatial_utils.create_tessellation is tessellation_utils.create_tessellation
+        assert spatial_utils.filter_graph_by_distance is distance_utils.filter_graph_by_distance
+        assert spatial_utils.plot_graph is plotting_utils.plot_graph
+        assert spatial_utils.MATPLOTLIB_AVAILABLE is plotting_utils.MATPLOTLIB_AVAILABLE

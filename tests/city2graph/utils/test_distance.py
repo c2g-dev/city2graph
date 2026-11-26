@@ -13,7 +13,9 @@ import pandas as pd
 import pytest
 from scipy.sparse import csgraph
 from shapely.geometry import LineString
+from shapely.geometry import MultiLineString
 from shapely.geometry import Point
+from shapely.geometry import Polygon
 
 from city2graph import network_cost_matrix
 from city2graph import network_costs
@@ -341,6 +343,181 @@ class TestNetworkCosts:
                 == sorted((abs(row - node), col) for col, node in enumerate(destinations.index))[:2]
             )
 
+    def test_non_point_node_layers_use_centroids(self) -> None:
+        """Polygon and LineString node layers resolve coordinates via centroids."""
+        buildings = gpd.GeoDataFrame(
+            geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
+            crs=3857,
+        )
+        streets = gpd.GeoDataFrame(geometry=_points((1, 1), (11, 1)))
+        edges = {
+            ("building", "near", "street"): gpd.GeoDataFrame(
+                {"u": [0], "v": [0], "cost": [2.0]},
+                geometry=[LineString([(1, 1), (1, 1)])],
+                crs=3857,
+            ),
+            ("street", "road", "street"): gpd.GeoDataFrame(
+                {"u": [0], "v": [1], "cost": [10.0]},
+                geometry=[LineString([(1, 1), (11, 1)])],
+                crs=3857,
+            ),
+        }
+        table = network_costs(
+            _points((1, 1)),
+            _points((11, 1)),
+            ({"building": buildings, "street": streets}, edges),
+            weight="cost",
+            connect_node_types="street",
+        )
+        assert table.cost.tolist() == [10.0]
+
+        missing_node_geom = gpd.GeoDataFrame(geometry=[None], crs=3857)
+        with pytest.raises(ValueError, match="missing or empty"):
+            network_costs(
+                _points((0, 0)), graph=(missing_node_geom, edges[("street", "road", "street")])
+            )
+
+    def test_empty_frame_crs_does_not_override_graph_crs(self) -> None:
+        """Empty layers with a different CRS are ignored consistently with CRS validation."""
+        empty_layer = gpd.GeoDataFrame(geometry=gpd.GeoSeries([], crs=4326))
+        streets = gpd.GeoDataFrame(geometry=_points((0, 0), (5, 0)))
+        edges = {
+            ("street", "road", "street"): gpd.GeoDataFrame(
+                {"u": [0], "v": [1], "cost": [5.0]},
+                geometry=[LineString([(0, 0), (5, 0)])],
+                crs=3857,
+            ),
+            ("empty", "link", "street"): gpd.GeoDataFrame(
+                {
+                    "u": pd.Series(dtype=int),
+                    "v": pd.Series(dtype=int),
+                    "cost": pd.Series(dtype=float),
+                },
+                geometry=gpd.GeoSeries([], crs=4326),
+            ),
+        }
+        table = network_costs(
+            _points((0, 0)),
+            _points((5, 0)),
+            ({"empty": empty_layer, "street": streets}, edges),
+            weight="cost",
+        )
+        assert table.cost.tolist() == [5.0]
+
+    def test_implicit_multi_relation_edges_dict_and_container_validation(self) -> None:
+        """Multi-relation edges-only dicts keep layer namespaces distinct and connect shared nodes."""
+        road = gpd.GeoDataFrame(
+            {"u": [0], "v": [1], "time": [10.0]},
+            geometry=[LineString([(0, 0), (10, 0)])],
+            crs=3857,
+        )
+        board = gpd.GeoDataFrame(
+            {"u": [0], "v": [0], "time": [2.0]},
+            geometry=[LineString([(0, 0), (1, 0)])],
+            crs=3857,
+        )
+        ride = gpd.GeoDataFrame(
+            {"u": [0], "v": [1], "time": [3.0]},
+            geometry=[LineString([(1, 0), (9, 0)])],
+            crs=3857,
+        )
+        alight = gpd.GeoDataFrame(
+            {"u": [1], "v": [1], "time": [2.0]},
+            geometry=[LineString([(9, 0), (10, 0)])],
+            crs=3857,
+        )
+        edges_dict = {
+            ("street", "road", "street"): road,
+            ("street", "board", "stop"): board,
+            ("stop", "ride", "stop"): ride,
+            ("stop", "alight", "street"): alight,
+        }
+        table = network_costs(
+            _points((0, 0)),
+            _points((10, 0)),
+            (None, edges_dict),
+            weight="time",
+            directed=True,
+            connect_node_types="street",
+        )
+        assert table.cost.tolist() == [7.0]
+
+        with pytest.raises(TypeError, match="NetworkX graph, GeoDataFrame"):
+            network_costs(_points((0, 0)), graph="invalid")
+        with pytest.raises(TypeError, match="graph edges must be"):
+            network_costs(_points((0, 0)), graph=(gpd.GeoDataFrame(geometry=_points((0, 0))), None))
+        with pytest.raises(TypeError, match="graph nodes must be"):
+            network_costs(_points((0, 0)), graph=("bad_nodes", road))
+        with pytest.raises(ValueError, match="missing node layer"):
+            network_costs(
+                _points((0, 0)),
+                graph=({"street": gpd.GeoDataFrame(geometry=_points((0, 0), (10, 0)))}, edges_dict),
+                weight="time",
+            )
+
+    def test_directed_true_on_undirected_nx_and_bool_weights_rejected(self) -> None:
+        """Undirected NetworkX graphs reject directed=True, and bool edge weights fail validation."""
+        undirected = nx.Graph(crs="EPSG:3857")
+        undirected.add_node(0, pos=(0, 0))
+        undirected.add_node(1, pos=(5, 0))
+        undirected.add_edge(0, 1, cost=5.0)
+        with pytest.raises(ValueError, match="directed NetworkX graph"):
+            network_costs(
+                _points((0, 0)), _points((5, 0)), undirected, weight="cost", directed=True
+            )
+
+        bool_edges = gpd.GeoDataFrame(
+            {"flag": [True]},
+            geometry=[LineString([(0, 0), (5, 0)])],
+            crs=3857,
+        )
+        with pytest.raises(ValueError, match="non-negative numeric cost"):
+            network_costs(_points((0, 0)), _points((5, 0)), bool_edges, weight="flag")
+
+        obj_bool_graph = nx.DiGraph(crs="EPSG:3857")
+        obj_bool_graph.add_node(0, pos=(0, 0))
+        obj_bool_graph.add_node(1, pos=(5, 0))
+        obj_bool_graph.add_edge(0, 1, cost=True)
+        with pytest.raises(ValueError, match="non-negative numeric cost"):
+            network_costs(_points((0, 0)), _points((5, 0)), obj_bool_graph, weight="cost")
+
+    def test_nan_point_and_multiline_edge_projection(self) -> None:
+        """NaN point coordinates stay disconnected and continuous MultiLineStrings project cleanly."""
+        aligned = MultiLineString([[(0, 0), (5, 0)], [(5, 0), (10, 0)]])
+        flipped = MultiLineString([[(0, 0), (5, 0)], [(10, 0), (5, 0)]])
+        for geom in (aligned, flipped):
+            edges = gpd.GeoDataFrame({"cost": [10.0]}, geometry=[geom], crs=3857)
+            origins = gpd.GeoSeries([Point(float("nan"), float("nan")), Point(2, 0)], crs=3857)
+            dests = _points((8, 0))
+            matrix = network_cost_matrix(origins, dests, edges, weight="cost", connect_to="edge")
+            assert matrix.shape == (2, 1)
+            assert matrix.nnz == 1
+            assert matrix[1, 0] == pytest.approx(6.0)
+
+    def test_one_way_edge_batched_search_skips_unreachable_endpoint(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """k>1 edge queries on a one-way road avoid Dijkstra from unreachable endpoints."""
+        graph = nx.DiGraph(crs="EPSG:3857")
+        graph.add_node(0, pos=(0, 0))
+        graph.add_node(1, pos=(10, 0))
+        graph.add_node(2, pos=(20, 0))
+        graph.add_edge(0, 1, cost=10.0)
+        graph.add_edge(1, 2, cost=10.0)
+        search = mock.Mock(wraps=csgraph.dijkstra)
+        monkeypatch.setattr(csgraph, "dijkstra", search)
+        result = network_costs(
+            _points((4, 0)),
+            _points((12, 0), (18, 0)),
+            graph,
+            weight="cost",
+            connect_to="edge",
+            k=2,
+        )
+        assert result.cost.tolist() == [8.0, 14.0]
+        assert search.call_count == 1
+        assert search.call_args.kwargs["indices"].tolist() == [1]
+
 
 class TestFilterGraphByDistance:
     """Tests for ``filter_graph_by_distance``."""
@@ -502,3 +679,15 @@ class TestFilterGraphByDistance:
         reachable = utils.filter_graph_by_distance(G, center_point=Point(0, 0), threshold=10)
         assert isinstance(reachable, nx.Graph)
         assert len(reachable) == 0
+
+    def test_filter_graph_supports_osmnx_xy_nodes(self, sample_crs: str) -> None:
+        """OSMnx-style x/y node attributes work without a precomputed pos attribute."""
+        graph = nx.Graph(crs=sample_crs)
+        graph.add_node(0, x=0.0, y=0.0)
+        graph.add_node(1, x=10.0, y=0.0)
+        graph.add_node(2, x=20.0, y=0.0)
+        graph.add_edge(0, 1, length=10.0)
+        graph.add_edge(1, 2, length=10.0)
+
+        reachable = utils.filter_graph_by_distance(graph, center_point=Point(1, 0), threshold=12.0)
+        assert set(reachable.nodes()) == {0, 1}

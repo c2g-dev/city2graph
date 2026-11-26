@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import math
 import typing
 from typing import TYPE_CHECKING
@@ -26,8 +25,6 @@ if TYPE_CHECKING:
 from .conversion import nx_to_gdf
 
 __all__ = ["plot_graph"]
-
-logger = logging.getLogger("city2graph.utils")
 
 PLOT_DEFAULTS = {
     "node_color": "#22d3ee",

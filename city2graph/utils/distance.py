@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import heapq
-import logging
 import math
 import numbers
 from dataclasses import dataclass
@@ -27,6 +26,7 @@ from city2graph.base import closest_positions
 from city2graph.base import compute_center_node_distances
 from city2graph.base import distance_batches
 from city2graph.base import edge_endpoints
+from city2graph.base import node_positions
 from city2graph.base import row_batches
 
 from .conversion import gdf_to_nx
@@ -42,8 +42,6 @@ __all__ = [
     "network_cost_matrix",
     "network_costs",
 ]
-
-logger = logging.getLogger("city2graph.utils")
 
 
 type _GraphArrays = tuple[
@@ -185,6 +183,35 @@ def _endpoint_costs(
     return _fraction_cost(fractions, rates)
 
 
+def _merge_lines(lines: np.ndarray) -> np.ndarray:
+    """
+    Merge multipart edge geometries while preferring directed continuity.
+
+    Directed merging preserves part orientation when segments align; remaining
+    multipart geometries fall back to undirected merging.
+
+    Parameters
+    ----------
+    lines : ndarray
+        Edge geometries in arc order.
+
+    Returns
+    -------
+    ndarray
+        Merged line geometries in input order.
+    """
+    multipart = shapely.get_type_id(lines) == 5
+    if not np.any(multipart):
+        return lines
+    merged = lines.copy()
+    parts = shapely.line_merge(merged[multipart], directed=True)
+    still_multi = shapely.get_type_id(parts) == 5
+    if np.any(still_multi):
+        parts[still_multi] = shapely.line_merge(parts[still_multi])
+    merged[multipart] = parts
+    return merged
+
+
 def _segments(
     coords: np.ndarray,
     u: np.ndarray,
@@ -220,8 +247,7 @@ def _segments(
     """
     if not len(lines):
         return lines, np.empty((0, 2), int), np.empty((0, 2))
-    multipart = shapely.get_type_id(lines) == 5
-    lines[multipart] = shapely.line_merge(lines[multipart])
+    lines = _merge_lines(lines)
     if np.any(shapely.get_type_id(lines) != 1) or np.any(shapely.is_empty(lines)):
         msg = "Edge connection requires a continuous LineString"
         raise ValueError(msg)
@@ -298,6 +324,243 @@ def _nx_arrays(graph: nx.Graph, weight: str | None) -> _GraphArrays:
     )
 
 
+def _unpack_geograph(
+    graph: _GraphInput,
+) -> tuple[dict[Any, gpd.GeoDataFrame], dict[tuple[Any, Any, Any], gpd.GeoDataFrame]]:
+    """
+    Normalise GeoDataFrame graph inputs into typed node and edge dictionaries.
+
+    Validates container structure before coordinate and topology extraction.
+
+    Parameters
+    ----------
+    graph : _GraphInput
+        Edges GeoDataFrame, ``(nodes, edges)`` pair, or heterogeneous layer dicts.
+
+    Returns
+    -------
+    tuple
+        Node-layer dictionary and edge-relation dictionary.
+    """
+    if isinstance(graph, gpd.GeoDataFrame):
+        nodes_raw: Any = None
+        edges_raw: Any = graph
+    elif isinstance(graph, tuple) and len(graph) == 2:
+        nodes_raw, edges_raw = graph
+    else:
+        msg = "graph must be a NetworkX graph, GeoDataFrame, or (nodes, edges) tuple"
+        raise TypeError(msg)
+    if isinstance(edges_raw, gpd.GeoDataFrame):
+        relations: dict[tuple[Any, Any, Any], gpd.GeoDataFrame] = {(None, None, None): edges_raw}
+    elif isinstance(edges_raw, dict):
+        relations = edges_raw
+    else:
+        msg = "graph edges must be a GeoDataFrame or a dictionary of GeoDataFrames"
+        raise TypeError(msg)
+    if nodes_raw is None:
+        frames: dict[Any, gpd.GeoDataFrame] = {}
+    elif isinstance(nodes_raw, gpd.GeoDataFrame):
+        frames = {None: nodes_raw}
+    elif isinstance(nodes_raw, dict):
+        frames = nodes_raw
+    else:
+        msg = "graph nodes must be None, a GeoDataFrame, or a dictionary of GeoDataFrames"
+        raise TypeError(msg)
+    return frames, relations
+
+
+def _node_xy(frame: gpd.GeoDataFrame) -> np.ndarray:
+    """
+    Extract planar 2D coordinates for a node layer, using centroids for non-points.
+
+    Point layers read coordinates directly to avoid centroid overhead.
+
+    Parameters
+    ----------
+    frame : geopandas.GeoDataFrame
+        Node layer with an active geometry column.
+
+    Returns
+    -------
+    ndarray
+        Two-column float array of node coordinates.
+    """
+    if frame.empty:
+        return np.empty((0, 2), dtype=float)
+    geom = frame.geometry.to_numpy()
+    if np.any(shapely.is_missing(geom) | shapely.is_empty(geom)):
+        msg = "Node geometries cannot be missing or empty"
+        raise ValueError(msg)
+    non_point = shapely.get_type_id(geom) != 0
+    if np.any(non_point):
+        geom = geom.copy()
+        geom[non_point] = shapely.centroid(geom[non_point])
+    return np.asarray(shapely.get_coordinates(geom), dtype=float)
+
+
+def _register_implicit(
+    layer: Any,  # noqa: ANN401
+    keys: Any,  # noqa: ANN401
+    xy: np.ndarray,
+    implicit_ids: dict[tuple[Any, Any], int],
+    implicit_coords: list[np.ndarray],
+    types: list[Any],
+) -> np.ndarray:
+    """
+    Assign stable vertex positions for implicit edge-only endpoints.
+
+    Nodes in the same layer share one identifier namespace across edge relations.
+
+    Parameters
+    ----------
+    layer : Any
+        Node layer label for the endpoint column.
+    keys : Any
+        Sequence or array of node identifiers or coordinate tuples.
+    xy : ndarray
+        Endpoint coordinates in row order.
+    implicit_ids : dict
+        Running map of ``(layer, key)`` to vertex position.
+    implicit_coords : list[ndarray]
+        Running list of vertex coordinates.
+    types : list[Any]
+        Running list of vertex layer labels.
+
+    Returns
+    -------
+    ndarray
+        Integer vertex positions for each endpoint row.
+    """
+    out = np.empty(len(xy), dtype=int)
+    for idx, (key, pt) in enumerate(zip(keys, xy, strict=True)):
+        node_key = (layer, key)
+        pos = implicit_ids.get(node_key)
+        if pos is None:
+            pos = len(implicit_ids)
+            implicit_ids[node_key] = pos
+            implicit_coords.append(pt)
+            types.append(layer)
+        out[idx] = pos
+    return out
+
+
+def _resolve_explicit_endpoints(
+    source: Any,  # noqa: ANN401
+    target: Any,  # noqa: ANN401
+    endpoints: tuple[Any, Any] | None,
+    lines: np.ndarray,
+    layer_ids: dict[Any, pd.Index],
+    layer_coords: dict[Any, np.ndarray],
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Map edge endpoints onto explicit node layer positions by ID or coordinates.
+
+    Validates that both referenced node layers exist before indexing.
+
+    Parameters
+    ----------
+    source : Any
+        Source node layer name.
+    target : Any
+        Target node layer name.
+    endpoints : tuple or None
+        Extracted endpoint identifier arrays, or None for coordinate lookup.
+    lines : ndarray
+        Edge geometries used when falling back to coordinate matching.
+    layer_ids : dict
+        Node indices keyed by layer name.
+    layer_coords : dict
+        Node coordinate arrays keyed by layer name.
+
+    Returns
+    -------
+    tuple
+        Local vertex positions for source and target endpoints.
+    """
+    if source not in layer_ids or target not in layer_ids:
+        missing_layers = [layer for layer in (source, target) if layer not in layer_ids]
+        msg = f"Edge layer references missing node layer(s): {missing_layers}"
+        raise ValueError(msg)
+    if endpoints is not None:
+        return (
+            np.asarray(layer_ids[source].get_indexer(endpoints[0])),
+            np.asarray(layer_ids[target].get_indexer(endpoints[1])),
+        )
+    a, b = np.split(_endpoints(lines), 2)
+    u = pd.MultiIndex.from_arrays(list(layer_coords[source].T)).get_indexer(
+        pd.MultiIndex.from_arrays(list(a.T))
+    )
+    v = pd.MultiIndex.from_arrays(list(layer_coords[target].T)).get_indexer(
+        pd.MultiIndex.from_arrays(list(b.T))
+    )
+    return np.asarray(u), np.asarray(v)
+
+
+def _resolve_implicit_endpoints(
+    source: Any,  # noqa: ANN401
+    target: Any,  # noqa: ANN401
+    endpoints: tuple[Any, Any] | None,
+    lines: np.ndarray,
+    *,
+    single_layer: bool,
+    coords: list[np.ndarray],
+    implicit_ids: dict[tuple[Any, Any], int],
+    implicit_coords: list[np.ndarray],
+    types: list[Any],
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Resolve endpoints for edges-only networks without an explicit node table.
+
+    Uses a vectorised factorisation path for single-layer inputs and per-layer
+    registration when multiple layers or relations are present.
+
+    Parameters
+    ----------
+    source : Any
+        Source node layer label.
+    target : Any
+        Target node layer label.
+    endpoints : tuple or None
+        Extracted endpoint identifiers, or None for coordinate matching.
+    lines : ndarray
+        Edge geometries in arc order.
+    single_layer : bool
+        Whether the entire graph consists of one homogeneous edge layer.
+    coords : list[ndarray]
+        Accumulator for node coordinate arrays.
+    implicit_ids : dict
+        Running map of ``(layer, key)`` to vertex position.
+    implicit_coords : list[ndarray]
+        Running list of vertex coordinates.
+    types : list[Any]
+        Running list of vertex layer labels.
+
+    Returns
+    -------
+    tuple
+        Source and target vertex position arrays.
+    """
+    ends = _endpoints(lines)
+    if single_layer:
+        labels = (
+            pd.Index(endpoints[0]).append(pd.Index(endpoints[1]))
+            if endpoints is not None
+            else pd.MultiIndex.from_arrays(list(ends.T))
+        )
+        codes, unique = pd.factorize(labels, sort=False)
+        first = np.unique(codes, return_index=True)[1]
+        coords.append(ends[first])
+        types.extend([source] * len(unique))
+        u, v = np.split(codes, 2)
+        return u, v
+    a_xy, b_xy = np.split(ends, 2)
+    src_keys = endpoints[0] if endpoints is not None else [tuple(p) for p in a_xy]
+    dst_keys = endpoints[1] if endpoints is not None else [tuple(p) for p in b_xy]
+    u = _register_implicit(source, src_keys, a_xy, implicit_ids, implicit_coords, types)
+    v = _register_implicit(target, dst_keys, b_xy, implicit_ids, implicit_coords, types)
+    return u, v
+
+
 def _edge_arrays(graph: _GraphInput, weight: str | None) -> _GraphArrays:
     """
     Read geospatial columns in node-layer order and map edge endpoints to integer positions.
@@ -318,32 +581,30 @@ def _edge_arrays(graph: _GraphInput, weight: str | None) -> _GraphArrays:
     """
     if isinstance(graph, nx.Graph):
         return _nx_arrays(graph, weight)
-    nodes, edges = (None, graph) if isinstance(graph, gpd.GeoDataFrame) else graph
-    relations = edges if isinstance(edges, dict) else {(None, None, None): edges}
-    frames = nodes if isinstance(nodes, dict) else {None: nodes} if nodes is not None else {}
-    GeoDataProcessor.ensure_crs_consistency(
-        *(f for f in (*frames.values(), *relations.values()) if f.active_geometry_name is not None)
-    )
-    crs = next(
-        (
-            f.crs
-            for f in (*frames.values(), *relations.values())
-            if f.active_geometry_name is not None and f.crs is not None
-        ),
-        None,
-    )
-    coords = []
-    layer_ids = {}
-    layer_offsets = {}
-    types = []
+    frames, relations = _unpack_geograph(graph)
+    geom_frames = [
+        f
+        for f in (*frames.values(), *relations.values())
+        if not f.empty and f.active_geometry_name is not None
+    ]
+    GeoDataProcessor.ensure_crs_consistency(*geom_frames)
+    crs = next((f.crs for f in geom_frames if f.crs is not None), None)
+    coords: list[np.ndarray] = []
+    layer_ids: dict[Any, pd.Index] = {}
+    layer_offsets: dict[Any, int] = {}
+    types: list[Any] = []
     size = 0
     for layer, frame in frames.items():
         layer_ids[layer] = frame.index
         layer_offsets[layer] = size
-        coords.append(np.column_stack((frame.geometry.x, frame.geometry.y)))
+        coords.append(_node_xy(frame))
         types.extend([layer] * len(frame))
         size += len(frame)
+    layer_coords = dict(zip(frames, coords, strict=True))
     arc_sources, arc_targets, geometries, weights = [], [], [], []
+    implicit_ids: dict[tuple[Any, Any], int] = {}
+    implicit_coords: list[np.ndarray] = []
+    single_implicit = not frames and len(relations) == 1
     for (source, _, target), frame in relations.items():
         if frame.empty:
             continue
@@ -354,30 +615,20 @@ def _edge_arrays(graph: _GraphInput, weight: str | None) -> _GraphArrays:
         )
         endpoints = edge_endpoints(frame)
         if not frames:
-            # An edges-only network may supply explicit IDs at coincident crossings.
-            ends = _endpoints(lines)
-            labels = (
-                pd.Index(endpoints[0]).append(pd.Index(endpoints[1]))
-                if endpoints is not None
-                else pd.MultiIndex.from_arrays(list(ends.T))
+            u, v = _resolve_implicit_endpoints(
+                source,
+                target,
+                endpoints,
+                lines,
+                single_layer=single_implicit and source == target,
+                coords=coords,
+                implicit_ids=implicit_ids,
+                implicit_coords=implicit_coords,
+                types=types,
             )
-            codes, unique = pd.factorize(labels, sort=False)
-            first = np.unique(codes, return_index=True)[1]
-            coords.append(ends[first])
-            types.extend([None] * len(unique))
-            u, v = np.split(codes, 2)
-        elif endpoints is not None:
-            u = layer_ids[source].get_indexer(endpoints[0])
-            v = layer_ids[target].get_indexer(endpoints[1])
         else:
-            ends = _endpoints(lines)
-            a, b = np.split(ends, 2)
-            lookup = dict(zip(frames, coords, strict=True))
-            u = pd.MultiIndex.from_arrays(list(lookup[source].T)).get_indexer(
-                pd.MultiIndex.from_arrays(list(a.T))
-            )
-            v = pd.MultiIndex.from_arrays(list(lookup[target].T)).get_indexer(
-                pd.MultiIndex.from_arrays(list(b.T))
+            u, v = _resolve_explicit_endpoints(
+                source, target, endpoints, lines, layer_ids, layer_coords
             )
         if np.any(u < 0) or np.any(v < 0):
             msg = "An edge endpoint is missing from its node layer"
@@ -390,6 +641,8 @@ def _edge_arrays(graph: _GraphInput, weight: str | None) -> _GraphArrays:
                 msg = f"Edges require a non-negative numeric cost for {weight!r}"
                 raise ValueError(msg)
             weights.append(frame[weight].to_numpy())
+    if implicit_coords:
+        coords.append(np.vstack(implicit_coords))
     return (
         np.concatenate(coords) if coords else np.empty((0, 2)),
         np.asarray(types),
@@ -417,11 +670,7 @@ def _endpoints(lines: np.ndarray) -> np.ndarray:
     ndarray
         Start coordinates followed by end coordinates in input order.
     """
-    continuous = (
-        shapely.line_merge(lines, directed=True)
-        if np.any(shapely.get_type_id(lines) == 5)
-        else lines
-    )
+    continuous = _merge_lines(lines)
     ends = np.concatenate((shapely.get_point(continuous, 0), shapely.get_point(continuous, -1)))
     xy = np.asarray(shapely.get_coordinates(ends))
     if len(xy) != 2 * len(lines):
@@ -449,7 +698,10 @@ def _weights(values: np.ndarray, weight: str | None) -> np.ndarray:
         Non-negative float costs, including infinite barriers.
     """
     raw = np.asarray(values)
-    if raw.dtype.kind not in "iuf" and not all(isinstance(v, numbers.Real) for v in raw):
+    if raw.dtype.kind == "b" or (
+        raw.dtype.kind not in "iuf"
+        and not all(isinstance(v, numbers.Real) and not isinstance(v, bool) for v in raw)
+    ):
         msg = f"Edges require a non-negative numeric cost for {weight!r}"
         raise ValueError(msg)
     costs = raw.astype(float, copy=False)
@@ -504,13 +756,19 @@ def _snap_points(
         msg = "Origins and destinations must be points"
         raise ValueError(msg)
     indices = np.flatnonzero(valid)
+    if len(indices):
+        xy = shapely.get_coordinates(geometry[indices])
+        finite = np.all(np.isfinite(xy), axis=1)
+        indices, xy = indices[finite], xy[finite]
+    else:
+        xy = np.empty((0, 2), dtype=float)
     feature = np.full(len(points), -1)
     distance = np.full(len(points), np.inf)
     along = np.zeros(len(points))
-    if connect_to == "node" and isinstance(tree, cKDTree):
-        dist, nearest = tree.query(shapely.get_coordinates(geometry[indices]))
+    if len(indices) and connect_to == "node" and isinstance(tree, cKDTree):
+        dist, nearest = tree.query(xy)
         feature[indices], distance[indices] = nodes[nearest], dist
-    elif connect_to == "edge" and isinstance(tree, shapely.STRtree) and lines.size:
+    elif len(indices) and connect_to == "edge" and isinstance(tree, shapely.STRtree) and lines.size:
         pairs, dist = tree.query_nearest(geometry[indices], return_distance=True)
         # Resolve equidistant lines in their stable graph order.
         order = np.lexsort((pairs[1], pairs[0]))
@@ -650,7 +908,7 @@ def _two_labels(
         for arc in range(matrix.indptr[vertex], matrix.indptr[vertex + 1]):
             neighbor = matrix.indices[arc]
             length = cost + matrix.data[arc]
-            if length <= limit and owners[neighbor, 1] < 0:
+            if length <= limit and owners[neighbor, 1] < 0 and owners[neighbor, 0] != label:
                 heapq.heappush(queue, (length, label, neighbor))
     return distances, owners
 
@@ -950,18 +1208,22 @@ def _pairs(
     pending = 0
     for batch in row_batches(len(representatives), base.shape[0] * source_vertices.shape[1]):
         batch_rows = representatives[batch]
-        seeds, inverse = np.unique(source_vertices[batch_rows], return_inverse=True)
+        batch_vertices = source_vertices[batch_rows]
+        batch_offsets = source_offsets[batch_rows]
+        finite_slots = np.isfinite(batch_offsets)
+        seeds, inverse = np.unique(batch_vertices[finite_slots], return_inverse=True)
         by_endpoint = np.vstack(
             [distances for _, distances, _ in distance_batches(base, seeds, limit)]
         )
-        endpoint_rows = inverse.reshape(len(batch_rows), -1)
+        endpoint_rows = np.full(batch_vertices.shape, -1, dtype=int)
+        endpoint_rows[finite_slots] = inverse
         for local, rep in enumerate(batch_rows):
             index = batch.start + local
-            lengths = by_endpoint[endpoint_rows[local, 0]] + source_offsets[rep, 0]
-            for slot in range(1, source_vertices.shape[1]):
-                lengths = np.minimum(
-                    lengths, by_endpoint[endpoint_rows[local, slot]] + source_offsets[rep, slot]
-                )
+            lengths = np.full(base.shape[0], np.inf)
+            for slot in range(source_vertices.shape[1]):
+                row_idx = endpoint_rows[local, slot]
+                if row_idx >= 0:
+                    lengths = np.minimum(lengths, by_endpoint[row_idx] + batch_offsets[local, slot])
             costs = _target_costs(
                 source, rep, target, target_vertices, edge_data, lengths, offsets, reverse
             )
@@ -985,6 +1247,66 @@ def _pairs(
     if not blocks:
         return empty
     return _rank(blocks, k)
+
+
+def _validate_route_options(
+    graph: _GraphInput | None,
+    directed: bool | None,
+    threshold: float | None,
+    k: int | None,
+    connect_to: Literal["node", "edge"],
+    max_connection_distance: float,
+) -> tuple[_GraphInput, bool, float]:
+    """
+    Validate public routing arguments and resolve traversal direction and cutoff.
+
+    Ensures all query bounds are non-negative and prevents treating undirected
+    NetworkX graphs as directed.
+
+    Parameters
+    ----------
+    graph : _GraphInput or None
+        Candidate spatial graph input.
+    directed : bool or None
+        Requested traversal direction override.
+    threshold : float or None
+        Optional inclusive cost cutoff.
+    k : int or None
+        Optional maximum destination count per origin.
+    connect_to : {"node", "edge"}
+        Attachment mode.
+    max_connection_distance : float
+        Maximum straight-line snapping distance.
+
+    Returns
+    -------
+    tuple
+        Validated graph, resolved direction flag, and numeric cutoff.
+    """
+    if graph is None:
+        msg = "Supply a graph"
+        raise ValueError(msg)
+    if connect_to not in ("node", "edge"):
+        msg = "connect_to must be 'node' or 'edge'"
+        raise ValueError(msg)
+    limit = math.inf if threshold is None else threshold
+    if not limit >= 0:
+        msg = "threshold must be non-negative"
+        raise ValueError(msg)
+    if k is not None and (isinstance(k, bool) or not isinstance(k, numbers.Integral) or k <= 0):
+        msg = "k must be a positive integer"
+        raise ValueError(msg)
+    if not max_connection_distance >= 0:
+        msg = "max_connection_distance must be non-negative"
+        raise ValueError(msg)
+    if directed is None:
+        resolved_directed = isinstance(graph, nx.Graph) and graph.is_directed()
+    elif directed and isinstance(graph, nx.Graph) and not graph.is_directed():
+        msg = "directed=True requires a directed NetworkX graph"
+        raise ValueError(msg)
+    else:
+        resolved_directed = directed
+    return graph, resolved_directed, limit
 
 
 def _route(
@@ -1033,27 +1355,17 @@ def _route(
     tuple
         Connected point sets, row positions, column positions and network costs.
     """
-    if graph is None:
-        msg = "Supply a graph"
-        raise ValueError(msg)
-    if connect_to not in ("node", "edge"):
-        msg = "connect_to must be 'node' or 'edge'"
-        raise ValueError(msg)
-    limit = math.inf if threshold is None else threshold
-    if not limit >= 0:
-        msg = "threshold must be non-negative"
-        raise ValueError(msg)
-    if k is not None and (isinstance(k, bool) or not isinstance(k, numbers.Integral) or k <= 0):
-        msg = "k must be a positive integer"
-        raise ValueError(msg)
-    if not max_connection_distance >= 0:
-        msg = "max_connection_distance must be non-negative"
-        raise ValueError(msg)
-
-    coords, layers, crs, u, v, raw_lines, values = _edge_arrays(graph, weight)
-    if directed is None:
-        directed = isinstance(graph, nx.Graph) and graph.is_directed()
-    types = [connect_node_types] if isinstance(connect_node_types, str) else connect_node_types
+    valid_graph, is_directed, limit = _validate_route_options(
+        graph, directed, threshold, k, connect_to, max_connection_distance
+    )
+    coords, layers, crs, u, v, raw_lines, values = _edge_arrays(valid_graph, weight)
+    types = (
+        [connect_node_types]
+        if isinstance(connect_node_types, str)
+        else list(connect_node_types)
+        if connect_node_types is not None
+        else None
+    )
     allowed = np.ones(len(coords), bool) if types is None else np.isin(layers, types)
     nodes = np.flatnonzero(allowed)
     if weight is None or connect_to == "edge":
@@ -1065,7 +1377,7 @@ def _route(
     costs = _weights(shapely.length(raw_lines) if weight is None else values, weight)
     finite = np.isfinite(costs)
     a, b, data = u[finite], v[finite], costs[finite]
-    if not directed:
+    if not is_directed:
         a, b, data = np.r_[a, b], np.r_[b, a], np.tile(data, 2)
     matrix = adjacency(a, b, data, len(coords))
 
@@ -1078,7 +1390,7 @@ def _route(
     else:
         eligible = finite & allowed[u] & allowed[v]
         lines, ends, rates = _segments(
-            coords, u[eligible], v[eligible], raw_lines[eligible], costs[eligible], directed
+            coords, u[eligible], v[eligible], raw_lines[eligible], costs[eligible], is_directed
         )
         lengths = shapely.length(lines)
         edge_data = _EdgeData(ends=ends, rates=rates, lengths=np.where(lengths > 0, lengths, 1.0))
@@ -1284,7 +1596,8 @@ def filter_graph_by_distance(
     Examples
     --------
     >>> import networkx as nx
-    >>>     >>> # Create a graph
+    >>> from shapely.geometry import Point
+    >>> # Create a graph
     >>> G = nx.Graph()
     >>> G.add_node(0, pos=(0, 0))
     >>> G.add_node(1, pos=(10, 0))
@@ -1300,12 +1613,7 @@ def filter_graph_by_distance(
     is_graph_input = isinstance(graph, (nx.Graph, nx.MultiGraph))
 
     # Convert to NetworkX if needed
-    if is_graph_input:
-        nx_graph = graph
-        original_crs = nx_graph.graph.get("crs")
-    else:
-        nx_graph = gdf_to_nx(edges=graph)
-        original_crs = graph.crs if hasattr(graph, "crs") else None
+    nx_graph = graph if is_graph_input else gdf_to_nx(edges=graph)
 
     distances = compute_center_node_distances(
         nx_graph,
@@ -1313,10 +1621,11 @@ def filter_graph_by_distance(
         edge_attr=edge_attr,
         cutoff=threshold,
     )
-    if not distances and not nx.get_node_attributes(nx_graph, "pos"):
+    if not distances and not node_positions(nx_graph):
         if is_graph_input:
             graph_type = type(graph)
             return graph_type()
+        original_crs = graph.crs if hasattr(graph, "crs") else None
         return gpd.GeoDataFrame(geometry=[], crs=original_crs)
 
     subgraph = build_reachable_subgraph(nx_graph, distances, threshold)

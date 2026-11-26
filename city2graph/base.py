@@ -1,10 +1,11 @@
 """
-Base Module for Graph Conversion.
+Layer 0 foundation module for city2graph.
 
-This module provides foundational classes for graph conversion operations,
-including metadata management, data validation, and base converter interfaces.
-These classes serve as the core building blocks for the city2graph package's
-graph conversion functionality across different formats (NetworkX, PyTorch Geometric).
+This module provides dependency-free foundational classes for graph conversion
+(metadata management, data validation, and base converter interfaces) together
+with shared low-level primitives for row batching, edge-endpoint extraction,
+sparse adjacency construction, batched shortest-path traversal, and centre-node
+reachability queries.
 """
 
 # Standard library imports
@@ -1412,6 +1413,32 @@ def normalize_center_points(
     return typing.cast("list[Point]", center_points)
 
 
+def node_positions(graph: nx.Graph | nx.MultiGraph) -> dict[Any, Any]:
+    """
+    Extract node coordinates from ``pos`` or OSMnx-style ``x``/``y`` attributes.
+
+    Nodes with a ``pos`` attribute retain it as-is; nodes missing ``pos`` fall
+    back to ``(x, y)`` when both coordinates are present.
+
+    Parameters
+    ----------
+    graph : networkx.Graph or networkx.MultiGraph
+        Input graph whose node coordinates should be extracted.
+
+    Returns
+    -------
+    dict[Any, Any]
+        Mapping of node identifiers to coordinate tuples.
+    """
+    positions: dict[Any, Any] = dict(nx.get_node_attributes(graph, "pos"))
+    if len(positions) == graph.number_of_nodes():
+        return positions
+    for node, data in graph.nodes(data=True):
+        if node not in positions and "x" in data and "y" in data:
+            positions[node] = (data["x"], data["y"])
+    return positions
+
+
 def compute_center_node_distances(
     graph: nx.Graph | nx.MultiGraph,
     center_point: Point | Sequence[Point] | gpd.GeoSeries | gpd.GeoDataFrame,
@@ -1440,7 +1467,7 @@ def compute_center_node_distances(
     dict[Any, float]
         Reachable node distances keyed by node id.
     """
-    pos_dict = nx.get_node_attributes(graph, "pos")
+    pos_dict = node_positions(graph)
     if not pos_dict:
         return {}
 
