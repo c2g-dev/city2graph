@@ -1101,7 +1101,7 @@ def test_batched_costs_match_networkx(streets: nx.MultiDiGraph, reverse: bool) -
     origins = points(*(coords[i] for i in starts))
     destinations = points(*(coords[j] for j in ends))
     table = network_costs(origins, destinations, streets, weight="time", threshold=30, k=2)
-    expected = []
+    expected: list[tuple[int, int, float]] = []
     for row, source in enumerate(starts):
         lengths = nx.single_source_dijkstra_path_length(streets, source, cutoff=30, weight="time")
         ranked = sorted((lengths[node], col) for col, node in enumerate(ends) if node in lengths)

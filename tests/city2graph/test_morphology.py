@@ -21,6 +21,7 @@ from shapely.geometry import Polygon
 from shapely.geometry import box
 
 import city2graph.morphology as morph
+import city2graph.utils.spatial as spatial
 from city2graph.morphology import _filter_tessellation_by_network_distance
 from city2graph.morphology import _segments_within_network_distance
 from city2graph.morphology import morphological_graph
@@ -1890,8 +1891,8 @@ class TestMorphologicalGraphs:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A list of distances yields a dict of (nodes, edges) keyed by distance."""
-        search = Mock(wraps=nx.multi_source_dijkstra_path_length)
-        monkeypatch.setattr(nx, "multi_source_dijkstra_path_length", search)
+        search = Mock(wraps=spatial.minimum_distances)
+        monkeypatch.setattr(spatial, "minimum_distances", search)
         distances = [2.0, 20.0]
 
         result = morphological_graphs(

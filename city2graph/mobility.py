@@ -2103,8 +2103,8 @@ def _pairs(
     result.extend((row, -cost, -col) for row, heap in best.items() for cost, col in heap)
     if not result:
         return empty, empty, empty.astype(float)
-    rows, costs, cols = zip(*sorted(result), strict=True)
-    return np.asarray(rows), np.asarray(cols), np.asarray(costs)
+    origin_positions, costs, destination_positions = zip(*sorted(result), strict=True)
+    return np.asarray(origin_positions), np.asarray(destination_positions), np.asarray(costs)
 
 
 def _route(
