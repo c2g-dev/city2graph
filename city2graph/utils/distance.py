@@ -9,7 +9,6 @@ import numbers
 import typing
 from collections.abc import Sequence
 from dataclasses import dataclass
-from functools import cached_property
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Literal
@@ -50,8 +49,46 @@ logger = logging.getLogger("city2graph.utils")
 _KNN_HULL_MAX_ATTEMPTS = 50
 _HULL_NEIGHBOR_CACHE_BYTES = 8 * 1024 * 1024
 
+type _GraphArrays = tuple[
+    np.ndarray, np.ndarray, object, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+]
+type _Points = gpd.GeoDataFrame | gpd.GeoSeries
+type _GraphInput = (
+    nx.Graph
+    | gpd.GeoDataFrame
+    | tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]
+    | tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]
+)
 
-def distance_batches(
+
+@dataclass(slots=True)
+class _EdgeData:
+    """
+    Projected line metadata for edge-based point attachment.
+
+    Stores endpoint vertex pairs, directional costs, and positive line lengths.
+    """
+
+    ends: np.ndarray
+    rates: np.ndarray
+    lengths: np.ndarray
+
+
+@dataclass(slots=True)
+class _Attachments:
+    """
+    Point attachments in original input order.
+
+    Feature indices refer to the eligible node or edge index for the query.
+    """
+
+    labels: pd.Index
+    feature: np.ndarray
+    along: np.ndarray
+    distance: np.ndarray
+
+
+def _distance_batches(
     matrix: sparse.csr_matrix, sources: np.ndarray, limit: float, *, paths: bool = False
 ) -> Iterator[tuple[slice, np.ndarray, np.ndarray | None]]:
     """
@@ -86,32 +123,7 @@ def distance_batches(
             yield batch, result, None
 
 
-def minimum_distances(
-    matrix: sparse.csr_matrix, indices: Sequence[int] | np.ndarray, limit: float
-) -> np.ndarray:
-    """
-    Run a bounded multi-source search.
-
-    The direction of each CSR arc determines traversal direction.
-
-    Parameters
-    ----------
-    matrix : scipy.sparse.csr_matrix
-        Weighted directed adjacency in search order.
-    indices : array-like
-        Source vertex indices.
-    limit : float
-        Inclusive cost cutoff for exploration.
-
-    Returns
-    -------
-    ndarray
-        Minimum cost from any source for each vertex, infinity if unreachable.
-    """
-    return np.asarray(csgraph.dijkstra(matrix, indices=indices, limit=limit, min_only=True))
-
-
-def adjacency(row: np.ndarray, col: np.ndarray, data: np.ndarray, n: int) -> sparse.csr_matrix:
+def _adjacency(row: np.ndarray, col: np.ndarray, data: np.ndarray, n: int) -> sparse.csr_matrix:
     """
     Build directed CSR adjacency from weighted arcs.
 
@@ -133,7 +145,6 @@ def adjacency(row: np.ndarray, col: np.ndarray, data: np.ndarray, n: int) -> spa
     scipy.sparse.csr_matrix
         Weighted adjacency in vertex order.
     """
-    # Keep the smallest weight of each parallel or reversed duplicate.
     order = np.lexsort((data, col, row))
     row, col, data = row[order], col[order], data[order]
     first = np.ones(len(row), dtype=bool)
@@ -141,7 +152,7 @@ def adjacency(row: np.ndarray, col: np.ndarray, data: np.ndarray, n: int) -> spa
     return sparse.csr_matrix((data[first], (row[first], col[first])), shape=(n, n))
 
 
-def sparse_adjacency(
+def _sparse_adjacency(
     graph: nx.Graph, weight: str, index: dict[Any, int]
 ) -> tuple[sparse.csr_matrix, bool, bool] | None:
     """
@@ -151,10 +162,10 @@ def sparse_adjacency(
 
     Parameters
     ----------
-    graph : networkx.Graph or spatial graph
-        Network supplying arcs and node coordinates.
-    weight : str or None
-        Edge cost attribute, or None for geometry length.
+    graph : networkx.Graph
+        Network supplying arcs and edge weights.
+    weight : str
+        Edge cost attribute.
     index : dict
         Mapping from node label to its matrix position.
 
@@ -192,11 +203,11 @@ def sparse_adjacency(
     finite = data < np.inf
     has_infinite = not bool(finite.all())
     row, col, data = row[finite], col[finite], data[finite]
-    matrix = adjacency(row, col, data, len(index))
+    matrix = _adjacency(row, col, data, len(index))
     return matrix, has_infinite, integers > 0
 
 
-def closest_positions(costs: np.ndarray, k: int) -> np.ndarray:
+def _closest_positions(costs: np.ndarray, k: int) -> np.ndarray:
     """
     Select the k lowest costs with stable ties.
 
@@ -222,123 +233,104 @@ def closest_positions(costs: np.ndarray, k: int) -> np.ndarray:
     return np.concatenate((nearer[np.argsort(costs[nearer], kind="stable")], tied))
 
 
-type _GraphArrays = tuple[
-    np.ndarray, np.ndarray, object, np.ndarray, np.ndarray, np.ndarray, np.ndarray
-]
-
-type Points = gpd.GeoDataFrame | gpd.GeoSeries
-type GraphInput = (
-    nx.Graph
-    | gpd.GeoDataFrame
-    | tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]
-    | tuple[dict[str, gpd.GeoDataFrame], dict[tuple[str, str, str], gpd.GeoDataFrame]]
-)
-
-
-@dataclass
-class _Connections:
+def _edge_groups(feature: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Store point attachments in input order.
+    Group connected rows by physical edge for direct interior trips.
 
-    Feature indices refer to the spatial index owned by the prepared network.
+    Only connected points take part in same-edge comparisons.
+
+    Parameters
+    ----------
+    feature : ndarray
+        Connected feature index per input row, or -1 if disconnected.
+
+    Returns
+    -------
+    tuple
+        Sorted positions, distinct edge IDs and group boundaries.
     """
+    rows = np.flatnonzero(feature >= 0)
+    rows = rows[np.argsort(feature[rows], kind="stable")]
+    keys, first = np.unique(feature[rows], return_index=True)
+    return rows, keys, np.r_[first, len(rows)]
 
-    network: _SpatialNetwork
-    labels: pd.Index
-    feature: np.ndarray
-    along: np.ndarray
-    distance: np.ndarray
 
-    @cached_property
-    def edge_groups(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Group connected rows by physical edge for direct interior trips.
+def _attachment_groups(feature: np.ndarray, along: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Index distinct attachments and their original row positions.
 
-        Only connected points take part in same-edge comparisons.
+    Coincident projections share one endpoint search.
 
-        Returns
-        -------
-        tuple
-            Sorted positions, distinct edge IDs and group boundaries.
-        """
-        rows = np.flatnonzero(self.feature >= 0)
-        rows = rows[np.argsort(self.feature[rows], kind="stable")]
-        keys, first = np.unique(self.feature[rows], return_index=True)
-        bounds = np.r_[first, len(rows)]
-        return rows, keys, bounds
+    Parameters
+    ----------
+    feature : ndarray
+        Connected feature index per input row, or -1 if disconnected.
+    along : ndarray
+        Linear offset along the connected line in CRS units.
 
-    @cached_property
-    def groups(self) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Index distinct attachments and their original row positions.
+    Returns
+    -------
+    tuple
+        Sorted positions and group boundaries.
+    """
+    pos = np.flatnonzero(feature >= 0)
+    order = pos[np.lexsort((along[pos], feature[pos]))]
+    breaks = np.flatnonzero((np.diff(feature[order]) != 0) | (np.diff(along[order]) != 0)) + 1
+    bounds = np.r_[0, breaks, len(order)] if len(order) else np.array([0])
+    return order, bounds
 
-        Coincident projections share one endpoint search.
 
-        Returns
-        -------
-        tuple
-            Sorted positions and group boundaries.
-        """
-        pos = np.flatnonzero(self.feature >= 0)
-        order = pos[np.lexsort((self.along[pos], self.feature[pos]))]
-        breaks = (
-            np.flatnonzero((np.diff(self.feature[order]) != 0) | (np.diff(self.along[order]) != 0))
-            + 1
-        )
-        bounds = np.r_[0, breaks, len(order)] if len(order) else np.array([0])
-        return order, bounds
+def _vertices(feature: np.ndarray, edge_data: _EdgeData | None) -> np.ndarray:
+    """
+    Return the base nodes available to each connected point.
 
-    @cached_property
-    def vertices(self) -> np.ndarray:
-        """
-        Return the base nodes available to each connected point.
+    Node connections have one column and edge connections have two.
 
-        Node connections have one column and edge connections have two.
+    Parameters
+    ----------
+    feature : ndarray
+        Connected feature index per input row.
+    edge_data : _EdgeData or None
+        Projected edge endpoints, or None for node attachment.
 
-        Returns
-        -------
-        ndarray
-            Vertex positions for each connection.
-        """
-        if self.network.connect_to == "node":
-            return self.feature[:, None]
-        return np.asarray(self.network.ends[self.feature])
+    Returns
+    -------
+    ndarray
+        Vertex positions for each connection.
+    """
+    if edge_data is None:
+        return feature[:, None]
+    return np.asarray(edge_data.ends[feature])
 
-    @cached_property
-    def departure(self) -> np.ndarray:
-        """
-        Return costs from the projected points to each endpoint.
 
-        One-way restrictions apply to interior projections.
+def _endpoint_costs(
+    points: _Attachments, edge_data: _EdgeData | None, *, arrival: bool = False
+) -> np.ndarray:
+    """
+    Return directional costs between projected points and their edge endpoints.
 
-        Returns
-        -------
-        ndarray
-            Outgoing network costs in endpoint order.
-        """
-        if self.network.connect_to == "node":
-            return np.zeros((len(self.feature), 1))
-        length = self.network.edge_lengths[self.feature]
-        fractions = np.column_stack((self.along, length - self.along)) / length[:, None]
-        return _fraction_cost(fractions, self.network.rates[self.feature])
+    One-way restrictions apply to interior projections.
 
-    @cached_property
-    def arrival(self) -> np.ndarray:
-        """
-        Return costs from each endpoint to the projected points.
+    Parameters
+    ----------
+    points : _Attachments
+        Connected points in input order.
+    edge_data : _EdgeData or None
+        Projected edge geometry metadata, or None for node attachment.
+    arrival : bool, default False
+        Compute incoming costs from endpoints when True, outgoing otherwise.
 
-        A directed edge can have different access and egress costs.
-
-        Returns
-        -------
-        ndarray
-            Incoming network costs in endpoint order.
-        """
-        if self.network.connect_to == "node":
-            return self.departure
-        length = self.network.edge_lengths[self.feature]
-        fractions = np.column_stack((self.along, length - self.along)) / length[:, None]
-        return _fraction_cost(fractions, self.network.rates[self.feature, ::-1])
+    Returns
+    -------
+    ndarray
+        Network costs in endpoint order.
+    """
+    if edge_data is None:
+        return np.zeros((len(points.feature), 1))
+    length = edge_data.lengths[points.feature]
+    fractions = np.column_stack((points.along, length - points.along)) / length[:, None]
+    rates = edge_data.rates[points.feature, ::-1] if arrival else edge_data.rates[points.feature]
+    return _fraction_cost(fractions, rates)
 
 
 def _position(data: dict[str, Any]) -> tuple[float, float]:
@@ -468,7 +460,7 @@ def _nx_arrays(graph: nx.Graph, weight: str | None) -> _GraphArrays:
     )
 
 
-def _edge_arrays(graph: GraphInput, weight: str | None) -> _GraphArrays:
+def _edge_arrays(graph: _GraphInput, weight: str | None) -> _GraphArrays:
     """
     Read geospatial columns in node-layer order and map edge endpoints to integer positions.
 
@@ -476,7 +468,7 @@ def _edge_arrays(graph: GraphInput, weight: str | None) -> _GraphArrays:
 
     Parameters
     ----------
-    graph : GraphInput
+    graph : _GraphInput
         Input spatial graph.
     weight : str | None
         Edge attribute for traversal cost. Omit to use planar length.
@@ -629,172 +621,68 @@ def _weights(values: np.ndarray, weight: str | None) -> np.ndarray:
     return costs
 
 
-class _SpatialNetwork:
+def _snap_points(
+    points: _Points,
+    crs: object,
+    connect_to: Literal["node", "edge"],
+    max_connection_distance: float,
+    nodes: np.ndarray,
+    lines: np.ndarray,
+    tree: cKDTree | shapely.STRtree | None,
+) -> _Attachments:
     """
-    Internal weighted graph representation for OD shortest-path queries.
+    Attach query points to eligible network nodes or line segments.
 
-    Stores the CSR adjacency and spatial index used to attach query points.
+    Missing points and points beyond the distance limit retain their input positions.
 
     Parameters
     ----------
-    graph : networkx.Graph or spatial graph
-        Network supplying arcs and node coordinates.
-    weight : str or None
-        Edge cost attribute, or None for geometry length.
-    directed : bool or None
-        Traversal direction override, inferred from NetworkX when omitted.
-    connect_to : str
-        Feature used for point attachment, either node or edge.
-    connect_node_types : str or sequence of str, optional
-        Eligible node layers for access and egress.
+    points : GeoSeries or GeoDataFrame
+        Spatial points to attach to the network.
+    crs : object
+        Expected coordinate reference system of the network.
+    connect_to : {"node", "edge"}
+        Attachment mode.
+    max_connection_distance : float
+        Inclusive snapping distance limit in planar CRS units.
+    nodes : ndarray
+        Eligible vertex indices for node attachment.
+    lines : ndarray
+        Eligible LineString geometries for edge attachment.
+    tree : cKDTree or STRtree or None
+        Spatial index for eligible attachment features.
+
+    Returns
+    -------
+    _Attachments
+        Input labels, connected feature indices, offsets and distances.
     """
-
-    def __init__(
-        self,
-        graph: GraphInput,
-        *,
-        weight: str | None = None,
-        directed: bool | None = None,
-        connect_to: Literal["node", "edge"] = "node",
-        connect_node_types: str | Sequence[str] | None = None,
-    ) -> None:
-        """
-        Build the adjacency and connection index.
-
-        Only eligible features participate in snapping. All traversable arcs participate in routing.
-
-        Parameters
-        ----------
-        graph : networkx.Graph or spatial graph
-            Network supplying arcs and node coordinates.
-        weight : str or None
-            Edge cost attribute, or None for geometry length.
-        directed : bool or None
-            Traversal direction override, inferred from NetworkX when omitted.
-        connect_to : str
-            Feature used for point attachment, either node or edge.
-        connect_node_types : str or sequence of str, optional
-            Eligible node layers for access and egress.
-        """
-        if connect_to not in ("node", "edge"):
-            msg = "connect_to must be 'node' or 'edge'"
-            raise ValueError(msg)
-        coords, layers, self.crs, u, v, lines, values = _edge_arrays(graph, weight)
-        self.connect_to = connect_to
-        if directed is None:
-            directed = isinstance(graph, nx.Graph) and graph.is_directed()
-        types = [connect_node_types] if isinstance(connect_node_types, str) else connect_node_types
-        allowed = np.ones(len(coords), bool) if types is None else np.isin(layers, types)
-        self.nodes = np.flatnonzero(allowed)
-        if weight is None or connect_to == "edge":
-            missing = shapely.is_missing(lines)
-            if missing.any():
-                lines[missing] = shapely.linestrings(
-                    np.stack((coords[u[missing]], coords[v[missing]]), axis=1)
-                )
-        costs = _weights(shapely.length(lines) if weight is None else values, weight)
-        finite = np.isfinite(costs)
-        a, b, data = u[finite], v[finite], costs[finite]
-        if not directed:
-            a, b, data = np.r_[a, b], np.r_[b, a], np.tile(data, 2)
-        self.matrix = adjacency(a, b, data, len(coords))
-        self.tree = None
-        self.lines = np.empty(0, object)
-        if connect_to == "node":
-            if self.nodes.size:
-                self.tree = cKDTree(coords[self.nodes])
-            return
-        eligible = finite & allowed[u] & allowed[v]
-        self.lines, self.ends, self.rates = _segments(
-            coords, u[eligible], v[eligible], lines[eligible], costs[eligible], directed
-        )
-        lengths = shapely.length(self.lines)
-        # All projections on a zero-length feature coincide at its start.
-        self.edge_lengths = np.where(lengths > 0, lengths, 1.0)
-        self.tree = shapely.STRtree(self.lines)
-
-    @cached_property
-    def _reverse(self) -> sparse.csr_matrix:
-        """
-        Transpose the base adjacency once.
-
-        Multiple destination sets can reuse the reverse graph.
-
-        Returns
-        -------
-        scipy.sparse.csr_matrix
-            Adjacency for searches from destination vertices.
-        """
-        return self.matrix.T.tocsr()
-
-    @cached_property
-    def _reverse_with_seeds(self) -> sparse.csr_matrix:
-        """
-        Reserve one incoming seed per node for repeated weighted multi-source searches.
-
-        Only the seed weights change between facility categories.
-
-        Returns
-        -------
-        sparse.csr_matrix
-            Reverse adjacency with an extra seed row per road vertex.
-        """
-        base = self._reverse
-        n = base.shape[0]
-        # The final n arcs have private seed tails and can never be reached from a road.
-        return sparse.csr_matrix(
-            (
-                np.r_[base.data, np.zeros(n)],
-                np.r_[base.indices, np.arange(n)],
-                np.r_[base.indptr, base.nnz + np.arange(1, n + 1)],
-            ),
-            shape=(2 * n, 2 * n),
-        )
-
-    def connect(self, points: Points, max_connection_distance: float = math.inf) -> _Connections:
-        """
-        Connect points to the prepared graph.
-
-        Missing points and points beyond the distance limit retain their input positions.
-
-        Parameters
-        ----------
-        points : GeoSeries or GeoDataFrame
-            Spatial points to connect to the network.
-        max_connection_distance : float
-            Inclusive snapping distance limit in planar CRS units.
-
-        Returns
-        -------
-        _Connections
-            Input labels, connected feature indices, offsets and distances.
-        """
-        if self.crs is not None and points.crs != self.crs:
-            msg = "Points and graph must have the same CRS"
-            raise ValueError(msg)
-        geometry = points.geometry.to_numpy()
-        valid = ~(shapely.is_missing(geometry) | shapely.is_empty(geometry))
-        if np.any(shapely.get_type_id(geometry[valid]) != 0):
-            msg = "Origins and destinations must be points"
-            raise ValueError(msg)
-        indices = np.flatnonzero(valid)
-        feature = np.full(len(points), -1)
-        distance = np.full(len(points), np.inf)
-        along = np.zeros(len(points))
-        if self.connect_to == "node" and self.tree is not None:
-            dist, nearest = self.tree.query(shapely.get_coordinates(geometry[indices]))
-            feature[indices], distance[indices] = self.nodes[nearest], dist
-        elif self.connect_to == "edge" and self.tree is not None and self.lines.size:
-            pairs, dist = self.tree.query_nearest(geometry[indices], return_distance=True)
-            # Resolve equidistant lines in their stable graph order.
-            order = np.lexsort((pairs[1], pairs[0]))
-            _, first = np.unique(pairs[0, order], return_index=True)
-            hits = order[first]
-            points_at, lines_at = indices[pairs[0, hits]], pairs[1, hits]
-            feature[points_at], distance[points_at] = lines_at, dist[hits]
-            along[points_at] = shapely.line_locate_point(self.lines[lines_at], geometry[points_at])
-        feature[distance > max_connection_distance] = -1
-        return _Connections(self, points.index.copy(), feature, along, distance)
+    if crs is not None and points.crs != crs:
+        msg = "Points and graph must have the same CRS"
+        raise ValueError(msg)
+    geometry = points.geometry.to_numpy()
+    valid = ~(shapely.is_missing(geometry) | shapely.is_empty(geometry))
+    if np.any(shapely.get_type_id(geometry[valid]) != 0):
+        msg = "Origins and destinations must be points"
+        raise ValueError(msg)
+    indices = np.flatnonzero(valid)
+    feature = np.full(len(points), -1)
+    distance = np.full(len(points), np.inf)
+    along = np.zeros(len(points))
+    if connect_to == "node" and isinstance(tree, cKDTree):
+        dist, nearest = tree.query(shapely.get_coordinates(geometry[indices]))
+        feature[indices], distance[indices] = nodes[nearest], dist
+    elif connect_to == "edge" and isinstance(tree, shapely.STRtree) and lines.size:
+        pairs, dist = tree.query_nearest(geometry[indices], return_distance=True)
+        # Resolve equidistant lines in their stable graph order.
+        order = np.lexsort((pairs[1], pairs[0]))
+        _, first = np.unique(pairs[0, order], return_index=True)
+        hits = order[first]
+        points_at, lines_at = indices[pairs[0, hits]], pairs[1, hits]
+        feature[points_at], distance[points_at] = lines_at, dist[hits]
+        along[points_at] = shapely.line_locate_point(lines[lines_at], geometry[points_at])
+    feature[distance > max_connection_distance] = -1
+    return _Attachments(points.index.copy(), feature, along, distance)
 
 
 def _fraction_cost(fraction: np.ndarray, rate: np.ndarray | float) -> np.ndarray:
@@ -844,7 +732,7 @@ def _nearest_labels(
     tuple
         Distances and owning destination positions for every vertex.
     """
-    distances = minimum_distances(matrix, seeds, limit)
+    distances = np.asarray(csgraph.dijkstra(matrix, indices=seeds, limit=limit, min_only=True))
     owner = np.full(matrix.shape[0], -1)
     order = np.argsort(labels)
     pointer, neighbors, weights = matrix.indptr, matrix.indices, matrix.data
@@ -869,7 +757,10 @@ def _nearest_labels(
 
 
 def _two_labels(
-    matrix: sparse.csr_matrix, points: _Connections, limit: float
+    matrix: sparse.csr_matrix,
+    points: _Attachments,
+    edge_data: _EdgeData | None,
+    limit: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Keep the closest two distinct input rows for leave-one-out queries.
@@ -880,8 +771,10 @@ def _two_labels(
     ----------
     matrix : sparse.csr_matrix
         Directed search adjacency.
-    points : _Connections
-        Projected destinations and directional costs from road endpoints.
+    points : _Attachments
+        Connected destinations in input order.
+    edge_data : _EdgeData or None
+        Projected edge geometry metadata, or None for node attachment.
     limit : float
         Inclusive upper bound in network cost units.
 
@@ -890,10 +783,12 @@ def _two_labels(
     tuple
         Costs and destination row positions in the closest two slots.
     """
+    arrival = _endpoint_costs(points, edge_data, arrival=True)
+    point_vertices = _vertices(points.feature, edge_data)
     rows, slots = np.nonzero(
-        (points.feature[:, None] >= 0) & np.isfinite(points.arrival) & (points.arrival <= limit)
+        (points.feature[:, None] >= 0) & np.isfinite(arrival) & (arrival <= limit)
     )
-    vertices, offsets = points.vertices[rows, slots], points.arrival[rows, slots]
+    vertices, offsets = point_vertices[rows, slots], arrival[rows, slots]
     order = np.lexsort((rows, offsets, vertices))
     _, first, groups = np.unique(vertices[order], return_index=True, return_inverse=True)
     winner = order[first]
@@ -923,7 +818,12 @@ def _two_labels(
 
 
 def _nearest_direct(
-    start: _Connections, end: _Connections, within: bool, costs: np.ndarray, labels: np.ndarray
+    start: _Attachments,
+    end: _Attachments,
+    edge_data: _EdgeData,
+    within: bool,
+    costs: np.ndarray,
+    labels: np.ndarray,
 ) -> None:
     """
     Compare endpoint detours with the closest downstream and upstream projections.
@@ -932,10 +832,12 @@ def _nearest_direct(
 
     Parameters
     ----------
-    start : _Connections
+    start : _Attachments
         Connected origins in input order.
-    end : _Connections
+    end : _Attachments
         Connected destinations in input order.
+    edge_data : _EdgeData
+        Projected edge geometry metadata.
     within : bool
         Whether origins and destinations refer to the same input rows.
     costs : ndarray
@@ -943,15 +845,15 @@ def _nearest_direct(
     labels : ndarray
         Current best destination position per origin, updated in place.
     """
-    source_order, source_edges, source_bounds = start.edge_groups
-    dest_order, dest_edges, dest_bounds = end.edge_groups
+    source_order, source_edges, source_bounds = _edge_groups(start.feature)
+    dest_order, dest_edges, dest_bounds = _edge_groups(end.feature)
     shared, origins, destinations = np.intersect1d(
         source_edges, dest_edges, assume_unique=True, return_indices=True
     )
     for edge, src_group, dst_group in zip(shared, origins, destinations, strict=True):
         rows = source_order[source_bounds[src_group] : source_bounds[src_group + 1]]
         cols = dest_order[dest_bounds[dst_group] : dest_bounds[dst_group + 1]]
-        for sign, rate in zip((-1, 1), start.network.rates[edge], strict=True):
+        for sign, rate in zip((-1, 1), edge_data.rates[edge], strict=True):
             ordered = cols[np.lexsort((cols, sign * end.along[cols]))]
             offsets = sign * end.along[ordered]
             positions = np.searchsorted(offsets, sign * start.along[rows])
@@ -972,7 +874,7 @@ def _nearest_direct(
             if within:
                 choice = np.where(choice == rows, second[positions], choice)
             delta = sign * (end.along[choice] - start.along[rows])
-            candidate = _fraction_cost(delta / start.network.edge_lengths[edge], rate)
+            candidate = _fraction_cost(delta / edge_data.lengths[edge], rate)
             improve = (choice >= 0) & (
                 (candidate < costs[rows]) | ((candidate == costs[rows]) & (choice < labels[rows]))
             )
@@ -981,7 +883,12 @@ def _nearest_direct(
 
 
 def _closest(
-    start: _Connections, end: _Connections, limit: float, within: bool
+    matrix: sparse.csr_matrix,
+    start: _Attachments,
+    end: _Attachments,
+    edge_data: _EdgeData | None,
+    limit: float,
+    within: bool,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Find the closest destination with one reverse multi-source traversal.
@@ -990,10 +897,14 @@ def _closest(
 
     Parameters
     ----------
-    start : _Connections
+    matrix : scipy.sparse.csr_matrix
+        Directed adjacency matrix.
+    start : _Attachments
         Connected origins in input order.
-    end : _Connections
+    end : _Attachments
         Connected destinations in input order.
+    edge_data : _EdgeData or None
+        Projected edge geometry metadata, or None for node attachment.
     limit : float
         Inclusive upper bound in network cost units.
     within : bool
@@ -1004,42 +915,54 @@ def _closest(
     tuple
         Origin positions, destination positions and minimum costs.
     """
+    reverse = matrix.T.tocsr()
     valid = np.flatnonzero(end.feature >= 0)
     if within:
-        distances, owners = _two_labels(end.network._reverse, end, limit)
-    elif end.network.connect_to == "node":
+        distances, owners = _two_labels(reverse, end, edge_data, limit)
+    elif edge_data is None:
         seeds, first = np.unique(end.feature[valid], return_index=True)
-        distances, owners = _nearest_labels(end.network._reverse, seeds, valid[first], limit)
+        distances, owners = _nearest_labels(reverse, seeds, valid[first], limit)
     else:
         # Only the cheapest destination offset at each road node can win.
-        rows, slots = np.nonzero(np.isfinite(end.arrival) & (end.feature[:, None] >= 0))
-        vertices, offsets = end.vertices[rows, slots], end.arrival[rows, slots]
+        arrival = _endpoint_costs(end, edge_data, arrival=True)
+        end_vertices = _vertices(end.feature, edge_data)
+        rows, slots = np.nonzero(np.isfinite(arrival) & (end.feature[:, None] >= 0))
+        vertices, offsets = end_vertices[rows, slots], arrival[rows, slots]
         order = np.lexsort((rows, offsets, vertices))
         seeds, first = np.unique(vertices[order], return_index=True)
         winners = order[first]
-        matrix = end.network._reverse_with_seeds
-        n = end.network.matrix.shape[0]
-        matrix.data[matrix.nnz - n + seeds] = offsets[winners]
-        distances, owners = _nearest_labels(matrix, n + seeds, rows[winners], limit)
-    if not within and end.network.connect_to == "node":
+        n = reverse.shape[0]
+        m = len(seeds)
+        seeded = sparse.csr_matrix(
+            (
+                np.r_[reverse.data, offsets[winners]],
+                np.r_[reverse.indices, seeds],
+                np.r_[reverse.indptr, reverse.nnz + np.arange(1, m + 1)],
+            ),
+            shape=(n + m, n + m),
+        )
+        distances, owners = _nearest_labels(seeded, np.arange(n, n + m), rows[winners], limit)
+    if not within and edge_data is None:
         labels = owners[start.feature, 0]
         rows = np.flatnonzero((start.feature >= 0) & (labels >= 0))
         return rows, labels[rows], distances[start.feature[rows], 0]
+    start_vertices = _vertices(start.feature, edge_data)
+    departure = _endpoint_costs(start, edge_data, arrival=False)
     rows = np.arange(len(start.feature))
     costs = np.full(len(rows), np.inf)
     labels = np.full(len(rows), -1)
-    for slot in range(start.vertices.shape[1]):
-        vertices = start.vertices[:, slot]
+    for slot in range(start_vertices.shape[1]):
+        vertices = start_vertices[:, slot]
         for rank in range(owners.shape[1]):
             choice = owners[vertices, rank]
-            candidate = distances[vertices, rank] + start.departure[:, slot]
+            candidate = distances[vertices, rank] + departure[:, slot]
             valid_choice = (choice >= 0) & ((choice != rows) if within else True)
             improve = valid_choice & (
                 (candidate < costs) | ((candidate == costs) & (choice < labels))
             )
             costs[improve], labels[improve] = candidate[improve], choice[improve]
-    if end.network.connect_to == "edge":
-        _nearest_direct(start, end, within, costs, labels)
+    if edge_data is not None:
+        _nearest_direct(start, end, edge_data, within, costs, labels)
     keep = (start.feature >= 0) & np.isfinite(costs) & (costs <= limit)
     return rows[keep], labels[keep], costs[keep]
 
@@ -1078,9 +1001,11 @@ def _rank(
 
 
 def _target_costs(
-    source: _Connections,
+    source: _Attachments,
     rep: int,
-    target: _Connections,
+    target: _Attachments,
+    target_vertices: np.ndarray,
+    edge_data: _EdgeData | None,
     lengths: np.ndarray,
     offsets: np.ndarray,
     reverse: bool,
@@ -1092,12 +1017,16 @@ def _target_costs(
 
     Parameters
     ----------
-    source : _Connections
+    source : _Attachments
         Point set on the search side.
     rep : int
         Representative row of the current search group.
-    target : _Connections
+    target : _Attachments
         Point set on the opposite side.
+    target_vertices : ndarray
+        Endpoint vertex positions for every target row.
+    edge_data : _EdgeData or None
+        Projected edge geometry metadata, or None for node attachment.
     lengths : ndarray
         Shortest path costs to road vertices.
     offsets : ndarray
@@ -1110,23 +1039,29 @@ def _target_costs(
     ndarray
         Minimum cost to each target in its input order.
     """
-    costs = np.min(lengths[target.vertices] + offsets, axis=1)
-    if source.network.connect_to == "edge":
+    costs = np.min(lengths[target_vertices] + offsets, axis=1)
+    if edge_data is not None:
         edge = source.feature[rep]
         same = np.flatnonzero(target.feature == edge)
         delta = target.along[same] - source.along[rep]
         if reverse:
             delta = -delta
         direct = _fraction_cost(
-            abs(delta) / source.network.edge_lengths[edge],
-            source.network.rates[edge, (delta >= 0).astype(int)],
+            abs(delta) / edge_data.lengths[edge],
+            edge_data.rates[edge, (delta >= 0).astype(int)],
         )
         costs[same] = np.minimum(costs[same], direct)
     return costs
 
 
 def _pairs(
-    start: _Connections, end: _Connections, limit: float, k: int | None, within: bool
+    matrix: sparse.csr_matrix,
+    start: _Attachments,
+    end: _Attachments,
+    edge_data: _EdgeData | None,
+    limit: float,
+    k: int | None,
+    within: bool,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Batch searches from the side with fewer unique attachments.
@@ -1135,10 +1070,14 @@ def _pairs(
 
     Parameters
     ----------
-    start : _Connections
+    matrix : scipy.sparse.csr_matrix
+        Directed adjacency matrix.
+    start : _Attachments
         Connected origins in input order.
-    end : _Connections
+    end : _Attachments
         Connected destinations in input order.
+    edge_data : _EdgeData or None
+        Projected edge geometry metadata, or None for node attachment.
     limit : float
         Inclusive upper bound in network cost units.
     k : int | None
@@ -1155,39 +1094,46 @@ def _pairs(
     if not np.any(start.feature >= 0) or not np.any(end.feature >= 0):
         return empty
     if k == 1:
-        return _closest(start, end, limit, within)
-    reverse = len(end.groups[1]) < len(start.groups[1])
+        return _closest(matrix, start, end, edge_data, limit, within)
+    start_order, start_bounds = _attachment_groups(start.feature, start.along)
+    end_order, end_bounds = (
+        (start_order, start_bounds) if within else _attachment_groups(end.feature, end.along)
+    )
+    reverse = len(end_bounds) < len(start_bounds)
     source, target = (end, start) if reverse else (start, end)
-    order, bounds = source.groups
-    net = start.network
+    order, bounds = (end_order, end_bounds) if reverse else (start_order, start_bounds)
     representatives = order[bounds[:-1]]
-    base = net._reverse if reverse else net.matrix
-    source_offsets = source.arrival if reverse else source.departure
-    offsets = target.departure if reverse else target.arrival
+    base = matrix.T.tocsr() if reverse else matrix
+    source_vertices = _vertices(source.feature, edge_data)
+    target_vertices = _vertices(target.feature, edge_data)
+    source_offsets = _endpoint_costs(source, edge_data, arrival=reverse)
+    offsets = _endpoint_costs(target, edge_data, arrival=not reverse)
     blocks = []
     pending = 0
-    for batch in row_batches(len(representatives), base.shape[0] * source.vertices.shape[1]):
+    for batch in row_batches(len(representatives), base.shape[0] * source_vertices.shape[1]):
         batch_rows = representatives[batch]
-        seeds, inverse = np.unique(source.vertices[batch_rows], return_inverse=True)
+        seeds, inverse = np.unique(source_vertices[batch_rows], return_inverse=True)
         by_endpoint = np.vstack(
-            [distances for _, distances, _ in distance_batches(base, seeds, limit)]
+            [distances for _, distances, _ in _distance_batches(base, seeds, limit)]
         )
         endpoint_rows = inverse.reshape(len(batch_rows), -1)
         for local, rep in enumerate(batch_rows):
             index = batch.start + local
             lengths = by_endpoint[endpoint_rows[local, 0]] + source_offsets[rep, 0]
-            for slot in range(1, source.vertices.shape[1]):
+            for slot in range(1, source_vertices.shape[1]):
                 lengths = np.minimum(
                     lengths, by_endpoint[endpoint_rows[local, slot]] + source_offsets[rep, slot]
                 )
-            costs = _target_costs(source, rep, target, lengths, offsets, reverse)
+            costs = _target_costs(
+                source, rep, target, target_vertices, edge_data, lengths, offsets, reverse
+            )
             hits = np.flatnonzero((target.feature >= 0) & np.isfinite(costs) & (costs <= limit))
             group = order[bounds[index] : bounds[index + 1]]
             if k is not None:
                 if reverse:
                     group = np.sort(group)[: k + int(within)]
                 else:
-                    hits = hits[closest_positions(costs[hits], k + int(within))]
+                    hits = hits[_closest_positions(costs[hits], k + int(within))]
             if not len(hits):
                 continue
             a, b = np.repeat(group, len(hits)), np.tile(hits, len(group))
@@ -1204,9 +1150,9 @@ def _pairs(
 
 
 def _route(
-    origins: Points,
-    destinations: Points | None,
-    graph: GraphInput | None,
+    origins: _Points,
+    destinations: _Points | None,
+    graph: _GraphInput | None,
     weight: str | None,
     directed: bool | None,
     threshold: float | None,
@@ -1214,12 +1160,12 @@ def _route(
     connect_to: Literal["node", "edge"],
     max_connection_distance: float,
     connect_node_types: str | Sequence[str] | None,
-) -> tuple[_Connections, _Connections, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[_Attachments, _Attachments, np.ndarray, np.ndarray, np.ndarray]:
     """
     Connect query points and compute their qualifying shortest-path costs.
 
-    Builds the internal sparse adjacency and spatial index once per query, attaches
-    query points within the snapping limit, and runs batched or reverse searches.
+    Builds the sparse adjacency and spatial index once per query, attaches query
+    points within the snapping limit, and runs batched or reverse searches.
 
     Parameters
     ----------
@@ -1227,7 +1173,7 @@ def _route(
         Origin points in graph CRS.
     destinations : GeoDataFrame or GeoSeries, optional
         Destination points in graph CRS. Omitting routes among origins.
-    graph : GraphInput or None
+    graph : _GraphInput or None
         Network supplying arcs and node coordinates.
     weight : str or None
         Edge cost attribute, or None for geometry length.
@@ -1252,6 +1198,9 @@ def _route(
     if graph is None:
         msg = "Supply a graph"
         raise ValueError(msg)
+    if connect_to not in ("node", "edge"):
+        msg = "connect_to must be 'node' or 'edge'"
+        raise ValueError(msg)
     limit = math.inf if threshold is None else threshold
     if not limit >= 0:
         msg = "threshold must be non-negative"
@@ -1262,23 +1211,57 @@ def _route(
     if not max_connection_distance >= 0:
         msg = "max_connection_distance must be non-negative"
         raise ValueError(msg)
-    network = _SpatialNetwork(
-        graph,
-        weight=weight,
-        directed=directed,
-        connect_to=connect_to,
-        connect_node_types=connect_node_types,
+
+    coords, layers, crs, u, v, raw_lines, values = _edge_arrays(graph, weight)
+    if directed is None:
+        directed = isinstance(graph, nx.Graph) and graph.is_directed()
+    types = [connect_node_types] if isinstance(connect_node_types, str) else connect_node_types
+    allowed = np.ones(len(coords), bool) if types is None else np.isin(layers, types)
+    nodes = np.flatnonzero(allowed)
+    if weight is None or connect_to == "edge":
+        missing = shapely.is_missing(raw_lines)
+        if missing.any():
+            raw_lines[missing] = shapely.linestrings(
+                np.stack((coords[u[missing]], coords[v[missing]]), axis=1)
+            )
+    costs = _weights(shapely.length(raw_lines) if weight is None else values, weight)
+    finite = np.isfinite(costs)
+    a, b, data = u[finite], v[finite], costs[finite]
+    if not directed:
+        a, b, data = np.r_[a, b], np.r_[b, a], np.tile(data, 2)
+    matrix = _adjacency(a, b, data, len(coords))
+
+    tree: cKDTree | shapely.STRtree | None = None
+    lines = np.empty(0, object)
+    edge_data: _EdgeData | None = None
+    if connect_to == "node":
+        if nodes.size:
+            tree = cKDTree(coords[nodes])
+    else:
+        eligible = finite & allowed[u] & allowed[v]
+        lines, ends, rates = _segments(
+            coords, u[eligible], v[eligible], raw_lines[eligible], costs[eligible], directed
+        )
+        lengths = shapely.length(lines)
+        edge_data = _EdgeData(ends=ends, rates=rates, lengths=np.where(lengths > 0, lengths, 1.0))
+        tree = shapely.STRtree(lines)
+
+    start = _snap_points(origins, crs, connect_to, max_connection_distance, nodes, lines, tree)
+    end = (
+        start
+        if destinations is None
+        else _snap_points(
+            destinations, crs, connect_to, max_connection_distance, nodes, lines, tree
+        )
     )
-    start = network.connect(origins, max_connection_distance)
-    end = start if destinations is None else network.connect(destinations, max_connection_distance)
-    rows, cols, costs = _pairs(start, end, limit, k, destinations is None)
-    return start, end, rows, cols, costs
+    rows, cols, trip_costs = _pairs(matrix, start, end, edge_data, limit, k, destinations is None)
+    return start, end, rows, cols, trip_costs
 
 
 def network_costs(
-    origins: Points,
-    destinations: Points | None = None,
-    graph: GraphInput | None = None,
+    origins: _Points,
+    destinations: _Points | None = None,
+    graph: _GraphInput | None = None,
     *,
     weight: str | None = None,
     directed: bool | None = None,
@@ -1354,9 +1337,9 @@ def network_costs(
 
 
 def network_cost_matrix(
-    origins: Points,
-    destinations: Points | None = None,
-    graph: GraphInput | None = None,
+    origins: _Points,
+    destinations: _Points | None = None,
+    graph: _GraphInput | None = None,
     *,
     weight: str | None = None,
     directed: bool | None = None,
