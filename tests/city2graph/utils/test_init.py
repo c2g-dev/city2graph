@@ -7,6 +7,7 @@ import pytest
 from city2graph import utils
 from city2graph.utils import conversion as conversion_utils
 from city2graph.utils import distance as distance_utils
+from city2graph.utils import isochrone as isochrone_utils
 from city2graph.utils import plotting as plotting_utils
 from city2graph.utils import tessellation as tessellation_utils
 from city2graph.utils import topology as topology_utils
@@ -51,10 +52,10 @@ class TestPublicUtilityExports:
             ("dual_graph", topology_utils),
             ("remove_isolated_components", topology_utils),
             ("symmetrize_edges", topology_utils),
-            ("create_isochrone", distance_utils),
             ("filter_graph_by_distance", distance_utils),
             ("network_cost_matrix", distance_utils),
             ("network_costs", distance_utils),
+            ("create_isochrone", isochrone_utils),
             ("create_tessellation", tessellation_utils),
             ("plot_graph", plotting_utils),
         ],

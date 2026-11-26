@@ -1,4 +1,4 @@
-"""Core graph conversion, topology, distance, tessellation, and plotting utilities."""
+"""Core graph conversion, topology, distance, isochrone, tessellation, and plotting utilities."""
 
 from .conversion import NxConverter as NxConverter
 from .conversion import gdf_to_nx
@@ -7,10 +7,10 @@ from .conversion import nx_to_rx
 from .conversion import rx_to_nx
 from .conversion import validate_gdf
 from .conversion import validate_nx
-from .distance import create_isochrone
 from .distance import filter_graph_by_distance
 from .distance import network_cost_matrix
 from .distance import network_costs
+from .isochrone import create_isochrone
 from .plotting import MATPLOTLIB_AVAILABLE as MATPLOTLIB_AVAILABLE
 from .plotting import plot_graph
 from .tessellation import create_tessellation
