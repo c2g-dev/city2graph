@@ -1158,10 +1158,10 @@ class TestRemoveIsolatedComponents:
         with pytest.raises(ValueError, match="connectivity must be 'weak' or 'strong'"):
             utils.remove_isolated_components(edges, connectivity="invalid")  # type: ignore[arg-type]
 
-        with pytest.raises(ValueError, match="requires directed=True"):
+        with pytest.raises(ValueError, match="requires a directed graph"):
             utils.remove_isolated_components(edges, connectivity="strong")
 
-        with pytest.raises(ValueError, match="requires directed=True"):
+        with pytest.raises(ValueError, match="requires a directed graph"):
             utils.remove_isolated_components(edges, directed=False, connectivity="strong")
 
         with pytest.raises(ValueError, match="requires a directed graph"):

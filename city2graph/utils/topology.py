@@ -858,78 +858,35 @@ def clip_graph(
     return _return_graph_output(filtered_nodes, clipped_edges, input_type, as_nx, original_graph)
 
 
-def _component_generator(
+def _largest_component(
     nx_graph: nx.Graph,
     connectivity: Literal["weak", "strong"],
-) -> Iterable[set[Any]]:
+) -> set[Any]:
     """
-    Return the connected-component iterator for a NetworkX graph.
+    Return the node set of the largest connected component.
 
-    Selects strongly connected, weakly connected, or undirected components
-    according to graph directionality and the requested connectivity mode.
+    Uses strongly connected components when requested, weakly connected
+    components for other directed graphs, and connected components otherwise.
 
     Parameters
     ----------
     nx_graph : networkx.Graph
-        Input NetworkX graph.
+        Non-empty NetworkX graph.
     connectivity : {"weak", "strong"}
         Component definition for directed graphs.
 
     Returns
     -------
-    Iterable[set[Any]]
-        Iterator of node sets, one per connected component.
+    set[Any]
+        Nodes of the largest component.
     """
     if connectivity == "strong":
-        return typing.cast("Iterable[set[Any]]", nx.strongly_connected_components(nx_graph))
-    if nx_graph.is_directed():
-        return typing.cast("Iterable[set[Any]]", nx.weakly_connected_components(nx_graph))
-    return typing.cast("Iterable[set[Any]]", nx.connected_components(nx_graph))
-
-
-def _remove_isolated_nx(
-    graph: nx.Graph | nx.MultiGraph,
-    *,
-    directed: bool | None,
-    connectivity: Literal["weak", "strong"],
-) -> nx.Graph | nx.MultiGraph:
-    """
-    Keep only the largest connected component of a NetworkX graph.
-
-    Validates directionality options against the input graph and returns a copy
-    of the induced subgraph for the largest component.
-
-    Parameters
-    ----------
-    graph : networkx.Graph or networkx.MultiGraph
-        Input NetworkX graph.
-    directed : bool or None
-        Requested directionality override, or ``None`` to infer from ``graph``.
-    connectivity : {"weak", "strong"}
-        Component definition for directed graphs.
-
-    Returns
-    -------
-    networkx.Graph or networkx.MultiGraph
-        Copy of the largest component retaining class, keys, and attributes.
-
-    Raises
-    ------
-    ValueError
-        If ``directed`` and ``connectivity`` contradict ``graph``.
-    """
-    is_nx_directed = graph.is_directed()
-    if directed is True and not is_nx_directed:
-        msg = "Cannot treat an undirected NetworkX graph as directed."
-        raise ValueError(msg)
-    effective_directed = is_nx_directed if directed is None else directed
-    if connectivity == "strong" and not effective_directed:
-        msg = "connectivity='strong' requires a directed graph."
-        raise ValueError(msg)
-    if not graph:
-        return graph.copy()
-    largest = max(_component_generator(graph, connectivity), key=len)
-    return graph.subgraph(largest).copy()
+        components = nx.strongly_connected_components(nx_graph)
+    elif nx_graph.is_directed():
+        components = nx.weakly_connected_components(nx_graph)
+    else:
+        components = nx.connected_components(nx_graph)
+    return typing.cast("set[Any]", max(components, key=len))
 
 
 def remove_isolated_components(
@@ -978,13 +935,24 @@ def remove_isolated_components(
         msg = f"connectivity must be 'weak' or 'strong', got {connectivity!r}."
         raise ValueError(msg)
 
-    if isinstance(graph, nx.Graph):
-        return _remove_isolated_nx(graph, directed=directed, connectivity=connectivity)
-
-    effective_directed = False if directed is None else directed
-    if connectivity == "strong" and not effective_directed:
-        msg = "connectivity='strong' requires directed=True for GeoDataFrame inputs."
+    nx_directed = graph.is_directed() if isinstance(graph, nx.Graph) else False
+    if directed and isinstance(graph, nx.Graph) and not nx_directed:
+        msg = "Cannot treat an undirected NetworkX graph as directed."
         raise ValueError(msg)
+    effective_directed = nx_directed if directed is None else directed
+    if connectivity == "strong" and not effective_directed:
+        msg = (
+            "connectivity='strong' requires a directed graph "
+            "(pass directed=True for GeoDataFrame inputs)."
+        )
+        raise ValueError(msg)
+
+    if isinstance(graph, nx.Graph):
+        return (
+            graph.subgraph(_largest_component(graph, connectivity)).copy()
+            if graph
+            else graph.copy()
+        )
 
     nodes, edges, input_type = _validate_graph_input(graph)
     if edges.empty:
@@ -1023,7 +991,7 @@ def remove_isolated_components(
     if nx_graph.number_of_nodes() == 0:
         return _return_graph_output(nodes, edges, input_type, as_nx, directed=effective_directed)
 
-    largest_cc = max(_component_generator(nx_graph, connectivity), key=len)
+    largest_cc = _largest_component(nx_graph, connectivity)
     subgraph = nx_graph.subgraph(largest_cc)
 
     retained_rows = np.zeros(len(edges), dtype=bool)

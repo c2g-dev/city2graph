@@ -8,13 +8,16 @@ operations commonly needed for urban network analysis.
 """
 
 # Standard library imports
+import ast
 import json
 import logging
+import math
 import shutil
 import subprocess
 import tempfile
 import warnings
 from pathlib import Path
+from typing import Any
 
 # Third-party imports
 import geopandas as gpd
@@ -36,8 +39,6 @@ from shapely.geometry import MultiPolygon
 from shapely.geometry import Polygon
 from shapely.ops import substring
 
-from ._overture import apply_overture_routing_attributes
-from ._overture import validate_travel_mode
 from .utils import clip_graph
 
 # Public API definition
@@ -74,6 +75,37 @@ VALID_OVERTURE_TYPES = {
 
 # Standard coordinate reference system
 WGS84_CRS = "EPSG:4326"
+
+# Overture TravelMode inheritance: each mode mapped to itself and its ancestors.
+_MODE_ANCESTORS: dict[str, frozenset[str]] = {
+    "vehicle": frozenset({"vehicle"}),
+    "motor_vehicle": frozenset({"motor_vehicle", "vehicle"}),
+    "car": frozenset({"car", "motor_vehicle", "vehicle"}),
+    "motorcycle": frozenset({"motorcycle", "motor_vehicle", "vehicle"}),
+    "bus": frozenset({"bus", "motor_vehicle", "vehicle"}),
+    "truck": frozenset({"truck", "motor_vehicle", "vehicle"}),
+    "hgv": frozenset({"hgv", "truck", "motor_vehicle", "vehicle"}),
+    "hov": frozenset({"hov", "motor_vehicle", "vehicle"}),
+    "emergency": frozenset({"emergency", "motor_vehicle", "vehicle"}),
+    "bicycle": frozenset({"bicycle", "vehicle"}),
+    "foot": frozenset({"foot"}),
+}
+
+# Default passable modes per Overture road class. Classes not listed here
+# (vehicular classes, "unknown" and missing classes) are open to every mode.
+_ALL_MODES = frozenset(_MODE_ANCESTORS)
+_ROAD_CLASS_DEFAULT_ACCESS: dict[str, frozenset[str]] = {
+    "motorway": frozenset(m for m, anc in _MODE_ANCESTORS.items() if "motor_vehicle" in anc),
+    "pedestrian": frozenset({"foot", "emergency"}),
+    "footway": frozenset({"foot"}),
+    "steps": frozenset({"foot"}),
+    "bridleway": frozenset({"foot"}),
+    "cycleway": frozenset({"bicycle"}),
+    "path": frozenset({"foot", "bicycle"}),
+    "track": frozenset({"foot", "bicycle"}),
+}
+_IMPASSABLE_ROAD_FLAGS = frozenset({"is_under_construction", "is_abandoned"})
+_SPEED_UNIT_TO_KPH = {"km/h": 1.0, "mph": 1.609344}
 
 
 def load_overture_data(
@@ -310,108 +342,108 @@ def get_boundaries(place_name: str, user_agent: str = "city2graph") -> gpd.GeoDa
 
 def process_overture_segments(
     segments_gdf: gpd.GeoDataFrame,
-    get_barriers: bool | None = None,
+    get_barriers: bool = True,
     connectors_gdf: gpd.GeoDataFrame | None = None,
     threshold: float = 1.0,
     *,
-    travel_mode: str | None = "all",
+    travel_mode: str | None = None,
     get_speed: bool = False,
 ) -> gpd.GeoDataFrame:
     """
-    Process Overture Maps segments into topology- and routing-ready LineStrings.
+    Process segments from Overture Maps to be split by connectors and extract barriers.
 
-    This function splits segments at connector points, snaps nearby endpoints,
-    computes segment lengths, optionally extracts barrier geometries from level
-    rules, optionally expands passable directions into directed segment rows for
-    a requested Overture ``TravelMode``, and optionally normalises posted speed
-    limits into ``max_speed_kph``.
+    This function processes road segments by splitting them at connector points and
+    optionally generates barrier geometries based on level rules. It also performs
+    endpoint clustering to snap nearby endpoints together. Optionally, it evaluates
+    Overture access rules for a travel mode into a ``oneway`` column and normalises
+    posted speed limits into ``max_speed_kph``. Each output row remains one
+    physical segment.
 
     Parameters
     ----------
     segments_gdf : geopandas.GeoDataFrame
-        GeoDataFrame containing Overture transportation segments with
-        LineString geometries. Expected columns vary by requested options
-        (``connectors``, ``level_rules``, ``subtype``, ``class``,
-        ``access_restrictions``, ``road_flags``, ``speed_limits``).
-    get_barriers : bool, optional
-        Whether to generate barrier geometries from ``level_rules``. Defaults
-        to ``True`` when ``travel_mode is None`` and ``False`` when
-        ``travel_mode`` is specified.
+        GeoDataFrame containing road segments with LineString geometries.
+        Expected to have 'connectors' and 'level_rules' columns, and
+        'subtype', 'class', 'access_restrictions', 'road_flags' and
+        'speed_limits' when ``travel_mode`` or ``get_speed`` is used.
+    get_barriers : bool, default True
+        Whether to generate barrier geometries from level rules.
     connectors_gdf : geopandas.GeoDataFrame, optional
         GeoDataFrame containing connector information. If provided, segments
-        are split at connector positions within the normalised range ``[0, 1]``.
+        will be split at connector positions within the normalized range [0, 1].
         References without a usable position are ignored.
     threshold : float, default 1.0
         Distance threshold for endpoint clustering in the same units as the CRS.
-    travel_mode : str or None, default "all"
-        Overture ``TravelMode`` used to filter impassable segments and expand
-        passable segments into one directed row per permitted travel direction
-        (two-way segments emit a forward row and a geometry-reversed backward
-        row; backward-only one-way segments have their geometry reversed):
-
-        - ``"all"`` (default): retain traversable ``subtype == "road"`` segments
-          and apply mode-unscoped directional restrictions.
-        - Any official Overture ``TravelMode``: ``"car"``, ``"foot"``,
-          ``"bicycle"``, ``"bus"``, ``"truck"``, ``"hgv"``, ``"motorcycle"``,
-          ``"hov"``, ``"emergency"``, ``"motor_vehicle"``, or ``"vehicle"``.
-        - ``None``: disable mode filtering and directed expansion, preserving
-          one row per physical segment (for morphological analysis, barrier
-          generation, physical street-length totals, or multi-mode reuse after
-          connector splitting).
+    travel_mode : str, optional
+        Overture ``TravelMode`` (``"vehicle"``, ``"motor_vehicle"``, ``"car"``,
+        ``"motorcycle"``, ``"bus"``, ``"truck"``, ``"hgv"``, ``"hov"``,
+        ``"emergency"``, ``"bicycle"`` or ``"foot"``), or ``"all"`` to apply
+        only mode-unscoped rules to every ``subtype == "road"`` segment. When
+        given, segments impassable in both directions are dropped and a
+        ``oneway`` column (``"both"``, ``"forward"`` or ``"backward"``) is
+        added for :func:`city2graph.segments_to_graph` with
+        ``oneway_col="oneway"``. Rules are evaluated at the midpoint of each
+        split segment; time- and vehicle-dimension-conditional rules are
+        ignored, and the last matching rule wins.
     get_speed : bool, default False
-        Whether to extract unit-normalised maximum speed limits from
-        ``speed_limits`` into a ``float64`` column ``max_speed_kph`` (converting
-        ``km/h`` and ``mph``, with ``NaN`` where unposted).
+        Whether to add ``max_speed_kph`` (float64) from ``speed_limits``,
+        converting ``mph`` to km/h. Direction-specific limits are reduced to
+        the lower value, and ``NaN`` marks segments without a posted limit.
+        The value is the posted limit for ``travel_mode`` (mode-unscoped
+        limits when ``travel_mode`` is ``None`` or ``"all"``), not a travel
+        speed for that mode.
 
     Returns
     -------
     geopandas.GeoDataFrame
         Processed segments with additional columns:
-
-        - ``split_from``, ``split_to``: Split positions if segments were split.
-        - ``length``: Length of each segment in CRS units.
-        - ``barrier_geometry``: Passable ground-level geometry when
-          ``get_barriers`` is enabled.
-        - ``max_speed_kph``: Unit-normalised maximum speed in km/h when
-          ``get_speed=True``.
+        - 'split_from', 'split_to': Split positions if segments were split
+        - 'length': Length of each segment
+        - 'barrier_geometry': Passable geometry if get_barriers=True. Level rules
+          retain their source references, and are applied to the relevant split.
+        - 'oneway': Permitted direction if ``travel_mode`` is given
+        - 'max_speed_kph': Posted maximum speed if ``get_speed=True``
 
     Raises
     ------
     ValueError
-        If ``travel_mode`` is not ``None``, ``"all"``, or a valid Overture
-        ``TravelMode``.
+        If ``travel_mode`` is not ``None``, ``"all"`` or an Overture ``TravelMode``.
 
     See Also
     --------
     load_overture_data : Load data from Overture Maps.
+    city2graph.segments_to_graph : Build a directed graph from the ``oneway`` column.
 
     Examples
     --------
-    >>> # Project to a metric CRS and expand directed car segments with speeds
-    >>> car_segments = process_overture_segments(
-    ...     segments_gdf.to_crs("EPSG:27700"),
-    ...     connectors_gdf=connectors_gdf.to_crs("EPSG:27700"),
+    >>> # Process segments with connector splitting
+    >>> processed = process_overture_segments(
+    ...     segments_gdf,
+    ...     connectors_gdf=connectors_gdf,
+    ...     threshold=1.0
+    ... )
+    >>> # Access barrier geometries for routing
+    >>> barriers = processed['barrier_geometry']
+    >>> # Build a directed car network with posted speeds on a metric CRS
+    >>> car = process_overture_segments(
+    ...     segments_gdf,
+    ...     connectors_gdf=connectors_gdf,
     ...     travel_mode="car",
     ...     get_speed=True,
     ... )
-    >>> # Compute unit-safe travel time in seconds on a metric CRS
-    >>> speed_kph = car_segments["max_speed_kph"].fillna(50.0)
-    >>> car_segments["travel_time_sec"] = car_segments["length"] / (speed_kph / 3.6)
-    >>> # Keep one physical row per road for morphological analysis
-    >>> physical = process_overture_segments(
-    ...     segments_gdf.to_crs("EPSG:27700"),
-    ...     connectors_gdf=connectors_gdf.to_crs("EPSG:27700"),
-    ...     travel_mode=None,
-    ... )
+    >>> car["travel_time_sec"] = car["length"] / (car["max_speed_kph"].fillna(50.0) / 3.6)
+    >>> nodes, edges = segments_to_graph(car, directed=True, oneway_col="oneway")
     """
-    validated_mode = validate_travel_mode(travel_mode)
-    include_barriers = (validated_mode is None) if get_barriers is None else get_barriers
+    if travel_mode is not None and travel_mode != "all" and travel_mode not in _MODE_ANCESTORS:
+        valid = ", ".join(["'all'", *(repr(mode) for mode in sorted(_MODE_ANCESTORS))])
+        msg = f"Invalid travel_mode {travel_mode!r}. Expected None or one of: {valid}."
+        raise ValueError(msg)
+    add_routing_columns = travel_mode is not None or get_speed
 
     if segments_gdf.empty:
-        empty_result = segments_gdf.copy()
-        if get_speed and "max_speed_kph" not in empty_result.columns:
-            empty_result["max_speed_kph"] = pd.Series(dtype="float64")
-        return empty_result
+        if add_routing_columns:
+            return _add_overture_routing_columns(segments_gdf, travel_mode, get_speed=get_speed)
+        return segments_gdf
 
     # Warn if CRS is geographic or missing
     if segments_gdf.crs is None or segments_gdf.crs.is_geographic:
@@ -436,20 +468,19 @@ def process_overture_segments(
     if connectors_gdf is not None and not connectors_gdf.empty:
         result_gdf = _cluster_segment_endpoints(result_gdf, threshold)
 
+    # Evaluate routing rules before length and barrier geometry generation so
+    # dropped impassable segments skip unnecessary geometry work.
+    if add_routing_columns:
+        result_gdf = _add_overture_routing_columns(result_gdf, travel_mode, get_speed=get_speed)
+
     # Add segment length
     result_gdf["length"] = result_gdf.geometry.length
 
-    # Generate barrier geometries before directed expansion so shared physical
-    # segments are not computed twice.
-    if include_barriers:
+    # Generate barrier geometries if requested
+    if get_barriers:
         result_gdf["barrier_geometry"] = _generate_barrier_geometries(result_gdf)
 
-    # Apply directed mode expansion and/or speed-limit extraction
-    return apply_overture_routing_attributes(
-        result_gdf,
-        travel_mode=validated_mode,
-        get_speed=get_speed,
-    )
+    return result_gdf
 
 
 def _validate_overture_release(release: str) -> None:
@@ -757,7 +788,7 @@ def _split_segments_at_connectors(
         "connectors",
         pd.Series("", index=segments_gdf.index, dtype=object),
     )
-    parsed_connectors = connector_values.map(_parse_connector_records)
+    parsed_connectors = connector_values.map(_parse_overture_list)
 
     # Normalize all connector records at once, retaining positional row IDs so
     # duplicate/non-unique input indexes do not affect ordering.
@@ -850,36 +881,38 @@ def _split_segments_at_connectors(
     return result_gdf
 
 
-def _parse_connector_records(value: object) -> list[object]:
+def _parse_overture_list(value: object) -> list[Any]:
     """
-    Normalize a connector value to a list of records.
+    Normalize a nested Overture value to a list.
 
-    JSON-like string values are decoded permissively to match the Overture
-    values accepted by the existing processing path.
+    Overture nested fields arrive as Python lists, GeoParquet ``numpy.ndarray``
+    objects, single mappings, or JSON or Python-literal strings from GeoJSON
+    exports.
 
     Parameters
     ----------
     value : object
-        Connector data represented as a list, JSON-like string, mapping, or null value.
+        Nested value represented as a list, array, mapping, JSON-like string, or null.
 
     Returns
     -------
-    list[object]
-        Parsed connector records. Invalid values produce an empty list.
+    list[Any]
+        Parsed elements. Null and invalid values produce an empty list.
     """
-    if isinstance(value, list):
-        return value
     if isinstance(value, np.ndarray):
-        return list(value.tolist())
-    if value is None or value == "":
-        return []
-    try:
-        parsed = json.loads(str(value).replace("'", '"').replace("None", "null"))
-    except (json.JSONDecodeError, AttributeError):
-        return []
-    if isinstance(parsed, list):
-        return parsed
-    return [parsed] if parsed else []
+        value = value.tolist()
+    if isinstance(value, str):
+        raw = value
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError:
+            try:
+                value = ast.literal_eval(raw)
+            except (ValueError, SyntaxError):
+                value = None
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value] if isinstance(value, dict) else []
 
 
 def _cluster_segment_endpoints(
@@ -953,6 +986,35 @@ def _cluster_segment_endpoints(
     return result_gdf
 
 
+def _split_bounds(segments_gdf: gpd.GeoDataFrame) -> tuple[pd.Series, pd.Series]:
+    """
+    Return numeric ``split_from`` and ``split_to`` bounds in ``[0, 1]``.
+
+    Missing or non-numeric entries default to ``0.0`` for ``split_from`` and
+    ``1.0`` for ``split_to``.
+
+    Parameters
+    ----------
+    segments_gdf : geopandas.GeoDataFrame
+        Segments GeoDataFrame with optional ``split_from`` and ``split_to``
+        columns.
+
+    Returns
+    -------
+    tuple[pandas.Series, pandas.Series]
+        ``(split_from, split_to)`` float series aligned to ``segments_gdf.index``.
+    """
+    split_from = pd.to_numeric(
+        segments_gdf.get("split_from", pd.Series(0.0, index=segments_gdf.index)),
+        errors="coerce",
+    ).fillna(0.0)
+    split_to = pd.to_numeric(
+        segments_gdf.get("split_to", pd.Series(1.0, index=segments_gdf.index)),
+        errors="coerce",
+    ).fillna(1.0)
+    return split_from, split_to
+
+
 def _generate_barrier_geometries(segments_gdf: gpd.GeoDataFrame) -> gpd.GeoSeries:
     """
     Generate barrier geometries from level rules.
@@ -985,22 +1047,15 @@ def _generate_barrier_geometries(segments_gdf: gpd.GeoDataFrame) -> gpd.GeoSerie
         pd.Series("", index=segments_gdf.index, dtype=object),
     )
     parsed_rules = level_rules.map(_parse_level_rules)
-    full_barrier = parsed_rules.map(lambda value: value == "full_barrier").to_numpy()
+    full_barrier = parsed_rules.map(lambda value: value == "full_barrier").to_numpy(dtype=bool)
     partial_barrier = parsed_rules.map(
         lambda value: isinstance(value, list) and bool(value)
-    ).to_numpy()
+    ).to_numpy(dtype=bool)
 
     barrier_geometries = segments_gdf.geometry.to_numpy().copy()
     barrier_geometries[full_barrier] = None
     partial_positions = np.flatnonzero(partial_barrier)
-    split_from = pd.to_numeric(
-        segments_gdf.get("split_from", pd.Series(0.0, index=segments_gdf.index)),
-        errors="coerce",
-    ).fillna(0.0)
-    split_to = pd.to_numeric(
-        segments_gdf.get("split_to", pd.Series(1.0, index=segments_gdf.index)),
-        errors="coerce",
-    ).fillna(1.0)
+    split_from, split_to = _split_bounds(segments_gdf)
     barrier_geometries[partial_positions] = [
         (
             geometry
@@ -1025,17 +1080,18 @@ def _generate_barrier_geometries(segments_gdf: gpd.GeoDataFrame) -> gpd.GeoSerie
     )
 
 
-def _parse_level_rules(level_rules_str: str) -> list[tuple[float, float]] | str:
+def _parse_level_rules(level_rules: object) -> list[tuple[float, float]] | str:
     """
-    Parse level rules string and extract barrier intervals.
+    Parse level rules and extract barrier intervals.
 
-    This function parses JSON-formatted level rules to extract barrier intervals
-    that define restricted access areas along road segments.
+    This function parses JSON strings, lists, or arrays of level rules to
+    extract barrier intervals that define restricted access areas along road
+    segments.
 
     Parameters
     ----------
-    level_rules_str : str
-        JSON string containing level rules data.
+    level_rules : object
+        Level rules represented as a JSON string, list, array, mapping, or null.
 
     Returns
     -------
@@ -1053,23 +1109,8 @@ def _parse_level_rules(level_rules_str: str) -> list[tuple[float, float]] | str:
     >>> intervals
     [(0.2, 0.8)]
     """
-    if isinstance(level_rules_str, np.ndarray):
-        rules_data = level_rules_str.tolist()
-    elif not level_rules_str:
-        return []
-    else:
-        try:
-            if isinstance(level_rules_str, list):
-                rules_data = level_rules_str
-            else:
-                rules_data = json.loads(
-                    str(level_rules_str).replace("'", '"').replace("None", "null")
-                )
-        except (json.JSONDecodeError, AttributeError):
-            return []
-
     barrier_intervals = []
-    for rule in rules_data:
+    for rule in _parse_overture_list(level_rules):
         if not isinstance(rule, dict) or rule.get("value") == 0:
             continue
 
@@ -1077,8 +1118,9 @@ def _parse_level_rules(level_rules_str: str) -> list[tuple[float, float]] | str:
         if between is None:
             return "full_barrier"
 
-        if isinstance(between, list) and len(between) == 2:
-            start, end = float(between[0]), float(between[1])
+        bounds = _parse_overture_list(between)
+        if len(bounds) == 2:
+            start, end = float(bounds[0]), float(bounds[1])
             barrier_intervals.append((start, end))
 
     return barrier_intervals
@@ -1192,3 +1234,291 @@ def _calculate_passable_intervals(
         passable_intervals.append((current, 1.0))
 
     return passable_intervals
+
+
+def _rule_matches(
+    rule: dict[str, Any],
+    *,
+    position: float,
+    heading: str,
+    travel_mode: str,
+    road_class: str,
+    allow_private: bool = False,
+) -> bool:
+    """
+    Check whether an unconditional Overture rule applies.
+
+    A rule applies when its ``between`` range covers ``position`` and its
+    ``when`` scope matches the heading and the travel mode, following Overture's
+    ``TravelMode`` inheritance. Rules conditioned on time, vehicle dimensions,
+    purpose of use, or a recognised status are skipped unless ``allow_private``
+    is enabled for private-access allowances. With ``"all"``, only mode-unscoped
+    rules apply.
+
+    Parameters
+    ----------
+    rule : dict[str, Any]
+        Overture rule with optional ``between`` and ``when`` keys.
+    position : float
+        Linear-reference position in ``[0, 1]`` along the original segment.
+    heading : str
+        ``"forward"`` or ``"backward"``.
+    travel_mode : str
+        ``"all"`` or an Overture ``TravelMode``.
+    road_class : str
+        Overture road ``class``, or ``""`` when missing.
+    allow_private : bool, default False
+        Whether to match non-denied rules whose ``when.recognized`` includes
+        ``"as_private"``.
+
+    Returns
+    -------
+    bool
+        Whether the rule applies.
+    """
+    between = rule.get("between")
+    bounds = [0.0, 1.0] if between is None else _parse_overture_list(between)
+    try:
+        start, end = (float(bound) for bound in bounds)
+    except (TypeError, ValueError):
+        return False
+
+    when = rule.get("when") or {}
+    rule_heading = when.get("heading")
+    modes = {str(mode) for mode in _parse_overture_list(when.get("mode"))}
+    if travel_mode == "all":
+        mode_matches = not modes
+    elif modes:
+        mode_matches = bool(modes & _MODE_ANCESTORS[travel_mode])
+    else:
+        # Pedestrians walk both ways along one-way roads open to cars.
+        car_road = "car" in _ROAD_CLASS_DEFAULT_ACCESS.get(road_class, _ALL_MODES)
+        mode_matches = not (travel_mode == "foot" and rule_heading and car_road)
+
+    recognized = {str(status) for status in _parse_overture_list(when.get("recognized"))}
+    recognized_matches = not recognized or (
+        allow_private and "as_private" in recognized and rule.get("access_type") != "denied"
+    )
+
+    return bool(
+        start <= position <= end
+        and not when.get("during")
+        and not _parse_overture_list(when.get("vehicle"))
+        and not _parse_overture_list(when.get("using"))
+        and recognized_matches
+        and rule_heading in {None, heading}
+        and mode_matches
+    )
+
+
+def _overture_oneway(
+    subtype: object,
+    access_restrictions: object,
+    road_flags: object,
+    *,
+    position: float,
+    travel_mode: str,
+    road_class: str,
+) -> str | None:
+    """
+    Evaluate the permitted travel direction of an Overture segment.
+
+    Starting from the road class default, matching ``access_restrictions``
+    and closing ``road_flags`` are applied in order, so the last matching rule
+    wins. Allowances for ``as_private`` users close the road to the public.
+
+    Parameters
+    ----------
+    subtype : object
+        Overture ``subtype`` value.
+    access_restrictions : object
+        Raw ``access_restrictions`` value.
+    road_flags : object
+        Raw ``road_flags`` value.
+    position : float
+        Linear-reference position in ``[0, 1]`` at which rules are evaluated.
+    travel_mode : str
+        ``"all"`` or an Overture ``TravelMode``.
+    road_class : str
+        Overture road ``class``, or ``""`` when missing.
+
+    Returns
+    -------
+    str or None
+        ``"both"``, ``"forward"`` or ``"backward"``, or ``None`` if impassable.
+    """
+    if isinstance(subtype, str) and subtype != "road":
+        return None
+    closures = [
+        {"access_type": "denied", "between": flag.get("between")}
+        for flag in _parse_overture_list(road_flags)
+        if isinstance(flag, dict)
+        and _IMPASSABLE_ROAD_FLAGS.intersection(map(str, _parse_overture_list(flag.get("values"))))
+    ]
+    rules = [
+        rule
+        for rule in [*_parse_overture_list(access_restrictions), *closures]
+        if isinstance(rule, dict) and rule.get("access_type") in {"allowed", "designated", "denied"}
+    ]
+    default = travel_mode == "all" or travel_mode in _ROAD_CLASS_DEFAULT_ACCESS.get(
+        road_class, _ALL_MODES
+    )
+
+    permitted = []
+    for heading in ("forward", "backward"):
+        passable = default
+        for rule in rules:
+            if _rule_matches(
+                rule,
+                position=position,
+                heading=heading,
+                travel_mode=travel_mode,
+                road_class=road_class,
+                allow_private=True,
+            ):
+                private = _parse_overture_list((rule.get("when") or {}).get("recognized"))
+                passable = rule["access_type"] != "denied" and not private
+        permitted.append(passable)
+
+    return {(True, True): "both", (True, False): "forward", (False, True): "backward"}.get(
+        (permitted[0], permitted[1])
+    )
+
+
+def _overture_max_speed(
+    speed_limits: object,
+    *,
+    position: float,
+    travel_mode: str,
+    road_class: str,
+    headings: tuple[str, ...] = ("forward", "backward"),
+) -> float:
+    """
+    Extract the posted maximum speed in km/h from Overture ``speed_limits``.
+
+    Each heading takes the last matching rule with a positive ``max_speed`` in
+    ``km/h`` or ``mph``, and the lowest finite speed across ``headings`` is
+    returned.
+
+    Parameters
+    ----------
+    speed_limits : object
+        Raw ``speed_limits`` value.
+    position : float
+        Linear-reference position in ``[0, 1]`` at which rules are evaluated.
+    travel_mode : str
+        ``"all"`` or an Overture ``TravelMode``.
+    road_class : str
+        Overture road ``class``, or ``""`` when missing.
+    headings : tuple[str, ...], default=("forward", "backward")
+        Permitted travel headings to evaluate.
+
+    Returns
+    -------
+    float
+        Maximum speed in km/h, or ``NaN`` when no limit is posted.
+    """
+    parsed_limits = _parse_overture_list(speed_limits)
+    speeds = []
+    for heading in headings:
+        speed = math.nan
+        for rule in parsed_limits:
+            try:
+                max_speed = rule["max_speed"]
+                value = float(max_speed["value"]) * _SPEED_UNIT_TO_KPH[max_speed["unit"]]
+            except (KeyError, TypeError, ValueError):
+                continue
+            if (
+                value > 0
+                and math.isfinite(value)
+                and _rule_matches(
+                    rule,
+                    position=position,
+                    heading=heading,
+                    travel_mode=travel_mode,
+                    road_class=road_class,
+                )
+            ):
+                speed = value
+        speeds.append(speed)
+    if len(speeds) == 1:
+        return float(speeds[0])
+    return float(np.fmin(speeds[0], speeds[1]))
+
+
+def _add_overture_routing_columns(
+    segments_gdf: gpd.GeoDataFrame,
+    travel_mode: str | None,
+    *,
+    get_speed: bool,
+) -> gpd.GeoDataFrame:
+    """
+    Add ``oneway`` and ``max_speed_kph`` columns to processed Overture segments.
+
+    Rules are evaluated at the midpoint of each segment's ``split_from`` and
+    ``split_to`` range. When ``travel_mode`` is given, segments impassable in
+    both directions are dropped while the remaining rows keep their index.
+
+    Parameters
+    ----------
+    segments_gdf : geopandas.GeoDataFrame
+        Processed Overture segments.
+    travel_mode : str or None
+        ``"all"``, an Overture ``TravelMode``, or ``None`` to skip ``oneway``.
+    get_speed : bool
+        Whether to add ``max_speed_kph``.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        Copy of ``segments_gdf`` with the requested columns.
+    """
+    result = segments_gdf.copy()
+    split_from, split_to = _split_bounds(result)
+    positions = (split_from + split_to) / 2
+    attributes = result.reindex(
+        columns=["subtype", "class", "access_restrictions", "road_flags", "speed_limits"]
+    ).to_numpy(dtype=object)
+    mode = travel_mode or "all"
+
+    oneway, speeds = [], []
+    for (subtype, raw_class, access, flags, limits), position in zip(
+        attributes, positions, strict=True
+    ):
+        road_class = raw_class if isinstance(raw_class, str) else ""
+        direction: str | None = None
+        if travel_mode is not None:
+            direction = _overture_oneway(
+                subtype,
+                access,
+                flags,
+                position=position,
+                travel_mode=mode,
+                road_class=road_class,
+            )
+            oneway.append(direction)
+        if get_speed:
+            if travel_mode is not None and direction is None:
+                speeds.append(math.nan)
+            else:
+                headings = (
+                    (direction,)
+                    if direction in {"forward", "backward"}
+                    else ("forward", "backward")
+                )
+                speeds.append(
+                    _overture_max_speed(
+                        limits,
+                        position=position,
+                        travel_mode=mode,
+                        road_class=road_class,
+                        headings=headings,
+                    )
+                )
+
+    if get_speed:
+        result["max_speed_kph"] = np.asarray(speeds, dtype="float64")
+    if travel_mode is not None:
+        result["oneway"] = pd.Series(oneway, index=result.index, dtype=object)
+        result = result[result["oneway"].notna()]
+    return result
