@@ -1648,6 +1648,8 @@ def segments_to_graph(
     multigraph: bool = True,
     directed: bool = True,
     as_nx: bool | None = None,
+    *,
+    oneway_col: str | None = None,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph:
     r"""
     Convert a GeoDataFrame of LineString segments into a graph structure.
@@ -1696,6 +1698,25 @@ def segments_to_graph(
             ``as_nx`` is deprecated and will be removed in a future release.
             Use :func:`gdf_to_nx` on the returned GeoDataFrames instead to
             obtain a NetworkX graph.
+    oneway_col : str, optional
+        Name of a column in ``segments_gdf`` encoding per-segment travel
+        directionality when each row represents a physical road. Requires
+        ``directed=True``. Recognised values are:
+
+        - Forward-only: ``True``, ``1``, ``"yes"``, ``"true"``, ``"1"``,
+          ``"forward"``
+        - Backward-only (geometry reversed): ``-1``, ``"-1"``, ``"reverse"``,
+          ``"backward"``
+        - Bidirectional (expanded into forward and geometry-reversed backward
+          edges): ``False``, ``0``, ``"no"``, ``"false"``, ``"0"``, ``"both"``,
+          ``""``, or null
+        - Closed (omitted): ``"none"``, ``"closed"``
+
+        Emitted edges carry a boolean ``reversed`` column marking edges whose
+        geometry was reversed. Only the active geometry is reversed; other
+        geometry columns keep their original orientation. Overture segments
+        processed with ``process_overture_segments(..., travel_mode=...)``
+        can be passed with ``oneway_col="oneway"``.
 
     Returns
     -------
@@ -1712,6 +1733,8 @@ def segments_to_graph(
     ValueError
         If ``multigraph=False`` and the segments contain duplicate node pairs
         (after canonicalization when ``directed=False``).
+        If ``oneway_col`` is passed with ``directed=False``, is not a column
+        in ``segments_gdf``, or contains an unsupported value.
 
     See Also
     --------
@@ -1752,6 +1775,20 @@ def segments_to_graph(
     >>> nodes_gdf, edges_gdf = segments_to_graph(segments_with_duplicates)
     >>> print(edges_gdf.index.names)
     ['from_node_id', 'to_node_id', 'edge_key']
+
+    >>> # Expand physical segments with a one-way attribute into directed edges
+    >>> directed_segments = gpd.GeoDataFrame(
+    ...     {"oneway": ["no", "yes", "-1"]},
+    ...     geometry=[
+    ...         LineString([(0, 0), (1, 0)]),
+    ...         LineString([(1, 0), (2, 0)]),
+    ...         LineString([(2, 0), (3, 0)]),
+    ...     ],
+    ...     crs="EPSG:32633",
+    ... )
+    >>> nodes_gdf, edges_gdf = segments_to_graph(
+    ...     directed_segments, directed=True, oneway_col="oneway"
+    ... )
     """
     if as_nx is not None:
         warnings.warn(
@@ -1763,13 +1800,36 @@ def segments_to_graph(
         )
     as_nx = bool(as_nx)
 
+    if oneway_col is not None:
+        if not directed:
+            msg = "oneway_col cannot be used with directed=False."
+            raise ValueError(msg)
+        if oneway_col not in segments_gdf.columns:
+            msg = f"Column {oneway_col!r} not found in segments_gdf."
+            raise ValueError(msg)
+
     processor = GeoDataProcessor()
 
     # Validate input
     segments_clean = processor.validate_gdf(segments_gdf, ["LineString"])
 
     if segments_clean is None or segments_clean.empty:
-        return _empty_segments_result(segments_gdf, multigraph=multigraph, as_nx=as_nx)
+        return _empty_segments_result(
+            segments_gdf,
+            multigraph=multigraph,
+            directed=oneway_col is not None,
+            as_nx=as_nx,
+        )
+
+    if oneway_col is not None:
+        segments_clean = _expand_oneway_segments(segments_clean, oneway_col)
+        if segments_clean.empty:
+            return _empty_segments_result(
+                segments_gdf,
+                multigraph=multigraph,
+                directed=True,
+                as_nx=as_nx,
+            )
 
     # Extract coordinates
     start_coords = processor.extract_coordinates(segments_clean, start=True)
@@ -1788,14 +1848,93 @@ def segments_to_graph(
     )
 
     if as_nx:
-        return gdf_to_nx(nodes=nodes_gdf, edges=edges_gdf, multigraph=multigraph)
+        return gdf_to_nx(
+            nodes=nodes_gdf,
+            edges=edges_gdf,
+            directed=oneway_col is not None,
+            multigraph=multigraph,
+        )
     return nodes_gdf, edges_gdf
+
+
+# Permitted (forward, backward) travel for normalised one-way values.
+_ONEWAY_DIRECTIONS: dict[str, tuple[bool, bool]] = {
+    **dict.fromkeys(("yes", "true", "1", "forward"), (True, False)),
+    **dict.fromkeys(("-1", "reverse", "backward"), (False, True)),
+    **dict.fromkeys(("no", "false", "0", "both", ""), (True, True)),
+    **dict.fromkeys(("none", "closed"), (False, False)),
+}
+
+
+def _expand_oneway_segments(
+    segments_clean: gpd.GeoDataFrame,
+    oneway_col: str,
+) -> gpd.GeoDataFrame:
+    """
+    Expand segments according to a one-way attribute column.
+
+    Two-way segments emit both original and geometry-reversed rows, backward-only
+    segments emit a single reversed row, and closed segments are dropped. A
+    boolean ``reversed`` column marks rows whose geometry was reversed. Nulls
+    are two-way, and numbers are matched by their integer text (``1.0`` as
+    ``"1"``).
+
+    Parameters
+    ----------
+    segments_clean : geopandas.GeoDataFrame
+        Validated LineString segments.
+    oneway_col : str
+        Name of the one-way column.
+
+    Returns
+    -------
+    geopandas.GeoDataFrame
+        Expanded GeoDataFrame with each row oriented in its permitted travel
+        direction.
+
+    Raises
+    ------
+    ValueError
+        If the column contains an unsupported value.
+    """
+    directions = []
+    for value in segments_clean[oneway_col].to_numpy(dtype=object):
+        if value is None or value is pd.NA or value is pd.NaT:
+            directions.append((True, True))
+            continue
+        if isinstance(value, (int, float, np.number)) and not isinstance(value, (bool, np.bool_)):
+            num = float(value)
+            if math.isnan(num):
+                directions.append((True, True))
+                continue
+            key = "0" if num == 0 else f"{num:g}"
+        else:
+            key = str(value).strip().lower()
+        if key not in _ONEWAY_DIRECTIONS:
+            msg = (
+                f"Unsupported oneway value {value!r} in column {oneway_col!r}. Expected "
+                "boolean, 1/0/-1, 'yes'/'no'/'-1', 'forward'/'backward'/'both', "
+                "'none'/'closed', or null."
+            )
+            raise ValueError(msg)
+        directions.append(_ONEWAY_DIRECTIONS[key])
+
+    # Interleave (forward, backward) candidates per segment and keep the permitted ones.
+    permitted = np.asarray(directions, dtype=bool).reshape(-1)
+    reverse = np.tile([False, True], len(segments_clean))[permitted]
+    expanded = segments_clean.iloc[np.repeat(np.arange(len(segments_clean)), 2)[permitted]]
+    expanded = expanded.reset_index(drop=True)
+    geometry = expanded.geometry
+    expanded = expanded.set_geometry(geometry.reverse().where(reverse, geometry))
+    expanded["reversed"] = reverse
+    return expanded
 
 
 def _empty_segments_result(
     segments_gdf: gpd.GeoDataFrame,
     *,
     multigraph: bool,
+    directed: bool = False,
     as_nx: bool,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph:
     """
@@ -1810,6 +1949,8 @@ def _empty_segments_result(
         The original segments input, used only for its CRS.
     multigraph : bool
         Whether the NetworkX output should be a MultiGraph.
+    directed : bool, default False
+        Whether the NetworkX output should be directed.
     as_nx : bool
         If True, return a NetworkX graph instead of GeoDataFrames.
 
@@ -1826,7 +1967,12 @@ def _empty_segments_result(
         index=pd.MultiIndex.from_arrays([[], []], names=["from_node_id", "to_node_id"]),
     )
     if as_nx:
-        return gdf_to_nx(nodes=empty_nodes, edges=empty_edges, multigraph=multigraph)
+        return gdf_to_nx(
+            nodes=empty_nodes,
+            edges=empty_edges,
+            directed=directed,
+            multigraph=multigraph,
+        )
     return empty_nodes, empty_edges
 
 

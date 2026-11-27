@@ -8,6 +8,8 @@ from unittest.mock import Mock
 from unittest.mock import patch
 
 import geopandas as gpd
+import networkx as nx
+import numpy as np
 import pytest
 from shapely.geometry import LineString
 from shapely.geometry import MultiLineString
@@ -16,6 +18,9 @@ from shapely.geometry import Point
 from shapely.geometry import Polygon
 
 from city2graph import data as data_module
+from city2graph.morphology import segments_to_graph
+from city2graph.utils import gdf_to_nx
+from city2graph.utils import remove_isolated_components
 from tests.city2graph.helpers import make_connectors_gdf
 from tests.city2graph.helpers import make_segments_gdf
 
@@ -24,6 +29,32 @@ WGS84_CRS = data_module.WGS84_CRS
 load_overture_data = data_module.load_overture_data
 process_overture_segments = data_module.process_overture_segments
 get_boundaries = data_module.get_boundaries
+
+PROJECTED_CRS = "EPSG:27700"
+SAMPLE_SEGMENTS = Path(__file__).parent / "data" / "sample_segments.geojson"
+ONEWAY = {"access_type": "denied", "when": {"heading": "backward"}}
+DENY_MOTOR = {"access_type": "denied", "when": {"mode": ["motor_vehicle"]}}
+ALLOW_BIKE_BACKWARD = {
+    "access_type": "allowed",
+    "when": {"heading": "backward", "mode": ["bicycle"]},
+}
+
+
+def _routing_segments(rows: list[dict[str, object]]) -> gpd.GeoDataFrame:
+    """Build projected Overture segments with one 10 m LineString per row."""
+    data = [{"id": f"s{i}", **row} for i, row in enumerate(rows)]
+    geometries = [LineString([(10 * i, 0), (10 * i + 10, 0)]) for i in range(len(rows))]
+    return gpd.GeoDataFrame(data, geometry=geometries, crs=PROJECTED_CRS)
+
+
+def _speed(
+    value: object, unit: str = "km/h", when: dict[str, object] | None = None
+) -> dict[str, object]:
+    """Build an Overture speed-limit rule."""
+    rule: dict[str, object] = {"max_speed": {"value": value, "unit": unit}}
+    if when is not None:
+        rule["when"] = when
+    return rule
 
 
 @pytest.fixture
@@ -772,6 +803,11 @@ class TestProcessOvertureSegments:
             pytest.param('[{"value": 1, "between": [0, 1]}]', [], id="full-interval"),
             pytest.param([{"value": 1, "between": [0.1, 0.5]}], [(0, 1), (5, 10)], id="list"),
             pytest.param(
+                np.array([{"value": 1, "between": np.array([0.1, 0.5])}], dtype=object),
+                [(0, 1), (5, 10)],
+                id="ndarray",
+            ),
+            pytest.param(
                 '[{"value": 1, "between": [0.1, 0.3]}, {"value": 1, "between": [0.7, 0.9]}]',
                 [(0, 1), (3, 7), (9, 10)],
                 id="disjoint",
@@ -857,6 +893,11 @@ class TestProcessOvertureSegments:
             pytest.param('{"invalid": "structure"}', [(0, 2)], id="missing-fields"),
             pytest.param('["not_a_dict"]', [(0, 2)], id="non-record"),
             pytest.param([{"connector_id": "c1", "at": 0.5}], [(0, 1), (1, 2)], id="list"),
+            pytest.param(
+                np.array([{"connector_id": "c1", "at": 0.5}], dtype=object),
+                [(0, 1), (1, 2)],
+                id="ndarray",
+            ),
             pytest.param('{"connector_id": "c1", "at": 0.5}', [(0, 1), (1, 2)], id="json-record"),
         ],
     )
@@ -1195,6 +1236,387 @@ class TestProcessOvertureSegments:
         result = process_overture_segments(segments_gdf, connectors_gdf=connectors_gdf)
 
         assert len(result) == 2
+
+    def test_routing_options_leave_default_output_unchanged(self) -> None:
+        """Without travel_mode or get_speed, no routing columns are added."""
+        segments = _routing_segments([{"class": "residential", "access_restrictions": [ONEWAY]}])
+
+        result = process_overture_segments(segments)
+
+        assert len(result) == 1
+        assert "barrier_geometry" in result.columns
+        assert not {"oneway", "max_speed_kph"} & set(result.columns)
+
+    @pytest.mark.parametrize(
+        ("row", "travel_mode", "expected"),
+        [
+            pytest.param({"class": "residential"}, "car", "both", id="two-way"),
+            pytest.param(
+                {"class": "residential", "access_restrictions": [ONEWAY]},
+                "car",
+                "forward",
+                id="oneway",
+            ),
+            pytest.param(
+                {
+                    "class": "residential",
+                    "access_restrictions": '[{"access_type": "denied", '
+                    '"when": {"heading": "forward"}}]',
+                },
+                "car",
+                "backward",
+                id="backward-json",
+            ),
+            pytest.param(
+                {"class": "residential", "access_restrictions": [ONEWAY]},
+                "foot",
+                "both",
+                id="foot-ignores-road-oneway",
+            ),
+            pytest.param(
+                {"class": "footway", "access_restrictions": [ONEWAY]},
+                "foot",
+                "forward",
+                id="foot-follows-footway-oneway",
+            ),
+            pytest.param({"class": "footway"}, "car", None, id="footway-car"),
+            pytest.param({"class": "motorway"}, "foot", None, id="motorway-foot"),
+            pytest.param({"class": "motorway"}, "hgv", "both", id="motorway-hgv"),
+            pytest.param({"class": "unknown"}, "car", "both", id="unknown-class"),
+            pytest.param({"class": None}, "bicycle", "both", id="missing-class"),
+            pytest.param({"subtype": "rail"}, "all", None, id="rail"),
+            pytest.param(
+                {"class": "residential", "access_restrictions": [DENY_MOTOR]},
+                "car",
+                None,
+                id="inherited-mode",
+            ),
+            pytest.param(
+                {"class": "residential", "access_restrictions": [DENY_MOTOR]},
+                "bicycle",
+                "both",
+                id="other-mode",
+            ),
+            pytest.param(
+                {"class": "residential", "access_restrictions": [DENY_MOTOR]},
+                "all",
+                "both",
+                id="all-ignores-mode-scoped",
+            ),
+            pytest.param(
+                {"class": "residential", "access_restrictions": [ONEWAY, ALLOW_BIKE_BACKWARD]},
+                "bicycle",
+                "both",
+                id="last-rule-wins",
+            ),
+            pytest.param(
+                {
+                    "class": "residential",
+                    "access_restrictions": [
+                        {"access_type": "allowed", "when": {"recognized": ["as_private"]}}
+                    ],
+                },
+                "car",
+                None,
+                id="private",
+            ),
+            pytest.param(
+                {
+                    "class": "residential",
+                    "access_restrictions": [
+                        {
+                            "access_type": "allowed",
+                            "when": {"recognized": ["as_private", "as_permitted"]},
+                        }
+                    ],
+                },
+                "car",
+                None,
+                id="private-with-other-recognized",
+            ),
+            pytest.param(
+                {
+                    "class": "residential",
+                    "access_restrictions": [
+                        {"access_type": "denied", "when": {"recognized": ["as_private"]}}
+                    ],
+                },
+                "car",
+                "both",
+                id="private-denied-ignored",
+            ),
+            pytest.param(
+                {
+                    "class": "residential",
+                    "access_restrictions": [
+                        {"access_type": "allowed", "when": {"using": ["as_customer"]}}
+                    ],
+                },
+                "car",
+                "both",
+                id="purpose-scoped-ignored",
+            ),
+            pytest.param(
+                {
+                    "class": "residential",
+                    "access_restrictions": [
+                        {"access_type": "denied", "when": {"during": "Mo-Fr 07:00-09:00"}}
+                    ],
+                },
+                "car",
+                "both",
+                id="time-scoped-ignored",
+            ),
+            pytest.param(
+                {
+                    "class": "residential",
+                    "access_restrictions": [
+                        {"access_type": "denied", "when": {"vehicle": [{"dimension": "weight"}]}}
+                    ],
+                },
+                "car",
+                "both",
+                id="vehicle-scoped-ignored",
+            ),
+            pytest.param(
+                {
+                    "class": "residential",
+                    "access_restrictions": [{"access_type": "denied", "between": [0.4, 0.6]}],
+                },
+                "car",
+                None,
+                id="between-covers-midpoint",
+            ),
+            pytest.param(
+                {
+                    "class": "residential",
+                    "access_restrictions": [{"access_type": "denied", "between": [0.0, 0.4]}],
+                },
+                "car",
+                "both",
+                id="between-misses-midpoint",
+            ),
+            pytest.param(
+                {
+                    "class": "residential",
+                    "access_restrictions": [
+                        {"access_type": "denied", "between": ["a", "b"]},
+                        {"access_type": "unknown"},
+                        "not-a-rule",
+                    ],
+                },
+                "car",
+                "both",
+                id="malformed-rules-ignored",
+            ),
+            pytest.param(
+                {"class": "residential", "road_flags": [{"values": ["is_under_construction"]}]},
+                "all",
+                None,
+                id="under-construction",
+            ),
+            pytest.param(
+                {
+                    "class": "residential",
+                    "road_flags": [
+                        {"values": ["is_bridge"]},
+                        {"values": ["is_abandoned"], "between": [0.8, 1.0]},
+                    ],
+                },
+                "all",
+                "both",
+                id="flags-elsewhere",
+            ),
+        ],
+    )
+    def test_travel_mode_oneway(
+        self, row: dict[str, object], travel_mode: str, expected: str | None
+    ) -> None:
+        """Access rules resolve to the permitted direction or drop the segment."""
+        result = process_overture_segments(
+            _routing_segments([{"subtype": "road", **row}]), travel_mode=travel_mode
+        )
+
+        assert result["oneway"].tolist() == ([] if expected is None else [expected])
+
+    def test_travel_mode_keeps_physical_rows(self) -> None:
+        """Rows keep their index, id and barrier geometry; impassable rows are dropped."""
+        segments = _routing_segments(
+            [
+                {"class": "residential", "level_rules": [{"value": 1, "between": [0.0, 0.5]}]},
+                {"class": "footway"},
+                {"class": "residential", "access_restrictions": [ONEWAY]},
+            ]
+        )
+        physical = process_overture_segments(segments)
+
+        result = process_overture_segments(segments, travel_mode="car")
+
+        assert result.index.tolist() == [0, 2]
+        assert result["id"].tolist() == ["s0", "s2"]
+        assert result["oneway"].tolist() == ["both", "forward"]
+        assert result["barrier_geometry"].equals(physical.loc[[0, 2], "barrier_geometry"])
+
+    def test_travel_mode_uses_split_midpoints(self) -> None:
+        """Rules are evaluated at the midpoint of each connector-split part."""
+        segments = _routing_segments(
+            [
+                {
+                    "class": "residential",
+                    "connectors": [{"connector_id": "c1", "at": 0.5}],
+                    "access_restrictions": [{"access_type": "denied", "between": [0.0, 0.5]}],
+                }
+            ]
+        )
+        connectors = make_connectors_gdf(ids=["c1"], coords=[(5, 0)], crs=PROJECTED_CRS)
+
+        result = process_overture_segments(
+            segments, connectors_gdf=connectors, threshold=0.01, travel_mode="car"
+        )
+
+        assert result["id"].tolist() == ["s0_2"]
+
+    def test_travel_mode_accepts_geoparquet_arrays(self) -> None:
+        """Nested numpy arrays from GeoParquet are parsed like lists."""
+        rule = {
+            "access_type": "denied",
+            "between": np.array([0.0, 1.0]),
+            "when": {"heading": "backward", "mode": np.array(["vehicle"], dtype=object)},
+        }
+        segments = _routing_segments(
+            [{"class": "residential", "access_restrictions": np.array([rule], dtype=object)}]
+        )
+
+        assert process_overture_segments(segments, travel_mode="car")["oneway"].tolist() == [
+            "forward"
+        ]
+        assert process_overture_segments(segments, travel_mode="foot")["oneway"].tolist() == [
+            "both"
+        ]
+
+    @pytest.mark.parametrize(
+        ("speed_limits", "travel_mode", "expected"),
+        [
+            pytest.param([_speed(30, "mph")], None, 48.28032, id="mph"),
+            pytest.param('[{"max_speed": {"value": 50, "unit": "km/h"}}]', "car", 50.0, id="json"),
+            pytest.param(
+                [_speed(50), _speed(30, when={"heading": "backward"})],
+                "all",
+                30.0,
+                id="lower-heading",
+            ),
+            pytest.param(
+                [_speed(80), _speed(60, when={"mode": ["hgv"]})],
+                "hgv",
+                60.0,
+                id="mode-scoped",
+            ),
+            pytest.param(
+                [_speed(80), _speed(60, when={"mode": ["hgv"]})],
+                "car",
+                80.0,
+                id="other-mode",
+            ),
+            pytest.param(
+                [_speed(80), _speed(20, when={"during": "Mo-Fr 07:00-09:00"})],
+                None,
+                80.0,
+                id="time-scoped-ignored",
+            ),
+            pytest.param(
+                [_speed(80), _speed(20, when={"recognized": ["as_employee"]})],
+                None,
+                80.0,
+                id="status-scoped-ignored",
+            ),
+            pytest.param(
+                [
+                    _speed(20, unit="knots"),
+                    _speed(-5),
+                    _speed("fast"),
+                    {"max_speed": None},
+                    {"min_speed": {"value": 10, "unit": "km/h"}},
+                ],
+                None,
+                np.nan,
+                id="invalid",
+            ),
+            pytest.param(None, None, np.nan, id="unposted"),
+        ],
+    )
+    def test_get_speed(
+        self, speed_limits: object, travel_mode: str | None, expected: float
+    ) -> None:
+        """Posted limits are normalised to km/h for the requested mode."""
+        segments = _routing_segments([{"class": "residential", "speed_limits": speed_limits}])
+
+        result = process_overture_segments(segments, travel_mode=travel_mode, get_speed=True)
+
+        assert result["max_speed_kph"].dtype == "float64"
+        np.testing.assert_allclose(result["max_speed_kph"].to_numpy(), [expected])
+
+    def test_get_speed_respects_oneway_permitted_heading(self) -> None:
+        """One-way segments use only the permitted direction's posted speed limit."""
+        segments = _routing_segments(
+            [
+                {
+                    "class": "residential",
+                    "access_restrictions": [ONEWAY],
+                    "speed_limits": [
+                        _speed(50, when={"heading": "forward"}),
+                        _speed(30, when={"heading": "backward"}),
+                    ],
+                },
+                {
+                    "class": "footway",
+                    "speed_limits": [_speed(20)],
+                },
+            ]
+        )
+
+        result = process_overture_segments(segments, travel_mode="car", get_speed=True)
+
+        assert result["oneway"].tolist() == ["forward"]
+        np.testing.assert_allclose(result["max_speed_kph"].to_numpy(), [50.0])
+
+    def test_routing_options_on_empty_input(self) -> None:
+        """Empty input gains the requested routing columns."""
+        empty = gpd.GeoDataFrame({"id": []}, geometry=[], crs=PROJECTED_CRS)
+
+        result = process_overture_segments(empty, travel_mode="car", get_speed=True)
+
+        assert result.empty
+        assert {"oneway", "max_speed_kph"} <= set(result.columns)
+        assert result["max_speed_kph"].dtype == "float64"
+
+    def test_invalid_travel_mode(self) -> None:
+        """Unknown travel modes raise ValueError listing valid modes."""
+        with pytest.raises(ValueError, match=r"Invalid travel_mode 'walk'.*'foot'"):
+            process_overture_segments(_routing_segments([{}]), travel_mode="walk")
+
+    def test_geographic_crs_warning(self) -> None:
+        """Any geographic CRS triggers the projection warning."""
+        segments = _routing_segments([{}]).set_crs("EPSG:4258", allow_override=True)
+
+        with pytest.warns(UserWarning, match="geographic CRS"):
+            process_overture_segments(segments, get_barriers=False)
+
+    def test_sample_data_to_strongly_connected_graph(self) -> None:
+        """Directed Overture segments build a strongly connected directed graph."""
+        segments = gpd.read_file(SAMPLE_SEGMENTS)
+        segments = segments.to_crs(segments.estimate_utm_crs())
+
+        car = process_overture_segments(segments, travel_mode="car", get_speed=True)
+        nodes, edges = segments_to_graph(car, directed=True, oneway_col="oneway")
+        nodes, edges = remove_isolated_components(
+            (nodes, edges), directed=True, connectivity="strong"
+        )
+
+        assert set(car["oneway"]) <= {"both", "forward", "backward"}
+        assert len(edges) > 0
+        assert edges["reversed"].any()
+        graph = gdf_to_nx(nodes=nodes, edges=edges, directed=True, multigraph=True)
+        assert nx.is_strongly_connected(graph)
 
 
 # ============================================================================

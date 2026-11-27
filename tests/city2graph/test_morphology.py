@@ -2096,6 +2096,136 @@ class TestSegmentsToGraph:
 
         assert_geodataframe_equal(sample_segments_gdf, segments_before)
 
+    def test_segments_to_graph_oneway_col_expansion_and_reversal(
+        self,
+        sample_crs: str,
+    ) -> None:
+        """oneway_col expands two-way segments, reverses backward rows, and omits closed ones."""
+        segments = gpd.GeoDataFrame(
+            {
+                "label": ["two_way", "fwd_bool", "bwd_neg1", "closed", "null_two_way", "bwd_int"],
+                "oneway": ["no", True, "-1", "none", None, -1],
+            },
+            geometry=[
+                LineString([(0, 0), (1, 0)]),
+                LineString([(1, 0), (2, 0)]),
+                LineString([(2, 0), (3, 0)]),
+                LineString([(3, 0), (4, 0)]),
+                LineString([(4, 0), (5, 0)]),
+                LineString([(5, 0), (6, 0)]),
+            ],
+            crs=sample_crs,
+        )
+
+        nodes, edges = segments_to_graph(segments, directed=True, oneway_col="oneway")
+
+        assert len(edges) == 7
+        assert "closed" not in set(edges["label"])
+        for (u, v, _k), row in edges.iterrows():
+            start_pt = Point(row.geometry.coords[0])
+            end_pt = Point(row.geometry.coords[-1])
+            assert start_pt.equals(nodes.loc[u].geometry)
+            assert end_pt.equals(nodes.loc[v].geometry)
+
+        bwd_geom = edges.loc[edges["label"] == "bwd_neg1", "geometry"].iloc[0]
+        assert list(bwd_geom.coords) == [(3.0, 0.0), (2.0, 0.0)]
+        reversed_labels = edges.loc[edges["reversed"], "label"].tolist()
+        assert sorted(reversed_labels) == ["bwd_int", "bwd_neg1", "null_two_way", "two_way"]
+
+    @pytest.mark.parametrize(
+        ("value", "expected_dirs"),
+        [
+            (True, [(0, 1, 0)]),
+            (False, [(0, 1, 0), (1, 0, 0)]),
+            (1, [(0, 1, 0)]),
+            (0, [(0, 1, 0), (1, 0, 0)]),
+            (-0.0, [(0, 1, 0), (1, 0, 0)]),
+            (-1, [(0, 1, 0)]),
+            ("yes", [(0, 1, 0)]),
+            ("forward", [(0, 1, 0)]),
+            ("backward", [(0, 1, 0)]),
+            ("reverse", [(0, 1, 0)]),
+            ("both", [(0, 1, 0), (1, 0, 0)]),
+            ("", [(0, 1, 0), (1, 0, 0)]),
+            (float("nan"), [(0, 1, 0), (1, 0, 0)]),
+            (pd.NA, [(0, 1, 0), (1, 0, 0)]),
+            (pd.NaT, [(0, 1, 0), (1, 0, 0)]),
+            ("closed", []),
+        ],
+    )
+    def test_segments_to_graph_oneway_values(
+        self,
+        sample_crs: str,
+        value: object,
+        expected_dirs: list[tuple[int, int, int]],
+    ) -> None:
+        """Recognised oneway values map cleanly to directed edge counts."""
+        segments = gpd.GeoDataFrame(
+            {"oneway": pd.Series([value], dtype=object)},
+            geometry=[LineString([(0, 0), (1, 0)])],
+            crs=sample_crs,
+        )
+
+        nodes, edges = segments_to_graph(segments, directed=True, oneway_col="oneway")
+
+        assert len(edges) == len(expected_dirs)
+        if not expected_dirs:
+            assert nodes.empty
+        else:
+            assert edges.index.tolist() == expected_dirs
+
+    def test_segments_to_graph_oneway_col_validation_and_as_nx(
+        self,
+        sample_crs: str,
+    ) -> None:
+        """Validate contradictory options, missing columns, invalid values, and as_nx."""
+        segments = gpd.GeoDataFrame(
+            {"oneway": ["yes"]},
+            geometry=[LineString([(0, 0), (1, 0)])],
+            crs=sample_crs,
+        )
+
+        with pytest.raises(ValueError, match="cannot be used with directed=False"):
+            segments_to_graph(segments, directed=False, oneway_col="oneway")
+
+        with pytest.raises(ValueError, match="not found in segments_gdf"):
+            segments_to_graph(segments, directed=True, oneway_col="missing")
+
+        for bad_val in ("sideways", "nan"):
+            bad = gpd.GeoDataFrame(
+                {"oneway": [bad_val]},
+                geometry=[LineString([(0, 0), (1, 0)])],
+                crs=sample_crs,
+            )
+            with pytest.raises(ValueError, match="Unsupported oneway value"):
+                segments_to_graph(bad, directed=True, oneway_col="oneway")
+
+        with pytest.warns(DeprecationWarning, match="as_nx"):
+            graph = segments_to_graph(segments, directed=True, oneway_col="oneway", as_nx=True)
+        assert isinstance(graph, nx.MultiDiGraph)
+        assert graph.number_of_edges() == 1
+
+        closed = gpd.GeoDataFrame(
+            {"oneway": ["closed"]},
+            geometry=[LineString([(0, 0), (1, 0)])],
+            crs=sample_crs,
+        )
+        with pytest.warns(DeprecationWarning, match="as_nx"):
+            empty_graph = segments_to_graph(closed, directed=True, oneway_col="oneway", as_nx=True)
+        assert isinstance(empty_graph, nx.MultiDiGraph)
+        assert empty_graph.number_of_edges() == 0
+
+        empty_input = gpd.GeoDataFrame(
+            {"oneway": pd.Series([], dtype=object)},
+            geometry=[],
+            crs=sample_crs,
+        )
+        with pytest.warns(DeprecationWarning, match="as_nx"):
+            empty_digraph = segments_to_graph(
+                empty_input, multigraph=False, directed=True, oneway_col="oneway", as_nx=True
+            )
+        assert type(empty_digraph) is nx.DiGraph
+
 
 class TestPlaceToPlaceGraph:
     """Tests for ``place_to_place_graph``."""

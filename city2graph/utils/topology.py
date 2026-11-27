@@ -682,6 +682,8 @@ def _return_graph_output(
     input_type: str,
     as_nx: bool,
     original_graph: nx.Graph | nx.MultiGraph | None = None,
+    *,
+    directed: bool = False,
 ) -> gpd.GeoDataFrame | tuple[gpd.GeoDataFrame | None, gpd.GeoDataFrame] | nx.Graph:
     """
     Return graph in format matching input type or as NetworkX if requested.
@@ -698,9 +700,10 @@ def _return_graph_output(
         Original input type: "gdf", "tuple", or "nx".
     as_nx : bool
         If True, return as NetworkX graph.
-
     original_graph : networkx.Graph or networkx.MultiGraph or None, optional
         Original NetworkX input whose graph type and identities are preserved.
+    directed : bool, default False
+        Whether a newly converted NetworkX graph should be directed.
 
     Returns
     -------
@@ -710,7 +713,10 @@ def _return_graph_output(
     if original_graph is not None:
         return _restore_filtered_nx_graph(original_graph, nodes, edges)
     if as_nx or input_type == "nx":
-        return gdf_to_nx(nodes=nodes, edges=edges) if nodes is not None else gdf_to_nx(edges=edges)
+        is_multi = isinstance(edges.index, pd.MultiIndex) and edges.index.nlevels == 3
+        if nodes is not None:
+            return gdf_to_nx(nodes=nodes, edges=edges, directed=directed, multigraph=is_multi)
+        return gdf_to_nx(edges=edges, directed=directed, multigraph=is_multi)
     return (nodes, edges) if input_type == "tuple" else edges
 
 
@@ -852,14 +858,49 @@ def clip_graph(
     return _return_graph_output(filtered_nodes, clipped_edges, input_type, as_nx, original_graph)
 
 
+def _largest_component(
+    nx_graph: nx.Graph,
+    connectivity: Literal["weak", "strong"],
+) -> set[Any]:
+    """
+    Return the node set of the largest connected component.
+
+    Uses strongly connected components when requested, weakly connected
+    components for other directed graphs, and connected components otherwise.
+
+    Parameters
+    ----------
+    nx_graph : networkx.Graph
+        Non-empty NetworkX graph.
+    connectivity : {"weak", "strong"}
+        Component definition for directed graphs.
+
+    Returns
+    -------
+    set[Any]
+        Nodes of the largest component.
+    """
+    if connectivity == "strong":
+        components = nx.strongly_connected_components(nx_graph)
+    elif nx_graph.is_directed():
+        components = nx.weakly_connected_components(nx_graph)
+    else:
+        components = nx.connected_components(nx_graph)
+    return typing.cast("set[Any]", max(components, key=len))
+
+
 def remove_isolated_components(
     graph: gpd.GeoDataFrame | tuple[gpd.GeoDataFrame, gpd.GeoDataFrame] | nx.Graph | nx.MultiGraph,
     as_nx: bool = False,
+    *,
+    directed: bool | None = None,
+    connectivity: Literal["weak", "strong"] = "weak",
 ) -> gpd.GeoDataFrame | tuple[gpd.GeoDataFrame | None, gpd.GeoDataFrame] | nx.Graph:
     """
     Keep only the largest connected component of a graph.
 
-    Identifies all connected components and retains only the largest one.
+    Identifies all connected components (weakly or strongly connected for
+    directed graphs) and retains only the largest one.
 
     Parameters
     ----------
@@ -867,24 +908,55 @@ def remove_isolated_components(
         Input graph as edges GeoDataFrame, (nodes, edges) tuple, or NetworkX graph.
     as_nx : bool, default False
         If True, return as NetworkX graph.
+    directed : bool, optional
+        Whether to treat the graph as directed when evaluating connectivity.
+        Inferred from NetworkX inputs (``graph.is_directed()``); defaults to
+        ``False`` for GeoDataFrame inputs.
+    connectivity : {"weak", "strong"}, default "weak"
+        Component definition for directed graphs. ``"strong"`` retains the
+        largest strongly connected component (mutually reachable nodes) and
+        requires a directed graph.
 
     Returns
     -------
     GeoDataFrame, tuple, or NetworkX graph
-        Graph with only largest component, in same format as input. Directed
-        NetworkX inputs use weak connectivity and retain direction, keys and attributes.
-    """
-    if isinstance(graph, nx.Graph):
-        if not graph:
-            return graph.copy()
-        components = (
-            nx.weakly_connected_components if graph.is_directed() else nx.connected_components
-        )
-        return graph.subgraph(max(components(graph), key=len)).copy()
-    nodes, edges, input_type = _validate_graph_input(graph)
+        Graph with only the largest component, in the same format as input (or
+        NetworkX if ``as_nx=True``). NetworkX inputs retain their graph class,
+        direction, keys, and attributes.
 
+    Raises
+    ------
+    ValueError
+        If ``connectivity`` is not ``"weak"`` or ``"strong"``, if
+        ``connectivity="strong"`` is requested on an undirected graph, or if
+        ``directed=True`` is passed for an undirected NetworkX graph.
+    """
+    if connectivity not in {"weak", "strong"}:
+        msg = f"connectivity must be 'weak' or 'strong', got {connectivity!r}."
+        raise ValueError(msg)
+
+    nx_directed = graph.is_directed() if isinstance(graph, nx.Graph) else False
+    if directed and isinstance(graph, nx.Graph) and not nx_directed:
+        msg = "Cannot treat an undirected NetworkX graph as directed."
+        raise ValueError(msg)
+    effective_directed = nx_directed if directed is None else directed
+    if connectivity == "strong" and not effective_directed:
+        msg = (
+            "connectivity='strong' requires a directed graph "
+            "(pass directed=True for GeoDataFrame inputs)."
+        )
+        raise ValueError(msg)
+
+    if isinstance(graph, nx.Graph):
+        return (
+            graph.subgraph(_largest_component(graph, connectivity)).copy()
+            if graph
+            else graph.copy()
+        )
+
+    nodes, edges, input_type = _validate_graph_input(graph)
     if edges.empty:
-        return _return_graph_output(nodes, edges, input_type, as_nx)
+        return _return_graph_output(nodes, edges, input_type, as_nx, directed=effective_directed)
 
     # Frame labels are not guaranteed unique, so carry source row positions
     # through conversion. Leave a caller's identically named column untouched.
@@ -908,16 +980,18 @@ def remove_isolated_components(
 
     # Build graph for component analysis
     try:
-        nx_graph = gdf_to_nx(edges=indexed_edges, multigraph=True)
+        nx_graph = gdf_to_nx(
+            edges=indexed_edges,
+            directed=effective_directed,
+            multigraph=True,
+        )
     except (ValueError, TypeError, KeyError):
-        return _return_graph_output(nodes, edges, input_type, as_nx)
+        return _return_graph_output(nodes, edges, input_type, as_nx, directed=effective_directed)
 
     if nx_graph.number_of_nodes() == 0:
-        return _return_graph_output(nodes, edges, input_type, as_nx)
+        return _return_graph_output(nodes, edges, input_type, as_nx, directed=effective_directed)
 
-    # Find largest component
-    cc_func = nx.weakly_connected_components if nx_graph.is_directed() else nx.connected_components
-    largest_cc = max(cc_func(nx_graph), key=len)
+    largest_cc = _largest_component(nx_graph, connectivity)
     subgraph = nx_graph.subgraph(largest_cc)
 
     retained_rows = np.zeros(len(edges), dtype=bool)
@@ -927,5 +1001,9 @@ def remove_isolated_components(
     filtered_edges = edges.iloc[retained_rows]
 
     return _return_graph_output(
-        _filter_nodes_by_edges(nodes, filtered_edges), filtered_edges, input_type, as_nx
+        _filter_nodes_by_edges(nodes, filtered_edges),
+        filtered_edges,
+        input_type,
+        as_nx,
+        directed=effective_directed,
     )
